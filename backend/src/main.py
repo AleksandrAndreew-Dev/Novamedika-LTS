@@ -17,7 +17,9 @@ from celery import Celery
 from db.database import Base, engine, get_db, async_session_maker
 import asyncio
 
-from router.upload import router
+from router.upload import router as upload_router
+from router.search import router as search_router
+from router.pharmacies_info import router as pharm_info_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -47,7 +49,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.include_router(router)
+app.include_router(upload_router)
+app.include_router(search_router)
+app.include_router(pharm_info_router)
 
 # В main.py исправить URL Redis
 celery = Celery(

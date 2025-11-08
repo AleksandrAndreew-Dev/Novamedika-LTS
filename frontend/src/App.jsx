@@ -1,79 +1,52 @@
-import React, { useState, useEffect } from "react";
-import axios from "axios";
+// App.jsx
+import React, { useEffect, useState } from "react";
+import Search from "./components/Search";
+import "./App.css";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
-
-export default function App() {
-  const [message, setMessage] = useState("");
-  const [health, setHealth] = useState(null);
-  const [loading, setLoading] = useState(true);
+function App() {
+  const [showCookieBanner, setShowCookieBanner] = useState(false);
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const response = await axios.get(`${API_URL}/`);
-        setMessage(response.data.message);
+    // Показываем баннер только на HTTPS и если нет флага в localStorage
+    if (window.location.protocol === 'https:' && !localStorage.getItem('cookiesAccepted')) {
+      setShowCookieBanner(true);
+    }
 
-        const healthResponse = await axios.get(`${API_URL}/health`);
-        setHealth(healthResponse.data);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-        setMessage("Backend connection failed");
-      } finally {
-        setLoading(false);
-      }
+    // Обработчик для кнопки принятия cookies
+    const handleAcceptCookies = () => {
+      setShowCookieBanner(false);
+      localStorage.setItem('cookiesAccepted', 'true');
+      document.cookie = "cookies_accepted=true; max-age=31536000; path=/; Secure; SameSite=Lax";
     };
 
-    fetchData();
+    const acceptButton = document.getElementById('accept-cookies');
+    if (acceptButton) {
+      acceptButton.addEventListener('click', handleAcceptCookies);
+    }
+
+    return () => {
+      if (acceptButton) {
+        acceptButton.removeEventListener('click', handleAcceptCookies);
+      }
+    };
   }, []);
 
-  if (loading) {
-    return (
-      <div className="p-8 text-center">
-        <h1 className="text-2xl font-bold">Novamedika Frontend</h1>
-        <p className="text-gray-600">Loading...</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="p-8 font-sans">
-      <h1 className="text-3xl font-bold mb-6">Hello Novamedika</h1>
-     <a href="http://api.localhost/docs">FastAPI Docs</a> 
-
-      <div className="mb-6 p-4 bg-gray-100 rounded-lg shadow">
-        <h3 className="text-xl font-semibold mb-2">Backend Status:</h3>
-        <p>
-          <span className="font-semibold">Message:</span> {message}
-        </p>
-        {health && (
-          <div className="mt-2 space-y-1">
-            <p>
-              <span className="font-semibold">Status:</span>{" "}
-              <span className="text-green-600">✅ {health.status}</span>
-            </p>
-            <p>
-              <span className="font-semibold">Service:</span> {health.service}
-            </p>
-            <p>
-              <span className="font-semibold">Version:</span> {health.version}
-            </p>
+    <div className="App">
+      {/* Cookie Banner */}
+      {showCookieBanner && (
+        <div id="cookie-banner" className="cookie-banner">
+          <div className="cookie-content">
+            <p>Мы используем только технические файлы cookie для корректной работы сайта. Продолжая использовать сайт, вы соглашаетесь с этим.</p>
+            <button id="accept-cookies" className="btn btn-primary">Принять</button>
+            <a href="/cookie-policy" className="cookie-link">Подробнее</a>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      <div>
-        <h3 className="text-xl font-semibold mb-2">Environment:</h3>
-        <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li>
-            <span className="font-semibold">API URL:</span> {API_URL}
-          </li>
-          <li>
-            <span className="font-semibold">Frontend:</span> React{" "}
-            {React.version}
-          </li>
-        </ul>
-      </div>
+      <Search />
     </div>
   );
 }
+
+export default App;
