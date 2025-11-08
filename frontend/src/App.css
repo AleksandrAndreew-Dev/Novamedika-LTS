@@ -1,0 +1,544 @@
+/* App.css - объединенные стили из всех Django CSS файлов */
+
+/* Переменные и базовые стили из main.css */
+:root {
+    --primary-blue: #59a5f7;
+    --primary-blue-hover: #317daf;
+    --primary-blue-active: #0056b3;
+    --text-dark: #2c3e50;
+    --text-light: #ffffff;
+    --accent-orange: orange;
+    --background-light: #f8f9fa;
+    --table-header-blue: #b0d9f4;
+    --table-row-even: #d9ecf8;
+    --table-row-odd: #f2f9fd;
+    --table-row-hover: #c3e4f5;
+    --success-green: rgb(144, 238, 144);
+    --success-green-hover: rgb(173, 255, 173);
+    --success-green-border: rgb(85, 155, 85);
+    --success-green-text: rgb(34, 77, 34);
+    --border-radius: 16px;
+    --transition-speed: 0.3s;
+    --spacing-xs: 0.5rem;
+    --spacing-sm: 1rem;
+    --spacing-md: 1.5rem;
+    --spacing-lg: 2rem;
+    --spacing-xl: 3rem;
+}
+
+html {
+    font-family: 'Roboto', Palatino, Arial, sans-serif;
+    font-weight: normal;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+}
+
+body {
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+    height: 100vh;
+    width: 100vw;
+    font-family: 'Roboto', Arial, sans-serif;
+    line-height: 1.6;
+    color: var(--text-dark);
+    background-color: var(--background-light);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+/* Стили из search.css */
+.logo-text2,
+.logo-text {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: green;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.logo-text2 {
+    color: var(--text-dark);
+    margin-bottom: var(--spacing-md);
+}
+
+.fletter {
+    color: var(--accent-orange);
+    font-weight: bold;
+}
+
+.search-form {
+    margin-bottom: var(--spacing-md);
+}
+
+.form-control.flex {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+    padding-left: 2.5%;
+    margin-bottom: var(--spacing-md);
+    position: relative;
+}
+
+.form-label {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.form-select,
+.search-input-text {
+    font-size: 14px;
+    padding: var(--spacing-xs);
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    transition: all var(--transition-speed) ease;
+}
+
+.form-select {
+    width: 25%;
+    margin-right: 2%;
+}
+
+.search-input-text {
+    width: 100%;
+    flex: 1;
+}
+
+.search-input-text::placeholder {
+    font-size: 0.9rem;
+    color: #888;
+    opacity: 1;
+}
+
+.search-button {
+    background-color: var(--primary-blue);
+    color: var(--text-light);
+    border: none;
+    border-radius: 6px;
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: 16px;
+    font-weight: bold;
+    text-align: center;
+    cursor: pointer;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    transition: all var(--transition-speed) ease;
+}
+
+.search-button:hover {
+    background-color: var(--primary-blue-hover);
+    transform: scale(1.05);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+}
+
+.search-button:active {
+    background-color: var(--primary-blue-active);
+    transform: scale(0.95);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.search-button:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.left-leaf,
+.left-leaf img {
+    left: 0;
+    top: 0;
+    display: flex;
+    width: 16%;
+    max-width: 30%;
+    position: absolute;
+}
+
+.right-leaf,
+.right-leaf img {
+    right: 1%;
+    bottom: 0%;
+    display: flex;
+    width: 20%;
+    position: absolute;
+}
+
+/* Стили из results.css */
+.results {
+    margin-top: var(--spacing-md);
+}
+
+.results-text {
+    display: flex;
+    margin: var(--spacing-md) 0 var(--spacing-xs) 0;
+    font-weight: bold;
+    color: var(--text-dark);
+}
+
+.results-text2 {
+    display: inline-flex;
+    flex-direction: row;
+    justify-content: left;
+    align-content: flex-start;
+    font-size: 1.5em;
+    font-weight: bold;
+    color: var(--primary-blue);
+    background-color: #f2f9fd;
+    padding: 2px 4px;
+    border-radius: 4px;
+    text-transform: capitalize;
+    margin: 0 0 var(--spacing-sm) 0;
+}
+
+.table-light-active {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: #f8fbfd;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    margin: var(--spacing-md) 0;
+}
+
+.table-light-active thead th {
+    background-color: var(--table-header-blue);
+    color: var(--text-light);
+    font-weight: bold;
+    padding: var(--spacing-sm);
+    text-align: center;
+    vertical-align: middle;
+}
+
+.table-light-active td {
+    text-align: center;
+    vertical-align: middle;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: 14px;
+    line-height: 1.2;
+}
+
+.table-light-active tbody tr:nth-child(even) {
+    background-color: var(--table-row-even);
+}
+
+.table-light-active tbody tr:nth-child(odd) {
+    background-color: var(--table-row-odd);
+}
+
+.table-light-active tbody tr:hover {
+    background-color: var(--table-row-hover);
+    transition: background-color var(--transition-speed) ease;
+}
+
+.pharma-price {
+    background-color: var(--primary-blue);
+    color: var(--text-light);
+    border: none;
+    padding: 9px 4px;
+    font-size: 16px;
+    border-radius: var(--border-radius);
+    font-weight: 600;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: all var(--transition-speed) ease;
+}
+
+.pharma-price:hover {
+    background-color: var(--primary-blue-hover);
+    transform: scale(1.05);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+}
+
+.updated-time {
+    display: block;
+    margin-top: 0.6rem;
+    color: #666;
+    font-size: 0.8rem;
+}
+
+.btn-choice {
+    background-color: var(--primary-blue);
+    color: var(--text-light);
+    border: none;
+    border-radius: var(--border-radius);
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: 16px;
+    font-weight: bold;
+    text-align: center;
+    cursor: pointer;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    transition: all var(--transition-speed) ease;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    width: fit-content;
+    margin: 0 auto;
+}
+
+.btn-choice:hover {
+    background-color: var(--primary-blue-hover);
+    transform: scale(1.05);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+}
+
+.btn-choice:active {
+    background-color: var(--primary-blue-active);
+    transform: scale(0.95);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Стили для пагинации */
+.pagination {
+    margin-top: var(--spacing-md);
+}
+
+.page-link {
+    color: var(--primary-blue);
+    border: 1px solid #dee2e6;
+}
+
+.page-item.active .page-link {
+    background-color: var(--primary-blue);
+    border-color: var(--primary-blue);
+}
+
+/* Стили из modal.css (для cookie banner) */
+.cookie-banner {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #f1f1f1;
+    padding: var(--spacing-md);
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+    z-index: 1000;
+    border-top: 1px solid #ddd;
+}
+
+.cookie-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.cookie-content p {
+    margin: 0;
+    flex-grow: 1;
+    padding-right: var(--spacing-md);
+    font-size: 14px;
+}
+
+.cookie-link {
+    margin-left: var(--spacing-sm);
+    color: var(--primary-blue);
+    text-decoration: underline;
+}
+
+/* Навигация и хедер */
+.nav {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: var(--spacing-sm);
+    margin-right: var(--spacing-md);
+}
+
+.nav .list-inline {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    gap: var(--spacing-md);
+}
+
+.list-inline-item {
+    display: inline-block;
+}
+
+.header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    width: 100%;
+    margin: 0;
+}
+
+.flex-wrapper {
+    margin-top: var(--spacing-md);
+    display: flex;
+    flex-direction: column;
+    max-width: 100%;
+    align-items: center;
+}
+
+/* Футер */
+.footer {
+    padding: var(--spacing-md) 0;
+    background-color: var(--background-light);
+}
+
+.footer ul {
+    list-style-type: none;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-content: center;
+    padding: 0;
+    margin: 0;
+    margin-top: var(--spacing-md);
+}
+
+.footer ul li {
+    margin: 0 var(--spacing-sm);
+}
+
+.footer ul li a {
+    text-decoration: none;
+    color: var(--primary-blue);
+}
+
+/* Карточки для этапов поиска */
+.card {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: var(--spacing-md);
+}
+
+.card-header {
+    background-color: var(--table-header-blue);
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.card-body {
+    padding: var(--spacing-md);
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+    .container.mt-5 {
+        padding: var(--spacing-sm);
+        margin-top: var(--spacing-sm) !important;
+    }
+
+    .header {
+        text-align: center;
+        font-size: 2rem;
+        padding: var(--spacing-sm) 0;
+    }
+
+    .results {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--spacing-sm);
+        padding: var(--spacing-sm);
+    }
+
+    .footer .list-inline {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        margin: 0;
+        font-size: 0.85rem;
+        text-align: center;
+    }
+
+    .footer .list-inline-item {
+        margin: var(--spacing-xs) 0;
+    }
+
+    .form-control.flex {
+        flex-direction: column;
+        gap: var(--spacing-sm);
+        align-items: center;
+        width: 90%;
+        margin: 0 auto;
+        padding-left: 0;
+    }
+
+    .form-select,
+    .search-input-text,
+    .search-button {
+        width: 100%;
+    }
+
+    .form-select {
+        margin-right: 0;
+        width: 100%;
+    }
+
+    .left-leaf, .right-leaf {
+        display: none;
+    }
+
+    .logo-text2 {
+        font-size: 1rem;
+        margin-bottom: var(--spacing-sm);
+    }
+
+    .logo-text {
+        font-size: 3rem;
+        margin-bottom: var(--spacing-sm);
+    }
+
+    .table-light-active,
+    .table-light-active thead,
+    .table-light-active tbody,
+    .table-light-active th,
+    .table-light-active td {
+        display: block;
+        width: 100%;
+    }
+
+    .table-light-active thead {
+        display: none;
+    }
+
+    .table-light-active tbody tr {
+        display: flex;
+        flex-direction: column;
+        border: 1px solid #ddd;
+        margin-bottom: var(--spacing-sm);
+    }
+
+    .table-light-active tbody tr td {
+        display: flex;
+        justify-content: space-between;
+        padding: var(--spacing-sm);
+        border-bottom: 1px solid #ddd;
+    }
+
+    .table-light-active tbody tr td:last-child {
+        border-bottom: none;
+    }
+
+    .pharma-price {
+        padding: 5px 8px;
+        font-size: 12px;
+        border-radius: 8px;
+        box-shadow: none;
+        white-space: normal;
+        word-wrap: break-word;
+        text-align: left;
+    }
+
+    .cookie-content {
+        flex-direction: column;
+        gap: var(--spacing-sm);
+        text-align: center;
+    }
+
+    .cookie-content p {
+        padding-right: 0;
+    }
+}

@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from datetime import date, datetime
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 import uuid
 
 
@@ -54,3 +54,52 @@ class PharmacyRead(PharmacyBase):
 
     class Config:
         orm_mode = True
+
+
+class PharmacyInfo(BaseModel):
+    pharmacy_name: str
+    pharmacy_number: str
+    pharmacy_city: str
+    pharmacy_address: str
+    pharmacy_phone: str
+
+
+class GroupedProductResponse(BaseModel):
+    name: str
+    form: str
+    pharmacy_name: str
+    pharmacy_city: str
+    pharmacy_address: str
+    pharmacy_phone: str
+    pharmacy_number: str
+    price: float
+    quantity: float
+    manufacturer: str
+    country: str
+    pharmacies: List[PharmacyInfo]
+    updated_at: datetime
+
+
+class SearchResponse(BaseModel):
+    items: List[GroupedProductResponse]
+    total: int
+    page: int
+    size: int
+    unique_cities: List[str]
+    unique_forms: List[str]
+    filters: Dict[str, Any]
+
+
+# schemas.py - дополнить
+class ProductPreview(BaseModel):
+    name: str
+    form: str
+    manufacturer: str
+    price: float
+    pharmacy_city: str
+
+class TwoStepSearchResponse(BaseModel):
+    available_forms: List[str]
+    preview_products: List[ProductPreview]
+    total_found: int
+    filters: dict
