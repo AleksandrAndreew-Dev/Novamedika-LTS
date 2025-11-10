@@ -5,46 +5,74 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 import uuid
 from math import ceil
+from datetime import datetime, timedelta
 
 from db.database import get_db
 from db.models import Pharmacy, Product
-from db.schemas import PharmacyRead, ProductRead
 
-router = APIRouter(prefix="/api/search", tags=["search"])  # Добавляем префикс
-# Временное хранилище для сохранения контекста поиска (в продакшене используйте Redis)
+router = APIRouter(prefix="/api/search", tags=["search"])
+
 _search_context = {}
+TTL_MINUTES = 30
 
 
+def _clean_old_contexts():
+    """Очистка устаревших контекстов поиска"""
+    now = datetime.now()
+    expired_ids = []
+    for search_id, context in _search_context.items():
+        if now - context["created_at"] > timedelta(minutes=TTL_MINUTES):
+            expired_ids.append(search_id)
+    for search_id in expired_ids:
+        del _search_context[search_id]
+
+
+# search.py - улучшенная версия search-two-step
+# search.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
 @router.get("/search-two-step/", response_model=dict)
 async def search_two_step(
     name: Optional[str] = Query(None),
     city: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Первый этап поиска - только по названию и городу
-    Возвращает доступные формы для уточнения и создает контекст поиска
-    """
+    """Первый этап поиска - только по названию и городу"""
     if not name:
         raise HTTPException(
             status_code=400, detail="Параметр 'name' обязателен для поиска"
         )
 
-    query = select(Product).options(joinedload(Product.pharmacy)).join(Pharmacy)
+    _clean_old_contexts()
 
-    filters = []
-    if name:
-        filters.append(Product.name.ilike(f"%{name}%"))
-    if city and city != "Все города":
-        filters.append(Pharmacy.city.ilike(f"%{city}%"))
+    # Базовый запрос с явным JOIN и правильной фильтрацией по городу
+    base_query = (
+        select(Product)
+        .join(Pharmacy, Product.pharmacy_id == Pharmacy.uuid)
+        .where(Product.name.ilike(f"%{name}%"))
+    )
 
-    if filters:
-        query = query.where(or_(*filters))
+    # ИСПРАВЛЕНИЕ: Правильная фильтрация по городу
+    if city and city != "Все города" and city.strip():
+        base_query = base_query.where(
+            Pharmacy.city == city
+        )  # Используем точное сравнение вместо ilike
 
-    result = await db.execute(query)
-    products = result.unique().scalars().all()
+    # Запрос для получения форм с правильной фильтрацией
+    forms_query = (
+        select(Product.form, func.count(Product.uuid))
+        .join(Pharmacy, Product.pharmacy_id == Pharmacy.uuid)
+        .where(Product.name.ilike(f"%{name}%"))
+    )
 
-    if not products:
+    # ИСПРАВЛЕНИЕ: Такая же фильтрация по городу в forms_query
+    if city and city != "Все города" and city.strip():
+        forms_query = forms_query.where(Pharmacy.city == city)
+
+    forms_query = forms_query.group_by(Product.form).order_by(Product.form)
+
+    forms_result = await db.execute(forms_query)
+    forms_data = forms_result.all()
+
+    if not forms_data:
         return {
             "available_forms": [],
             "preview_products": [],
@@ -54,15 +82,21 @@ async def search_two_step(
             "message": "Товары не найдены",
         }
 
-    # Собираем уникальные формы из найденных продуктов
-    available_forms = set()
+    available_forms = [form for form, count in forms_data if form]
+    total_found = sum(count for form, count in forms_data)
+
+    # Получаем превью с правильной фильтрацией
+    preview_query = (
+        base_query.options(joinedload(Product.pharmacy))
+        .limit(10)
+        .order_by(Product.updated_at.desc())
+    )
+
+    preview_result = await db.execute(preview_query)
+    preview_products_data = preview_result.unique().scalars().all()
+
     preview_products = []
-
-    product_ids = []  # Сохраняем ID продуктов для второго этапа
-
-    for product in products[:10]:  # Первые 10 для превью
-        available_forms.add(product.form)
-        product_ids.append(str(product.uuid))
+    for product in preview_products_data:
         preview_products.append(
             {
                 "name": product.name,
@@ -75,195 +109,116 @@ async def search_two_step(
             }
         )
 
-    # Создаем контекст поиска с ID найденных продуктов
+    # Создаем контекст поиска
     search_id = str(uuid.uuid4())
     _search_context[search_id] = {
-        "product_ids": product_ids,
         "name": name,
         "city": city,
-        "available_forms": list(available_forms),
-        "created_at": func.now(),
+        "available_forms": available_forms,
+        "created_at": datetime.now(),
     }
 
     return {
-        "available_forms": sorted(list(available_forms)),
+        "available_forms": available_forms,
         "preview_products": preview_products,
-        "total_found": len(products),
+        "total_found": total_found,
         "filters": {"name": name, "city": city},
-        "search_id": search_id,  # Возвращаем ID для второго этапа
+        "search_id": search_id,
     }
 
 
 @router.get("/search/", response_model=dict)
 async def search_products(
-    search_id: Optional[str] = Query(None),  # ID из первого этапа
-    form: Optional[str] = Query(None),  # Выбранная форма
-    name: Optional[str] = Query(
-        None
-    ),  # Можно передать напрямую (для обратной совместимости)
-    city: Optional[str] = Query(None),  # Можно передать напрямую
+    search_id: Optional[str] = Query(None),
+    form: Optional[str] = Query(None),
+    name: Optional[str] = Query(None),
+    city: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    size: int = Query(50, ge=1, le=100),
+    size: int = Query(100, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Второй этап поиска - с выбранной формой препарата
-    Может использовать контекст поиска из первого этапа
     """
-    # Определяем контекст поиска
+    # Очищаем старые контексты
+    _clean_old_contexts()
+
+    # Определяем параметры поиска
+    search_name = name
+    search_city = city
+
     if search_id and search_id in _search_context:
-        # Используем сохраненный контекст
         context = _search_context[search_id]
         search_name = context["name"]
         search_city = context["city"]
-        product_ids = context["product_ids"]
 
-        # Удаляем использованный контекст (очистка памяти)
-        del _search_context[search_id]
+    # Базовый запрос с пагинацией
+    query = (
+        select(Product)
+        .options(joinedload(Product.pharmacy))
+        .join(Pharmacy)
+        .where(Product.name.ilike(f"%{search_name}%"))
+    )
 
-        # Базовый запрос с фильтрацией по ID из первого этапа
-        query = (
-            select(Product)
-            .options(joinedload(Product.pharmacy))
-            .join(Pharmacy)
-            .where(Product.uuid.in_([uuid.UUID(pid) for pid in product_ids]))
-        )
-
-    else:
-        # Прямой поиск (для обратной совместимости)
-        search_name = name
-        search_city = city
-
-        query = select(Product).options(joinedload(Product.pharmacy)).join(Pharmacy)
-        filters = []
-        if search_name:
-            filters.append(Product.name.ilike(f"%{search_name}%"))
-        if search_city and search_city != "Все города":
-            filters.append(Pharmacy.city.ilike(f"%{search_city}%"))
-
-        if filters:
-            query = query.where(or_(*filters))
-
-    # Добавляем фильтр по форме, если указана
+    if search_city and search_city != "Все города":
+        query = query.where(Pharmacy.city.ilike(f"%{search_city}%"))
     if form:
         query = query.where(Product.form == form)
 
-    # Выполняем запрос
+    # Получаем общее количество ДО пагинации
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar()
+
+    # Применяем пагинацию
+    total_pages = ceil(total / size) if total > 0 else 1
+    if page > total_pages:
+        page = total_pages
+
+    query = (
+        query.order_by(Product.updated_at.desc()).offset((page - 1) * size).limit(size)
+    )
     result = await db.execute(query)
     products = result.unique().scalars().all()
 
-    # Группируем продукты
-    grouped_products = {}
+    # Форматируем результаты
+    items = []
     for product in products:
         pharmacy = product.pharmacy
-
-        key = (
-            product.name,
-            product.form,
-            pharmacy.name if pharmacy else "Unknown",
-            pharmacy.city if pharmacy else "Unknown",
-            pharmacy.pharmacy_number if pharmacy else "N/A",
-        )
-
-        if key not in grouped_products:
-            grouped_products[key] = {
+        items.append(
+            {
+                "uuid": str(product.uuid),
                 "name": product.name,
                 "form": product.form,
+                "manufacturer": product.manufacturer,
+                "country": product.country,
+                "price": float(product.price) if product.price else 0.0,
+                "quantity": float(product.quantity) if product.quantity else 0.0,
                 "pharmacy_name": pharmacy.name if pharmacy else "Unknown",
                 "pharmacy_city": pharmacy.city if pharmacy else "Unknown",
                 "pharmacy_address": pharmacy.address if pharmacy else "Unknown",
                 "pharmacy_phone": pharmacy.phone if pharmacy else "Unknown",
                 "pharmacy_number": pharmacy.pharmacy_number if pharmacy else "N/A",
-                "price": float(product.price) if product.price else 0.0,
-                "quantity": float(product.quantity) if product.quantity else 0.0,
-                "manufacturer": product.manufacturer,
-                "country": product.country,
-                "pharmacies": [],
-                "updated_at": product.updated_at,
+                "updated_at": (
+                    product.updated_at.isoformat() if product.updated_at else None
+                ),
             }
-        else:
-            if product.updated_at > grouped_products[key]["updated_at"]:
-                grouped_products[key]["updated_at"] = product.updated_at
-
-            grouped_products[key]["quantity"] += (
-                float(product.quantity) if product.quantity else 0.0
-            )
-
-        if pharmacy:
-            grouped_products[key]["pharmacies"].append(
-                {
-                    "pharmacy_name": pharmacy.name,
-                    "pharmacy_number": pharmacy.pharmacy_number,
-                    "pharmacy_city": pharmacy.city,
-                    "pharmacy_address": pharmacy.address,
-                    "pharmacy_phone": pharmacy.phone,
-                }
-            )
-
-    # Преобразуем в список для пагинации
-    grouped_products_list = list(grouped_products.values())
-
-    # Пагинация
-    total = len(grouped_products_list)
-    total_pages = ceil(total / size) if total > 0 else 1
-    start_idx = (page - 1) * size
-    end_idx = start_idx + size
-    paginated_items = grouped_products_list[start_idx:end_idx]
-
-    # Получаем уникальные города и формы для фильтров
-    cities_query = select(Pharmacy.city).distinct().order_by(Pharmacy.city)
-    cities_result = await db.execute(cities_query)
-    unique_cities = [row[0] for row in cities_result.all() if row[0]]
-
-    forms_query = select(Product.form).distinct().order_by(Product.form)
-    forms_result = await db.execute(forms_query)
-    unique_forms = [row[0] for row in forms_result.all() if row[0]]
+        )
 
     return {
-        "items": paginated_items,
+        "items": items,
         "total": total,
         "page": page,
         "size": size,
         "total_pages": total_pages,
-        "unique_cities": unique_cities,
-        "unique_forms": unique_forms,
         "filters": {"name": search_name, "city": search_city, "form": form},
-        "search_used_context": bool(search_id and search_id in _search_context),
+        "search_id": search_id,
     }
 
 
-@router.get("/forms-by-name/")
-async def get_forms_by_name(
-    name: str = Query(..., description="Название препарата"),
-    city: Optional[str] = Query(None),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Получить доступные формы для конкретного названия препарата
-    (Альтернативный подход без сохранения контекста)
-    """
-    query = (
-        select(Product.form)
-        .distinct()
-        .join(Pharmacy)
-        .where(Product.name.ilike(f"%{name}%"))
-    )
-
-    if city and city != "Все города":
-        query = query.where(Pharmacy.city.ilike(f"%{city}%"))
-
-    query = query.order_by(Product.form)
-
-    result = await db.execute(query)
-    forms = [row[0] for row in result.all() if row[0]]
-
-    return {"name": name, "city": city, "available_forms": forms}
-
-
-# Остальные эндпоинты остаются без изменений
+# Остальные эндпоинты без изменений
 @router.get("/cities/")
 async def get_cities(db: AsyncSession = Depends(get_db)):
-    """Получить список уникальных городов"""
     result = await db.execute(
         select(Pharmacy.city)
         .distinct()
@@ -276,7 +231,6 @@ async def get_cities(db: AsyncSession = Depends(get_db)):
 
 @router.get("/forms/")
 async def get_forms(db: AsyncSession = Depends(get_db)):
-    """Получить список уникальных форм препаратов"""
     result = await db.execute(
         select(Product.form)
         .distinct()
@@ -287,47 +241,28 @@ async def get_forms(db: AsyncSession = Depends(get_db)):
     return forms
 
 
-@router.get("/products/{product_id}")
-async def get_product(product_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    """Получить детальную информацию о продукте"""
-    result = await db.execute(
-        select(Product)
-        .options(joinedload(Product.pharmacy))
-        .where(Product.uuid == product_id)
-    )
-    product = result.unique().scalar_one_or_none()
+# Добавьте в search.py
+@router.get("/check-relations/")
+async def check_relations(db: AsyncSession = Depends(get_db)):
+    """Проверка связей между аптеками и продуктами"""
 
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
+    # Проверяем количество записей
+    pharmacies_count = await db.execute(select(func.count(Pharmacy.uuid)))
+    products_count = await db.execute(select(func.count(Product.uuid)))
+
+    # Проверяем продукты без аптек
+    orphan_products = await db.execute(
+        select(func.count(Product.uuid)).where(Product.pharmacy_id.is_(None))
+    )
+
+    # Проверяем аптеки без продуктов
+    empty_pharmacies = await db.execute(
+        select(func.count(Pharmacy.uuid)).where(~Pharmacy.products.any())
+    )
 
     return {
-        "uuid": product.uuid,
-        "name": product.name,
-        "form": product.form,
-        "manufacturer": product.manufacturer,
-        "country": product.country,
-        "price": float(product.price) if product.price else 0.0,
-        "quantity": float(product.quantity) if product.quantity else 0.0,
-        "pharmacy": (
-            {
-                "name": product.pharmacy.name if product.pharmacy else None,
-                "city": product.pharmacy.city if product.pharmacy else None,
-                "address": product.pharmacy.address if product.pharmacy else None,
-                "phone": product.pharmacy.phone if product.pharmacy else None,
-            }
-            if product.pharmacy
-            else None
-        ),
+        "pharmacies_count": pharmacies_count.scalar(),
+        "products_count": products_count.scalar(),
+        "orphan_products": orphan_products.scalar(),
+        "empty_pharmacies": empty_pharmacies.scalar(),
     }
-
-
-@router.get("/pharmacies/{pharmacy_id}")
-async def get_pharmacy(pharmacy_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    """Получить информацию об аптеке"""
-    result = await db.execute(select(Pharmacy).where(Pharmacy.uuid == pharmacy_id))
-    pharmacy = result.scalar_one_or_none()
-
-    if not pharmacy:
-        raise HTTPException(status_code=404, detail="Pharmacy not found")
-
-    return pharmacy

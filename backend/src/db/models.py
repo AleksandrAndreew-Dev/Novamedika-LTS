@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Date, ForeignKey, Numeric, DateTime
+from sqlalchemy import Column, String, Date, ForeignKey, Numeric, DateTime, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
@@ -10,12 +10,17 @@ class Pharmacy(Base):
     __tablename__ = "pharmacies"
 
     uuid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String(30), nullable=True)
-    pharmacy_number = Column(String(100), nullable=True)
+    name = Column(String(30), nullable=False)
+    pharmacy_number = Column(String(100), nullable=False)
     city = Column(String(30), nullable=True)
     address = Column(String(255), nullable=True)
     phone = Column(String(100), nullable=True)
     opening_hours = Column(String(255), nullable=True)
+
+    # Добавляем уникальное ограничение
+    __table_args__ = (
+        UniqueConstraint('name', 'pharmacy_number', name='uq_pharmacy_name_number'),
+    )
 
     products = relationship("Product", back_populates="pharmacy")
 

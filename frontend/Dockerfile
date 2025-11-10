@@ -5,10 +5,11 @@ WORKDIR /app
 # Установка curl для healthcheck
 RUN apk add --no-cache curl
 
-COPY package*.json ./
+# Копируем package.json и устанавливаем зависимости
+COPY package.json ./
 RUN npm install
 
-# Копируем только необходимые файлы
+# Копируем остальные файлы
 COPY vite.config.js ./
 COPY index.html ./
 COPY src/ ./src/

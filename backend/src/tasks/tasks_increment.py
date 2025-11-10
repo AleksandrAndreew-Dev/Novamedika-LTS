@@ -1,4 +1,4 @@
-# tasks_increment.py (исправленная версия с правильной обработкой дат)
+# tasks_increment.py (исправленная версия)
 import csv
 import re
 import logging
@@ -7,6 +7,8 @@ from datetime import datetime, date, timezone
 from io import StringIO
 from typing import List, Tuple, Dict, Set, Optional
 import asyncio
+
+from pathlib import Path
 
 from celery import Celery
 from sqlalchemy import select, and_
@@ -76,21 +78,14 @@ def process_csv_incremental(
 async def process_csv_incremental_async(
     file_content: str, pharmacy_name: str, pharmacy_number: str
 ):
-    """Асинхронная версия обработки CSV"""
     try:
-        pharmacy_map = {"novamedika": "Новамедика", "ekliniya": "Эклиния"}
+        pharmacy_map = {"novamedika": "Новамедика", "ekliniya": "ЭКЛИНИЯ"}
         normalized_name = pharmacy_map.get(pharmacy_name.lower())
         if not normalized_name:
             raise ValueError(f"Invalid pharmacy: {pharmacy_name}")
 
-        city_map = {
-            "Новамедика": "Минск",
-            "Эклиния": "Минск",
-        }
-        current_city = city_map.get(normalized_name, "Минск")
-
         async with async_session_maker() as session:
-            # Получаем или создаем аптеку
+            # Ищем аптеку по названию и номеру - НЕ СОЗДАЕМ НОВУЮ И НЕ ОБНОВЛЯЕМ
             result = await session.execute(
                 select(Pharmacy).where(
                     and_(
@@ -101,27 +96,19 @@ async def process_csv_incremental_async(
             )
             pharmacy = result.scalar_one_or_none()
 
-            if pharmacy:
-                logger.info(f"Found existing pharmacy: {pharmacy.uuid}")
-                if not pharmacy.city or pharmacy.city.strip() == "":
-                    pharmacy.city = current_city
-                    await session.commit()
-            else:
-                logger.info(
-                    f"Creating new pharmacy: {normalized_name}, number: {pharmacy_number}"
+            # ЕСЛИ АПТЕКА НЕ НАЙДЕНА - ВОЗВРАЩАЕМ ОШИБКУ И НЕ ПРОДОЛЖАЕМ ЗАГРУЗКУ
+            if not pharmacy:
+                logger.error(
+                    f"Pharmacy not found: {normalized_name}, number: {pharmacy_number}"
                 )
-                pharmacy = Pharmacy(
-                    uuid=uuid.uuid4(),
-                    name=normalized_name,
-                    pharmacy_number=str(pharmacy_number),
-                    city=current_city,
-                )
-                session.add(pharmacy)
-                await session.commit()
-                await session.refresh(pharmacy)
-                logger.info(f"Created pharmacy with UUID: {pharmacy.uuid}")
+                return {
+                    "status": "error",
+                    "error": f"Аптека не найдена: {normalized_name} номер {pharmacy_number}. Загрузка продуктов невозможна.",
+                }
 
-            # Обрабатываем CSV
+            logger.info(f"Found pharmacy: {pharmacy.uuid}")
+
+            # Обрабатываем CSV только для найденной аптеки
             csv_data, csv_hashes = process_csv_data_with_hashes(
                 file_content, pharmacy.uuid
             )
@@ -140,7 +127,7 @@ async def process_csv_incremental_async(
                 f"Changes: {len(to_add)} to add, {len(to_update)} to update, {len(to_remove)} to remove"
             )
 
-            # Выполняем изменения
+            # Выполняем изменения ТОЛЬКО для продуктов
             stats = await execute_incremental_changes_async(
                 to_add, to_update, to_remove, pharmacy.uuid
             )
@@ -504,9 +491,6 @@ def compare_products(
             to_update.append(product_data)
 
     return to_add, to_update, to_remove
-
-
-# tasks_increment.py
 
 
 async def execute_incremental_changes_async(

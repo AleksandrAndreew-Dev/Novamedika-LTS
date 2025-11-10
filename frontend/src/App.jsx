@@ -1,4 +1,3 @@
-// App.jsx
 import React, { useEffect, useState } from "react";
 import Search from "./components/Search";
 import "./App.css";
@@ -7,39 +6,42 @@ function App() {
   const [showCookieBanner, setShowCookieBanner] = useState(false);
 
   useEffect(() => {
-    // Показываем баннер только на HTTPS и если нет флага в localStorage
     if (window.location.protocol === 'https:' && !localStorage.getItem('cookiesAccepted')) {
       setShowCookieBanner(true);
     }
-
-    // Обработчик для кнопки принятия cookies
-    const handleAcceptCookies = () => {
-      setShowCookieBanner(false);
-      localStorage.setItem('cookiesAccepted', 'true');
-      document.cookie = "cookies_accepted=true; max-age=31536000; path=/; Secure; SameSite=Lax";
-    };
-
-    const acceptButton = document.getElementById('accept-cookies');
-    if (acceptButton) {
-      acceptButton.addEventListener('click', handleAcceptCookies);
-    }
-
-    return () => {
-      if (acceptButton) {
-        acceptButton.removeEventListener('click', handleAcceptCookies);
-      }
-    };
   }, []);
+
+  const handleAcceptCookies = () => {
+    setShowCookieBanner(false);
+    localStorage.setItem('cookiesAccepted', 'true');
+    document.cookie = "cookies_accepted=true; max-age=31536000; path=/; Secure; SameSite=Lax";
+  };
 
   return (
     <div className="App">
-      {/* Cookie Banner */}
       {showCookieBanner && (
-        <div id="cookie-banner" className="cookie-banner">
-          <div className="cookie-content">
-            <p>Мы используем только технические файлы cookie для корректной работы сайта. Продолжая использовать сайт, вы соглашаетесь с этим.</p>
-            <button id="accept-cookies" className="btn btn-primary">Принять</button>
-            <a href="/cookie-policy" className="cookie-link">Подробнее</a>
+        <div className="fixed bottom-4 left-4 right-4 bg-white rounded-2xl shadow-lg border border-telegram-border z-50 max-w-md mx-auto">
+          <div className="p-4">
+            <div className="text-center">
+              <p className="text-gray-800 mb-4 text-sm leading-relaxed">
+                Мы используем только технические файлы cookie для корректной работы сайта.
+                Продолжая использовать сайт, вы соглашаетесь с этим.
+              </p>
+              <div className="flex flex-col space-y-2">
+                <button
+                  onClick={handleAcceptCookies}
+                  className="bg-telegram-primary hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm"
+                >
+                  Принять
+                </button>
+                <a
+                  href="/cookie-policy"
+                  className="text-telegram-primary hover:text-blue-600 font-medium py-2 text-sm"
+                >
+                  Подробнее
+                </a>
+              </div>
+            </div>
           </div>
         </div>
       )}

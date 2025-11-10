@@ -1,4 +1,3 @@
-// components/Search.jsx
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import SearchBar from "./SearchBar";
@@ -14,24 +13,22 @@ export default function Search() {
   const [searchData, setSearchData] = useState({
     name: "",
     city: "",
-    form: ""
+    form: "",
   });
   const [searchContext, setSearchContext] = useState(null);
   const [results, setResults] = useState([]);
   const [pagination, setPagination] = useState({
     page: 1,
-    size: 50,
+    size: 100, // Увеличил количество результатов на странице
     total: 0,
-    totalPages: 1
+    totalPages: 1,
   });
+  const [error, setError] = useState(null);
 
-  // Загружаем список городов при монтировании
   useEffect(() => {
     const fetchCities = async () => {
       try {
-        console.log("Fetching cities from:", `${API_BASE_URL}/api/search/cities/`);
         const response = await axios.get(`${API_BASE_URL}/api/search/cities/`);
-        console.log("Cities response:", response.data);
         setCities(response.data);
       } catch (error) {
         console.error("Error fetching cities:", error);
@@ -41,180 +38,246 @@ export default function Search() {
     fetchCities();
   }, []);
 
-  // Первый этап поиска
   const handleInitialSearch = async (name, city) => {
     setLoading(true);
+    setError(null);
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/search/search-two-step/`, {
-        params: { name, city }
-      });
+      const response = await axios.get(
+        `${API_BASE_URL}/api/search/search-two-step/`,
+        {
+          params: { name, city },
+        }
+      );
 
-      setSearchData(prev => ({ ...prev, name, city }));
+      setSearchData((prev) => ({ ...prev, name, city }));
       setSearchContext({
         availableForms: response.data.available_forms,
         previewProducts: response.data.preview_products,
         totalFound: response.data.total_found,
-        searchId: response.data.search_id
+        searchId: response.data.search_id,
       });
       setStep(2);
     } catch (error) {
       console.error("Search error:", error);
-      alert("Ошибка при поиске. Попробуйте еще раз.");
+      setError("Ошибка при поиске. Попробуйте еще раз.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Второй этап - выбор формы
   const handleFormSelect = async (form) => {
     setLoading(true);
+    setError(null);
     try {
       const params = {
         form,
         page: 1,
-        size: pagination.size
+        size: pagination.size,
       };
 
-      // Если есть search_id из контекста, используем его
+      // Используем searchId если есть, иначе прямой поиск
       if (searchContext?.searchId) {
         params.search_id = searchContext.searchId;
       } else {
-        // Иначе используем обычные параметры
         params.name = searchData.name;
         params.city = searchData.city;
       }
 
-      const response = await axios.get(`${API_BASE_URL}/api/search/search/`, { params });
+      const response = await axios.get(`${API_BASE_URL}/api/search/search/`, {
+        params,
+      });
 
-      setSearchData(prev => ({ ...prev, form }));
+      setSearchData((prev) => ({ ...prev, form }));
       setResults(response.data.items);
-      setPagination(prev => ({
+      setPagination((prev) => ({
         ...prev,
         page: response.data.page,
         total: response.data.total,
-        totalPages: response.data.total_pages
+        totalPages: response.data.total_pages,
       }));
       setStep(3);
     } catch (error) {
       console.error("Form selection error:", error);
-      alert("Ошибка при загрузке результатов.");
+      setError("Ошибка при загрузке результатов.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Пагинация
   const handlePageChange = async (newPage) => {
     setLoading(true);
     try {
       const params = {
-        name: searchData.name,
-        city: searchData.city,
-        form: searchData.form,
         page: newPage,
-        size: pagination.size
+        size: pagination.size,
       };
 
-      const response = await axios.get(`${API_BASE_URL}/api/search/search/`, { params });
+      // Приоритет: searchId > прямой поиск
+      if (searchContext?.searchId) {
+        params.search_id = searchContext.searchId;
+        params.form = searchData.form;
+      } else {
+        params.name = searchData.name;
+        params.city = searchData.city;
+        params.form = searchData.form;
+      }
+
+      const response = await axios.get(`${API_BASE_URL}/api/search/search/`, {
+        params,
+      });
 
       setResults(response.data.items);
-      setPagination(prev => ({
+      setPagination((prev) => ({
         ...prev,
         page: response.data.page,
         total: response.data.total,
-        totalPages: response.data.total_pages
+        totalPages: response.data.total_pages,
       }));
     } catch (error) {
       console.error("Pagination error:", error);
+      setError("Ошибка при загрузке страницы.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Сброс поиска
+  const handleBackToForms = () => {
+    setStep(2);
+  };
+
   const handleReset = () => {
     setStep(1);
     setSearchData({ name: "", city: "", form: "" });
     setSearchContext(null);
     setResults([]);
+    setError(null);
   };
 
   return (
-    <div className="search-container">
-      <nav className="nav">
-        <ul className="list-inline">
-          <li className="list-inline-item">
-            <a href="/psi">Центр психологической силы Инсайтинк</a>
-          </li>
-          <li className="list-inline-item">
-            <a href="/novamedika">Сайт Новамедика</a>
-          </li>
-        </ul>
-      </nav>
-
-      <main className="container-lg">
-        <section className="row flex-wrapper container-fluid">
-          <header className="header container">
-            <span className="logo-text1">Сеть Аптек</span>
-            <h1 className="logo-text">
-              <span className="fletter">Н</span>ова<span className="fletter">М</span>едика
-            </h1>
-            <span className="logo-text2">Справочная служба</span>
-          </header>
-
-          <div id="two" className="container">
-            <div className="row">
-              <SearchBar
-                cities={cities}
-                onSearch={handleInitialSearch}
-                loading={loading}
-                currentCity={searchData.city}
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* Результаты поиска */}
-        {step === 2 && searchContext && (
-          <FormSelection
-            availableForms={searchContext.availableForms}
-            previewProducts={searchContext.previewProducts}
-            totalFound={searchContext.totalFound}
-            searchData={searchData}
-            onFormSelect={handleFormSelect}
-            onBack={handleReset}
-            loading={loading}
-          />
-        )}
-
-        {step === 3 && (
-          <SearchResults
-            results={results}
-            searchData={searchData}
-            pagination={pagination}
-            onPageChange={handlePageChange}
-            onNewSearch={handleReset}
-            loading={loading}
-          />
-        )}
-      </main>
-
-      {/* Футер */}
-      <div className="footer container-fluid text-center">
-        <ul className="list-inline">
-          <li className="list-inline-item"><a href="/">Поиск</a></li>
-          <li className="list-inline-item"><a href="/terms">Условия использования сервиса</a></li>
-          <li className="list-inline-item"><a href="/cookie-policy">Политика использования файлов cookie</a></li>
-          <li className="list-inline-item"><a href="/pharmacies-nearby">Аптеки рядом</a></li>
-          <li className="list-inline-item"><a href="/advertising">Реклама</a></li>
-          <li className="list-inline-item"><a href="/contacts">Контакты</a></li>
-          <li className="list-inline-item"><a href="/help">Помощь</a></li>
-        </ul>
+    <div className="min-h-screen bg-telegram-bg">
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b border-telegram-border">
+        <div className="text-center py-4 px-4">
+          <div className="text-gray-600 text-sm mb-1">Сеть Аптек</div>
+          <h1 className="text-2xl font-bold text-telegram-primary m-0">
+            <span className="text-orange-500">Н</span>ова
+            <span className="text-orange-500">М</span>едика
+          </h1>
+          <div className="text-gray-600 text-sm mt-1">Справочная служба</div>
+        </div>
       </div>
 
-      <footer className="footer container-fluid text-center">
-        &#169;2025 Novamedika.com
-      </footer>
+      {/* Content */}
+      <div className="p-4">
+        <div className="max-w-4xl mx-auto">
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+              <div className="flex items-center">
+                <svg
+                  className="w-5 h-5 text-red-500 mr-2"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                <span className="text-red-800 text-sm">{error}</span>
+              </div>
+            </div>
+          )}
+
+          {step === 1 && (
+            <SearchBar
+              cities={cities}
+              onSearch={handleInitialSearch}
+              loading={loading}
+              currentCity={searchData.city}
+            />
+          )}
+
+          {loading && (
+            <div className="flex justify-center items-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-telegram-primary"></div>
+            </div>
+          )}
+
+          {step === 2 && searchContext && (
+            <FormSelection
+              availableForms={searchContext.availableForms}
+              previewProducts={searchContext.previewProducts}
+              totalFound={searchContext.totalFound}
+              searchData={searchData}
+              onFormSelect={handleFormSelect}
+              onBack={handleReset}
+              loading={loading}
+            />
+          )}
+
+          {step === 3 && (
+            <SearchResults
+              results={results}
+              searchData={searchData}
+              pagination={pagination}
+              onPageChange={handlePageChange}
+              onNewSearch={handleReset}
+              onBackToForms={handleBackToForms}
+              loading={loading}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="bg-white border-t border-telegram-border mt-8">
+        <div className="max-w-4xl mx-auto py-6 px-4">
+          <div className="space-y-4">
+            <div className="flex flex-wrap justify-center gap-4 text-sm">
+              <a
+                href="/"
+                className="text-telegram-primary hover:text-blue-600 transition-colors"
+              >
+                Поиск
+              </a>
+              <a
+                href="/terms"
+                className="text-telegram-primary hover:text-blue-600 transition-colors"
+              >
+                Условия использования
+              </a>
+              <a
+                href="/cookie-policy"
+                className="text-telegram-primary hover:text-blue-600 transition-colors"
+              >
+                Cookie
+              </a>
+              <a
+                href="/pharmacies-nearby"
+                className="text-telegram-primary hover:text-blue-600 transition-colors"
+              >
+                Аптеки рядом
+              </a>
+              <a
+                href="/contacts"
+                className="text-telegram-primary hover:text-blue-600 transition-colors"
+              >
+                Контакты
+              </a>
+              <a
+                href="/help"
+                className="text-telegram-primary hover:text-blue-600 transition-colors"
+              >
+                Помощь
+              </a>
+            </div>
+            <div className="text-center text-gray-600 text-sm">
+              &#169;2025 Novamedika.com
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

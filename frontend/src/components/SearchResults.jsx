@@ -1,4 +1,3 @@
-// components/SearchResults.jsx
 import React from "react";
 
 export default function SearchResults({
@@ -7,9 +6,12 @@ export default function SearchResults({
   pagination,
   onPageChange,
   onNewSearch,
+  onBackToForms,
   loading
 }) {
   const formatDate = (dateString) => {
+    if (!dateString) return "Недавно";
+
     const date = new Date(dateString);
     const now = new Date();
     const diffMs = now - date;
@@ -26,128 +28,190 @@ export default function SearchResults({
     }
   };
 
+  // Функция для генерации номеров страниц
+  const generatePageNumbers = () => {
+    const pages = [];
+    const current = pagination.page;
+    const total = pagination.totalPages;
+
+    // Всегда показываем первую страницу
+    pages.push(1);
+
+    // Показываем эллипсис если нужно
+    if (current > 3) {
+      pages.push('...');
+    }
+
+    // Показываем страницы вокруг текущей
+    for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) {
+      pages.push(i);
+    }
+
+    // Показываем эллипсис если нужно
+    if (current < total - 2) {
+      pages.push('...');
+    }
+
+    // Всегда показываем последнюю страницу если есть больше 1 страницы
+    if (total > 1) {
+      pages.push(total);
+    }
+
+    return pages;
+  };
+
   return (
-    <div className="results container-lg">
-      <div className="card">
-        <div className="card-header d-flex justify-content-between align-items-center">
-          <div>
-            <h5 className="results-text">Результаты поиска: </h5>
-            <span className="results-text2">
-              {searchData.name} {searchData.form}
-              {results[0] && ` - ${results[0].manufacturer} ${results[0].country}`}
-            </span>
-          </div>
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={onNewSearch}
-            disabled={loading}
-          >
-            ← Новый поиск
-          </button>
-        </div>
-
-        <div className="card-body">
-          {results.length === 0 ? (
-            <div className="text-center py-4">
-              <h5>Ничего не найдено</h5>
-              <p>Попробуйте изменить параметры поиска</p>
+    <div className="p-4 max-w-6xl mx-auto">
+      <div className="bg-white rounded-2xl shadow-sm border border-telegram-border overflow-hidden">
+        {/* Header */}
+        <div className="border-b border-telegram-border px-6 py-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800">Результаты поиска:</h2>
+              <p className="text-telegram-primary font-medium text-sm mt-1">
+                {searchData.name} {searchData.form}
+                {results[0] && ` - ${results[0].manufacturer} ${results[0].country}`}
+              </p>
+              <p className="text-gray-600 text-sm mt-1">
+                Найдено {pagination.total} результатов
+              </p>
             </div>
-          ) : (
-            <>
-              <div className="table-responsive">
-                <table id="results-table" className="table-sm table-light-active align-middle">
-                  <thead>
-                    <tr className="table-light">
-                      <th scope="col">Аптека</th>
-                      <th scope="col">Город</th>
-                      <th scope="col">Адрес</th>
-                      <th scope="col">Телефон</th>
-                      <th scope="col">Название</th>
-                      <th scope="col">Форма</th>
-                      <th scope="col">Цена в аптеке бел.руб</th>
-                      <th scope="col">Количество в Аптеке</th>
-                      <th scope="col">Производитель, Страна</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {results.map((item, index) => (
-                      <tr key={index} className="table-light">
-                        <td className="table-light">
-                          {item.pharmacy_name} №{item.pharmacy_number}
-                          <br />
-                          <small className="updated-time text-muted">
-                            Обновлено: {formatDate(item.updated_at)}
-                          </small>
-                        </td>
-                        <td className="table-light">{item.pharmacy_city}</td>
-                        <td className="table-light">{item.pharmacy_address}</td>
-                        <td className="table-light">{item.pharmacy_phone}</td>
-                        <td className="table-light">{item.name}</td>
-                        <td className="table-light">{item.form}</td>
-                        <td className="table-light">
-                          <span className="pharma-price">{item.price} Br</span>
-                        </td>
-                        <td className="table-light">
-                          {item.quantity} уп.
-                          <br />
-                          <small className="text-muted">Уточняйте кол-во в аптеке</small>
-                        </td>
-                        <td className="table-light">
-                          {item.manufacturer}, {item.country}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Пагинация */}
-              {pagination.totalPages > 1 && (
-                <nav aria-label="Page navigation" className="mt-3">
-                  <ul className="pagination justify-content-center">
-                    <li className={`page-item ${pagination.page === 1 ? 'disabled' : ''}`}>
-                      <button
-                        className="page-link"
-                        onClick={() => onPageChange(pagination.page - 1)}
-                        disabled={pagination.page === 1 || loading}
-                      >
-                        Назад
-                      </button>
-                    </li>
-
-                    {[...Array(pagination.totalPages)].map((_, index) => {
-                      const pageNum = index + 1;
-                      return (
-                        <li
-                          key={pageNum}
-                          className={`page-item ${pagination.page === pageNum ? 'active' : ''}`}
-                        >
-                          <button
-                            className="page-link"
-                            onClick={() => onPageChange(pageNum)}
-                            disabled={loading}
-                          >
-                            {pageNum}
-                          </button>
-                        </li>
-                      );
-                    })}
-
-                    <li className={`page-item ${pagination.page === pagination.totalPages ? 'disabled' : ''}`}>
-                      <button
-                        className="page-link"
-                        onClick={() => onPageChange(pagination.page + 1)}
-                        disabled={pagination.page === pagination.totalPages || loading}
-                      >
-                        Вперед
-                      </button>
-                    </li>
-                  </ul>
-                </nav>
-              )}
-            </>
-          )}
+            <div className="flex gap-2">
+              <button
+                onClick={onBackToForms}
+                disabled={loading}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center text-sm"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+                Выбор формы
+              </button>
+              <button
+                onClick={onNewSearch}
+                disabled={loading}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center text-sm"
+              >
+                Новый поиск
+              </button>
+            </div>
+          </div>
         </div>
+
+        {results.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="text-gray-400 mb-4">
+              <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-medium text-gray-500 mb-2">Ничего не найдено</h3>
+            <p className="text-gray-400 text-sm">Попробуйте изменить параметры поиска</p>
+          </div>
+        ) : (
+          <div className="p-6">
+            {/* Results Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Аптека</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Город</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Адрес</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Телефон</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Название</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Форма</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Цена</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Количество</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Производитель</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {results.map((item, index) => (
+                    <tr key={index} className="hover:bg-gray-50 transition-colors">
+                      <td className="py-3 px-4">
+                        <div>
+                          <div className="text-sm font-medium text-gray-800">
+                            {item.pharmacy_name} №{item.pharmacy_number}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            Обновлено: {formatDate(item.updated_at)}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-600">{item.pharmacy_city}</td>
+                      <td className="py-3 px-4 text-sm text-gray-600">{item.pharmacy_address}</td>
+                      <td className="py-3 px-4 text-sm text-gray-600">{item.pharmacy_phone}</td>
+                      <td className="py-3 px-4 text-sm text-gray-800">{item.name}</td>
+                      <td className="py-3 px-4 text-sm text-gray-600">{item.form}</td>
+                      <td className="py-3 px-4">
+                        <span className="inline-block bg-telegram-primary text-white text-sm font-medium py-1 px-3 rounded-full">
+                          {item.price} Br
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div>
+                          <div className="text-sm text-gray-800">{item.quantity} уп.</div>
+                          <div className="text-xs text-gray-500">Уточняйте в аптеке</div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-600">
+                        {item.manufacturer}, {item.country}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {pagination.totalPages > 1 && (
+              <div className="flex justify-center items-center mt-6 space-x-2">
+                <button
+                  onClick={() => onPageChange(pagination.page - 1)}
+                  disabled={pagination.page === 1 || loading}
+                  className="bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-300 text-gray-700 font-medium py-2 px-3 rounded-lg transition-colors flex items-center text-sm"
+                >
+                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Назад
+                </button>
+
+                {/* Номера страниц */}
+                {generatePageNumbers().map((page, index) => (
+                  page === '...' ? (
+                    <span key={index} className="px-2 py-1 text-gray-500">...</span>
+                  ) : (
+                    <button
+                      key={index}
+                      onClick={() => onPageChange(page)}
+                      disabled={page === pagination.page || loading}
+                      className={`py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                        page === pagination.page
+                          ? 'bg-telegram-primary text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  )
+                ))}
+
+                <button
+                  onClick={() => onPageChange(pagination.page + 1)}
+                  disabled={pagination.page === pagination.totalPages || loading}
+                  className="bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-300 text-gray-700 font-medium py-2 px-3 rounded-lg transition-colors flex items-center text-sm"
+                >
+                  Вперед
+                  <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

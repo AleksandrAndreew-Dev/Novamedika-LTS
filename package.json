@@ -5,6 +5,8 @@
     "dev:watch": "docker compose -f docker-compose.traefik.dev.yml -f compose.watch.yml watch",
     "dev:logs": "docker compose -f docker-compose.traefik.dev.yml logs -f",
     "dev:down": "docker compose -f docker-compose.traefik.dev.yml down",
-    "dev:clean": "docker compose -f docker-compose.traefik.dev.yml down -v"
+    "dev:clean": "docker compose -f docker-compose.traefik.dev.yml down -v",
+    "dev:frontend": "docker compose -f docker-compose.traefik.dev.yml up --build -d frontend",
+  "restart:frontend": "docker compose -f docker-compose.traefik.dev.yml restart frontend"
   }
 }
