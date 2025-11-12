@@ -10,6 +10,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   DOCKER_COMPOSE_FILE: docker-compose.traefik.prod.yml
+  DOMAIN: spravka.novamedika.com
 
 jobs:
   test:

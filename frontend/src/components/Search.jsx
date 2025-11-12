@@ -3,6 +3,7 @@ import axios from "axios";
 import SearchBar from "./SearchBar";
 import FormSelection from "./FormSelection";
 import SearchResults from "./SearchResults";
+import { useTelegramWebApp, useTelegramUser } from "../telegram/TelegramWebApp";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -19,11 +20,15 @@ export default function Search() {
   const [results, setResults] = useState([]);
   const [pagination, setPagination] = useState({
     page: 1,
-    size: 100, // Увеличил количество результатов на странице
+    size: 50, // Увеличил количество результатов на странице
     total: 0,
     totalPages: 1,
   });
   const [error, setError] = useState(null);
+
+
+  const { tg, isTelegram } = useTelegramWebApp();
+  const telegramUser = useTelegramUser();
 
   useEffect(() => {
     const fetchCities = async () => {
@@ -37,6 +42,28 @@ export default function Search() {
     };
     fetchCities();
   }, []);
+
+
+  useEffect(() => {
+    if (!isTelegram || !tg) return;
+
+    if (step === 1) {
+      tg.BackButton.hide();
+    } else {
+      tg.BackButton.show();
+      tg.BackButton.onClick(() => {
+        if (step === 2) {
+          setStep(1);
+        } else if (step === 3) {
+          setStep(2);
+        }
+      });
+    }
+
+    return () => {
+      tg.BackButton.offClick();
+    };
+  }, [step, isTelegram, tg]);
 
   const handleInitialSearch = async (name, city) => {
     setLoading(true);
@@ -60,10 +87,19 @@ export default function Search() {
     } catch (error) {
       console.error("Search error:", error);
       setError("Ошибка при поиске. Попробуйте еще раз.");
+
+      if (isTelegram) {
+        tg.showPopup({
+          title: 'Ошибка',
+          message: 'Ошибка при поиске. Попробуйте еще раз.',
+          buttons: [{ type: 'ok' }]
+        });
+      }
     } finally {
       setLoading(false);
     }
   };
+
 
   const handleFormSelect = async (form) => {
     setLoading(true);
@@ -154,35 +190,29 @@ export default function Search() {
   };
 
   return (
-    <div className="min-h-screen bg-telegram-bg">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-telegram-border">
-        <div className="text-center py-4 px-4">
-          <div className="text-gray-600 text-sm mb-1">Сеть Аптек</div>
-          <h1 className="text-2xl font-bold text-telegram-primary m-0">
-            <span className="text-orange-500">Н</span>ова
-            <span className="text-orange-500">М</span>едика
-          </h1>
-          <div className="text-gray-600 text-sm mt-1">Справочная служба</div>
+    <div className={`min-h-screen ${isTelegram ? 'bg-transparent' : 'bg-telegram-bg'}`}>
+      {/* Показываем кастомный header только вне Telegram */}
+      {!isTelegram && (
+        <div className="bg-white shadow-sm border-b border-telegram-border">
+          <div className="text-center py-4 px-4">
+            <div className="text-gray-600 text-sm mb-1">Сеть Аптек</div>
+            <h1 className="text-2xl font-bold text-telegram-primary m-0">
+              <span className="text-orange-500">Н</span>ова
+              <span className="text-orange-500">М</span>едика
+            </h1>
+            <div className="text-gray-600 text-sm mt-1">Справочная служба</div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Content */}
-      <div className="p-4">
-        <div className="max-w-4xl mx-auto">
+      <div className={isTelegram ? 'p-2' : 'p-4'}>
+        <div className={isTelegram ? 'max-w-full' : 'max-w-4xl mx-auto'}>
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
               <div className="flex items-center">
-                <svg
-                  className="w-5 h-5 text-red-500 mr-2"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                    clipRule="evenodd"
-                  />
+                <svg className="w-5 h-5 text-red-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                 </svg>
                 <span className="text-red-800 text-sm">{error}</span>
               </div>
@@ -195,6 +225,7 @@ export default function Search() {
               onSearch={handleInitialSearch}
               loading={loading}
               currentCity={searchData.city}
+              isTelegram={isTelegram}
             />
           )}
 
@@ -211,8 +242,9 @@ export default function Search() {
               totalFound={searchContext.totalFound}
               searchData={searchData}
               onFormSelect={handleFormSelect}
-              onBack={handleReset}
+              onBack={() => setStep(1)}
               loading={loading}
+              isTelegram={isTelegram}
             />
           )}
 
@@ -222,62 +254,53 @@ export default function Search() {
               searchData={searchData}
               pagination={pagination}
               onPageChange={handlePageChange}
-              onNewSearch={handleReset}
-              onBackToForms={handleBackToForms}
+              onNewSearch={() => setStep(1)}
+              onBackToForms={() => setStep(2)}
               loading={loading}
+              isTelegram={isTelegram}
             />
           )}
         </div>
       </div>
 
+
       {/* Footer */}
-      <div className="bg-white border-t border-telegram-border mt-8">
-        <div className="max-w-4xl mx-auto py-6 px-4">
-          <div className="space-y-4">
-            <div className="flex flex-wrap justify-center gap-4 text-sm">
-              <a
-                href="/"
-                className="text-telegram-primary hover:text-blue-600 transition-colors"
-              >
-                Поиск
-              </a>
-              <a
-                href="/terms"
-                className="text-telegram-primary hover:text-blue-600 transition-colors"
-              >
-                Условия использования
-              </a>
-              <a
-                href="/cookie-policy"
-                className="text-telegram-primary hover:text-blue-600 transition-colors"
-              >
-                Cookie
-              </a>
-              <a
-                href="/pharmacies-nearby"
-                className="text-telegram-primary hover:text-blue-600 transition-colors"
-              >
-                Аптеки рядом
-              </a>
-              <a
-                href="/contacts"
-                className="text-telegram-primary hover:text-blue-600 transition-colors"
-              >
-                Контакты
-              </a>
-              <a
-                href="/help"
-                className="text-telegram-primary hover:text-blue-600 transition-colors"
-              >
-                Помощь
-              </a>
-            </div>
-            <div className="text-center text-gray-600 text-sm">
-              &#169;2025 Novamedika.com
+            {!isTelegram && (
+        <div className="bg-white border-t border-telegram-border mt-8">
+          <div className="max-w-4xl mx-auto py-6 px-4">
+            <div className="space-y-4">
+              <div className="flex flex-wrap justify-center gap-4 text-sm">
+                <a href="/" className="text-telegram-primary hover:text-blue-600 transition-colors">
+                  Поиск
+                </a>
+                <a href="/terms" className="text-telegram-primary hover:text-blue-600 transition-colors">
+                  Условия использования
+                </a>
+                <a href="/cookie-policy" className="text-telegram-primary hover:text-blue-600 transition-colors">
+                  Cookie
+                </a>
+                <a href="/pharmacies-nearby" className="text-telegram-primary hover:text-blue-600 transition-colors">
+                  Аптеки рядом
+                </a>
+                <a href="/contacts" className="text-telegram-primary hover:text-blue-600 transition-colors">
+                  Контакты
+                </a>
+                <a href="/help" className="text-telegram-primary hover:text-blue-600 transition-colors">
+                  Помощь
+                </a>
+              </div>
+              <div className="text-center text-gray-600 text-sm">
+                &#169;2025 Novamedika.com
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
+
+
+
+
+

@@ -7,7 +7,8 @@ export default function SearchResults({
   onPageChange,
   onNewSearch,
   onBackToForms,
-  loading
+  loading,
+  isTelegram
 }) {
   const formatDate = (dateString) => {
     if (!dateString) return "Недавно";
@@ -60,12 +61,12 @@ export default function SearchResults({
     return pages;
   };
 
-  return (
-    <div className="p-4 max-w-6xl mx-auto">
+   return (
+    <div className={`${isTelegram ? 'p-2' : 'p-4'} max-w-6xl mx-auto`}>
       <div className="bg-white rounded-2xl shadow-sm border border-telegram-border overflow-hidden">
         {/* Header */}
-        <div className="border-b border-telegram-border px-6 py-4">
-          <div className="flex justify-between items-center">
+        <div className="border-b border-telegram-border px-4 py-3">
+          <div className={`${isTelegram ? 'flex-col space-y-2' : 'flex justify-between items-center'}`}>
             <div>
               <h2 className="text-lg font-semibold text-gray-800">Результаты поиска:</h2>
               <p className="text-telegram-primary font-medium text-sm mt-1">
@@ -76,37 +77,55 @@ export default function SearchResults({
                 Найдено {pagination.total} результатов
               </p>
             </div>
-            <div className="flex gap-2">
-              <button
-                onClick={onBackToForms}
-                disabled={loading}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center text-sm"
-              >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                </svg>
-                Выбор формы
-              </button>
-              <button
-                onClick={onNewSearch}
-                disabled={loading}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center text-sm"
-              >
-                Новый поиск
-              </button>
-            </div>
+            {!isTelegram && (
+              <div className="flex gap-2">
+                <button
+                  onClick={onBackToForms}
+                  disabled={loading}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center text-sm"
+                >
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                  </svg>
+                  Выбор формы
+                </button>
+                <button
+                  onClick={onNewSearch}
+                  disabled={loading}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center text-sm"
+                >
+                  Новый поиск
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
-        {results.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="text-gray-400 mb-4">
-              <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+        {/* Для мобильных - упрощенная таблица */}
+        {isTelegram ? (
+          <div className="p-4">
+            <div className="space-y-3">
+              {results.map((item, index) => (
+                <div key={index} className="border border-gray-200 rounded-lg p-3">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <h3 className="font-semibold text-gray-800">{item.name}</h3>
+                      <p className="text-sm text-gray-600">{item.form}</p>
+                    </div>
+                    <span className="bg-telegram-primary text-white text-sm font-medium py-1 px-2 rounded-full">
+                      {item.price} Br
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-600 space-y-1">
+                    <p><strong>Аптека:</strong> {item.pharmacy_name} №{item.pharmacy_number}</p>
+                    <p><strong>Адрес:</strong> {item.pharmacy_city}, {item.pharmacy_address}</p>
+                    <p><strong>Телефон:</strong> {item.pharmacy_phone}</p>
+                    <p><strong>Количество:</strong> {item.quantity} уп.</p>
+                    <p className="text-xs text-gray-500 mt-1">Обновлено: {formatDate(item.updated_at)}</p>
+                  </div>
+                </div>
+              ))}
             </div>
-            <h3 className="text-lg font-medium text-gray-500 mb-2">Ничего не найдено</h3>
-            <p className="text-gray-400 text-sm">Попробуйте изменить параметры поиска</p>
           </div>
         ) : (
           <div className="p-6">
@@ -198,6 +217,37 @@ export default function SearchResults({
                   )
                 ))}
 
+                   {/* Пагинация для Telegram */}
+{pagination.totalPages > 1 && isTelegram && (
+  <div className="flex justify-center items-center mt-6 space-x-2">
+    <button
+      onClick={() => onPageChange(pagination.page - 1)}
+      disabled={pagination.page === 1 || loading}
+      className="bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-300 text-gray-700 font-medium py-2 px-3 rounded-lg transition-colors flex items-center text-sm"
+    >
+      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+      </svg>
+      Назад
+    </button>
+
+    <span className="text-sm text-gray-600">
+      Страница {pagination.page} из {pagination.totalPages}
+    </span>
+
+    <button
+      onClick={() => onPageChange(pagination.page + 1)}
+      disabled={pagination.page === pagination.totalPages || loading}
+      className="bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-300 text-gray-700 font-medium py-2 px-3 rounded-lg transition-colors flex items-center text-sm"
+    >
+      Вперед
+      <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+      </svg>
+    </button>
+  </div>
+)}
+
                 <button
                   onClick={() => onPageChange(pagination.page + 1)}
                   disabled={pagination.page === pagination.totalPages || loading}
@@ -213,6 +263,7 @@ export default function SearchResults({
           </div>
         )}
       </div>
-    </div>
+     </div>
+
   );
 }

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 
-export default function SearchBar({ cities, onSearch, loading, currentCity }) {
+export default function SearchBar({ cities, onSearch, loading, currentCity, isTelegram }) {
   const [name, setName] = useState("");
   const [city, setCity] = useState(currentCity || "");
 
@@ -14,9 +14,9 @@ export default function SearchBar({ cities, onSearch, loading, currentCity }) {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-telegram-border p-6 mb-6">
+    <div className={`bg-white rounded-2xl shadow-sm border border-telegram-border ${isTelegram ? 'p-4 mb-2' : 'p-6 mb-6'}`}>
       <form onSubmit={handleSubmit} className="w-full">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Город
@@ -24,7 +24,7 @@ export default function SearchBar({ cities, onSearch, loading, currentCity }) {
             <select
               value={city}
               onChange={(e) => setCity(e.target.value)}
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:border-transparent transition-all"
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:border-transparent transition-all text-base"
             >
               <option value="">Все города</option>
               {cities.map((cityName) => (
@@ -35,7 +35,7 @@ export default function SearchBar({ cities, onSearch, loading, currentCity }) {
             </select>
           </div>
 
-          <div className="md:col-span-2">
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Название препарата *
             </label>
@@ -44,16 +44,16 @@ export default function SearchBar({ cities, onSearch, loading, currentCity }) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Например: анальгин, парацетамол..."
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:border-transparent transition-all"
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:border-transparent transition-all text-base"
               required
             />
           </div>
 
-          <div className="flex items-end">
+          <div>
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-telegram-primary hover:bg-blue-600 disabled:bg-telegram-secondary text-white font-medium py-3 px-6 rounded-xl focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:ring-offset-2 transition-all flex items-center justify-center"
+              className="w-full bg-telegram-primary hover:bg-blue-600 disabled:bg-telegram-secondary text-white font-medium py-3 px-6 rounded-xl focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:ring-offset-2 transition-all flex items-center justify-center text-base"
             >
               {loading ? (
                 <>
