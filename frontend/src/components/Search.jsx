@@ -207,7 +207,7 @@ export default function Search() {
               <span className="text-orange-500">Н</span>ова
               <span className="text-orange-500">М</span>едика
             </h1>
-            <div className="text-gray-600 text-sm mt-1">Справочная служба</div>
+            <div className="text-gray-600 text-sm mt-1">Справочная служба CI CD</div>
           </div>
         </div>
       )}
