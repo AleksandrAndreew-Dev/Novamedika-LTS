@@ -187,6 +187,17 @@ jobs:
       with:
         name: deployment-files
 
+    - name: Upload deployment files
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.PRODUCTION_SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        source: "docker-compose.deploy.yml,.env.deploy"
+        target: "/opt/novamedika-prod"
+
+
+
     - name: Deploy to production
       uses: appleboy/ssh-action@v1.0.3
       with:
@@ -196,8 +207,9 @@ jobs:
         script: |
           cd /opt/novamedika-prod
 
-          # Копируем новый docker-compose
+          # Копируем новые файлы
           cp docker-compose.deploy.yml docker-compose.traefik.prod.yml
+          cp .env.deploy .env
 
           # Останавливаем и обновляем
           docker-compose -f docker-compose.traefik.prod.yml down
@@ -207,10 +219,11 @@ jobs:
           # Health checks
           echo "Waiting for services to start..."
           sleep 30
-          curl -f https://${{ secrets.DOMAIN }}/health || exit 1
-          curl -f https://api.${{ secrets.DOMAIN }}/health || exit 1
+          curl -f https://${{ env.DOMAIN }}/health || exit 1
+          curl -f https://api.${{ env.DOMAIN }}/health || exit 1
 
           docker system prune -f
 
           echo "✅ Deployment completed successfully!"
+
 
