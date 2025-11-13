@@ -1,0 +1,29 @@
+backend
+├── alembic.ini
+├── Dockerfile
+├── pyproject.toml
+├── README.md
+├── src
+│   ├── data
+│   │   └── pharmacies_info.csv
+│   ├── db
+│   │   ├── database.py
+│   │   ├── __init__.py
+│   │   ├── models.py
+│   │   └── schemas.py
+│   ├── __init__.py
+│   ├── main.py
+│   ├── migrations
+│   │   └── 001_add_indexes.sql
+│   ├── router
+│   │   ├── __init__.py
+│   │   ├── pharmacies_info.py
+│   │   ├── search.py
+│   │   └── upload.py
+│   └── tasks
+│       ├── __init__.py
+│       ├── tasks_increment.py
+│       └── tasks.py
+└── uv.lock
+
+7 directories, 20 files
