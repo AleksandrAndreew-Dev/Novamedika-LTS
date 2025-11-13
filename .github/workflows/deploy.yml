@@ -169,7 +169,7 @@ jobs:
 
           # Проверяем здоровье сервисов
           sleep 30
-          curl -f https://staging.novamedika.com/health || exit 1
+          curl -f https://api.staging.novamedika.com/health || exit 1
 
           # Чистим старые образы
           docker image prune -f
