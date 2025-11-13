@@ -209,7 +209,7 @@ jobs:
 
           # Копируем новые файлы
           cp docker-compose.deploy.yml docker-compose.traefik.prod.yml
-          cp .env.deploy .env
+          cp .env .env
 
           # Останавливаем и обновляем
           docker-compose -f docker-compose.traefik.prod.yml down
