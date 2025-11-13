@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import SearchBar from "./SearchBar";
 import FormSelection from "./FormSelection";
 import SearchResults from "./SearchResults";
-import { useTelegramWebApp, useTelegramUser } from "../telegram/TelegramWebApp";
+import { useTelegramWebApp} from "../telegram/TelegramWebApp";
 import { api } from '../api/client';
 
 
@@ -186,7 +186,7 @@ export default function Search() {
 
 
 
- 
+
 
   return (
     <div className={`min-h-screen ${isTelegram ? 'bg-transparent' : 'bg-telegram-bg'}`}>
