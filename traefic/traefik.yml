@@ -12,7 +12,7 @@ entryPoints:
 certificatesResolvers:
   letsencrypt:
     acme:
-      email: "admin@novamedika.com"
+      email: "${SSL_EMAIL}"
       storage: "/letsencrypt/acme.json"
       httpChallenge:
         entryPoint: "web"
