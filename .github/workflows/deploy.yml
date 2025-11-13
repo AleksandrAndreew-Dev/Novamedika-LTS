@@ -130,7 +130,23 @@ jobs:
       run: |
         sed "s|image:.*backend.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest|g" $DOCKER_COMPOSE_FILE > docker-compose.deploy.yml
         sed -i "s|image:.*frontend.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest|g" docker-compose.deploy.yml
-        cp .env.example .env.deploy
+        
+
+    - name: Create .env.deploy
+      run: |
+        echo "DOMAIN=${{ secrets.DOMAIN }}" >> .env.deploy
+        echo "API_DOMAIN=${{ secrets.API_DOMAIN }}" >> .env.deploy
+        echo "SSL_EMAIL=${{ secrets.SSL_EMAIL }}" >> .env.deploy
+        echo "TRAEFIK_AUTH_USERS=${{ secrets.TRAEFIK_AUTH_USERS }}" >> .env.deploy
+        echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" >> .env.deploy
+        echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env.deploy
+        echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" >> .env.deploy
+        echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" >> .env.deploy
+        echo "REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}" >> .env.deploy
+        echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env.deploy
+        echo "CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}" >> .env.deploy
+        echo "VITE_API_URL=${{ secrets.VITE_API_URL }}" >> .env.deploy
+
 
     - name: Upload deployment artifacts
       uses: actions/upload-artifact@v4
@@ -209,7 +225,7 @@ jobs:
 
           # Копируем новые файлы
           cp docker-compose.deploy.yml docker-compose.traefik.prod.yml
-          cp .env .env
+          cp .env.deploy .env
 
           # Останавливаем и обновляем
           docker-compose -f docker-compose.traefik.prod.yml down
@@ -220,6 +236,7 @@ jobs:
           echo "Waiting for services to start..."
           sleep 30
           curl -f https://api.${{ env.DOMAIN }}/health || exit 1
+
 
           docker system prune -f
 
