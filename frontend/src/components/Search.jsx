@@ -28,7 +28,7 @@ export default function Search() {
 
 
   const { tg, isTelegram } = useTelegramWebApp();
-  const telegramUser = useTelegramUser();
+
 
   useEffect(() => {
   const fetchCities = async () => {
@@ -184,17 +184,9 @@ export default function Search() {
     }
   };
 
-  const handleBackToForms = () => {
-    setStep(2);
-  };
 
-  const handleReset = () => {
-    setStep(1);
-    setSearchData({ name: "", city: "", form: "" });
-    setSearchContext(null);
-    setResults([]);
-    setError(null);
-  };
+
+ 
 
   return (
     <div className={`min-h-screen ${isTelegram ? 'bg-transparent' : 'bg-telegram-bg'}`}>
