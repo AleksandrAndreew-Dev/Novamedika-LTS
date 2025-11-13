@@ -12,6 +12,8 @@ env:
   IMAGE_REPO: novamedika-lts
   DOCKER_COMPOSE_FILE: docker-compose.traefik.prod.yml
   DOMAIN: spravka.novamedika.com
+  IMAGE_NAME: aleksandrandreew-dev/novamedika-lts
+
 
 jobs:
   test:
@@ -56,6 +58,10 @@ jobs:
         cd frontend
         npm ci
 
+    - name: Lint code
+      run: |
+        cd frontend
+        npm run lint
 
     - name: Run React tests and build
       run: |
@@ -63,10 +69,7 @@ jobs:
         npm run build
         echo "✅ Frontend builds successfully"
 
-    - name: Lint code
-      run: |
-        cd frontend
-        npm run lint
+
 
   build-and-push:
     needs: test
@@ -100,14 +103,15 @@ jobs:
     - name: Build and push backend image
       uses: docker/build-push-action@v5
       with:
-        context: .
+        context: ./backend
         file: ./backend/Dockerfile
         target: prod
         push: true
         tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_REPO }}/backend:latest
-        labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
+
+
 
     - name: Build and push frontend image
       uses: docker/build-push-action@v5
@@ -123,12 +127,8 @@ jobs:
 
     - name: Update deployment file with new images
       run: |
-        # Создаем временный docker-compose файл с актуальными тегами
         sed "s|image:.*backend.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest|g" $DOCKER_COMPOSE_FILE > docker-compose.deploy.yml
         sed -i "s|image:.*frontend.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest|g" docker-compose.deploy.yml
-
-        # Копируем необходимые файлы
-        cp $DOCKER_COMPOSE_FILE docker-compose.deploy.yml
         cp .env.example .env.deploy
 
     - name: Upload deployment artifacts
@@ -171,7 +171,7 @@ jobs:
           curl -f https://staging.novamedika.com/health || exit 1
 
           # Чистим старые образы
-          docker system prune -f
+          docker image prune -f
 
   deploy-production:
     needs: build-and-push
