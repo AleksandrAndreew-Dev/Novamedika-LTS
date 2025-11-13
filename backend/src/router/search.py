@@ -10,11 +10,10 @@ from datetime import datetime, timedelta
 from db.database import get_db
 from db.models import Pharmacy, Product
 
-router = APIRouter(prefix="/api/search", tags=["search"])
+router = APIRouter()  # УБРАТЬ prefix="/api/search" - он дублируется
 
 _search_context = {}
 TTL_MINUTES = 30
-
 
 def _clean_old_contexts():
     """Очистка устаревших контекстов поиска"""
@@ -26,10 +25,7 @@ def _clean_old_contexts():
     for search_id in expired_ids:
         del _search_context[search_id]
 
-
-# search.py - улучшенная версия search-two-step
-# search.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
-@router.get("/search-two-step/", response_model=dict)
+@router.get("/search/search-two-step/", response_model=dict)
 async def search_two_step(
     name: Optional[str] = Query(None),
     city: Optional[str] = Query(None),
@@ -52,9 +48,7 @@ async def search_two_step(
 
     # ИСПРАВЛЕНИЕ: Правильная фильтрация по городу
     if city and city != "Все города" and city.strip():
-        base_query = base_query.where(
-            Pharmacy.city == city
-        )  # Используем точное сравнение вместо ilike
+        base_query = base_query.where(Pharmacy.city == city)
 
     # Запрос для получения форм с правильной фильтрацией
     forms_query = (
@@ -126,8 +120,7 @@ async def search_two_step(
         "search_id": search_id,
     }
 
-
-@router.get("/search/", response_model=dict)
+@router.get("/search/search/", response_model=dict)
 async def search_products(
     search_id: Optional[str] = Query(None),
     form: Optional[str] = Query(None),
@@ -215,9 +208,7 @@ async def search_products(
         "search_id": search_id,
     }
 
-
-# Остальные эндпоинты без изменений
-@router.get("/cities/")
+@router.get("/search/cities/")
 async def get_cities(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Pharmacy.city)
@@ -228,8 +219,7 @@ async def get_cities(db: AsyncSession = Depends(get_db)):
     cities = [row[0] for row in result.all() if row[0]]
     return cities
 
-
-@router.get("/forms/")
+@router.get("/search/forms/")
 async def get_forms(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Product.form)
@@ -240,12 +230,9 @@ async def get_forms(db: AsyncSession = Depends(get_db)):
     forms = [row[0] for row in result.all() if row[0]]
     return forms
 
-
-# Добавьте в search.py
-@router.get("/check-relations/")
+@router.get("/search/check-relations/")
 async def check_relations(db: AsyncSession = Depends(get_db)):
     """Проверка связей между аптеками и продуктами"""
-
     # Проверяем количество записей
     pharmacies_count = await db.execute(select(func.count(Pharmacy.uuid)))
     products_count = await db.execute(select(func.count(Product.uuid)))

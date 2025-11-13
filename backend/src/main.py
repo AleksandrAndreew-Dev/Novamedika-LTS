@@ -13,7 +13,6 @@ import uuid
 from celery import Celery
 
 # Исправить пути импортов:
-
 from db.database import Base, engine, get_db, async_session_maker
 import asyncio
 
@@ -23,9 +22,6 @@ from router.pharmacies_info import router as pharm_info_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -41,7 +37,6 @@ async def lifespan(app: FastAPI):
     print("🔴 Backend shutting down...")
     await engine.dispose()
 
-
 app = FastAPI(
     title="Novamedika API",
     description="Backend API for Novamedika",
@@ -49,16 +44,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.include_router(upload_router)
-app.include_router(search_router)
-app.include_router(pharm_info_router)
-
-# В main.py исправить URL Redis
-celery = Celery(
-    __name__,
-    broker="redis://redis:6379/0",  # было localhost
-    backend="redis://redis:6379/0"   # было localhost
-)
+# Включение роутеров с префиксами
+app.include_router(upload_router, prefix="/api")
+app.include_router(search_router, prefix="/api")
+app.include_router(pharm_info_router, prefix="/api")
 
 # Более безопасная обработка CORS
 origins_raw = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
@@ -74,16 +63,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 @app.get("/")
 async def get_main():
     return {"message": "Hello Novamedika API", "status": "running"}
 
-
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "backend", "version": "1.0.0"}
-
 
 @app.get("/api/info")
 async def api_info():
@@ -92,3 +78,7 @@ async def api_info():
         "version": "1.0.0",
         "environment": os.getenv("ENVIRONMENT", "development"),
     }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

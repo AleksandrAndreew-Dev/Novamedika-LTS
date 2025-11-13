@@ -1,17 +1,27 @@
-FROM python:3.12-slim AS dev
+FROM python:3.12-slim as prod
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
-    curl gcc python3-dev libpq-dev \
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app/src
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential curl gcc libpq-dev ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# Copy dependency files
+COPY pyproject.toml uv.lock ./
+
+# Install uv and dependencies
 RUN pip install --upgrade pip && pip install uv
+RUN uv sync --frozen --no-cache
 
-COPY pyproject.toml uv.lock README.md ./
-RUN uv sync --frozen
-
+# Copy source code
 COPY src/ ./src/
-WORKDIR /app/src
 
-CMD ["/bin/bash", "-c", "source /app/.venv/bin/activate && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"]
+EXPOSE 8000
+
+# Use uvicorn directly
+CMD ["/app/.venv/bin/uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
 import SearchBar from "./SearchBar";
 import FormSelection from "./FormSelection";
 import SearchResults from "./SearchResults";
 import { useTelegramWebApp, useTelegramUser } from "../telegram/TelegramWebApp";
+import { api } from '../api/client';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
 
 export default function Search() {
   const [step, setStep] = useState(1);
@@ -31,17 +31,27 @@ export default function Search() {
   const telegramUser = useTelegramUser();
 
   useEffect(() => {
-    const fetchCities = async () => {
-      try {
-        const response = await axios.get(`${API_BASE_URL}/api/search/cities/`);
-        setCities(response.data);
-      } catch (error) {
-        console.error("Error fetching cities:", error);
+  const fetchCities = async () => {
+    try {
+
+      const response = await api.get('/api/search/cities/');
+      const data = response.data;
+
+      // безопасность: привести результат к массиву
+      const cities = Array.isArray(data) ? data : (data?.results ?? data?.items ?? []);
+      if (!Array.isArray(cities)) {
+        // если всё ещё не массив — fallback
         setCities(["Минск", "Гомель", "Брест", "Гродно", "Витебск", "Могилев"]);
+      } else {
+        setCities(cities);
       }
-    };
-    fetchCities();
-  }, []);
+    } catch (error) {
+      console.error("Error fetching cities:", error);
+      setCities(["Минск", "Гомель", "Брест", "Гродно", "Витебск", "Могилев"]);
+    }
+  };
+  fetchCities();
+}, []);
 
 
   useEffect(() => {
@@ -69,12 +79,9 @@ export default function Search() {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.get(
-        `${API_BASE_URL}/api/search/search-two-step/`,
-        {
-          params: { name, city },
-        }
-      );
+       const response = await api.get('/api/search/search-two-step/', {
+        params: { name, city },
+      });
 
       setSearchData((prev) => ({ ...prev, name, city }));
       setSearchContext({
@@ -119,7 +126,7 @@ export default function Search() {
         params.city = searchData.city;
       }
 
-      const response = await axios.get(`${API_BASE_URL}/api/search/search/`, {
+      const response = await api.get('/api/search/search/', {
         params,
       });
 
@@ -158,7 +165,7 @@ export default function Search() {
         params.form = searchData.form;
       }
 
-      const response = await axios.get(`${API_BASE_URL}/api/search/search/`, {
+      const response = await api.get('/api/search/search/', {
         params,
       });
 

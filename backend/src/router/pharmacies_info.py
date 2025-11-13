@@ -18,7 +18,6 @@ from db.models import Pharmacy, Product
 
 router = APIRouter()
 
-
 def parse_pharmacy_name(full_name: str) -> tuple[str, str]:
     """Разбирает полное название аптеки на название и номер"""
     # Паттерны для извлечения номера
@@ -39,8 +38,6 @@ def parse_pharmacy_name(full_name: str) -> tuple[str, str]:
     # Если не удалось разобрать, возвращаем как есть
     return full_name.strip(), ""
 
-
-# В функции load_pharmacies обновите логику:
 @router.post("/load-pharmacies/")
 async def load_pharmacies():
     """Эндпоинт для загрузки данных аптек из CSV"""
@@ -127,7 +124,6 @@ async def load_pharmacies():
             detail=f"Ошибка при загрузке данных аптек: {str(e)}",
         )
 
-
 @router.get("/pharmacies/")
 async def get_pharmacies():
     """Получить список всех аптек"""
@@ -136,12 +132,9 @@ async def get_pharmacies():
         pharmacies = result.scalars().all()
         return pharmacies
 
-
-# Добавьте в pharmacies_info.py
 @router.get("/check-data/")
 async def check_data(db: AsyncSession = Depends(get_db)):
     """Проверка загруженных данных"""
-
     # Проверяем аптеки
     pharmacies_result = await db.execute(select(Pharmacy))
     pharmacies = pharmacies_result.scalars().all()
@@ -180,9 +173,8 @@ async def check_data(db: AsyncSession = Depends(get_db)):
         "sample_products": sample_data,
     }
 
-
-# Добавьте в pharmacies_info.py
 from sqlalchemy import text
+
 
 
 @router.delete("/clear-all-data/")

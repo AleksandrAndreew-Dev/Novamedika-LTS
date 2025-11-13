@@ -1,24 +1,29 @@
-# Dev stage
-FROM node:20-alpine AS dev
+FROM node:20-alpine as builder
+
 WORKDIR /app
 
-# Установка curl для healthcheck
-RUN apk add --no-cache curl
+# Аргументы сборки
+ARG VITE_API_URL
+ARG VITE_TELEGRAM_BOT_TOKEN
 
-# Копируем package.json и устанавливаем зависимости
-COPY package.json ./
-RUN npm install
+# Копируем package files
+COPY package*.json ./
+# Устанавливаем ВСЕ зависимости для сборки
+RUN npm ci
 
-# Копируем остальные файлы
-COPY vite.config.js ./
-COPY index.html ./
-COPY src/ ./src/
-COPY public/ ./public/
+# Копируем исходный код
+COPY . .
 
-EXPOSE 5173
+# Собираем приложение с переменными окружения
+RUN VITE_API_URL=${VITE_API_URL} VITE_TELEGRAM_BOT_TOKEN=${VITE_TELEGRAM_BOT_TOKEN} npm run build
 
-# Healthcheck
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD curl -f http://localhost:5173/ || exit 1
+FROM nginx:alpine as prod
 
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+# Копируем собранное приложение в nginx
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Копируем кастомную конфигурацию nginx
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

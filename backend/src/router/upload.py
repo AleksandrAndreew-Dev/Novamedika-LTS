@@ -6,7 +6,6 @@ from tasks.tasks_increment import process_csv_incremental
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-
 @router.post("/upload/{pharmacy_name}/{pharmacy_number}/")
 async def upload_file(
     pharmacy_name: str, pharmacy_number: str, file: UploadFile = File(...)
@@ -16,6 +15,7 @@ async def upload_file(
             f"Starting upload for pharmacy: {pharmacy_name}, number: {pharmacy_number}"
         )
         logger.info(f"File: {file.filename}, size: {file.size}")
+
         # Читаем файл как байты
         file_bytes = await file.read()
         logger.info(f"File read successfully, size: {len(file_bytes)} bytes")

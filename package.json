@@ -1,12 +1,14 @@
+
 {
-  "name": "novamedika-dev",
+  "name": "novamedika-prod",
   "scripts": {
-    "dev": "docker compose -f docker-compose.traefik.dev.yml up --build",
-    "dev:watch": "docker compose -f docker-compose.traefik.dev.yml -f compose.watch.yml watch",
-    "dev:logs": "docker compose -f docker-compose.traefik.dev.yml logs -f",
-    "dev:down": "docker compose -f docker-compose.traefik.dev.yml down",
-    "dev:clean": "docker compose -f docker-compose.traefik.dev.yml down -v",
-    "dev:frontend": "docker compose -f docker-compose.traefik.dev.yml up --build -d frontend",
-  "restart:frontend": "docker compose -f docker-compose.traefik.dev.yml restart frontend"
+    "prod:up": "docker-compose -f docker-compose.traefik.prod.yml up -d --build",
+    "prod:down": "docker-compose -f docker-compose.traefik.prod.yml down",
+    "prod:logs": "docker-compose -f docker-compose.traefik.prod.yml logs -f",
+    "prod:restart": "docker-compose -f docker-compose.traefik.prod.yml restart",
+    "prod:restart-backend": "docker-compose -f docker-compose.traefik.prod.yml restart backend",
+    "prod:restart-frontend": "docker-compose -f docker-compose.traefik.prod.yml restart frontend",
+    "prod:ps": "docker-compose -f docker-compose.traefik.prod.yml ps",
+    "prod:build": "docker-compose -f docker-compose.traefik.prod.yml build --no-cache"
   }
 }

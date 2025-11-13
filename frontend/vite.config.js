@@ -2,15 +2,27 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     host: "0.0.0.0",
     port: 5173,
-    strictPort: true,
-    watch: { usePolling: true, interval: 1000 },
-    hmr: { host: "localhost", port: 5173 },
+    
   },
+  preview: {
+    host: "0.0.0.0",
+    port: 80,
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: false,
+    // Добавляем настройки для корректной сборки
+    rollupOptions: {
+      output: {
+        manualChunks: undefined,
+      }
+    }
+  },
+  // Убедимся что base правильный
+  base: '/',
 });
-

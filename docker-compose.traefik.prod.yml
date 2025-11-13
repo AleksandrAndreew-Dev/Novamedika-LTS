@@ -1,9 +1,7 @@
-# docker-compose.prod.yml
-version: '3.8'
-
 services:
   traefik:
     image: traefik:v3.0
+    container_name: traefik-prod
     command:
       - --api.dashboard=true
       - --api.insecure=false
@@ -14,6 +12,8 @@ services:
       - --certificatesresolvers.letsencrypt.acme.email=${SSL_EMAIL}
       - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
       - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+      - --log.level=INFO
+      - --accesslog=true
     ports:
       - "80:80"
       - "443:443"
@@ -21,50 +21,95 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./letsencrypt:/letsencrypt
     networks:
-      - app-network
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.${DOMAIN}`)"
+      - "traefik.http.routers.traefik-dashboard.service=api@internal"
+      - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.traefik-dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.traefik-dashboard.middlewares=traefik-auth"
+      - "traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_AUTH_USERS}"
+    restart: unless-stopped
 
   backend:
-    image: ваш-образ-бэкенда
+    build:
+      context: ./backend
+      target: prod
+    container_name: backend-prod
     environment:
       - ENVIRONMENT=production
-      - DATABASE_URL=postgresql+asyncpg://novamedika:novamedika@postgres:5432/novamedika_prod
+      - CORS_ORIGINS=${CORS_ORIGINS}
+      - PYTHONUNBUFFERED=1
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.backend.rule=Host(`api.${DOMAIN}`)"
       - "traefik.http.routers.backend.entrypoints=websecure"
       - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.backend.loadbalancer.server.port=8000"
     networks:
-      - app-network
+      - traefik-public
+    depends_on:
+      - postgres
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
 
   frontend:
-    image: ваш-образ-фронтенда
+    build:
+      context: ./frontend
+      target: prod
+    container_name: frontend-prod
+    environment:
+      - VITE_API_URL=${VITE_API_URL}
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.frontend.rule=Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)"
       - "traefik.http.routers.frontend.entrypoints=websecure"
       - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.routers.frontend-http.rule=Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)"
+      - "traefik.http.routers.frontend-http.entrypoints=web"
+      - "traefik.http.routers.frontend-http.middlewares=redirect-to-https"
     networks:
-      - app-network
+      - traefik-public
+    restart: unless-stopped
 
   postgres:
     image: postgres:17
+    container_name: postgres-prod
     environment:
-      - POSTGRES_USER=novamedika
-      - POSTGRES_PASSWORD=novamedika
-      - POSTGRES_DB=novamedika_prod
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - app-network
+      - traefik-public
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
+    container_name: redis-prod
     command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
     networks:
-      - app-network
+      - traefik-public
+    restart: unless-stopped
 
 networks:
-  app-network:
+  traefik-public:
+    driver: bridge
 
 volumes:
   postgres_data:
+  redis_data:

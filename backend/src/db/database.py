@@ -3,7 +3,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 import asyncpg
 
-DATABASE_URL = "postgresql+asyncpg://novamedika:novamedika@postgres:5432/novamedika_dev"
+DATABASE_URL = "postgresql+asyncpg://novamedika:novamedika@postgres:5432/novamedika_prod"
 
 Base = declarative_base()
 

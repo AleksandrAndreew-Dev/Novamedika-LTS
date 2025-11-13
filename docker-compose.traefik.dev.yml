@@ -105,7 +105,7 @@ services:
     environment:
       - POSTGRES_USER=novamedika
       - POSTGRES_PASSWORD=novamedika
-      - POSTGRES_DB=novamedika_dev
+      - POSTGRES_DB=novamedika_prod
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
