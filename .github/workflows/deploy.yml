@@ -223,23 +223,25 @@ jobs:
         script: |
           cd /opt/novamedika-prod
 
-          # Копируем новые файлы
-          cp docker-compose.deploy.yml docker-compose.traefik.prod.yml
-          cp .env.deploy .env
+          mkdir -p letsencrypt
+          touch letsencrypt/acme.json
+          chmod 600 letsencrypt/acme.json
 
           # Останавливаем и обновляем
-          docker-compose -f docker-compose.traefik.prod.yml down
-          docker-compose -f docker-compose.traefik.prod.yml pull
-          docker-compose -f docker-compose.traefik.prod.yml up -d
+          docker-compose -f docker-compose.deploy.yml down
+          docker-compose -f docker-compose.deploy.yml pull
+          docker-compose -f docker-compose.deploy.yml up -d
+
+          # Проверяем здоровье сервисов
+          echo "Waiting for services to start..."
+          sleep 45
 
           # Health checks
-          echo "Waiting for services to start..."
-          sleep 30
           curl -f https://api.spravka.novamedika.com/health || exit 1
 
-
+          # Чистим старые образы
           docker system prune -f
 
-          echo "✅ Deployment completed successfully!"
+          echo "✅ Production deployment completed!"
 
 
