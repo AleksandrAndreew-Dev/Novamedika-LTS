@@ -144,6 +144,16 @@ jobs:
         with:
           name: deployment-files
 
+      - name: Upload compose to server
+        uses: appleboy/scp-action@v0.1.2
+        with:
+          host: ${{ secrets.PRODUCTION_SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          source: docker-compose.deploy.yml
+          target: /opt/novamedika-prod/
+
+
       - name: Deploy to production
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -175,8 +185,8 @@ jobs:
             # Небольшая задержка, затем проверка здоровья сервисов
             sleep 30
             set +e
-            curl -fsS "https://${{ secrets.DOMAIN }}/health" || { echo "site root health failed"; exit 3; }
-            curl -fsS "https://api.${{ secrets.DOMAIN }}/health" || { echo "api health failed"; exit 4; }
+            curl -fsS "https://${{ env.DOMAIN }}/health" || { echo "site root health failed"; exit 3; }
+            curl -fsS "https://api.${{ env.DOMAIN }}/health" || { echo "api health failed"; exit 4; }
             set -e
 
             # Проверка Celery (если контейнер запущен)
