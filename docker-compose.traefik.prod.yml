@@ -113,14 +113,14 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-    command: ["python", "-m", "celery", "-A", "tasks.tasks_increment.celery", "worker", "--loglevel=info"]
+    command: ["/app/.venv/bin/python","-m","celery","-A","tasks.tasks_increment.celery","worker","--loglevel=info"]
     networks:
       - traefik-public
     depends_on:
       - postgres
       - redis
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"from tasks.tasks_increment.celery import celery; print('Celery app loaded')\""]
+      test: ["CMD-SHELL", "/app/.venv/bin/python -m celery -A tasks.tasks_increment.celery inspect ping -d celery@$(hostname) || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -139,7 +139,7 @@ services:
     - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
     - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
     - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/0
-    command: ["python", "-m", "celery", "-A", "tasks.tasks_increment.celery", "flower", "--port=5555", "--broker=redis://:${REDIS_PASSWORD}@redis:6379/0"]
+    command: ["/app/.venv/bin/python","-m","celery","-A","tasks.tasks_increment.celery","flower","--port=5555","--broker=redis://:${REDIS_PASSWORD}@redis:6379/0"]
     networks:
       - traefik-public
     depends_on:
