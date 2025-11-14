@@ -1,6 +1,6 @@
 services:
   traefik:
-    image: traefik:v3.0
+    image: traefik:v3.6.1
     container_name: traefik-prod
     command:
       - --api.dashboard=true
@@ -54,10 +54,11 @@ services:
       - postgres
       - redis
     healthcheck:
-      test: ["CMD", "curl", "-f", "https://api.${DOMAIN}/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 60s
     restart: unless-stopped
 
   frontend:
@@ -136,21 +137,20 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-    command: ["python", "-m", "celery", "-A", "tasks.tasks_increment.celery", "flower", "--port=5555"]
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.flower.rule=Host(`flower.${DOMAIN}`)"
-      - "traefik.http.routers.flower.entrypoints=websecure"
-      - "traefik.http.routers.flower.tls.certresolver=letsencrypt"
-      - "traefik.http.services.flower.loadbalancer.server.port=5555"
-      # 🔒 Добавьте аутентификацию для безопасности!
-      - "traefik.http.routers.flower.middlewares=flower-auth"
-      - "traefik.http.middlewares.flower-auth.basicauth.users=${FLOWER_AUTH_USERS}"
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/0
+    command: ["python", "-m", "celery", "-A", "tasks.tasks_increment.celery", "flower", "--port=5555", "--broker=redis://:${REDIS_PASSWORD}@redis:6379/0"]
     networks:
       - traefik-public
     depends_on:
       - redis
       - celery_worker
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5555/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     restart: unless-stopped
 
 networks:
