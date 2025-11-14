@@ -1,5 +1,5 @@
 
-
+import os
 from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import secrets
@@ -9,9 +9,10 @@ from tasks.tasks_increment import process_csv_incremental
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+security = HTTPBasic()  # обязательно
 
-CORRECT_USERNAME = "pharmacy"
-CORRECT_PASSWORD = "aleksandr8044"
+CORRECT_USERNAME = os.getenv('CORRECT_USERNAME')
+CORRECT_PASSWORD = os.getenv('CORRECT_PASSWORD')
 
 def authenticate_pharmacy(credentials: HTTPBasicCredentials = Depends(security)):
     """Проверка аутентификации BasicAuth"""
