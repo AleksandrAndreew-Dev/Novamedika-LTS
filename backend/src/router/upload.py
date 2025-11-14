@@ -1,18 +1,50 @@
-# routers/upload.py (или где у вас endpoint для загрузки)
-from fastapi import APIRouter, UploadFile, File, HTTPException, status
+
+
+from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+import secrets
+
 import logging
 from tasks.tasks_increment import process_csv_incremental
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+CORRECT_USERNAME = "pharmacy"
+CORRECT_PASSWORD = "aleksandr8044"
+
+def authenticate_pharmacy(credentials: HTTPBasicCredentials = Depends(security)):
+    """Проверка аутентификации BasicAuth"""
+    correct_username_bytes = CORRECT_USERNAME.encode("utf8")
+    correct_password_bytes = CORRECT_PASSWORD.encode("utf8")
+
+    current_username_bytes = credentials.username.encode("utf8")
+    current_password_bytes = credentials.password.encode("utf8")
+
+    is_correct_username = secrets.compare_digest(
+        current_username_bytes, correct_username_bytes
+    )
+    is_correct_password = secrets.compare_digest(
+        current_password_bytes, correct_password_bytes
+    )
+
+    if not (is_correct_username and is_correct_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return credentials.username
+
 @router.post("/upload/{pharmacy_name}/{pharmacy_number}/")
 async def upload_file(
-    pharmacy_name: str, pharmacy_number: str, file: UploadFile = File(...)
+    pharmacy_name: str, pharmacy_number: str, file: UploadFile = File(...),
+    username: str = Depends(authenticate_pharmacy)  # Добавляем аутентификацию
 ):
+
     try:
         logger.info(
-            f"Starting upload for pharmacy: {pharmacy_name}, number: {pharmacy_number}"
+            f"Starting upload for pharmacy: {pharmacy_name}, number: {pharmacy_number}, user: {username}"
         )
         logger.info(f"File: {file.filename}, size: {file.size}")
 
@@ -40,6 +72,7 @@ async def upload_file(
             content = file_bytes.decode("utf-8", errors="replace")
 
         # Запускаем задачу Celery
+        from tasks.tasks_increment import process_csv_incremental
         task = process_csv_incremental.delay(content, pharmacy_name, pharmacy_number)
         logger.info(f"Celery task created: {task.id}")
 
