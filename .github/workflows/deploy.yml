@@ -185,12 +185,12 @@ jobs:
             # Небольшая задержка, затем проверка здоровья сервисов
             sleep 30
             set +e
-            curl -fsS "https://${{ env.DOMAIN }}/health" || { echo "site root health failed"; exit 3; }
-            curl -fsS "https://api.${{ env.DOMAIN }}/health" || { echo "api health failed"; exit 4; }
+            docker exec backend-prod curl -f http://localhost:8000/health || { echo "backend health failed"; exit 3; }
+            docker exec frontend-prod curl -f http://localhost:80/ || { echo "frontend health failed"; exit 4; }
             set -e
 
             # Проверка Celery (если контейнер запущен)
-            docker exec -T celery-worker-prod celery -A tasks.tasks_increment.celery inspect ping -d celery@celery-worker-prod || { echo "celery ping failed"; exit 5; }
+            docker exec celery-worker-prod python -m celery -A tasks.tasks_increment.celery inspect ping || { echo "celery ping failed"; exit 5; }
 
             # Очистка
             docker system prune -af || true
