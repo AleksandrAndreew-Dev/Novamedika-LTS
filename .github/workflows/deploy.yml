@@ -15,7 +15,7 @@ env:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, novamedika-runner]
     strategy:
       matrix:
         node-version: [20.x]
