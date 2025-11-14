@@ -14,9 +14,6 @@
 
 
   jobs:
-    - name: Fix IMAGE_NAME to lowercase
-      run: echo "IMAGE_NAME=$(echo ${GITHUB_REPOSITORY} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-
     test:
       runs-on: ubuntu-latest
       strategy:
@@ -25,6 +22,8 @@
           python-version: [3.12]
 
       steps:
+      - name: Fix IMAGE_NAME to lowercase
+        run: echo "IMAGE_NAME=$(echo ${GITHUB_REPOSITORY} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
       - name: Checkout code
         uses: actions/checkout@v4
 
