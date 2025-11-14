@@ -1,6 +1,4 @@
 
-env_file:
-  - .env
 
 services:
 
@@ -40,6 +38,8 @@ services:
   backend:
     image: ghcr.io/aleksandrandreew-dev/novamedika-lts/backend:latest
     container_name: backend-prod
+    env_file:
+      - .env
     environment:
       - ENVIRONMENT=production
       - CORS_ORIGINS=${CORS_ORIGINS}
