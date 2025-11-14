@@ -8,11 +8,9 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_OWNER: aleksandrandreew-dev
-  IMAGE_REPO: novamedika-lts
+  IMAGE_NAME: ${{ github.repository }}
   DOCKER_COMPOSE_FILE: docker-compose.traefik.prod.yml
   DOMAIN: spravka.novamedika.com
-  IMAGE_NAME: aleksandrandreew-dev/novamedika-lts
 
 
 jobs:
@@ -78,7 +76,9 @@ jobs:
 
     permissions:
       contents: read
-      packages: write
+      packages: write  # ⬅️ КРИТИЧЕСКИ ВАЖНО для приватных пакетов
+      attestations: write
+      id-token: write
 
     steps:
       - name: Checkout repository
@@ -106,6 +106,8 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          provenance: false
+          sbom: false
 
       - name: Build and push frontend image
         uses: docker/build-push-action@v5
@@ -119,12 +121,15 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          provenance: false
+          sbom: false
 
       - name: Prepare deployment files
         run: |
-          # Просто копируем docker-compose файл - образы уже указаны правильно
+          # Создаем docker-compose.deploy.yml с правильными путями к образам
           cp $DOCKER_COMPOSE_FILE docker-compose.deploy.yml
-          # .env.deploy больше не нужен, так как на сервере есть .env
+          sed -i "s|build:.*backend.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest|g" docker-compose.deploy.yml
+          sed -i "s|build:.*frontend.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest|g" docker-compose.deploy.yml
 
       - name: Upload deployment artifacts
         uses: actions/upload-artifact@v4
@@ -189,7 +194,7 @@ jobs:
             cd /opt/novamedika
 
             # Логинимся в GitHub Container Registry
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
             # Создаем директорию для Let's Encrypt если нужно
             mkdir -p letsencrypt
