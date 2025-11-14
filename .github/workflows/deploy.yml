@@ -236,8 +236,12 @@ jobs:
           echo "Waiting for services to start..."
           sleep 45
 
+          docker exec celery-worker-prod celery -A tasks.tasks_increment.celery inspect ping -d celery@celery-worker-prod || exit 1
+
           # Health checks
           curl -f https://api.spravka.novamedika.com/health || exit 1
+
+
 
           # Чистим старые образы
           docker system prune -f

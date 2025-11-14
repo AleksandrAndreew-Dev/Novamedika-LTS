@@ -33,7 +33,9 @@ services:
     restart: unless-stopped
 
   backend:
-    image: ghcr.io/aleksandrandreew-dev/novamedika-lts/backend:latest
+    build:
+      context: ./backend
+      target: prod
     container_name: backend-prod
     environment:
       - ENVIRONMENT=production
@@ -54,25 +56,27 @@ services:
       - postgres
       - redis
     healthcheck:
-      test: ["CMD", "curl", "-f", "https://api.${DOMAIN}/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
     restart: unless-stopped
 
   frontend:
-    image: ghcr.io/aleksandrandreew-dev/novamedika-lts/frontend:latest
+    build:
+      context: ./frontend
+      target: prod
     container_name: frontend-prod
     environment:
       - VITE_API_URL=${VITE_API_URL}
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.frontend.rule=Host(`spravka.novamedika.com`) || Host(`www.spravka.novamedika.com`)"
+      - "traefik.http.routers.frontend.rule=Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)"
       - "traefik.http.routers.frontend.entrypoints=websecure"
       - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
       - "traefik.http.services.frontend.loadbalancer.server.port=80"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-      - "traefik.http.routers.frontend-http.rule=Host(`spravka.novamedika.com`) || Host(`www.spravka.novamedika.com`)"
+      - "traefik.http.routers.frontend-http.rule=Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)"
       - "traefik.http.routers.frontend-http.entrypoints=web"
       - "traefik.http.routers.frontend-http.middlewares=redirect-to-https"
     networks:
@@ -100,6 +104,61 @@ services:
       - redis_data:/data
     networks:
       - traefik-public
+    restart: unless-stopped
+
+  celery_worker:
+    build:
+      context: ./backend
+      target: prod
+    container_name: celery-worker-prod
+    environment:
+      - ENVIRONMENT=production
+      - CORS_ORIGINS=${CORS_ORIGINS}
+      - PYTHONUNBUFFERED=1
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+    command: celery -A tasks.tasks_increment.celery worker --loglevel=info
+    networks:
+      - traefik-public
+    depends_on:
+      - postgres
+      - redis
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A tasks.tasks_increment.celery inspect ping -d celery@$$(hostname) || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  flower:
+    build:
+      context: ./backend
+      target: prod
+    container_name: flower-prod
+    environment:
+      - ENVIRONMENT=production
+      - CORS_ORIGINS=${CORS_ORIGINS}
+      - PYTHONUNBUFFERED=1
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+    command: celery -A tasks.tasks_increment.celery flower --port=5555
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.flower.rule=Host(`flower.${DOMAIN}`)"
+      - "traefik.http.routers.flower.entrypoints=websecure"
+      - "traefik.http.routers.flower.tls.certresolver=letsencrypt"
+      - "traefik.http.services.flower.loadbalancer.server.port=5555"
+      # 🔒 Добавьте аутентификацию для безопасности!
+      - "traefik.http.routers.flower.middlewares=flower-auth"
+      - "traefik.http.middlewares.flower-auth.basicauth.users=${FLOWER_AUTH_USERS}"
+    networks:
+      - traefik-public
+    depends_on:
+      - redis
+      - celery_worker
     restart: unless-stopped
 
 networks:
