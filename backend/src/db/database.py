@@ -18,5 +18,5 @@ async def get_db():
 async def get_async_connection():
     """Получить asyncpg соединение"""
     return await asyncpg.connect(
-        "postgresql://novamedika:novamedika@postgres:5432/novamedika_dev"
+        "postgresql://novamedika:novamedika@postgres:5432/novamedika_prod"
     )
