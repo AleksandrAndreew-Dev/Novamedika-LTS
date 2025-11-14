@@ -11,6 +11,7 @@ import asyncio
 from pathlib import Path
 
 from celery import Celery
+import os
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,7 +20,13 @@ from db.models import Pharmacy, Product
 
 logger = logging.getLogger(__name__)
 
-celery = Celery(__name__, broker="redis://redis:6379/0", backend="redis://redis:6379/0")
+redis_password = os.getenv('REDIS_PASSWORD', '')
+
+celery = Celery(
+    'tasks',
+    broker=f'redis://:{redis_password}@redis:6379/0',
+    backend=f'redis://:{redis_password}@redis:6379/0'
+)
 
 
 def generate_product_hash(product_data: dict) -> str:
