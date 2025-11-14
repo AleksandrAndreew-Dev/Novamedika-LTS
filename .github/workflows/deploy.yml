@@ -203,17 +203,6 @@ jobs:
       with:
         name: deployment-files
 
-    - name: Upload deployment files
-      uses: appleboy/scp-action@v0.1.7
-      with:
-        host: ${{ secrets.PRODUCTION_SERVER_HOST }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SERVER_SSH_KEY }}
-        source: "docker-compose.deploy.yml,.env.deploy"
-        target: "/opt/novamedika-prod"
-
-
-
     - name: Deploy to production
       uses: appleboy/ssh-action@v1.0.3
       with:
