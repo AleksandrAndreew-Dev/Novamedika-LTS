@@ -33,7 +33,7 @@ services:
     restart: unless-stopped
 
   backend:
-    image: ghcr.io/aleksandrandreew-dev/novamedika-lts/backend:latest
+    image: ghcr.io/novamedika-lts/backend:latest
     container_name: backend-prod
     environment:
       - ENVIRONMENT=production
@@ -61,7 +61,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    image: ghcr.io/aleksandrandreew-dev/novamedika-lts/frontend:latest
+    image: ghcr.io/novamedika-lts/frontend:latest
     container_name: frontend-prod
     environment:
       - VITE_API_URL=${VITE_API_URL}
@@ -103,9 +103,7 @@ services:
     restart: unless-stopped
 
   celery_worker:
-    build:
-      context: ./backend
-      target: prod
+    image: ghcr.io/novamedika-lts/backend:latest
     container_name: celery-worker-prod
     environment:
       - ENVIRONMENT=production
@@ -129,9 +127,7 @@ services:
     restart: unless-stopped
 
   flower:
-    build:
-      context: ./backend
-      target: prod
+    image: ghcr.io/novamedika-lts/backend:latest
     container_name: flower-prod
     environment:
       - ENVIRONMENT=production

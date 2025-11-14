@@ -72,34 +72,27 @@ jobs:
 
 
   build-and-push:
-    needs: test
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+  needs: test
+  runs-on: ubuntu-latest
+  if: github.ref == 'refs/heads/main'
 
-    permissions:
-      contents: read
-      packages: write
+  permissions:
+    contents: read
+    packages: write
 
-    steps:
+  steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    - name: Log in to GHCR
+    - name: Log in to Container Registry
       uses: docker/login-action@v3
       with:
-        registry: ghcr.io
-        username: aleksandrandreew-dev
-        password: ${{ secrets.GHCR_PAT }}
-
-
-    - name: Extract metadata (tags, labels)
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Build and push backend image
       uses: docker/build-push-action@v5
@@ -108,11 +101,11 @@ jobs:
         file: ./backend/Dockerfile
         target: prod
         push: true
-        tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_REPO }}/backend:latest
+        tags: |
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
-
-
 
     - name: Build and push frontend image
       uses: docker/build-push-action@v5
@@ -121,40 +114,23 @@ jobs:
         file: ./frontend/Dockerfile
         target: prod
         push: true
-        tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_REPO }}/frontend:latest
-        labels: ${{ steps.meta.outputs.labels }}
+        tags: |
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ github.sha }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
-    - name: Update deployment file with new images
+    - name: Prepare deployment files
       run: |
-        sed "s|image:.*backend.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest|g" $DOCKER_COMPOSE_FILE > docker-compose.deploy.yml
-        sed -i "s|image:.*frontend.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest|g" docker-compose.deploy.yml
-
-
-    - name: Create .env.deploy
-      run: |
-        echo "DOMAIN=${{ secrets.DOMAIN }}" >> .env.deploy
-        echo "API_DOMAIN=${{ secrets.API_DOMAIN }}" >> .env.deploy
-        echo "SSL_EMAIL=${{ secrets.SSL_EMAIL }}" >> .env.deploy
-        echo "TRAEFIK_AUTH_USERS=${{ secrets.TRAEFIK_AUTH_USERS }}" >> .env.deploy
-        echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" >> .env.deploy
-        echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env.deploy
-        echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" >> .env.deploy
-        echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" >> .env.deploy
-        echo "REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}" >> .env.deploy
-        echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env.deploy
-        echo "CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}" >> .env.deploy
-        echo "VITE_API_URL=${{ secrets.VITE_API_URL }}" >> .env.deploy
-
+        # Просто копируем docker-compose файл - образы уже указаны правильно
+        cp $DOCKER_COMPOSE_FILE docker-compose.deploy.yml
+        # .env.deploy больше не нужен, так как на сервере есть .env
 
     - name: Upload deployment artifacts
       uses: actions/upload-artifact@v4
       with:
         name: deployment-files
-        path: |
-          docker-compose.deploy.yml
-          .env.deploy
+        path: docker-compose.deploy.yml
         retention-days: 1
 
   deploy-staging:
@@ -198,43 +174,44 @@ jobs:
     environment: production
 
     steps:
-    - name: Download deployment artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: deployment-files
+      - name: Download deployment artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: deployment-files
 
-    - name: Deploy to production
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.PRODUCTION_SERVER_HOST }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SERVER_SSH_KEY }}
-        script: |
-          cd /opt/novamedika-prod
+      - name: Deploy to production
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PRODUCTION_SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd /opt/novamedika
 
-          mkdir -p letsencrypt
-          touch letsencrypt/acme.json
-          chmod 600 letsencrypt/acme.json
+            # Логинимся в GitHub Container Registry
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-          # Останавливаем и обновляем
-          docker-compose -f docker-compose.deploy.yml down
-          docker-compose -f docker-compose.deploy.yml pull
-          docker-compose -f docker-compose.deploy.yml up -d
+            # Создаем директорию для Let's Encrypt если нужно
+            mkdir -p letsencrypt
+            touch letsencrypt/acme.json
+            chmod 600 letsencrypt/acme.json
 
-          # Проверяем здоровье сервисов
-          echo "Waiting for services to start..."
-          sleep 45
+            # Останавливаем и обновляем
+            docker-compose -f docker-compose.deploy.yml down
+            docker-compose -f docker-compose.deploy.yml pull
+            docker-compose -f docker-compose.deploy.yml up -d
 
-          docker exec celery-worker-prod celery -A tasks.tasks_increment.celery inspect ping -d celery@celery-worker-prod || exit 1
+            # Проверяем здоровье сервисов
+            echo "Waiting for services to start..."
+            sleep 30
 
-          # Health checks
-          curl -f https://api.spravka.novamedika.com/health || exit 1
+            # Health checks
+            curl -f https://${{ secrets.DOMAIN }}/health || exit 1
+            curl -f https://api.${{ secrets.DOMAIN }}/health || exit 1
 
+            docker exec celery-worker-prod celery -A tasks.tasks_increment.celery inspect ping -d celery@celery-worker-prod || exit 1
 
+            # Чистим старые образы
+            docker system prune -f
 
-          # Чистим старые образы
-          docker system prune -f
-
-          echo "✅ Production deployment completed!"
-
-
+            echo "✅ Deployment completed successfully!"
