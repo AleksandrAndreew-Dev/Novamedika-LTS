@@ -151,32 +151,39 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            cd /opt/novamedika
+            set -euo pipefail
 
-            # Логинимся в GitHub Container Registry с помощью PAT
-            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            # Рабочая директория (существует на сервере)
+            DEPLOY_DIR="/opt/novamedika-prod"
+            cd "$DEPLOY_DIR"
 
-            # Создаем директорию для Let's Encrypt если нужно
-            mkdir -p letsencrypt
-            touch letsencrypt/acme.json
-            chmod 600 letsencrypt/acme.json
+            # Логинимся в GHCR (PAT хранится в secrets.GHCR_PAT)
+            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ secrets.GHCR_USER }} --password-stdin
 
-            # Останавливаем и обновляем
-            docker-compose -f docker-compose.deploy.yml down
+            # Проверим, что docker-compose.deploy.yml есть
+            if [ ! -f docker-compose.deploy.yml ]; then
+              echo "ERROR: docker-compose.deploy.yml not found in $DEPLOY_DIR"
+              ls -la
+              exit 2
+            fi
+
+            # Стартуем безопасно: останов, pull, up
+            docker-compose -f docker-compose.deploy.yml down || true
             docker-compose -f docker-compose.deploy.yml pull
             docker-compose -f docker-compose.deploy.yml up -d
 
-            # Проверяем здоровье сервисов
-            echo "Waiting for services to start..."
+            # Небольшая задержка, затем проверка здоровья сервисов
             sleep 30
+            set +e
+            curl -fsS "https://${{ secrets.DOMAIN }}/health" || { echo "site root health failed"; exit 3; }
+            curl -fsS "https://api.${{ secrets.DOMAIN }}/health" || { echo "api health failed"; exit 4; }
+            set -e
 
-            # Health checks
-            curl -f https://${{ secrets.DOMAIN }}/health || exit 1
-            curl -f https://api.${{ secrets.DOMAIN }}/health || exit 1
+            # Проверка Celery (если контейнер запущен)
+            docker exec -T celery-worker-prod celery -A tasks.tasks_increment.celery inspect ping -d celery@celery-worker-prod || { echo "celery ping failed"; exit 5; }
 
-            docker exec celery-worker-prod celery -A tasks.tasks_increment.celery inspect ping -d celery@celery-worker-prod || exit 1
-
-            # Чистим старые образы
-            docker system prune -f
+            # Очистка
+            docker system prune -af || true
 
             echo "✅ Deployment completed successfully!"
+
