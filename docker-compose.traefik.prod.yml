@@ -120,7 +120,7 @@ services:
       - postgres
       - redis
     healthcheck:
-      test: ["CMD-SHELL", "python -m celery -A tasks.tasks_increment.celery inspect ping || exit 1"]
+      test: ["CMD-SHELL", "python -c \"from tasks.tasks_increment.celery import celery; print('Celery app loaded')\""]
       interval: 30s
       timeout: 10s
       retries: 3

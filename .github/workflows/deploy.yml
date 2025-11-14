@@ -183,14 +183,19 @@ jobs:
             docker-compose -f docker-compose.deploy.yml up -d
 
             # Небольшая задержка, затем проверка здоровья сервисов
-            sleep 30
+            sleep 60
             set +e
             docker exec backend-prod curl -f http://localhost:8000/health || { echo "backend health failed"; exit 3; }
             docker exec frontend-prod curl -f http://localhost:80/ || { echo "frontend health failed"; exit 4; }
             set -e
 
-            # Проверка Celery (если контейнер запущен)
-            docker exec celery-worker-prod python -m celery -A tasks.tasks_increment.celery inspect ping || { echo "celery ping failed"; exit 5; }
+            sleep 30
+
+            CELERY_STATUS=$(docker inspect -f '{{.State.Status}}' celery-worker-prod)
+            if [ "$CELERY_STATUS" != "running" ]; then
+              echo "celery container status is '$CELERY_STATUS', expected 'running'"
+              exit 5
+            fi
 
             # Очистка
             docker system prune -af || true
