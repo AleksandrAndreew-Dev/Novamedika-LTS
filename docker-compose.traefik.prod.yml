@@ -112,14 +112,14 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-    command: celery -A tasks.tasks_increment.celery worker --loglevel=info
+    command: ["python", "-m", "celery", "-A", "tasks.tasks_increment.celery", "worker", "--loglevel=info"]
     networks:
       - traefik-public
     depends_on:
       - postgres
       - redis
     healthcheck:
-      test: ["CMD-SHELL", "celery -A tasks.tasks_increment.celery inspect ping -d celery@$$(hostname) || exit 1"]
+      test: ["CMD-SHELL", "python -m celery -A tasks.tasks_increment.celery inspect ping -d celery@$(hostname) || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -136,7 +136,7 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-    command: celery -A tasks.tasks_increment.celery flower --port=5555
+    command: ["python", "-m", "celery", "-A", "tasks.tasks_increment.celery", "flower", "--port=5555"]
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.flower.rule=Host(`flower.${DOMAIN}`)"
