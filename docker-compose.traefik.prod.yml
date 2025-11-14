@@ -1,4 +1,9 @@
+
+env_file:
+  - .env
+
 services:
+
   traefik:
     image: traefik:v3.6.1
     container_name: traefik-prod
