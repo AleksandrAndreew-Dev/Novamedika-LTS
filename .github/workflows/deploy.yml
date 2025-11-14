@@ -133,7 +133,7 @@ jobs:
 
   deploy-production:
     needs: build-and-push
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, novamedika-runner]
     if: github.ref == 'refs/heads/main'
 
     environment: production
