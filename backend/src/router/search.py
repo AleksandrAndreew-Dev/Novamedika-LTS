@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from db.database import get_db
 from db.models import Pharmacy, Product
 
-router = APIRouter()  # УБРАТЬ prefix="/api/search" - он дублируется
+router = APIRouter()
 
 _search_context = {}
 TTL_MINUTES = 30
@@ -25,7 +25,7 @@ def _clean_old_contexts():
     for search_id in expired_ids:
         del _search_context[search_id]
 
-@router.get("/search/search-two-step/", response_model=dict)
+@router.get("/search-two-step/", response_model=dict)
 async def search_two_step(
     name: Optional[str] = Query(None),
     city: Optional[str] = Query(None),
@@ -120,7 +120,7 @@ async def search_two_step(
         "search_id": search_id,
     }
 
-@router.get("/search/search/", response_model=dict)
+@router.get("/search/", response_model=dict)
 async def search_products(
     search_id: Optional[str] = Query(None),
     form: Optional[str] = Query(None),
@@ -208,7 +208,7 @@ async def search_products(
         "search_id": search_id,
     }
 
-@router.get("/search/cities/")
+@router.get("/cities/")
 async def get_cities(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Pharmacy.city)
@@ -219,7 +219,7 @@ async def get_cities(db: AsyncSession = Depends(get_db)):
     cities = [row[0] for row in result.all() if row[0]]
     return cities
 
-@router.get("/search/forms/")
+@router.get("/forms/")
 async def get_forms(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Product.form)
@@ -230,7 +230,7 @@ async def get_forms(db: AsyncSession = Depends(get_db)):
     forms = [row[0] for row in result.all() if row[0]]
     return forms
 
-@router.get("/search/check-relations/")
+@router.get("/check-relations/")
 async def check_relations(db: AsyncSession = Depends(get_db)):
     """Проверка связей между аптеками и продуктами"""
     # Проверяем количество записей

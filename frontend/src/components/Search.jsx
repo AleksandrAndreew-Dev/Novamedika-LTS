@@ -34,7 +34,7 @@ export default function Search() {
   const fetchCities = async () => {
     try {
 
-      const response = await api.get('/api/search/cities/');
+      const response = await api.get('/cities/');
       const data = response.data;
 
       // безопасность: привести результат к массиву
@@ -79,7 +79,7 @@ export default function Search() {
     setLoading(true);
     setError(null);
     try {
-       const response = await api.get('/api/search/search-two-step/', {
+       const response = await api.get('/search-two-step/', {
         params: { name, city },
       });
 
@@ -126,7 +126,7 @@ export default function Search() {
         params.city = searchData.city;
       }
 
-      const response = await api.get('/api/search/search/', {
+      const response = await api.get('/search/', {
         params,
       });
 
@@ -165,7 +165,7 @@ export default function Search() {
         params.form = searchData.form;
       }
 
-      const response = await api.get('/api/search/search/', {
+      const response = await api.get('/search/', {
         params,
       });
 

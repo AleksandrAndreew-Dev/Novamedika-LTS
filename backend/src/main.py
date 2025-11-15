@@ -45,9 +45,10 @@ app = FastAPI(
 )
 
 # Включение роутеров с префиксами
-app.include_router(upload_router, prefix="/api")
-app.include_router(search_router, prefix="/api")
-app.include_router(pharm_info_router, prefix="/api")
+
+app.include_router(upload_router, prefix="", tags=["search"])
+app.include_router(search_router, prefix="", tags=["upload"])
+app.include_router(pharm_info_router, prefix="", tags=["pharmacies"])
 
 # Более безопасная обработка CORS
 origins_raw = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
