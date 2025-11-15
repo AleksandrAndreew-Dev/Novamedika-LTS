@@ -46,8 +46,6 @@ export default function FormSelection({
     <div className="p-4 max-w-6xl mx-auto">
       <div className="bg-white rounded-2xl shadow-sm border border-telegram-border overflow-hidden">
         {/* Header */}
-        // FormSelection.jsx - заменить header секцию
-        {/* Header */}
         <div className="border-b border-telegram-border px-6 py-4">
           <div className="flex justify-between items-center">
             <div>

@@ -110,7 +110,7 @@ export default function SearchResults({
                 : "flex justify-between items-center"
             }`}
           >
-            // SearchResults.jsx - заменить соответствующий блок
+            
             <div>
               <h2 className="text-lg font-semibold text-gray-800">
                 Результаты поиска:
