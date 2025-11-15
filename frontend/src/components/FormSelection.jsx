@@ -10,19 +10,33 @@ export default function FormSelection({
 }) {
   const [selectedForm, setSelectedForm] = useState("");
 
-  // Группируем продукты по формам - одна форма = одна строка
+  // Группируем продукты по уникальной комбинации: форма + производитель + страна
   const groupedByForm = previewProducts.reduce((acc, product) => {
-    if (!acc[product.form]) {
-      acc[product.form] = {
+    const key = `${product.form}|${product.manufacturer}|${product.country}`;
+
+    if (!acc[key]) {
+      acc[key] = {
         form: product.form,
+        manufacturer: product.manufacturer,
+        country: product.country,
+        // Собираем все уникальные названия для этой группы
+        names: new Set([product.name]),
         // Берем первый продукт как пример для отображения
         example: product,
       };
+    } else {
+      // Добавляем новое название в набор
+      acc[key].names.add(product.name);
     }
     return acc;
   }, {});
 
-  const formGroups = Object.values(groupedByForm);
+  // Преобразуем в массив и обрабатываем названия
+  const formGroups = Object.values(groupedByForm).map(group => ({
+    ...group,
+    // Объединяем уникальные названия через запятую
+    displayName: Array.from(group.names).join(', ')
+  }));
 
   const handleFormClick = (form) => {
     setSelectedForm(form);
@@ -92,6 +106,9 @@ export default function FormSelection({
                     <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
                       Производитель
                     </th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
+                      Страна
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -107,17 +124,25 @@ export default function FormSelection({
                     >
                       <td className="py-3 px-4">
                         <div className="text-sm font-medium text-gray-800">
-                          {group.example.name.toUpperCase()}
+                          {group.displayName}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          {group.names.size > 1 ? `${group.names.size} вариантов` : '1 вариант'}
                         </div>
                       </td>
                       <td className="py-3 px-4">
                         <div className="text-sm text-gray-600">
-                          {group.example.form}
+                          {group.form}
                         </div>
                       </td>
                       <td className="py-3 px-4">
                         <div className="text-sm text-gray-600">
-                          {group.example.manufacturer.toUpperCase()}
+                          {group.manufacturer}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="text-sm text-gray-600">
+                          {group.country}
                         </div>
                         {loading && selectedForm === group.form && (
                           <div className="flex items-center mt-1">
