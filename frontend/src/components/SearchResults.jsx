@@ -23,7 +23,7 @@ export default function SearchResults({
         grouped[key] = {
           ...item,
           // Преобразуем quantity в число для последующего суммирования
-          quantity: parseFloat(item.quantity) || 0,
+          quantity: Math.round((parseFloat(item.quantity) || 0) * 1000) / 1000,
         };
       } else {
         // Уже существует - суммируем количество
@@ -39,6 +39,11 @@ export default function SearchResults({
     });
 
     return Object.values(grouped);
+  };
+  const formatQuantity = (quantity) => {
+    const num = parseFloat(quantity);
+    if (isNaN(num)) return "0";
+    return Math.round(num * 1000) / 1000;
   };
 
   const groupedResults = getGroupedResults();
@@ -110,7 +115,6 @@ export default function SearchResults({
                 : "flex justify-between items-center"
             }`}
           >
-            
             <div>
               <h2 className="text-lg font-semibold text-gray-800">
                 Результаты поиска:
@@ -191,7 +195,8 @@ export default function SearchResults({
                       <strong>Телефон:</strong> {item.pharmacy_phone}
                     </p>
                     <p>
-                      <strong>Количество:</strong> {item.quantity} уп.
+                      <strong>Количество:</strong>{" "}
+                      {formatQuantity(item.quantity)} уп.
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
                       Обновлено: {formatDate(item.updated_at)}
@@ -276,7 +281,7 @@ export default function SearchResults({
                       <td className="py-3 px-4">
                         <div>
                           <div className="text-sm text-gray-800">
-                            {item.quantity} уп.
+                            {formatQuantity(item.quantity)} уп.
                           </div>
                           <div className="text-xs text-gray-500">
                             Уточняйте в аптеке

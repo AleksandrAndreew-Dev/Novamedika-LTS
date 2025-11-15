@@ -2,10 +2,8 @@ import React, { useState, useEffect } from "react";
 import SearchBar from "./SearchBar";
 import FormSelection from "./FormSelection";
 import SearchResults from "./SearchResults";
-import { useTelegramWebApp} from "../telegram/TelegramWebApp";
-import { api } from '../api/client';
-
-
+import { useTelegramWebApp } from "../telegram/TelegramWebApp";
+import { api } from "../api/client";
 
 export default function Search() {
   const [step, setStep] = useState(1);
@@ -26,33 +24,38 @@ export default function Search() {
   });
   const [error, setError] = useState(null);
 
-
   const { tg, isTelegram } = useTelegramWebApp();
 
-
   useEffect(() => {
-  const fetchCities = async () => {
-    try {
+    const fetchCities = async () => {
+      try {
+        const response = await api.get("/cities/");
+        const data = response.data;
 
-      const response = await api.get('/cities/');
-      const data = response.data;
-
-      // безопасность: привести результат к массиву
-      const cities = Array.isArray(data) ? data : (data?.results ?? data?.items ?? []);
-      if (!Array.isArray(cities)) {
-        // если всё ещё не массив — fallback
+        // безопасность: привести результат к массиву
+        const cities = Array.isArray(data)
+          ? data
+          : data?.results ?? data?.items ?? [];
+        if (!Array.isArray(cities)) {
+          // если всё ещё не массив — fallback
+          setCities([
+            "Минск",
+            "Гомель",
+            "Брест",
+            "Гродно",
+            "Витебск",
+            "Могилев",
+          ]);
+        } else {
+          setCities(cities);
+        }
+      } catch (error) {
+        console.error("Error fetching cities:", error);
         setCities(["Минск", "Гомель", "Брест", "Гродно", "Витебск", "Могилев"]);
-      } else {
-        setCities(cities);
       }
-    } catch (error) {
-      console.error("Error fetching cities:", error);
-      setCities(["Минск", "Гомель", "Брест", "Гродно", "Витебск", "Могилев"]);
-    }
-  };
-  fetchCities();
-}, []);
-
+    };
+    fetchCities();
+  }, []);
 
   useEffect(() => {
     if (!isTelegram || !tg) return;
@@ -79,7 +82,7 @@ export default function Search() {
     setLoading(true);
     setError(null);
     try {
-       const response = await api.get('/search-two-step/', {
+      const response = await api.get("/search-two-step/", {
         params: { name, city },
       });
 
@@ -97,16 +100,15 @@ export default function Search() {
 
       if (isTelegram) {
         tg.showPopup({
-          title: 'Ошибка',
-          message: 'Ошибка при поиске. Попробуйте еще раз.',
-          buttons: [{ type: 'ok' }]
+          title: "Ошибка",
+          message: "Ошибка при поиске. Попробуйте еще раз.",
+          buttons: [{ type: "ok" }],
         });
       }
     } finally {
       setLoading(false);
     }
   };
-
 
   const handleFormSelect = async (form) => {
     setLoading(true);
@@ -126,7 +128,7 @@ export default function Search() {
         params.city = searchData.city;
       }
 
-      const response = await api.get('/search/', {
+      const response = await api.get("/search/", {
         params,
       });
 
@@ -165,7 +167,7 @@ export default function Search() {
         params.form = searchData.form;
       }
 
-      const response = await api.get('/search/', {
+      const response = await api.get("/search/", {
         params,
       });
 
@@ -184,12 +186,12 @@ export default function Search() {
     }
   };
 
-
-
-
-
   return (
-    <div className={`min-h-screen ${isTelegram ? 'bg-transparent' : 'bg-telegram-bg'}`}>
+    <div
+      className={`min-h-screen ${
+        isTelegram ? "bg-transparent" : "bg-telegram-bg"
+      }`}
+    >
       {/* Показываем кастомный header только вне Telegram */}
       {!isTelegram && (
         <div className="bg-white shadow-sm border-b border-telegram-border">
@@ -199,25 +201,34 @@ export default function Search() {
               <span className="text-orange-500">Н</span>ова
               <span className="text-orange-500">М</span>едика
             </h1>
-            <div className="text-gray-600 text-sm mt-1">Справочная служба CI CD</div>
+            <div className="text-gray-600 text-sm mt-1">
+              Справочная служба CI CD
+            </div>
           </div>
         </div>
       )}
 
       {/* Content */}
-      <div className={isTelegram ? 'p-2' : 'p-4'}>
-        <div className={isTelegram ? 'max-w-full' : 'max-w-4xl mx-auto'}>
+      <div className={isTelegram ? "p-2" : "p-4"}>
+        <div className={isTelegram ? "max-w-full" : "max-w-4xl mx-auto"}>
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
               <div className="flex items-center">
-                <svg className="w-5 h-5 text-red-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                <svg
+                  className="w-5 h-5 text-red-500 mr-2"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                    clipRule="evenodd"
+                  />
                 </svg>
                 <span className="text-red-800 text-sm">{error}</span>
               </div>
             </div>
           )}
-
           {step === 1 && (
             <SearchBar
               cities={cities}
@@ -227,13 +238,11 @@ export default function Search() {
               isTelegram={isTelegram}
             />
           )}
-
           {loading && (
             <div className="flex justify-center items-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-telegram-primary"></div>
             </div>
           )}
-
           {step === 2 && searchContext && (
             <FormSelection
               availableForms={searchContext.availableForms}
@@ -246,14 +255,20 @@ export default function Search() {
               isTelegram={isTelegram}
             />
           )}
-
+          // В Search.jsx в шаге 3 добавьте пропс для полного сброса
           {step === 3 && (
             <SearchResults
               results={results}
               searchData={searchData}
               pagination={pagination}
               onPageChange={handlePageChange}
-              onNewSearch={() => setStep(1)}
+              onNewSearch={() => {
+                // Полный сброс к начальному состоянию
+                setStep(1);
+                setSearchData({ name: "", city: "", form: "" });
+                setResults([]);
+                setSearchContext(null);
+              }}
               onBackToForms={() => setStep(2)}
               loading={loading}
               isTelegram={isTelegram}
@@ -262,29 +277,46 @@ export default function Search() {
         </div>
       </div>
 
-
       {/* Footer */}
-            {!isTelegram && (
+      {!isTelegram && (
         <div className="bg-white border-t border-telegram-border mt-8">
           <div className="max-w-4xl mx-auto py-6 px-4">
             <div className="space-y-4">
               <div className="flex flex-wrap justify-center gap-4 text-sm">
-                <a href="/" className="text-telegram-primary hover:text-blue-600 transition-colors">
+                <a
+                  href="/"
+                  className="text-telegram-primary hover:text-blue-600 transition-colors"
+                >
                   Поиск
                 </a>
-                <a href="/terms" className="text-telegram-primary hover:text-blue-600 transition-colors">
+                <a
+                  href="/terms"
+                  className="text-telegram-primary hover:text-blue-600 transition-colors"
+                >
                   Условия использования
                 </a>
-                <a href="/cookie-policy" className="text-telegram-primary hover:text-blue-600 transition-colors">
+                <a
+                  href="/cookie-policy"
+                  className="text-telegram-primary hover:text-blue-600 transition-colors"
+                >
                   Cookie
                 </a>
-                <a href="/pharmacies-nearby" className="text-telegram-primary hover:text-blue-600 transition-colors">
+                <a
+                  href="/pharmacies-nearby"
+                  className="text-telegram-primary hover:text-blue-600 transition-colors"
+                >
                   Аптеки рядом
                 </a>
-                <a href="/contacts" className="text-telegram-primary hover:text-blue-600 transition-colors">
+                <a
+                  href="/contacts"
+                  className="text-telegram-primary hover:text-blue-600 transition-colors"
+                >
                   Контакты
                 </a>
-                <a href="/help" className="text-telegram-primary hover:text-blue-600 transition-colors">
+                <a
+                  href="/help"
+                  className="text-telegram-primary hover:text-blue-600 transition-colors"
+                >
                   Помощь
                 </a>
               </div>
@@ -298,8 +330,3 @@ export default function Search() {
     </div>
   );
 }
-
-
-
-
-
