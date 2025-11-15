@@ -1,6 +1,12 @@
 import React, { useState } from "react";
 
-export default function SearchBar({ cities, onSearch, loading, currentCity, isTelegram }) {
+export default function SearchBar({
+  cities,
+  onSearch,
+  loading,
+  currentCity,
+  isTelegram,
+}) {
   const [name, setName] = useState("");
   const [city, setCity] = useState(currentCity || "");
 
@@ -14,7 +20,11 @@ export default function SearchBar({ cities, onSearch, loading, currentCity, isTe
   };
 
   return (
-    <div className={`bg-white rounded-2xl shadow-sm border border-telegram-border ${isTelegram ? 'p-4 mb-2' : 'p-6 mb-6'}`}>
+    <div
+      className={`bg-white rounded-2xl shadow-sm border border-telegram-border ${
+        isTelegram ? "p-4 mb-2" : "p-6 mb-6"
+      }`}
+    >
       <form onSubmit={handleSubmit} className="w-full">
         <div className="space-y-4">
           <div>
@@ -53,7 +63,13 @@ export default function SearchBar({ cities, onSearch, loading, currentCity, isTe
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-telegram-primary hover:bg-blue-600 disabled:bg-telegram-secondary text-white font-medium py-3 px-6 rounded-xl focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:ring-offset-2 transition-all flex items-center justify-center text-base"
+              className="
+    w-full bg-telegram-primary text-white font-medium py-3 px-6 rounded-xl
+    focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:ring-offset-2
+    transition-all flex items-center justify-center text-base
+    hover:bg-blue-600
+    disabled:opacity-100 disabled:cursor-not-allowed disabled:hover:bg-blue-600
+  "
             >
               {loading ? (
                 <>
@@ -62,8 +78,18 @@ export default function SearchBar({ cities, onSearch, loading, currentCity, isTe
                 </>
               ) : (
                 <>
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  <svg
+                    className="w-4 h-4 mr-2"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                    />
                   </svg>
                   Найти
                 </>

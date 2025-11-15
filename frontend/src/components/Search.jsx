@@ -195,7 +195,36 @@ export default function Search() {
       {/* Показываем кастомный header только вне Telegram */}
       {!isTelegram && (
         <div className="bg-white shadow-sm border-b border-telegram-border">
-          <div className="text-center py-4 px-4">
+          <div className="text-center py-4 px-4 relative">
+            {/* Кнопка назад для десктопа */}
+            {step > 1 && (
+              <button
+                onClick={() => {
+                  if (step === 2) {
+                    setStep(1);
+                  } else if (step === 3) {
+                    setStep(2);
+                  }
+                }}
+                disabled={loading}
+                className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center text-sm"
+              >
+                <svg
+                  className="w-4 h-4 mr-2"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                  />
+                </svg>
+                Назад
+              </button>
+            )}
             <div className="text-gray-600 text-sm mb-1">Сеть Аптек</div>
             <h1 className="text-2xl font-bold text-telegram-primary m-0">
               <span className="text-orange-500">Н</span>ова
@@ -255,7 +284,7 @@ export default function Search() {
               isTelegram={isTelegram}
             />
           )}
-          
+
           {step === 3 && (
             <SearchResults
               results={results}

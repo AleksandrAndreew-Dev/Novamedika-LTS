@@ -53,7 +53,7 @@ export default function FormSelection({
                 Выберите форму препарата
               </h2>
               <p className="text-gray-600 text-sm mt-1">
-                для "{searchData.name}"
+                для "<span className="font-semibold uppercase">{searchData.name}</span>"
                 {searchData.city && ` в городе ${searchData.city}`}
               </p>
             </div>

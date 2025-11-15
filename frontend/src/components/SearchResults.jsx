@@ -119,7 +119,7 @@ export default function SearchResults({
               <h2 className="text-lg font-semibold text-gray-800">
                 Результаты поиска:
               </h2>
-              <p className="text-telegram-primary font-medium text-sm mt-1">
+              <p className="text-telegram-primary font-bold text-sm mt-1 uppercase">
                 {searchData.name} {searchData.form}
                 {groupedResults[0] &&
                   ` - ${groupedResults[0].manufacturer} ${groupedResults[0].country}`}
