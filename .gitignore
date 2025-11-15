@@ -1,4 +1,5 @@
 .env
+.env.deploy
 node_modules/
 *.pyc
 __pycache__/
