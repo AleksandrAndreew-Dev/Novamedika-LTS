@@ -4,7 +4,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 
-from .database import Base  # ваш declarative_base()
+from db.database import Base  # ваш declarative_base()
 
 class Pharmacy(Base):
     __tablename__ = "pharmacies"

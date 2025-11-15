@@ -1,10 +1,15 @@
 # main.py - исправленные импорты
+
+from router.telegram_bot import setup_bot
+
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import os
 import logging
+
+
 
 # Добавить недостающие импорты:
 from sqlalchemy import text
@@ -18,7 +23,11 @@ import asyncio
 
 from router.upload import router as upload_router
 from router.search import router as search_router
-from router.pharmacies_info import router as pharm_info_router
+from router.pharmacies_info import router as pharm_info_router# В main.py добавить:
+from telegram_bot import router as telegram_router
+
+# В разделе включения роутеров добавить:
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,10 +40,38 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    from bot.core import bot_manager
+    bot, dp = await bot_manager.initialize()
+    if bot and dp:
+        print("✅ Telegram bot initialized")
+
+        # Автоматически устанавливаем webhook в production
+        if os.getenv("ENVIRONMENT") == "production":
+            try:
+                webhook_url = os.getenv("TELEGRAM_WEBHOOK_URL")
+                if webhook_url:
+                    secret_token = os.getenv("TELEGRAM_WEBHOOK_SECRET")
+                    webhook_config = {
+                        "url": webhook_url,
+                        "drop_pending_updates": True,
+                        "max_connections": 40,
+                    }
+                    if secret_token:
+                        webhook_config["secret_token"] = secret_token
+
+                    await bot.set_webhook(**webhook_config)
+                    print(f"✅ Production webhook set: {webhook_url}")
+            except Exception as e:
+                print(f"❌ Failed to set production webhook: {e}")
+    else:
+        print("❌ Telegram bot not configured")
+
     print("✅ Database tables created/verified")
     yield
 
     print("🔴 Backend shutting down...")
+    # Корректное завершение работы бота
+    await bot_manager.shutdown()
     await engine.dispose()
 
 app = FastAPI(
@@ -49,6 +86,8 @@ app = FastAPI(
 app.include_router(upload_router, prefix="", tags=["search"])
 app.include_router(search_router, prefix="", tags=["upload"])
 app.include_router(pharm_info_router, prefix="", tags=["pharmacies"])
+
+app.include_router(telegram_router, prefix="", tags=["telegram"])
 
 # Более безопасная обработка CORS
 origins_raw = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
