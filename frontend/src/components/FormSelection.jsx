@@ -2,7 +2,6 @@ import React, { useState } from "react";
 
 export default function FormSelection({
   previewProducts,
-  totalFound,
   searchData,
   onFormSelect,
   onBack,
