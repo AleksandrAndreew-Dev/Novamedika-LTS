@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import Search from "./components/Search";
-import TelegramWrapper from "./components/TelegramWrapper";
+import TelegramWrapper from "./telegram/TelegramWrapper";
 import "./App.css";
 
 function App() {
