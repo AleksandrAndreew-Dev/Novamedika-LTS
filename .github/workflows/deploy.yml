@@ -67,7 +67,7 @@ jobs:
 
   build-and-push:
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, novamedika-runner]
     if: github.ref == 'refs/heads/main'
 
     permissions:
