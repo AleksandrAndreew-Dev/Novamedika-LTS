@@ -255,7 +255,7 @@ export default function Search() {
               isTelegram={isTelegram}
             />
           )}
-          // В Search.jsx в шаге 3 добавьте пропс для полного сброса
+          
           {step === 3 && (
             <SearchResults
               results={results}
