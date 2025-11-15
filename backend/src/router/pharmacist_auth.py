@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
+from sqlalchemy.orm import selectinload
 import uuid
 
 from db.database import get_db
@@ -42,7 +43,7 @@ async def register_pharmacist(
                 detail="Аптека не найдена"
             )
 
-        # Проверяем, не зарегистрирован ли уже фармацевт для этого пользователя и аптеки
+        # Проверяем, не зарегистрирован ли уже фармацевт
         existing_pharmacist_result = await db.execute(
             select(Pharmacist).where(
                 and_(

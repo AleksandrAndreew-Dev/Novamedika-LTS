@@ -1,33 +1,19 @@
 # main.py - исправленные импорты
 
-from router.telegram_bot import setup_bot
-
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Depends
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import os
 import logging
 
-
-
-# Добавить недостающие импорты:
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
-import uuid
-from celery import Celery
-
-# Исправить пути импортов:
 from db.database import Base, engine, get_db, async_session_maker
 import asyncio
 
 from router.upload import router as upload_router
 from router.search import router as search_router
-from router.pharmacies_info import router as pharm_info_router# В main.py добавить:
-from telegram_bot import router as telegram_router
-
-# В разделе включения роутеров добавить:
-
+from router.pharmacies_info import router as pharm_info_router
+from router.telegram_bot import router as telegram_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -82,17 +68,13 @@ app = FastAPI(
 )
 
 # Включение роутеров с префиксами
-
 app.include_router(upload_router, prefix="", tags=["search"])
 app.include_router(search_router, prefix="", tags=["upload"])
 app.include_router(pharm_info_router, prefix="", tags=["pharmacies"])
-
 app.include_router(telegram_router, prefix="", tags=["telegram"])
 
 # Более безопасная обработка CORS
 origins_raw = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
-
-# CORS configuration
 origins = [origin.strip() for origin in origins_raw.split(",") if origin.strip()]
 
 app.add_middleware(

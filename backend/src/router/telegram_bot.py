@@ -1,7 +1,8 @@
-
-from fastapi import APIRouter, Request, Depends, HTTPException
+from fastapi import APIRouter, Request, HTTPException
 from aiogram.types import Update
 import logging
+import os
+
 from bot.core import bot_manager
 
 logger = logging.getLogger(__name__)
@@ -44,14 +45,14 @@ async def set_webhook():
         secret_token = os.getenv("TELEGRAM_WEBHOOK_SECRET")
         webhook_config = {
             "url": webhook_url,
-            "drop_pending_updates": True,  # Важно для production
+            "drop_pending_updates": True,
             "max_connections": 40,
         }
 
         if secret_token:
             webhook_config["secret_token"] = secret_token
 
-        result = await bot.set_webhook(**webhook_config)
+        await bot.set_webhook(**webhook_config)
 
         logger.info(f"Webhook set successfully: {webhook_url}")
         return {
@@ -72,7 +73,7 @@ async def delete_webhook():
         if not bot:
             return {"status": "error", "detail": "Bot not configured"}
 
-        result = await bot.delete_webhook(drop_pending_updates=True)
+        await bot.delete_webhook(drop_pending_updates=True)
         return {"status": "success", "message": "Webhook deleted"}
 
     except Exception as e:

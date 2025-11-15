@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_
@@ -9,8 +8,7 @@ import uuid
 
 from db.database import get_db
 from db.qa_models import User, Question, Answer, Pharmacist
-from db.models import Pharmacy
-from db.qa_schemas import QuestionCreate, QuestionResponse, AnswerCreate, AnswerResponse, PharmacistBasicResponse, UserResponse
+from db.qa_schemas import QuestionCreate, QuestionResponse, AnswerBase, AnswerResponse, PharmacistBasicResponse, UserResponse
 from auth.auth import get_current_pharmacist
 
 router = APIRouter(prefix="/qa", tags=["Q&A"])
@@ -87,12 +85,11 @@ async def create_question(
             detail=f"Ошибка при создании вопроса: {str(e)}"
         )
 
-
 @router.get("/questions/", response_model=List[QuestionResponse])
 async def get_questions(
     status: Optional[str] = None,
     pharmacist_id: Optional[str] = None,
-    pharmacy_id: Optional[str] = None,  # Новый параметр для фильтрации по аптеке
+    pharmacy_id: Optional[str] = None,
     db: AsyncSession = Depends(get_db)
 ):
     try:
@@ -114,7 +111,7 @@ async def get_questions(
                 )
             )
 
-        # Фильтрация по аптеке (все фармацевты определенной аптеки)
+        # Фильтрация по аптеке
         if pharmacy_id:
             query = query.where(
                 or_(
@@ -199,12 +196,11 @@ async def get_questions(
             detail=f"Ошибка при получении вопросов: {str(e)}"
         )
 
-
 @router.post("/questions/{question_id}/answer", response_model=AnswerResponse)
 async def answer_question(
     question_id: str,
-    answer: AnswerBase,  # Только text, без pharmacist_id
-    pharmacist: Pharmacist = Depends(get_current_pharmacist),  # ДОБАВИТЬ аутентификацию
+    answer: AnswerBase,
+    pharmacist: Pharmacist = Depends(get_current_pharmacist),
     db: AsyncSession = Depends(get_db)
 ):
     """Ответ фармацевта на вопрос"""
@@ -225,7 +221,7 @@ async def answer_question(
         new_answer = Answer(
             uuid=uuid.uuid4(),
             question_id=question.uuid,
-            pharmacist_id=pharmacist.uuid,  # Из аутентифицированного фармацевта
+            pharmacist_id=pharmacist.uuid,
             text=answer.text
         )
 
