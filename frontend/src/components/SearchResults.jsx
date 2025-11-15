@@ -10,6 +10,39 @@ export default function SearchResults({
   loading,
   isTelegram
 }) {
+  // Функция для группировки и суммирования количества одинаковых продуктов в одной аптеке
+  const getGroupedResults = () => {
+    const grouped = {};
+
+    results.forEach(item => {
+      // Ключ группировки: аптека + название + форма + производитель + страна
+      const key = `${item.pharmacy_number}-${item.name}-${item.form}-${item.manufacturer}-${item.country}`;
+
+      if (!grouped[key]) {
+        // Первое вхождение - создаем новую запись
+        grouped[key] = {
+          ...item,
+          // Преобразуем quantity в число для последующего суммирования
+          quantity: parseFloat(item.quantity) || 0
+        };
+      } else {
+        // Уже существует - суммируем количество
+        grouped[key].quantity += parseFloat(item.quantity) || 0;
+
+        // Берем самую свежую дату обновления
+        const currentDate = new Date(grouped[key].updated_at);
+        const newDate = new Date(item.updated_at);
+        if (newDate > currentDate) {
+          grouped[key].updated_at = item.updated_at;
+        }
+      }
+    });
+
+    return Object.values(grouped);
+  };
+
+  const groupedResults = getGroupedResults();
+
   const formatDate = (dateString) => {
     if (!dateString) return "Недавно";
 
@@ -71,10 +104,12 @@ export default function SearchResults({
               <h2 className="text-lg font-semibold text-gray-800">Результаты поиска:</h2>
               <p className="text-telegram-primary font-medium text-sm mt-1">
                 {searchData.name} {searchData.form}
-                {results[0] && ` - ${results[0].manufacturer} ${results[0].country}`}
+                {groupedResults[0] && ` - ${groupedResults[0].manufacturer} ${groupedResults[0].country}`}
               </p>
               <p className="text-gray-600 text-sm mt-1">
                 Найдено {pagination.total} результатов
+                {groupedResults.length !== results.length &&
+                  ` (сгруппировано ${groupedResults.length} позиций)`}
               </p>
             </div>
             {!isTelegram && (
@@ -105,7 +140,7 @@ export default function SearchResults({
         {isTelegram ? (
           <div className="p-4">
             <div className="space-y-3">
-              {results.map((item, index) => (
+              {groupedResults.map((item, index) => (
                 <div key={index} className="border border-gray-200 rounded-lg p-3">
                   <div className="flex justify-between items-start mb-2">
                     <div>
@@ -146,7 +181,7 @@ export default function SearchResults({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {results.map((item, index) => (
+                  {groupedResults.map((item, index) => (
                     <tr key={index} className="hover:bg-gray-50 transition-colors">
                       <td className="py-3 px-4">
                         <div>
