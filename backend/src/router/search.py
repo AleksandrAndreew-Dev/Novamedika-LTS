@@ -15,6 +15,7 @@ router = APIRouter()
 _search_context = {}
 TTL_MINUTES = 30
 
+
 def _clean_old_contexts():
     """Очистка устаревших контекстов поиска"""
     now = datetime.now()
@@ -24,6 +25,7 @@ def _clean_old_contexts():
             expired_ids.append(search_id)
     for search_id in expired_ids:
         del _search_context[search_id]
+
 
 @router.get("/search-two-step/", response_model=dict)
 async def search_two_step(
@@ -96,6 +98,7 @@ async def search_two_step(
                 "name": product.name,
                 "form": product.form,
                 "manufacturer": product.manufacturer,
+                "country": product.country,
                 "price": float(product.price) if product.price else 0.0,
                 "pharmacy_city": (
                     product.pharmacy.city if product.pharmacy else "Unknown"
@@ -119,6 +122,7 @@ async def search_two_step(
         "filters": {"name": name, "city": city},
         "search_id": search_id,
     }
+
 
 @router.get("/search/", response_model=dict)
 async def search_products(
@@ -208,6 +212,7 @@ async def search_products(
         "search_id": search_id,
     }
 
+
 @router.get("/cities/")
 async def get_cities(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -219,6 +224,7 @@ async def get_cities(db: AsyncSession = Depends(get_db)):
     cities = [row[0] for row in result.all() if row[0]]
     return cities
 
+
 @router.get("/forms/")
 async def get_forms(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -229,6 +235,7 @@ async def get_forms(db: AsyncSession = Depends(get_db)):
     )
     forms = [row[0] for row in result.all() if row[0]]
     return forms
+
 
 @router.get("/check-relations/")
 async def check_relations(db: AsyncSession = Depends(get_db)):

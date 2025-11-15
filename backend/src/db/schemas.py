@@ -95,6 +95,7 @@ class ProductPreview(BaseModel):
     name: str
     form: str
     manufacturer: str
+    country: str
     price: float
     pharmacy_city: str
 

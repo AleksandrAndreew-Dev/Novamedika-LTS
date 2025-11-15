@@ -32,10 +32,10 @@ export default function FormSelection({
   }, {});
 
   // Преобразуем в массив и обрабатываем названия
-  const formGroups = Object.values(groupedByForm).map(group => ({
+  const formGroups = Object.values(groupedByForm).map((group) => ({
     ...group,
     // Объединяем уникальные названия через запятую
-    displayName: Array.from(group.names).join(', ')
+    displayName: Array.from(group.names).join(", "),
   }));
 
   const handleFormClick = (form) => {
@@ -47,11 +47,13 @@ export default function FormSelection({
     <div className="p-4 max-w-6xl mx-auto">
       <div className="bg-white rounded-2xl shadow-sm border border-telegram-border overflow-hidden">
         {/* Header */}
+        // FormSelection.jsx - заменить header секцию
+        {/* Header */}
         <div className="border-b border-telegram-border px-6 py-4">
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-lg font-semibold text-gray-800">
-                Найдено {totalFound} вариантов
+                Выберите форму препарата
               </h2>
               <p className="text-gray-600 text-sm mt-1">
                 для "{searchData.name}"
@@ -80,7 +82,6 @@ export default function FormSelection({
             </button>
           </div>
         </div>
-
         <div className="p-6">
           <div className="mb-6">
             <h3 className="text-lg font-medium text-gray-800 mb-2">
@@ -127,7 +128,9 @@ export default function FormSelection({
                           {group.displayName}
                         </div>
                         <div className="text-xs text-gray-500 mt-1">
-                          {group.names.size > 1 ? `${group.names.size} вариантов` : '1 вариант'}
+                          {group.names.size > 1
+                            ? `${group.names.size} вариантов`
+                            : "1 вариант"}
                         </div>
                       </td>
                       <td className="py-3 px-4">
