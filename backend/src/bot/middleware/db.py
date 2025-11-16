@@ -1,6 +1,6 @@
 # bot/middleware/db.py
 from aiogram import BaseMiddleware
-from typing import Callable, Dict, Any, Awaitable
+from typing import Callable, Dict, Any, Awaitable, Message
 from db.database import async_session_maker
 
 class DbMiddleware(BaseMiddleware):
