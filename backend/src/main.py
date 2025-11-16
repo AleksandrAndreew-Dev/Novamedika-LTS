@@ -77,9 +77,9 @@ app = FastAPI(
 )
 
 # Включение роутеров с префиксами (ИСПРАВЛЕННЫЕ ПУТИ)
-app.include_router(upload_router, prefix="/api", tags=["upload"])
-app.include_router(search_router, prefix="/api", tags=["search"])
-app.include_router(pharm_info_router, prefix="/api", tags=["pharmacies"])
+app.include_router(upload_router, tags=["upload"])
+app.include_router(search_router, tags=["search"])
+app.include_router(pharm_info_router, tags=["pharmacies"])
 app.include_router(telegram_router, prefix="/api", tags=["telegram"])
 app.include_router(pharmacist_router, prefix="/api", tags=["pharmacists"])
 app.include_router(qa_router, prefix="/api", tags=["q&a"])
