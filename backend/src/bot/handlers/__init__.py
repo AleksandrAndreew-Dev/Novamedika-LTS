@@ -58,7 +58,7 @@ async def process_pharmacy_number(message: Message, state: FSMContext, db: Async
 @router.message(RegistrationStates.confirm_registration, F.text == "/confirm")
 async def confirm_registration(message: Message, state: FSMContext, db: AsyncSession):
     """Подтверждение регистрации"""
-    from router.pharmacist_auth import register_from_telegram
+    from routers.pharmacist_auth import register_from_telegram
 
     data = await state.get_data()
     pharmacy_id = data.get('pharmacy_id')
@@ -102,7 +102,7 @@ async def confirm_registration(message: Message, state: FSMContext, db: AsyncSes
 @router.message(Command("login"))
 async def cmd_login(message: Message, db: AsyncSession):
     """Вход для зарегистрированных фармацевтов"""
-    from router.pharmacist_auth import pharmacist_login
+    from routers.pharmacist_auth import pharmacist_login
 
     try:
         result = await pharmacist_login(message.from_user.id, db)

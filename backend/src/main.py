@@ -1,4 +1,4 @@
-# main.py - исправленные импорты
+# main.py - ИСПРАВЛЕННЫЕ ИМПОРТЫ
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,14 +10,14 @@ from sqlalchemy import text
 from db.database import Base, engine, get_db, async_session_maker
 import asyncio
 
-from router.upload import router as upload_router
-from router.search import router as search_router
-from router.pharmacies_info import router as pharm_info_router
-from router.telegram_bot import router as telegram_router
-# Добавляем импорт новых роутеров
-from router.pharmacist_auth import router as pharmacist_router
-from router.qa import router as qa_router
-from auth.auth import router as auth_router  # если нужно отдельно
+# ИСПРАВЛЕННЫЕ ИМПОРТЫ - routers вместо router
+from routers.upload import router as upload_router
+from routers.search import router as search_router
+from routers.pharmacies_info import router as pharm_info_router
+from routers.telegram_bot import router as telegram_router
+from routers.pharmacist_auth import router as pharmacist_router
+from routers.qa import router as qa_router
+from auth.auth import router as auth_router  # добавлен auth router
 from bot.middleware.db import DbMiddleware
 
 logging.basicConfig(level=logging.INFO)
@@ -76,15 +76,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Включение роутеров с префиксами (ОДИН РАЗ)
+# Включение роутеров с префиксами (ИСПРАВЛЕННЫЕ ПУТИ)
 app.include_router(upload_router, prefix="/api", tags=["upload"])
 app.include_router(search_router, prefix="/api", tags=["search"])
 app.include_router(pharm_info_router, prefix="/api", tags=["pharmacies"])
 app.include_router(telegram_router, prefix="/api", tags=["telegram"])
 app.include_router(pharmacist_router, prefix="/api", tags=["pharmacists"])
 app.include_router(qa_router, prefix="/api", tags=["q&a"])
-
-
+app.include_router(auth_router, prefix="/api", tags=["auth"])  # добавлен
 
 # Более безопасная обработка CORS
 origins_raw = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
