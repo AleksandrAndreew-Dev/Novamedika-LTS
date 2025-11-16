@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List, Optional
 import uuid
 
-from schemas import PharmacyRead
+from db.schemas import PharmacyRead
 
 class QuestionBase(BaseModel):
     text: str
