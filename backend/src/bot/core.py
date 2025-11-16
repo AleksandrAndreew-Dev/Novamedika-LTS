@@ -1,4 +1,3 @@
-
 import os
 import logging
 from aiogram import Bot, Dispatcher
@@ -35,11 +34,14 @@ class BotManager:
                 default=DefaultBotProperties(parse_mode=ParseMode.HTML)
             )
 
+            # Проверяем, что бот доступен
+            bot_info = await self._bot.get_me()
+            logger.info(f"Bot initialized successfully: @{bot_info.username}")
+
             # Для production рекомендуется RedisStorage вместо MemoryStorage
             storage = MemoryStorage()  # В будущем заменить на RedisStorage
             self._dp = Dispatcher(storage=storage)
 
-            logger.info("Bot initialized successfully")
             return self._bot, self._dp
 
         except Exception as e:
