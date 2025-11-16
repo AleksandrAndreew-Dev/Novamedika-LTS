@@ -31,9 +31,12 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
 
     from bot.core import bot_manager
+    from bot.handlers.registration import router as registration_router
+
     bot, dp = await bot_manager.initialize()
     if bot and dp:
         print("✅ Telegram bot initialized")
+        dp.include_router(registration_router)
 
         # Автоматически устанавливаем webhook в production
         if os.getenv("ENVIRONMENT") == "production":
@@ -79,7 +82,7 @@ app.include_router(telegram_router, prefix="/api", tags=["telegram"])
 app.include_router(pharmacist_router, prefix="/api", tags=["pharmacists"])
 app.include_router(qa_router, prefix="/api", tags=["q&a"])
 
-# УДАЛИТЬ все последующие дублирующиеся include_router вызовы
+
 
 # Более безопасная обработка CORS
 origins_raw = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")

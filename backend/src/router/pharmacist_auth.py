@@ -16,21 +16,12 @@ router = APIRouter()
 
 @router.post("/register-from-telegram/", response_model=PharmacistResponse)
 async def register_from_telegram(
-    telegram_data: dict,  # или создайте отдельную схему
+    telegram_data: dict,
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Упрощенная регистрация фармацевта с данными из Telegram
-    Ожидает: {
-        "telegram_user_id": 123456789,
-        "pharmacy_id": "uuid",
-        "first_name": "Иван",
-        "last_name": "Иванов",
-        "telegram_username": "ivanov"
-    }
-    """
+    """Упрощенная регистрация фармацевта с данными из Telegram"""
     try:
-        # Создаем/обновляем пользователя
+        # Находим или создаем пользователя
         user_result = await db.execute(
             select(User).where(User.telegram_id == telegram_data["telegram_user_id"])
         )
@@ -46,9 +37,15 @@ async def register_from_telegram(
             )
             db.add(user)
             await db.flush()
+        else:
+            # Обновляем данные пользователя, если нужно
+            user.first_name = telegram_data.get("first_name", user.first_name)
+            user.last_name = telegram_data.get("last_name", user.last_name)
+            user.telegram_username = telegram_data.get("telegram_username", user.telegram_username)
 
+        # Проверяем существование аптеки
         pharmacy_result = await db.execute(
-            select(Pharmacy).where(Pharmacy.uuid == pharmacist_data.pharmacy_id)
+            select(Pharmacy).where(Pharmacy.uuid == uuid.UUID(telegram_data["pharmacy_id"]))
         )
         pharmacy = pharmacy_result.scalar_one_or_none()
 
@@ -63,7 +60,7 @@ async def register_from_telegram(
             select(Pharmacist).where(
                 and_(
                     Pharmacist.user_id == user.uuid,
-                    Pharmacist.pharmacy_id == pharmacist_data.pharmacy_id
+                    Pharmacist.pharmacy_id == uuid.UUID(telegram_data["pharmacy_id"])
                 )
             )
         )
@@ -79,7 +76,7 @@ async def register_from_telegram(
         pharmacist = Pharmacist(
             uuid=uuid.uuid4(),
             user_id=user.uuid,
-            pharmacy_id=pharmacist_data.pharmacy_id,
+            pharmacy_id=uuid.UUID(telegram_data["pharmacy_id"]),
             is_active=True
         )
 
