@@ -10,6 +10,7 @@ from db.models import Pharmacy
 from db.qa_schemas import PharmacistCreate, PharmacistResponse, UserResponse
 from db.schemas import PharmacyRead
 from auth.auth import create_access_token, get_current_pharmacist
+from utils.time_utils import get_utc_now_naive
 
 router = APIRouter()
 
@@ -33,7 +34,8 @@ async def register_from_telegram(
                 telegram_id=telegram_data["telegram_user_id"],
                 first_name=telegram_data.get("first_name", ""),
                 last_name=telegram_data.get("last_name", ""),
-                telegram_username=telegram_data.get("telegram_username", "")
+                telegram_username=telegram_data.get("telegram_username", ""),
+                created_at=get_utc_now_naive() 
             )
             db.add(user)
             await db.flush()

@@ -5,6 +5,7 @@ from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 
 from db.database import Base  # ваш declarative_base()
+from utils.time_utils import get_utc_now_naive
 
 class Pharmacy(Base):
     __tablename__ = "pharmacies"
@@ -16,7 +17,7 @@ class Pharmacy(Base):
     address = Column(String(255), nullable=True)
     phone = Column(String(100), nullable=True)
     opening_hours = Column(String(255), nullable=True)
-    chain = Column(String(50), nullable=False) 
+    chain = Column(String(50), nullable=False)
 
     # Добавляем уникальное ограничение
     __table_args__ = (
@@ -48,10 +49,6 @@ class Product(Base):
     distributor = Column(String(255), nullable=False, default="")
     internal_id = Column(String(255), nullable=False, default="")
     pharmacy_id = Column(UUID(as_uuid=True), ForeignKey("pharmacies.uuid"), index=True)
-    updated_at = Column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-    )
+    updated_at = Column(DateTime, default=get_utc_now_naive, onupdate=get_utc_now_naive)
 
     pharmacy = relationship("Pharmacy", back_populates="products")

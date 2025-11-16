@@ -13,9 +13,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from datetime import datetime, timezone
+from datetime import datetime
 
 from db.database import Base
+from utils.time_utils import get_utc_now_naive
 
 class User(Base):
     __tablename__ = "users"
@@ -26,7 +27,7 @@ class User(Base):
     first_name = Column(String(100), nullable=True)
     last_name = Column(String(100), nullable=True)
     phone = Column(String(20), nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=get_utc_now_naive)
     questions = relationship("Question", back_populates="user")
 
 class Pharmacist(Base):
@@ -38,7 +39,7 @@ class Pharmacist(Base):
         UUID(as_uuid=True), ForeignKey("pharmacies.uuid"), nullable=False
     )
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=get_utc_now_naive)
 
     user = relationship("User")
     pharmacy = relationship("Pharmacy")
@@ -62,7 +63,7 @@ class Question(Base):
     parent_question_id = Column(
         UUID(as_uuid=True), ForeignKey("questions.uuid"), nullable=True
     )
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=get_utc_now_naive)
     answered_at = Column(DateTime, nullable=True)
 
     user = relationship("User", back_populates="questions")
@@ -84,7 +85,7 @@ class Answer(Base):
         UUID(as_uuid=True), ForeignKey("pharmacists.uuid"), nullable=False
     )
     text = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=get_utc_now_naive)
 
     question = relationship("Question", back_populates="answers")
     pharmacist = relationship("Pharmacist", back_populates="answers")
