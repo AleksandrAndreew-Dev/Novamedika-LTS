@@ -80,10 +80,10 @@ app = FastAPI(
 app.include_router(upload_router, tags=["upload"])
 app.include_router(search_router, tags=["search"])
 app.include_router(pharm_info_router, tags=["pharmacies"])
-app.include_router(telegram_router, prefix="/api", tags=["telegram"])
-app.include_router(pharmacist_router, prefix="/api", tags=["pharmacists"])
-app.include_router(qa_router, prefix="/api", tags=["q&a"])
-app.include_router(auth_router, prefix="/api", tags=["auth"])  # добавлен
+app.include_router(telegram_router, tags=["telegram"])
+app.include_router(pharmacist_router, tags=["pharmacists"])
+app.include_router(qa_router, tags=["q&a"])
+app.include_router(auth_router, tags=["auth"])  # добавлен
 
 # Более безопасная обработка CORS
 origins_raw = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
