@@ -14,6 +14,10 @@ from router.upload import router as upload_router
 from router.search import router as search_router
 from router.pharmacies_info import router as pharm_info_router
 from router.telegram_bot import router as telegram_router
+# Добавляем импорт новых роутеров
+from router.pharmacist_auth import router as pharmacist_router
+from router.qa import router as qa_router
+from auth.auth import router as auth_router  # если нужно отдельно
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -72,6 +76,10 @@ app.include_router(upload_router, prefix="", tags=["search"])
 app.include_router(search_router, prefix="", tags=["upload"])
 app.include_router(pharm_info_router, prefix="", tags=["pharmacies"])
 app.include_router(telegram_router, prefix="", tags=["telegram"])
+# Добавляем новые роутеры
+app.include_router(pharmacist_router, prefix="", tags=["pharmacists"])
+app.include_router(qa_router, prefix="", tags=["q&a"])
+# app.include_router(auth_router, prefix="", tags=["auth"])  # если нужно отдельно
 
 # Более безопасная обработка CORS
 origins_raw = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
