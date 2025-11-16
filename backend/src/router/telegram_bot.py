@@ -7,7 +7,7 @@ import json
 from bot.core import bot_manager
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/telegram", tags=["Telegram Bot"])
+router = APIRouter()
 
 @router.post("/webhook/")
 async def telegram_webhook(request: Request):

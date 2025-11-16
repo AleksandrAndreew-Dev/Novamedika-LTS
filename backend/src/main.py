@@ -71,13 +71,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Включение роутеров с префиксами
+# Включение роутеров с префиксами (ОДИН РАЗ)
 app.include_router(upload_router, prefix="/api", tags=["upload"])
 app.include_router(search_router, prefix="/api", tags=["search"])
 app.include_router(pharm_info_router, prefix="/api", tags=["pharmacies"])
 app.include_router(telegram_router, prefix="/api", tags=["telegram"])
 app.include_router(pharmacist_router, prefix="/api", tags=["pharmacists"])
 app.include_router(qa_router, prefix="/api", tags=["q&a"])
+
+# УДАЛИТЬ все последующие дублирующиеся include_router вызовы
 
 # Более безопасная обработка CORS
 origins_raw = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")

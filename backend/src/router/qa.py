@@ -11,7 +11,7 @@ from db.qa_models import User, Question, Answer, Pharmacist
 from db.qa_schemas import QuestionCreate, QuestionResponse, AnswerBase, AnswerResponse, PharmacistBasicResponse, UserResponse
 from auth.auth import get_current_pharmacist
 
-router = APIRouter(prefix="/qa", tags=["Q&A"])
+router = APIRouter()
 
 @router.post("/questions/", response_model=QuestionResponse)
 async def create_question(

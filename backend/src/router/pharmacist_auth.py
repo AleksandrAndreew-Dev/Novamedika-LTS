@@ -11,7 +11,7 @@ from db.qa_schemas import PharmacistCreate, PharmacistResponse, UserResponse
 from db.schemas import PharmacyRead
 from auth.auth import create_access_token, get_current_pharmacist
 
-router = APIRouter(prefix="/pharmacists", tags=["Pharmacists"])
+router = APIRouter()
 
 
 @router.post("/register-from-telegram/", response_model=PharmacistResponse)
