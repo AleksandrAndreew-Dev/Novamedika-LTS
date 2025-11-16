@@ -13,23 +13,138 @@ from auth.auth import create_access_token, get_current_pharmacist
 
 router = APIRouter(prefix="/pharmacists", tags=["Pharmacists"])
 
+
+@router.post("/register-from-telegram/", response_model=PharmacistResponse)
+async def register_from_telegram(
+    telegram_data: dict,  # или создайте отдельную схему
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Упрощенная регистрация фармацевта с данными из Telegram
+    Ожидает: {
+        "telegram_user_id": 123456789,
+        "pharmacy_id": "uuid",
+        "first_name": "Иван",
+        "last_name": "Иванов",
+        "telegram_username": "ivanov"
+    }
+    """
+    try:
+        # Создаем/обновляем пользователя
+        user_result = await db.execute(
+            select(User).where(User.telegram_id == telegram_data["telegram_user_id"])
+        )
+        user = user_result.scalar_one_or_none()
+
+        if not user:
+            user = User(
+                uuid=uuid.uuid4(),
+                telegram_id=telegram_data["telegram_user_id"],
+                first_name=telegram_data.get("first_name", ""),
+                last_name=telegram_data.get("last_name", ""),
+                telegram_username=telegram_data.get("telegram_username", "")
+            )
+            db.add(user)
+            await db.flush()
+
+        pharmacy_result = await db.execute(
+            select(Pharmacy).where(Pharmacy.uuid == pharmacist_data.pharmacy_id)
+        )
+        pharmacy = pharmacy_result.scalar_one_or_none()
+
+        if not pharmacy:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Аптека не найдена"
+            )
+
+        # Проверяем, не зарегистрирован ли уже фармацевт
+        existing_pharmacist_result = await db.execute(
+            select(Pharmacist).where(
+                and_(
+                    Pharmacist.user_id == user.uuid,
+                    Pharmacist.pharmacy_id == pharmacist_data.pharmacy_id
+                )
+            )
+        )
+        existing_pharmacist = existing_pharmacist_result.scalar_one_or_none()
+
+        if existing_pharmacist:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Фармацевт уже зарегистрирован для этой аптеки"
+            )
+
+        # Создаем фармацевта
+        pharmacist = Pharmacist(
+            uuid=uuid.uuid4(),
+            user_id=user.uuid,
+            pharmacy_id=pharmacist_data.pharmacy_id,
+            is_active=True
+        )
+
+        db.add(pharmacist)
+        await db.commit()
+        await db.refresh(pharmacist)
+
+        # Загружаем связанные данные
+        await db.refresh(user)
+        await db.refresh(pharmacy)
+
+        return PharmacistResponse(
+            uuid=pharmacist.uuid,
+            user=UserResponse(
+                uuid=user.uuid,
+                first_name=user.first_name,
+                last_name=user.last_name,
+                telegram_username=user.telegram_username
+            ),
+            pharmacy=PharmacyRead(
+                uuid=pharmacy.uuid,
+                name=pharmacy.name,
+                pharmacy_number=pharmacy.pharmacy_number,
+                city=pharmacy.city,
+                address=pharmacy.address,
+                phone=pharmacy.phone,
+                opening_hours=pharmacy.opening_hours
+            ),
+            is_active=pharmacist.is_active
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при регистрации фармацевта: {str(e)}"
+        )
+
+
+
 @router.post("/register/", response_model=PharmacistResponse)
 async def register_pharmacist(
     pharmacist_data: PharmacistCreate,
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        # Проверяем существование пользователя Telegram
+        # Находим или создаем пользователя Telegram
         user_result = await db.execute(
             select(User).where(User.telegram_id == pharmacist_data.telegram_user_id)
         )
         user = user_result.scalar_one_or_none()
 
         if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Пользователь Telegram не найден"
+            # Создаем нового пользователя
+            user = User(
+                uuid=uuid.uuid4(),
+                telegram_id=pharmacist_data.telegram_user_id,
+                first_name="",  # можно получить из Telegram
+                last_name="",   # можно получить из Telegram
+                telegram_username=""  # можно получить из Telegram
             )
+            db.add(user)
+            await db.flush()
 
         # Проверяем существование аптеки
         pharmacy_result = await db.execute(

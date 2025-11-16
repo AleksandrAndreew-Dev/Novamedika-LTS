@@ -5,6 +5,15 @@ import uuid
 
 from db.schemas import PharmacyRead
 
+
+class PharmacistRegisterFromTelegram(BaseModel):
+    telegram_user_id: int
+    pharmacy_id: uuid.UUID
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    telegram_username: Optional[str] = None
+
+
 class QuestionBase(BaseModel):
     text: str
     parent_question_id: Optional[uuid.UUID] = None
