@@ -48,12 +48,18 @@ class PharmacyCreate(PharmacyBase):
     pass
 
 
-class PharmacyRead(PharmacyBase):
+class PharmacyRead(BaseModel):
     uuid: uuid.UUID
-    products: List[ProductRead] = []
+    name: str
+    pharmacy_number: str
+    city: str
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    opening_hours: Optional[str] = None
+    chain: str  # Добавьте это поле
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class PharmacyInfo(BaseModel):

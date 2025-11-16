@@ -67,7 +67,7 @@ async def process_pharmacy_number(message: Message, state: FSMContext, db: Async
     result = await db.execute(
         select(Pharmacy).where(
             Pharmacy.pharmacy_number == pharmacy_number,
-            Pharmacy.chain == chain_name  # Предполагаем, что в модели есть поле chain
+            Pharmacy.chain == chain_name  # Используем chain вместо name для фильтрации сети
         )
     )
     pharmacy = result.scalar_one_or_none()
@@ -83,7 +83,7 @@ async def process_pharmacy_number(message: Message, state: FSMContext, db: Async
 
     await message.answer(
         f"✅ Найдена аптека: {pharmacy.name}\n"
-        f"📍 Сеть: {pharmacy.chain}\n"
+        f"📍 Сеть: {pharmacy.chain}\n"  # Показываем сеть из поля chain
         f"📍 Город: {pharmacy.city}\n"
         f"📞 Телефон: {pharmacy.phone}\n\n"
         "Для подтверждения регистрации отправьте /confirm"
