@@ -18,6 +18,7 @@ from router.telegram_bot import router as telegram_router
 from router.pharmacist_auth import router as pharmacist_router
 from router.qa import router as qa_router
 from auth.auth import router as auth_router  # если нужно отдельно
+from bot.middleware.db import DbMiddleware
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -36,6 +37,7 @@ async def lifespan(app: FastAPI):
     bot, dp = await bot_manager.initialize()
     if bot and dp:
         print("✅ Telegram bot initialized")
+        dp.update.middleware(DbMiddleware())
         dp.include_router(registration_router)
 
         # Автоматически устанавливаем webhook в production
