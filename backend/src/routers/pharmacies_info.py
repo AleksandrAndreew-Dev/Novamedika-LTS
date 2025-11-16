@@ -1,4 +1,4 @@
-# routers/pharmacies.py
+# routers/pharmacies_info.py
 from fastapi import APIRouter, HTTPException, status, Depends
 import csv
 import uuid
@@ -18,8 +18,8 @@ from db.models import Pharmacy, Product
 
 router = APIRouter()
 
-def parse_pharmacy_name(full_name: str) -> tuple[str, str]:
-    """Разбирает полное название аптеки на название и номер"""
+def parse_pharmacy_name(full_name: str) -> tuple[str, str, str]:
+    """Разбирает полное название аптеки на название, номер и сеть"""
     # Паттерны для извлечения номера
     patterns = [
         r"^(.*?)\s*№\s*(\d+)$",  # "Новамедика №1"
@@ -32,11 +32,27 @@ def parse_pharmacy_name(full_name: str) -> tuple[str, str]:
         if match:
             name = match.group(1).strip()
             number = match.group(2).strip()
-            # Возвращаем нормализованное название и номер
-            return name, number
 
-    # Если не удалось разобрать, возвращаем как есть
-    return full_name.strip(), ""
+            # Определяем сеть по названию
+            chain = determine_chain(name)
+
+            return name, number, chain
+
+    # Если не удалось разобрать, возвращаем как есть и определяем сеть
+    chain = determine_chain(full_name.strip())
+    return full_name.strip(), "", chain
+
+def determine_chain(pharmacy_name: str) -> str:
+    """Определяет сеть аптеки по названию"""
+    name_lower = pharmacy_name.lower()
+
+    if "новамедик" in name_lower or "novamedik" in name_lower:
+        return "Новамедика"
+    elif "эклини" in name_lower or "eklini" in name_lower:
+        return "Эклиния"
+    else:
+        # По умолчанию или можно добавить логику для определения по другим признакам
+        return "Новамедика"
 
 @router.post("/load-pharmacies/")
 async def load_pharmacies():
@@ -55,10 +71,10 @@ async def load_pharmacies():
                 for row_num, row in enumerate(reader, 1):
                     try:
                         full_name = row["name"]
-                        pharmacy_name, pharmacy_number = parse_pharmacy_name(full_name)
+                        pharmacy_name, pharmacy_number, chain = parse_pharmacy_name(full_name)
 
                         if not pharmacy_number:
-                            pharmacy_number = row["pharmacy_number"]
+                            pharmacy_number = row.get("pharmacy_number", "")
 
                         # Ищем аптеку по имени и номеру (уникальная комбинация)
                         existing_pharmacy = await session.execute(
@@ -86,6 +102,10 @@ async def load_pharmacies():
                             if existing_pharmacy.opening_hours != row["opening_hours"]:
                                 existing_pharmacy.opening_hours = row["opening_hours"]
                                 update_needed = True
+                            # Обновляем сеть, если она изменилась
+                            if existing_pharmacy.chain != chain:
+                                existing_pharmacy.chain = chain
+                                update_needed = True
 
                             if update_needed:
                                 pharmacies_updated += 1
@@ -99,6 +119,7 @@ async def load_pharmacies():
                                 address=row["address"],
                                 phone=row["phone"],
                                 opening_hours=row["opening_hours"],
+                                chain=chain  # Используем определенную сеть
                             )
                             session.add(pharmacy)
                             pharmacies_loaded += 1
@@ -124,6 +145,7 @@ async def load_pharmacies():
             detail=f"Ошибка при загрузке данных аптек: {str(e)}",
         )
 
+# Остальные endpoints остаются без изменений
 @router.get("/pharmacies/")
 async def get_pharmacies():
     """Получить список всех аптек"""
@@ -161,21 +183,27 @@ async def check_data(db: AsyncSession = Depends(get_db)):
                     if product.pharmacy
                     else "NO NUMBER"
                 ),
+                "pharmacy_chain": (
+                    product.pharmacy.chain if product.pharmacy else "NO CHAIN"
+                ),
             }
         )
 
     return {
         "total_pharmacies": len(pharmacies),
         "sample_pharmacies": [
-            {"name": p.name, "pharmacy_number": p.pharmacy_number, "city": p.city}
+            {
+                "name": p.name,
+                "pharmacy_number": p.pharmacy_number,
+                "city": p.city,
+                "chain": p.chain
+            }
             for p in pharmacies[:5]
         ],
         "sample_products": sample_data,
     }
 
 from sqlalchemy import text
-
-
 
 @router.delete("/clear-all-data/")
 async def clear_all_data(db: AsyncSession = Depends(get_db)):
