@@ -6,79 +6,40 @@ import uuid
 
 from db.database import get_db
 from db.qa_models import User, Pharmacist
-from db.models import Pharmacy
-from db.qa_schemas import PharmacistCreate, PharmacistResponse, UserResponse
-from db.schemas import PharmacyRead
+
+from db.qa_schemas import PharmacistCreate, PharmacistResponse, UserResponse, PharmacyInfoSimple
 from auth.auth import create_access_token, get_current_pharmacist
 from utils.time_utils import get_utc_now_naive
 
 router = APIRouter()
 
+# ЗАМЕНИТЬ импорты
+from db.qa_schemas import PharmacistCreate, PharmacistResponse, UserResponse, PharmacyInfoSimple
+# УДАЛИТЬ: from db.models import Pharmacy
+# УДАЛИТЬ: from db.schemas import PharmacyRead
 
 @router.post("/register-from-telegram/", response_model=PharmacistResponse)
-async def register_from_telegram(
+async def register_pharmacist(
     telegram_data: dict,
     db: AsyncSession = Depends(get_db)
 ):
-    """Упрощенная регистрация фармацевта с данными из Telegram"""
+    """Регистрация фармацевта с данными об аптеке в JSON"""
     try:
-        # Находим или создаем пользователя
-        user_result = await db.execute(
-            select(User).where(User.telegram_id == telegram_data["telegram_user_id"])
-        )
-        user = user_result.scalar_one_or_none()
+        user = await get_or_create_user(telegram_data, db)
 
-        if not user:
-            user = User(
-                uuid=uuid.uuid4(),
-                telegram_id=telegram_data["telegram_user_id"],
-                first_name=telegram_data.get("first_name", ""),
-                last_name=telegram_data.get("last_name", ""),
-                telegram_username=telegram_data.get("telegram_username", ""),
-                created_at=get_utc_now_naive() 
-            )
-            db.add(user)
-            await db.flush()
-        else:
-            # Обновляем данные пользователя, если нужно
-            user.first_name = telegram_data.get("first_name", user.first_name)
-            user.last_name = telegram_data.get("last_name", user.last_name)
-            user.telegram_username = telegram_data.get("telegram_username", user.telegram_username)
-
-        # Проверяем существование аптеки
-        pharmacy_result = await db.execute(
-            select(Pharmacy).where(Pharmacy.uuid == uuid.UUID(telegram_data["pharmacy_id"]))
-        )
-        pharmacy = pharmacy_result.scalar_one_or_none()
-
-        if not pharmacy:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Аптека не найдена"
-            )
-
-        # Проверяем, не зарегистрирован ли уже фармацевт
-        existing_pharmacist_result = await db.execute(
-            select(Pharmacist).where(
-                and_(
-                    Pharmacist.user_id == user.uuid,
-                    Pharmacist.pharmacy_id == uuid.UUID(telegram_data["pharmacy_id"])
-                )
-            )
-        )
-        existing_pharmacist = existing_pharmacist_result.scalar_one_or_none()
-
-        if existing_pharmacist:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Фармацевт уже зарегистрирован для этой аптеки"
-            )
+        # Данные об аптеке (из Telegram)
+        pharmacy_info = {
+            "name": telegram_data.get("pharmacy_name", ""),
+            "number": telegram_data.get("pharmacy_number", ""),
+            "city": telegram_data.get("pharmacy_city", ""),
+            "chain": telegram_data.get("pharmacy_chain", "Новамедика")
+        }
 
         # Создаем фармацевта
         pharmacist = Pharmacist(
             uuid=uuid.uuid4(),
             user_id=user.uuid,
-            pharmacy_id=uuid.UUID(telegram_data["pharmacy_id"]),
+            pharmacy_info=pharmacy_info,  # ✅ Сохраняем в JSON
             is_active=True
         )
 
@@ -86,138 +47,16 @@ async def register_from_telegram(
         await db.commit()
         await db.refresh(pharmacist)
 
-        # Загружаем связанные данные
-        await db.refresh(user)
-        await db.refresh(pharmacy)
-
         return PharmacistResponse(
             uuid=pharmacist.uuid,
-            user=UserResponse(
-                uuid=user.uuid,
-                first_name=user.first_name,
-                last_name=user.last_name,
-                telegram_username=user.telegram_username
-            ),
-            pharmacy=PharmacyRead(
-                uuid=pharmacy.uuid,
-                name=pharmacy.name,
-                pharmacy_number=pharmacy.pharmacy_number,
-                city=pharmacy.city,
-                address=pharmacy.address,
-                phone=pharmacy.phone,
-                opening_hours=pharmacy.opening_hours
-            ),
+            user=UserResponse.model_validate(user),
+            pharmacy_info=pharmacy_info,
             is_active=pharmacist.is_active
         )
 
-    except HTTPException:
-        raise
     except Exception as e:
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при регистрации фармацевта: {str(e)}"
-        )
-
-
-
-@router.post("/register/", response_model=PharmacistResponse)
-async def register_pharmacist(
-    pharmacist_data: PharmacistCreate,
-    db: AsyncSession = Depends(get_db)
-):
-    try:
-        # Находим или создаем пользователя Telegram
-        user_result = await db.execute(
-            select(User).where(User.telegram_id == pharmacist_data.telegram_user_id)
-        )
-        user = user_result.scalar_one_or_none()
-
-        if not user:
-            # Создаем нового пользователя
-            user = User(
-                uuid=uuid.uuid4(),
-                telegram_id=pharmacist_data.telegram_user_id,
-                first_name="",  # можно получить из Telegram
-                last_name="",   # можно получить из Telegram
-                telegram_username=""  # можно получить из Telegram
-            )
-            db.add(user)
-            await db.flush()
-
-        # Проверяем существование аптеки
-        pharmacy_result = await db.execute(
-            select(Pharmacy).where(Pharmacy.uuid == pharmacist_data.pharmacy_id)
-        )
-        pharmacy = pharmacy_result.scalar_one_or_none()
-
-        if not pharmacy:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Аптека не найдена"
-            )
-
-        # Проверяем, не зарегистрирован ли уже фармацевт
-        existing_pharmacist_result = await db.execute(
-            select(Pharmacist).where(
-                and_(
-                    Pharmacist.user_id == user.uuid,
-                    Pharmacist.pharmacy_id == pharmacist_data.pharmacy_id
-                )
-            )
-        )
-        existing_pharmacist = existing_pharmacist_result.scalar_one_or_none()
-
-        if existing_pharmacist:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Фармацевт уже зарегистрирован для этой аптеки"
-            )
-
-        # Создаем фармацевта
-        pharmacist = Pharmacist(
-            uuid=uuid.uuid4(),
-            user_id=user.uuid,
-            pharmacy_id=pharmacist_data.pharmacy_id,
-            is_active=True
-        )
-
-        db.add(pharmacist)
-        await db.commit()
-        await db.refresh(pharmacist)
-
-        # Загружаем связанные данные
-        await db.refresh(user)
-        await db.refresh(pharmacy)
-
-        return PharmacistResponse(
-            uuid=pharmacist.uuid,
-            user=UserResponse(
-                uuid=user.uuid,
-                first_name=user.first_name,
-                last_name=user.last_name,
-                telegram_username=user.telegram_username
-            ),
-            pharmacy=PharmacyRead(
-                uuid=pharmacy.uuid,
-                name=pharmacy.name,
-                pharmacy_number=pharmacy.pharmacy_number,
-                city=pharmacy.city,
-                address=pharmacy.address,
-                phone=pharmacy.phone,
-                opening_hours=pharmacy.opening_hours
-            ),
-            is_active=pharmacist.is_active
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при регистрации фармацевта: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/login/")
 async def pharmacist_login(
@@ -226,26 +65,16 @@ async def pharmacist_login(
 ):
     """Логин фармацевта по Telegram ID"""
     try:
-        # Находим пользователя и фармацевта
         result = await db.execute(
             select(Pharmacist)
             .join(User, Pharmacist.user_id == User.uuid)
-            .options(selectinload(Pharmacist.user), selectinload(Pharmacist.pharmacy))
+            .options(selectinload(Pharmacist.user))
             .where(User.telegram_id == telegram_user_id)
         )
         pharmacist = result.scalar_one_or_none()
 
         if not pharmacist:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Фармацевт не найден"
-            )
-
-        if not pharmacist.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Аккаунт фармацевта деактивирован"
-            )
+            raise HTTPException(status_code=404, detail="Фармацевт не найден")
 
         # Создаем JWT токен
         access_token = create_access_token(data={"sub": str(pharmacist.uuid)})
@@ -255,32 +84,11 @@ async def pharmacist_login(
             "token_type": "bearer",
             "pharmacist": PharmacistResponse(
                 uuid=pharmacist.uuid,
-                user=UserResponse(
-                    uuid=pharmacist.user.uuid,
-                    first_name=pharmacist.user.first_name,
-                    last_name=pharmacist.user.last_name,
-                    telegram_username=pharmacist.user.telegram_username
-                ),
-                pharmacy=PharmacyRead(
-                    uuid=pharmacist.pharmacy.uuid,
-                    name=pharmacist.pharmacy.name,
-                    pharmacy_number=pharmacist.pharmacy.pharmacy_number,
-                    city=pharmacist.pharmacy.city,
-                    address=pharmacist.pharmacy.address,
-                    phone=pharmacist.pharmacy.phone,
-                    opening_hours=pharmacist.pharmacy.opening_hours
-                ),
+                user=UserResponse.model_validate(pharmacist.user),
+                pharmacy_info=pharmacist.pharmacy_info,  # ✅ Используем JSON данные
                 is_active=pharmacist.is_active
             )
         }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при входе: {str(e)}"
-        )
 
 @router.get("/me", response_model=PharmacistResponse)
 async def get_current_pharmacist_info(
@@ -289,63 +97,7 @@ async def get_current_pharmacist_info(
     """Получение информации о текущем фармацевте"""
     return PharmacistResponse(
         uuid=pharmacist.uuid,
-        user=UserResponse(
-            uuid=pharmacist.user.uuid,
-            first_name=pharmacist.user.first_name,
-            last_name=pharmacist.user.last_name,
-            telegram_username=pharmacist.user.telegram_username
-        ),
-        pharmacy=PharmacyRead(
-            uuid=pharmacist.pharmacy.uuid,
-            name=pharmacist.pharmacy.name,
-            pharmacy_number=pharmacist.pharmacy.pharmacy_number,
-            city=pharmacist.pharmacy.city,
-            address=pharmacist.pharmacy.address,
-            phone=pharmacist.pharmacy.phone,
-            opening_hours=pharmacist.pharmacy.opening_hours
-        ),
+        user=UserResponse.model_validate(pharmacist.user),
+        pharmacy_info=pharmacist.pharmacy_info,  # ✅ Используем JSON данные
         is_active=pharmacist.is_active
     )
-
-@router.get("/pharmacy/{pharmacy_id}/pharmacists")
-async def get_pharmacists_by_pharmacy(
-    pharmacy_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db)
-):
-    """Получить всех фармацевтов для указанной аптеки"""
-    try:
-        result = await db.execute(
-            select(Pharmacist)
-            .options(selectinload(Pharmacist.user), selectinload(Pharmacist.pharmacy))
-            .where(Pharmacist.pharmacy_id == pharmacy_id, Pharmacist.is_active == True)
-        )
-        pharmacists = result.scalars().all()
-
-        return [
-            PharmacistResponse(
-                uuid=pharmacist.uuid,
-                user=UserResponse(
-                    uuid=pharmacist.user.uuid,
-                    first_name=pharmacist.user.first_name,
-                    last_name=pharmacist.user.last_name,
-                    telegram_username=pharmacist.user.telegram_username
-                ),
-                pharmacy=PharmacyRead(
-                    uuid=pharmacist.pharmacy.uuid,
-                    name=pharmacist.pharmacy.name,
-                    pharmacy_number=pharmacist.pharmacy.pharmacy_number,
-                    city=pharmacist.pharmacy.city,
-                    address=pharmacist.pharmacy.address,
-                    phone=pharmacist.pharmacy.phone,
-                    opening_hours=pharmacist.pharmacy.opening_hours
-                ),
-                is_active=pharmacist.is_active
-            )
-            for pharmacist in pharmacists
-        ]
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при получении фармацевтов: {str(e)}"
-        )

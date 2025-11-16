@@ -10,6 +10,7 @@ from typing import Optional
 # Добавляем импорт для получения сессии БД
 from db.database import get_db
 from db.qa_models import Pharmacist, User
+from utils.time_utils import get_utc_now_naive
 
 router = APIRouter()
 security = HTTPBearer()
@@ -20,7 +21,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 def create_access_token(data: dict):
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = get_utc_now_naive() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 

@@ -17,123 +17,49 @@ class RegistrationStates(StatesGroup):
     confirm_registration = State()
 
 router = Router()
-
+# bot/handlers/registration.py (упрощенная версия)
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
-    """Начало регистрации фармацевта с выбором сети"""
+    """Упрощенная регистрация"""
     await message.answer(
         "👨‍⚕️ Добро пожаловать в систему Novamedika!\n\n"
-        "Пожалуйста, выберите сеть аптек, в которой вы работаете:\n"
-        "1. Новамедика\n"
-        "2. Эклиния\n\n"
-        "Отправьте номер сети (1 или 2):"
+        "Для регистрации как фармацевт отправьте:\n"
+        "• Название аптеки\n"
+        "• Номер аптеки\n"
+        "• Город\n\n"
+        "Пример:\n"
+        "Новамедика №1, Москва"
     )
-    await state.set_state(RegistrationStates.waiting_for_chain)
+    await state.set_state(RegistrationStates.waiting_pharmacy_info)
 
-
-@router.message(RegistrationStates.waiting_for_chain)
-async def process_chain_selection(message: Message, state: FSMContext):
-    """Обработка выбора сети аптек"""
-    chain_choice = message.text.strip()
-
-    if chain_choice == "1":
-        chain_name = "Новамедика"
-    elif chain_choice == "2":
-        chain_name = "Эклиния"
-    else:
-        await message.answer(
-            "❌ Пожалуйста, выберите корректный номер сети:\n"
-            "1 - Новамедика\n"
-            "2 - Эклиния"
-        )
-        return
-
-    await state.update_data(chain_name=chain_name)
-    await message.answer(
-        f"✅ Вы выбрали: {chain_name}\n\n"
-        "Теперь отправьте номер аптеки, в которой вы работаете:"
-    )
-    await state.set_state(RegistrationStates.waiting_for_pharmacy)
-
-@router.message(RegistrationStates.waiting_for_pharmacy)
-async def process_pharmacy_number(message: Message, state: FSMContext, db: AsyncSession):
-    """Обработка номера аптеки с фильтрацией по сети"""
-    pharmacy_number = message.text.strip()
-    data = await state.get_data()
-    chain_name = data.get('chain_name')
-
-    # Ищем аптеку по номеру и сети
-    from db.models import Pharmacy
-    result = await db.execute(
-        select(Pharmacy).where(
-            Pharmacy.pharmacy_number == pharmacy_number,
-            Pharmacy.chain == chain_name  # Используем chain вместо name для фильтрации сети
-        )
-    )
-    pharmacy = result.scalar_one_or_none()
-
-    if not pharmacy:
-        await message.answer(
-            f"❌ Аптека с номером {pharmacy_number} не найдена в сети {chain_name}.\n"
-            "Пожалуйста, проверьте номер и попробуйте еще раз:"
-        )
-        return
-
-    await state.update_data(pharmacy_id=str(pharmacy.uuid))
-
-    await message.answer(
-        f"✅ Найдена аптека: {pharmacy.name}\n"
-        f"📍 Сеть: {pharmacy.chain}\n"  # Показываем сеть из поля chain
-        f"📍 Город: {pharmacy.city}\n"
-        f"📞 Телефон: {pharmacy.phone}\n\n"
-        "Для подтверждения регистрации отправьте /confirm"
-    )
-    await state.set_state(RegistrationStates.confirm_registration)
-
-@router.message(Command("confirm"))
-@router.message(RegistrationStates.confirm_registration, F.text == "/confirm")
-async def confirm_registration(message: Message, state: FSMContext, db: AsyncSession):
-    """Подтверждение регистрации"""
-    from routers.pharmacist_auth import register_from_telegram
-
-    data = await state.get_data()
-    pharmacy_id = data.get('pharmacy_id')
-
-    if not pharmacy_id:
-        await message.answer("❌ Ошибка: данные аптеки не найдены. Начните заново с /start")
-        await state.clear()
-        return
-
-    # Данные из Telegram
-    telegram_data = {
-        "telegram_user_id": message.from_user.id,
-        "pharmacy_id": pharmacy_id,
-        "first_name": message.from_user.first_name or "",
-        "last_name": message.from_user.last_name or "",
-        "telegram_username": message.from_user.username or ""
-    }
-
+@router.message(RegistrationStates.waiting_pharmacy_info)
+# registration.py - ОБНОВИТЬ функцию process_pharmacy_info
+async def process_pharmacy_info(message: Message, state: FSMContext, db: AsyncSession):
+    """Обработка информации об аптеке"""
     try:
-        # Регистрируем фармацевта
-        response = await register_from_telegram(telegram_data, db)
+        text = message.text.strip()
+        pharmacy_data = parse_pharmacy_info(text)
 
-        await message.answer(
-            "🎉 Регистрация успешно завершена!\n\n"
-            "Теперь вы можете:\n"
-            "• Получать вопросы от пользователей\n"
-            "• Отвечать на вопросы\n"
-            "• Просматривать назначенные вопросы\n\n"
-            "Используйте команду /help для списка доступных команд"
-        )
+        telegram_data = {
+            "telegram_user_id": message.from_user.id,
+            "first_name": message.from_user.first_name,
+            "last_name": message.from_user.last_name,
+            "telegram_username": message.from_user.username,
+            "pharmacy_name": pharmacy_data.get("pharmacy_name", ""),
+            "pharmacy_number": pharmacy_data.get("pharmacy_number", ""),
+            "pharmacy_city": pharmacy_data.get("pharmacy_city", ""),
+            "pharmacy_chain": "Новамедика"  # или извлечь из данных
+        }
+
+        # Вызываем обновленную функцию регистрации
+        from routers.pharmacist_auth import register_pharmacist
+        result = await register_pharmacist(telegram_data, db)
+
+        await message.answer("✅ Регистрация успешна!")
+        await state.clear()
 
     except Exception as e:
-        logger.error(f"Registration error: {e}")
-        await message.answer(
-            "❌ Ошибка регистрации. Возможно, вы уже зарегистрированы.\n"
-            "Для входа используйте /login"
-        )
-
-    await state.clear()
+        await message.answer("❌ Ошибка регистрации. Попробуйте еще раз.")
 
 @router.message(Command("login"))
 async def cmd_login(message: Message, db: AsyncSession):
