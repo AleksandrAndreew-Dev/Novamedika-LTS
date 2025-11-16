@@ -26,8 +26,7 @@ class User(Base):
     first_name = Column(String(100), nullable=True)
     last_name = Column(String(100), nullable=True)
     phone = Column(String(20), nullable=True)
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
-
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     questions = relationship("Question", back_populates="user")
 
 class Pharmacist(Base):
@@ -39,7 +38,7 @@ class Pharmacist(Base):
         UUID(as_uuid=True), ForeignKey("pharmacies.uuid"), nullable=False
     )
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     user = relationship("User")
     pharmacy = relationship("Pharmacy")
@@ -63,7 +62,7 @@ class Question(Base):
     parent_question_id = Column(
         UUID(as_uuid=True), ForeignKey("questions.uuid"), nullable=True
     )
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     answered_at = Column(DateTime, nullable=True)
 
     user = relationship("User", back_populates="questions")
@@ -85,7 +84,7 @@ class Answer(Base):
         UUID(as_uuid=True), ForeignKey("pharmacists.uuid"), nullable=False
     )
     text = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     question = relationship("Question", back_populates="answers")
     pharmacist = relationship("Pharmacist", back_populates="answers")

@@ -1,7 +1,6 @@
 # bot/handlers/registration.py
 from aiogram import Router, F
 from aiogram.types import Message
-from aiogram.types import CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -9,9 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import logging
 
+
 logger = logging.getLogger(__name__)
 
 class RegistrationStates(StatesGroup):
+    waiting_for_chain = State()
     waiting_for_pharmacy = State()
     confirm_registration = State()
 
@@ -19,28 +20,61 @@ router = Router()
 
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
-    """Начало регистрации фармацевта"""
+    """Начало регистрации фармацевта с выбором сети"""
     await message.answer(
         "👨‍⚕️ Добро пожаловать в систему Novamedika!\n\n"
-        "Для регистрации как фармацевт отправьте номер аптеки, в которой вы работаете:"
+        "Пожалуйста, выберите сеть аптек, в которой вы работаете:\n"
+        "1. Новамедика\n"
+        "2. Эклиния\n\n"
+        "Отправьте номер сети (1 или 2):"
+    )
+    await state.set_state(RegistrationStates.waiting_for_chain)
+
+
+@router.message(RegistrationStates.waiting_for_chain)
+async def process_chain_selection(message: Message, state: FSMContext):
+    """Обработка выбора сети аптек"""
+    chain_choice = message.text.strip()
+
+    if chain_choice == "1":
+        chain_name = "Новамедика"
+    elif chain_choice == "2":
+        chain_name = "Эклиния"
+    else:
+        await message.answer(
+            "❌ Пожалуйста, выберите корректный номер сети:\n"
+            "1 - Новамедика\n"
+            "2 - Эклиния"
+        )
+        return
+
+    await state.update_data(chain_name=chain_name)
+    await message.answer(
+        f"✅ Вы выбрали: {chain_name}\n\n"
+        "Теперь отправьте номер аптеки, в которой вы работаете:"
     )
     await state.set_state(RegistrationStates.waiting_for_pharmacy)
 
 @router.message(RegistrationStates.waiting_for_pharmacy)
 async def process_pharmacy_number(message: Message, state: FSMContext, db: AsyncSession):
-    """Обработка номера аптеки"""
+    """Обработка номера аптеки с фильтрацией по сети"""
     pharmacy_number = message.text.strip()
+    data = await state.get_data()
+    chain_name = data.get('chain_name')
 
-    # Ищем аптеку по номеру
+    # Ищем аптеку по номеру и сети
     from db.models import Pharmacy
     result = await db.execute(
-        select(Pharmacy).where(Pharmacy.pharmacy_number == pharmacy_number)
+        select(Pharmacy).where(
+            Pharmacy.pharmacy_number == pharmacy_number,
+            Pharmacy.chain == chain_name  # Предполагаем, что в модели есть поле chain
+        )
     )
     pharmacy = result.scalar_one_or_none()
 
     if not pharmacy:
         await message.answer(
-            "❌ Аптека с таким номером не найдена.\n"
+            f"❌ Аптека с номером {pharmacy_number} не найдена в сети {chain_name}.\n"
             "Пожалуйста, проверьте номер и попробуйте еще раз:"
         )
         return
@@ -49,6 +83,7 @@ async def process_pharmacy_number(message: Message, state: FSMContext, db: Async
 
     await message.answer(
         f"✅ Найдена аптека: {pharmacy.name}\n"
+        f"📍 Сеть: {pharmacy.chain}\n"
         f"📍 Город: {pharmacy.city}\n"
         f"📞 Телефон: {pharmacy.phone}\n\n"
         "Для подтверждения регистрации отправьте /confirm"
