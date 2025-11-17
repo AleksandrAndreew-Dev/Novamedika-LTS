@@ -1,3 +1,4 @@
+# user_questions.py - ОБНОВЛЕННАЯ ВЕРСИЯ
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.filters import Command
@@ -8,18 +9,19 @@ import logging
 import uuid
 from datetime import timedelta
 
-from db.qa_models import User, Question, Pharmacist
-from db.qa_schemas import QuestionCreate
+from db.qa_models import User, Question, Pharmacist, Answer
 from utils.time_utils import get_utc_now_naive
 
 logger = logging.getLogger(__name__)
 router = Router()
 
+# Состояния для диалога
+from bot.handlers.qa_states import UserQAStates
 
 async def get_or_create_user(
     telegram_id: int, first_name: str, username: str, db: AsyncSession
 ) -> User:
-    """Создать или найти пользователя - БЕЗ РЕГИСТРАЦИИ"""
+    """Создать или найти пользователя"""
     result = await db.execute(select(User).where(User.telegram_id == telegram_id))
     user = result.scalar_one_or_none()
 
@@ -36,10 +38,17 @@ async def get_or_create_user(
 
     return user
 
-
 @router.message(Command("ask"))
 async def cmd_ask(message: Message, state: FSMContext, db: AsyncSession):
-    """Команда для задания вопроса"""
+    """Начать диалог с вопросом"""
+    # Проверяем, не является ли пользователь фармацевтом
+    from routers.pharmacist_auth import get_pharmacist_by_telegram_id
+    pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
+
+    if pharmacist:
+        await message.answer("ℹ️ Вы зарегистрированы как фармацевт. Используйте команды /questions для ответов на вопросы.")
+        return
+
     # Показываем количество онлайн фармацевтов
     online_threshold = get_utc_now_naive() - timedelta(minutes=5)
     result = await db.execute(
@@ -59,23 +68,15 @@ async def cmd_ask(message: Message, state: FSMContext, db: AsyncSession):
         f"{status_text}"
         "💊 Задайте ваш вопрос фармацевту:\n\n"
         "Просто напишите ваш вопрос и отправьте его. "
-        "Фармацевты ответят вам в ближайшее время."
+        "Фармацевты ответят вам в ближайшее время.\n\n"
+        "❌ Чтобы отменить, используйте /cancel"
     )
+    await state.set_state(UserQAStates.waiting_for_question)
 
-
-@router.message(F.text & ~F.command)
-async def handle_user_question(message: Message, db: AsyncSession):
-    """Обработка вопросов от пользователей (только для пользователей)"""
+@router.message(UserQAStates.waiting_for_question)
+async def process_user_question(message: Message, state: FSMContext, db: AsyncSession):
+    """Обработка вопроса пользователя"""
     try:
-        # ПРОВЕРЯЕМ, ЯВЛЯЕТСЯ ЛИ ПОЛЬЗОВАТЕЛЬ ФАРМАЦЕВТОМ
-        from routers.pharmacist_auth import get_pharmacist_by_telegram_id
-        pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
-
-        if pharmacist:
-            # Если это фармацевт, игнорируем обычные сообщения
-            logger.info(f"Pharmacist {pharmacist.uuid} sent message, ignoring as user question")
-            return
-        
         # Создаем или находим пользователя
         user = await get_or_create_user(
             telegram_id=message.from_user.id,
@@ -98,30 +99,96 @@ async def handle_user_question(message: Message, db: AsyncSession):
         await db.refresh(question)
 
         # Уведомляем фармацевтов
-        from bot.services.notification_service import (
-            notify_pharmacists_about_new_question,
-        )
-
+        from bot.services.notification_service import notify_pharmacists_about_new_question
         await notify_pharmacists_about_new_question(question, db)
+
+        # Сохраняем ID вопроса для продолжения диалога
+        await state.update_data(current_question_id=str(question.uuid))
 
         await message.answer(
             "✅ Ваш вопрос принят! Ожидайте ответа от фармацевта.\n\n"
-            "Вы получите уведомление, когда на ваш вопрос ответят."
+            "Вы получите уведомление, когда на ваш вопрос ответят.\n"
+            "Можете продолжать писать сообщения - они добавятся к этому же вопросу.\n\n"
+            "❌ Чтобы завершить вопрос, используйте /done"
         )
+
+        # Переходим в состояние диалога
+        await state.set_state(UserQAStates.in_dialog)
 
         logger.info(f"New question from user {user.uuid}: {message.text[:100]}...")
 
     except Exception as e:
         logger.error(f"Error processing user question: {e}")
+        await message.answer("❌ Произошла ошибка при отправке вопроса. Попробуйте позже.")
+
+@router.message(UserQAStates.in_dialog)
+async def process_dialog_message(message: Message, state: FSMContext, db: AsyncSession):
+    """Обработка сообщений в диалоге"""
+    try:
+        data = await state.get_data()
+        question_id = data.get('current_question_id')
+
+        if not question_id:
+            await message.answer("❌ Не найден активный вопрос. Используйте /ask чтобы задать новый вопрос.")
+            await state.clear()
+            return
+
+        # Находим вопрос
+        result = await db.execute(
+            select(Question).where(Question.uuid == uuid.UUID(question_id))
+        )
+        question = result.scalar_one_or_none()
+
+        if not question:
+            await message.answer("❌ Вопрос не найден. Используйте /ask чтобы задать новый вопрос.")
+            await state.clear()
+            return
+
+        # Добавляем сообщение к существующему вопросу
+        question.text += f"\n\n[Дополнение]: {message.text}"
+        await db.commit()
+
         await message.answer(
-            "❌ Произошла ошибка при отправке вопроса. Попробуйте позже."
+            "✅ Ваше сообщение добавлено к вопросу. Фармацевт увидит его когда будет отвечать.\n\n"
+            "❌ Чтобы завершить вопрос, используйте /done"
         )
 
+    except Exception as e:
+        logger.error(f"Error processing dialog message: {e}")
+        await message.answer("❌ Ошибка при обработке сообщения.")
+
+@router.message(Command("done"))
+async def cmd_done(message: Message, state: FSMContext):
+    """Завершить текущий диалог"""
+    await state.clear()
+    await message.answer(
+        "✅ Диалог завершен. Если у вас появится новый вопрос, используйте /ask\n\n"
+        "📋 Чтобы посмотреть историю вопросов, используйте /my_questions"
+    )
+
+@router.message(Command("cancel"))
+async def cmd_cancel(message: Message, state: FSMContext):
+    """Отмена текущего действия"""
+    current_state = await state.get_state()
+    if current_state is None:
+        await message.answer("ℹ️ Нечего отменять.")
+        return
+
+    await state.clear()
+    await message.answer("❌ Действие отменено.")
 
 @router.message(Command("my_questions"))
 async def cmd_my_questions(message: Message, db: AsyncSession):
     """Показать вопросы пользователя и ответы на них"""
     try:
+        # Проверяем, не является ли пользователь фармацевтом
+        from routers.pharmacist_auth import get_pharmacist_by_telegram_id
+        pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
+
+        if pharmacist:
+            await message.answer("ℹ️ Вы фармацевт. Используйте /questions для просмотра вопросов.")
+            return
+
         result = await db.execute(
             select(Question)
             .join(User)
@@ -139,31 +206,82 @@ async def cmd_my_questions(message: Message, db: AsyncSession):
 
         for question in questions:
             status_emoji = "✅" if question.status == "answered" else "⏳"
-            text = f"{status_emoji} Вопрос: {question.text[:200]}...\n"
-            text += f"Статус: {question.status}\n"
-            text += f"Дата: {question.created_at.strftime('%d.%m.%Y %H:%M')}\n"
+            status_text = "отвечен" if question.status == "answered" else "ожидает ответа"
+
+            text = f"{status_emoji} Вопрос ({status_text}):\n{question.text}\n"
+            text += f"📅 Дата: {question.created_at.strftime('%d.%m.%Y %H:%M')}\n"
 
             if question.answers:
-                text += f"\n💊 Ответ фармацевта: {question.answers[0].text[:200]}..."
+                text += f"\n💊 Ответ фармацевта:\n{question.answers[0].text}\n"
+                text += f"📅 Ответ дан: {question.answers[0].created_at.strftime('%d.%m.%Y %H:%M')}"
 
-            await message.answer(text)
+            # Разделяем длинные сообщения
+            if len(text) > 4000:
+                parts = [text[i:i+4000] for i in range(0, len(text), 4000)]
+                for part in parts:
+                    await message.answer(part)
+            else:
+                await message.answer(text)
 
     except Exception as e:
         logger.error(f"Error getting user questions: {e}")
         await message.answer("❌ Ошибка при получении ваших вопросов")
 
+@router.message(F.text & ~F.command)
+async def handle_user_message(message: Message, state: FSMContext, db: AsyncSession):
+    """Обработка обычных сообщений от пользователей"""
+    try:
+        # Проверяем, не является ли пользователь фармацевтом
+        from routers.pharmacist_auth import get_pharmacist_by_telegram_id
+        pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
+
+        if pharmacist:
+            # Если это фармацевт, игнорируем обычные сообщения
+            logger.info(f"Pharmacist {pharmacist.uuid} sent message, ignoring as user question")
+            return
+
+        # Проверяем состояние
+        current_state = await state.get_state()
+
+        if current_state == UserQAStates.in_dialog:
+            # Если в диалоге, обрабатываем как дополнение к вопросу
+            await process_dialog_message(message, state, db)
+        elif current_state == UserQAStates.waiting_for_question:
+            # Если ждем вопроса, обрабатываем как новый вопрос
+            await process_user_question(message, state, db)
+        else:
+            # Если не в состоянии диалога, предлагаем начать его
+            await message.answer(
+                "💊 Чтобы задать вопрос фармацевту, используйте команду /ask\n\n"
+                "📋 Для справки используйте /help"
+            )
+
+    except Exception as e:
+        logger.error(f"Error processing user message: {e}")
+        await message.answer("❌ Произошла ошибка. Попробуйте позже.")
 
 @router.message(Command("help"))
 async def user_help(message: Message, db: AsyncSession):
     """Справка для пользователей"""
+    # Проверяем, не является ли пользователь фармацевтом
+    from routers.pharmacist_auth import get_pharmacist_by_telegram_id
+    pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
+
+    if pharmacist:
+        await message.answer("ℹ️ Вы фармацевт. Используйте /help в контексте фармацевта.")
+        return
+
     help_text = (
         "💊 Бот вопрос-ответ Novamedika\n\n"
         "📋 Доступные команды:\n\n"
         "❓ Задать вопрос:\n"
-        "/ask - Задать вопрос фармацевту\n"
+        "/ask - Начать новый вопрос\n"
+        "/done - Завершить текущий диалог\n"
+        "/cancel - Отменить текущее действие\n\n"
+        "📊 Мои вопросы:\n"
         "/my_questions - Мои вопросы и ответы\n\n"
         "ℹ️ Справка:\n"
         "/help - Эта справка\n\n"
-        "Просто напишите ваш вопрос и отправьте его - фармацевты ответят вам в ближайшее время!"
+        "💡 После команды /ask все ваши сообщения будут добавляться к текущему вопросу до тех пор, пока вы не используете /done"
     )
     await message.answer(help_text)

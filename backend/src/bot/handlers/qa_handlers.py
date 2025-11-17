@@ -111,6 +111,7 @@ async def get_status(message: Message, db: AsyncSession):
         logger.error(f"Error getting status: {e}")
         await message.answer("❌ Ошибка при получении статуса")
 
+# qa_handlers.py - ОБНОВЛЕННЫЙ ФРАГМЕНТ
 @router.message(Command("questions"))
 async def cmd_questions(message: Message, state: FSMContext, db: AsyncSession):
     """Показать вопросы, ожидающие ответа"""
@@ -139,17 +140,21 @@ async def cmd_questions(message: Message, state: FSMContext, db: AsyncSession):
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=[])
         for question in questions:
-            text = f"❓ Вопрос #{question.uuid}\n{question.text[:100]}..."
+            # Обрезаем текст вопроса для кнопки
+            question_preview = question.text[:100] + "..." if len(question.text) > 100 else question.text
             btn = InlineKeyboardButton(
-                text=f"Ответить на вопрос #{question.uuid}",
+                text=f"❓ {question_preview}",
                 callback_data=f"answer_{question.uuid}"
             )
             keyboard.inline_keyboard.append([btn])
-            await message.answer(text)
 
         status_text = f"\n👥 Фармацевтов онлайн: {online_count}" if online_count > 0 else "\n⚠️ Сейчас нет фармацевтов онлайн"
 
-        await message.answer(f"Выберите вопрос для ответа:{status_text}", reply_markup=keyboard)
+        await message.answer(
+            f"Выберите вопрос для ответа:{status_text}\n\n"
+            "💡 Нажмите на вопрос чтобы ответить на него",
+            reply_markup=keyboard
+        )
         await state.set_state(QAStates.viewing_questions)
 
     except Exception as e:

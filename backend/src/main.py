@@ -20,12 +20,12 @@ from auth.auth import router as auth_router
 from bot.handlers.user_questions import router as user_questions_router
 from bot.handlers.qa_handlers import router as qa_handlers_router
 from bot.middleware.db import DbMiddleware
+from bot.handlers.qa_states import QAStates, UserQAStates
 
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-@asynccontextmanager
 async def lifespan(app: FastAPI):
     print("🚀 Backend starting up...")
 
@@ -35,14 +35,16 @@ async def lifespan(app: FastAPI):
 
     from bot.core import bot_manager
     from bot.handlers.registration import router as registration_router
+    from bot.handlers.user_questions import router as user_questions_router
+    from bot.handlers.qa_handlers import router as qa_handlers_router
 
     bot, dp = await bot_manager.initialize()
     if bot and dp:
         print("✅ Telegram bot initialized")
         dp.update.middleware(DbMiddleware())
         dp.include_router(registration_router)
-        dp.include_router(qa_handlers_router)  # ИСПРАВЛЕНО
-        dp.include_router(user_questions_router)
+        dp.include_router(qa_handlers_router)
+        dp.include_router(user_questions_router)  # ДОБАВЛЕНО
 
         # Автоматически устанавливаем webhook в production
         if os.getenv("ENVIRONMENT") == "production":
