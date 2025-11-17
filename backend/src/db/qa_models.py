@@ -50,6 +50,7 @@ class Question(Base):
     context_data = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=get_utc_now_naive)
     answered_at = Column(DateTime, nullable=True)
+    status = Column(String(20), default="pending")
 
     user = relationship("User", back_populates="questions")
     assigned_pharmacist = relationship("Pharmacist", foreign_keys=[assigned_to], back_populates="assigned_questions")

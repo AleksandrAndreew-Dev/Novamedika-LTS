@@ -1,4 +1,3 @@
-# routers/qa.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -11,6 +10,46 @@ from db.qa_schemas import QuestionCreate, QuestionResponse, AnswerBase, AnswerRe
 from auth.auth import get_current_pharmacist
 
 router = APIRouter()
+
+# В routers/qa.py добавить:
+async def answer_question_internal(
+    question_id: str,
+    answer: AnswerBase,
+    pharmacist: Pharmacist,
+    db: AsyncSession
+) -> AnswerResponse:
+    """Внутренняя функция для ответа на вопрос (используется ботом)"""
+    try:
+        result = await db.execute(
+            select(Question).where(Question.uuid == uuid.UUID(question_id))
+        )
+        question = result.scalar_one_or_none()
+
+        if not question:
+            raise HTTPException(status_code=404, detail="Question not found")
+
+        new_answer = Answer(
+            uuid=uuid.uuid4(),
+            question_id=question.uuid,
+            pharmacist_id=pharmacist.uuid,
+            text=answer.text
+        )
+
+        question.status = 'answered'
+        question.answered_by = pharmacist.uuid
+
+        db.add(new_answer)
+        await db.commit()
+        await db.refresh(new_answer)
+
+        return AnswerResponse.model_validate(new_answer)
+
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при создании ответа: {str(e)}"
+        )
 
 # Вспомогательные функции
 async def get_or_create_user(telegram_data: dict, db: AsyncSession) -> User:
@@ -138,6 +177,7 @@ async def get_question(
             detail=f"Ошибка при получении вопроса: {str(e)}"
         )
 
+# routers/qa.py - проверьте сигнатуру функции answer_question
 @router.post("/questions/{question_id}/answer", response_model=AnswerResponse)
 async def answer_question(
     question_id: str,
@@ -237,7 +277,6 @@ async def get_user_questions(
             detail=f"Ошибка при получении вопросов: {str(e)}"
         )
 
-# routers/qa.py - ДОПОЛНЕНИЯ
 
 @router.get("/pharmacist/questions", response_model=List[QuestionResponse])
 async def get_pharmacist_questions(
@@ -285,3 +324,6 @@ async def get_questions_stats(db: AsyncSession = Depends(get_db)):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка при получении статистики: {str(e)}")
+
+
+__all__ = ['router', 'answer_question_internal']

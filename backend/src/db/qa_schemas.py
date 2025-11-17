@@ -23,9 +23,9 @@ class UserResponse(UserBase):
 class PharmacyInfoSimple(BaseModel):
     name: str
     number: str
-    city: Optional[str] = ""  # Теперь необязательное поле
+    city: Optional[str] = ""  
     chain: str
-    role: str  # Новое поле: "Фармацевт" или "Провизор"
+    role: str
 
     model_config = {"from_attributes": True}
 

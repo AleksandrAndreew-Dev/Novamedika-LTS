@@ -3,7 +3,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from db.qa_models import Pharmacist, User  # ДОБАВИТЬ импорт
+from db.qa_models import Pharmacist, User
 from bot.core import bot_manager
 
 logger = logging.getLogger(__name__)

@@ -2,6 +2,7 @@
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from db.qa_models import Pharmacist, Question
 
 logger = logging.getLogger(__name__)
 

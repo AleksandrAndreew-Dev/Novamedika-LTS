@@ -4,9 +4,9 @@ from contextlib import asynccontextmanager
 import os
 import logging
 
-from sqlalchemy import text
-from db.database import Base, engine, get_db, async_session_maker
-import asyncio
+
+from db.database import Base, engine
+
 
 
 from routers.upload import router as upload_router
@@ -19,6 +19,7 @@ from auth.auth import router as auth_router
 from bot.handlers.user_questions import router as user_questions_router
 from bot.handlers.qa_handlers import router as qa_handlers_router
 from bot.middleware.db import DbMiddleware
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

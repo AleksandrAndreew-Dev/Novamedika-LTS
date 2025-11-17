@@ -1,15 +1,14 @@
-# bot/handlers/qa_handlers.py
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 import logging
 from typing import List
 
-from db.qa_models import Question, Pharmacist
-from db.qa_schemas import QuestionCreate
+from db.qa_models import Question, Pharmacist, User
 from bot.handlers.qa_states import QAStates
 
 logger = logging.getLogger(__name__)
@@ -90,8 +89,9 @@ async def process_answer_text(message: Message, state: FSMContext, db: AsyncSess
         # Находим фармацевта
         result = await db.execute(
             select(Pharmacist)
-            .join(Pharmacist.user)
-            .where(Pharmacist.user.telegram_id == message.from_user.id)
+            .join(User, Pharmacist.user_id == User.uuid)
+            .where(User.telegram_id == message.from_user.id)
+            .options(selectinload(Pharmacist.user))
         )
         pharmacist = result.scalar_one_or_none()
 
@@ -100,12 +100,12 @@ async def process_answer_text(message: Message, state: FSMContext, db: AsyncSess
             await state.clear()
             return
 
-        # Отправляем ответ через API
-        from routers.qa import answer_question
+        # Используем внутреннюю функцию
+        from routers.qa import answer_question_internal
         from db.qa_schemas import AnswerBase
 
         answer_data = AnswerBase(text=message.text)
-        await answer_question(question_id, answer_data, pharmacist, db)
+        await answer_question_internal(question_id, answer_data, pharmacist, db)
 
         await message.answer("✅ Ответ успешно отправлен!")
         await state.clear()
@@ -114,3 +114,6 @@ async def process_answer_text(message: Message, state: FSMContext, db: AsyncSess
         logger.error(f"Error processing answer: {e}")
         await message.answer("❌ Ошибка при отправке ответа")
         await state.clear()
+
+# В этом файле определен только router, поэтому __all__ должен содержать только его
+__all__ = ['router']
