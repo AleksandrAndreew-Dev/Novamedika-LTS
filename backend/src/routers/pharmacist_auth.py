@@ -101,10 +101,17 @@ async def pharmacist_login(
             "pharmacist": PharmacistResponse(
                 uuid=pharmacist.uuid,
                 user=UserResponse.model_validate(pharmacist.user),
-                pharmacy_info=pharmacist.pharmacy_info,  # ✅ Используем JSON данные
+                pharmacy_info=pharmacist.pharmacy_info,
                 is_active=pharmacist.is_active
             )
         }
+    except HTTPException:
+        # Пробрасываем ожидаемые ошибки как есть
+        raise
+    except Exception as e:
+        # Непредвиденная ошибка
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/me", response_model=PharmacistResponse)
 async def get_current_pharmacist_info(
