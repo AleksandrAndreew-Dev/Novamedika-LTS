@@ -69,7 +69,7 @@ async def handle_user_question(message: Message, db: AsyncSession):
         await db.refresh(question)
 
         # Уведомляем фармацевтов
-        from services.notification_service import notify_pharmacists_about_new_question
+        from bot.services.notification_service import notify_pharmacists_about_new_question
         await notify_pharmacists_about_new_question(question, db)
 
         await message.answer(
