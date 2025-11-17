@@ -1,18 +1,112 @@
+
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 import logging
 from typing import List
+from datetime import timedelta
 
 from db.qa_models import Question, Pharmacist, User
 from bot.handlers.qa_states import QAStates
+from utils.time_utils import get_utc_now_naive
 
 logger = logging.getLogger(__name__)
 router = Router()
+
+@router.message(Command("online"))
+async def set_online(message: Message, db: AsyncSession):
+    """Перевести фармацевта в онлайн"""
+    try:
+        result = await db.execute(
+            select(Pharmacist)
+            .join(User, Pharmacist.user_id == User.uuid)
+            .where(User.telegram_id == message.from_user.id)
+            .where(Pharmacist.is_active == True)
+        )
+        pharmacists = result.scalars().all()
+
+        if not pharmacists:
+            await message.answer("❌ Фармацевт не найден. Пройдите регистрацию /start")
+            return
+
+        # Обновляем статус всех фармацевтов пользователя
+        for pharmacist in pharmacists:
+            pharmacist.is_online = True
+            pharmacist.last_seen = get_utc_now_naive()
+
+        await db.commit()
+
+        await message.answer("✅ Вы теперь онлайн и готовы принимать вопросы!")
+
+    except Exception as e:
+        logger.error(f"Error setting online status: {e}")
+        await message.answer("❌ Ошибка при изменении статуса")
+
+@router.message(Command("offline"))
+async def set_offline(message: Message, db: AsyncSession):
+    """Перевести фармацевта в офлайн"""
+    try:
+        result = await db.execute(
+            select(Pharmacist)
+            .join(User, Pharmacist.user_id == User.uuid)
+            .where(User.telegram_id == message.from_user.id)
+            .where(Pharmacist.is_active == True)
+        )
+        pharmacists = result.scalars().all()
+
+        if not pharmacists:
+            await message.answer("❌ Фармацевт не найден. Пройдите регистрацию /start")
+            return
+
+        # Обновляем статус всех фармацевтов пользователя
+        for pharmacist in pharmacists:
+            pharmacist.is_online = False
+            pharmacist.last_seen = get_utc_now_naive()
+
+        await db.commit()
+
+        await message.answer("✅ Вы теперь офлайн и не будете получать новые уведомления")
+
+    except Exception as e:
+        logger.error(f"Error setting offline status: {e}")
+        await message.answer("❌ Ошибка при изменении статуса")
+
+@router.message(Command("status"))
+async def get_status(message: Message, db: AsyncSession):
+    """Показать статус фармацевта"""
+    try:
+        result = await db.execute(
+            select(Pharmacist)
+            .join(User, Pharmacist.user_id == User.uuid)
+            .where(User.telegram_id == message.from_user.id)
+            .where(Pharmacist.is_active == True)
+        )
+        pharmacists = result.scalars().all()
+
+        if not pharmacists:
+            await message.answer("❌ Фармацевт не найден. Пройдите регистрацию /start")
+            return
+
+        pharmacist = pharmacists[0]  # Берем первого
+
+        status_text = "🟢 Онлайн" if pharmacist.is_online else "🔴 Офлайн"
+
+        await message.answer(
+            f"📊 Ваш статус:\n\n"
+            f"{status_text}\n"
+            f"Сеть: {pharmacist.pharmacy_info.get('chain', 'Не указана')}\n"
+            f"Аптека №: {pharmacist.pharmacy_info.get('number', 'Не указан')}\n"
+            f"Роль: {pharmacist.pharmacy_info.get('role', 'Не указана')}\n"
+            f"Последняя активность: {pharmacist.last_seen.strftime('%H:%M %d.%m.%Y')}"
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting status: {e}")
+        await message.answer("❌ Ошибка при получении статуса")
 
 @router.message(Command("questions"))
 async def cmd_questions(message: Message, state: FSMContext, db: AsyncSession):
@@ -31,6 +125,15 @@ async def cmd_questions(message: Message, state: FSMContext, db: AsyncSession):
             await message.answer("📭 Нет вопросов, ожидающих ответа")
             return
 
+        # Показываем количество онлайн фармацевтов
+        online_threshold = get_utc_now_naive() - timedelta(minutes=5)
+        result = await db.execute(
+            select(func.count(Pharmacist.uuid))
+            .where(Pharmacist.is_online == True)
+            .where(Pharmacist.last_seen >= online_threshold)
+        )
+        online_count = result.scalar() or 0
+
         keyboard = InlineKeyboardMarkup(inline_keyboard=[])
         for question in questions:
             text = f"❓ Вопрос #{question.uuid}\n{question.text[:100]}..."
@@ -41,7 +144,9 @@ async def cmd_questions(message: Message, state: FSMContext, db: AsyncSession):
             keyboard.inline_keyboard.append([btn])
             await message.answer(text)
 
-        await message.answer("Выберите вопрос для ответа:", reply_markup=keyboard)
+        status_text = f"\n👥 Фармацевтов онлайн: {online_count}" if online_count > 0 else "\n⚠️ Сейчас нет фармацевтов онлайн"
+
+        await message.answer(f"Выберите вопрос для ответа:{status_text}", reply_markup=keyboard)
         await state.set_state(QAStates.viewing_questions)
 
     except Exception as e:
@@ -104,6 +209,10 @@ async def process_answer_text(message: Message, state: FSMContext, db: AsyncSess
         # Если несколько фармацевтов, берем первого активного
         pharmacist = pharmacists[0]
 
+        # Обновляем время последней активности
+        pharmacist.last_seen = get_utc_now_naive()
+        await db.commit()
+
         # Если нужно дать выбор аптеки, можно добавить клавиатуру выбора
         if len(pharmacists) > 1:
             # Пока берем первого, но можно добавить выбор аптеки
@@ -126,3 +235,4 @@ async def process_answer_text(message: Message, state: FSMContext, db: AsyncSess
 
 # В этом файле определен только router, поэтому __all__ должен содержать только его
 __all__ = ['router']
+

@@ -1,4 +1,4 @@
-# db/qa_models.py
+
 import uuid
 from sqlalchemy import Column, String, Text, Boolean, BigInteger, DateTime, JSON, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
@@ -29,6 +29,8 @@ class Pharmacist(Base):
     # Обновленная структура pharmacy_info
     pharmacy_info = Column(JSON, nullable=False, default=dict)
     is_active = Column(Boolean, default=True)
+    is_online = Column(Boolean, default=False)  # Новое поле для онлайн статуса
+    last_seen = Column(DateTime, default=get_utc_now_naive)  # Время последней активности
     created_at = Column(DateTime, default=get_utc_now_naive)
 
     user = relationship("User")
@@ -67,3 +69,4 @@ class Answer(Base):
 
     question = relationship("Question", back_populates="answers")
     pharmacist = relationship("Pharmacist", back_populates="answers")
+

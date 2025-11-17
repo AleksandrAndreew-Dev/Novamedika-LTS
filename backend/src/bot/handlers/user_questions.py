@@ -1,21 +1,23 @@
-# bot/handlers/user_questions.py
+
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 import logging
 import uuid
+from datetime import timedelta
 
-from db.qa_models import User, Question
+from db.qa_models import User, Question, Pharmacist
 from db.qa_schemas import QuestionCreate
+from utils.time_utils import get_utc_now_naive
 
 logger = logging.getLogger(__name__)
 router = Router()
 
 async def get_or_create_user(telegram_id: int, first_name: str, username: str, db: AsyncSession) -> User:
-    """Создать или найти пользователя"""
+    """Создать или найти пользователя - БЕЗ РЕГИСТРАЦИИ"""
     result = await db.execute(
         select(User).where(User.telegram_id == telegram_id)
     )
@@ -35,9 +37,21 @@ async def get_or_create_user(telegram_id: int, first_name: str, username: str, d
     return user
 
 @router.message(Command("ask"))
-async def cmd_ask(message: Message, state: FSMContext):
+async def cmd_ask(message: Message, state: FSMContext, db: AsyncSession):
     """Команда для задания вопроса"""
+    # Показываем количество онлайн фармацевтов
+    online_threshold = get_utc_now_naive() - timedelta(minutes=5)
+    result = await db.execute(
+        select(func.count(Pharmacist.uuid))
+        .where(Pharmacist.is_online == True)
+        .where(Pharmacist.last_seen >= online_threshold)
+    )
+    online_count = result.scalar() or 0
+
+    status_text = f"👥 Фармацевтов онлайн: {online_count}\n\n" if online_count > 0 else "⏳ В настоящее время фармацевтов нет онлайн, но ваш вопрос будет сохранен\n\n"
+
     await message.answer(
+        f"{status_text}"
         "💊 Задайте ваш вопрос фармацевту:\n\n"
         "Просто напишите ваш вопрос и отправьте его. "
         "Фармацевты ответят вам в ближайшее время."
@@ -114,3 +128,4 @@ async def cmd_my_questions(message: Message, db: AsyncSession):
     except Exception as e:
         logger.error(f"Error getting user questions: {e}")
         await message.answer("❌ Ошибка при получении ваших вопросов")
+

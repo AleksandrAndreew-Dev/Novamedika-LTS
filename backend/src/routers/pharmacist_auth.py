@@ -1,18 +1,31 @@
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 import uuid
+import logging
 
 from db.database import get_db
 from db.qa_models import User, Pharmacist
-
-
 from db.qa_schemas import PharmacistCreate, PharmacistResponse, UserResponse, PharmacyInfoSimple
 from auth.auth import create_access_token, get_current_pharmacist
 from utils.time_utils import get_utc_now_naive
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# Новая функция для получения фармацевта по Telegram ID
+async def get_pharmacist_by_telegram_id(telegram_id: int, db: AsyncSession) -> Pharmacist:
+    """Найти фармацевта по Telegram ID"""
+    result = await db.execute(
+        select(Pharmacist)
+        .join(User, Pharmacist.user_id == User.uuid)
+        .options(selectinload(Pharmacist.user))
+        .where(User.telegram_id == telegram_id)
+        .where(Pharmacist.is_active == True)
+    )
+    return result.scalar_one_or_none()
 
 # pharmacist_auth.py - ДОБАВИТЬ эту функцию
 async def get_or_create_user(telegram_data: dict, db: AsyncSession) -> User:
@@ -61,6 +74,8 @@ async def register_pharmacist(
         if existing_pharmacist:
             # Если запись уже есть, активируем ее
             existing_pharmacist.is_active = True
+            existing_pharmacist.is_online = True  # Автоматически ставим онлайн при регистрации
+            existing_pharmacist.last_seen = get_utc_now_naive()
             pharmacist = existing_pharmacist
         else:
             # Создаем новую запись
@@ -68,7 +83,9 @@ async def register_pharmacist(
                 uuid=uuid.uuid4(),
                 user_id=user.uuid,
                 pharmacy_info=pharmacy_info,
-                is_active=True
+                is_active=True,
+                is_online=True,  # Автоматически ставим онлайн при регистрации
+                last_seen=get_utc_now_naive()
             )
             db.add(pharmacist)
 
@@ -108,6 +125,11 @@ async def pharmacist_login(
         # Берем первого активного фармацевта
         pharmacist = pharmacists[0]
 
+        # Обновляем статус онлайн и время последней активности
+        pharmacist.is_online = True
+        pharmacist.last_seen = get_utc_now_naive()
+        await db.commit()
+
         # Если нужно, можно вернуть список всех аптек для выбора
         if len(pharmacists) > 1:
             logger.info(f"User {telegram_user_id} has {len(pharmacists)} active pharmacist profiles")
@@ -131,7 +153,6 @@ async def pharmacist_login(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.get("/me", response_model=PharmacistResponse)
 async def get_current_pharmacist_info(
     pharmacist: Pharmacist = Depends(get_current_pharmacist)
@@ -143,3 +164,41 @@ async def get_current_pharmacist_info(
         pharmacy_info=pharmacist.pharmacy_info,  # ✅ Используем JSON данные
         is_active=pharmacist.is_active
     )
+
+# Новые эндпоинты для управления онлайн статусом
+@router.post("/online")
+async def set_online(
+    pharmacist: Pharmacist = Depends(get_current_pharmacist),
+    db: AsyncSession = Depends(get_db)
+):
+    """Перевести фармацевта в онлайн"""
+    pharmacist.is_online = True
+    pharmacist.last_seen = get_utc_now_naive()
+    await db.commit()
+
+    return {"status": "success", "message": "Вы теперь онлайн"}
+
+@router.post("/offline")
+async def set_offline(
+    pharmacist: Pharmacist = Depends(get_current_pharmacist),
+    db: AsyncSession = Depends(get_db)
+):
+    """Перевести фармацевта в офлайн"""
+    pharmacist.is_online = False
+    pharmacist.last_seen = get_utc_now_naive()
+    await db.commit()
+
+    return {"status": "success", "message": "Вы теперь офлайн"}
+
+@router.get("/status")
+async def get_status(
+    pharmacist: Pharmacist = Depends(get_current_pharmacist)
+):
+    """Получить текущий статус фармацевта"""
+    return {
+        "is_online": pharmacist.is_online,
+        "last_seen": pharmacist.last_seen,
+        "is_active": pharmacist.is_active,
+        "pharmacy_info": pharmacist.pharmacy_info
+    }
+

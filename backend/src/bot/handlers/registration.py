@@ -1,6 +1,6 @@
-# bot/handlers/registration.py
+
 from aiogram import Router, F
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -19,12 +19,27 @@ class RegistrationStates(StatesGroup):
     waiting_secret_word = State()
 
 @router.message(Command("start"))
-async def cmd_start(message: Message, state: FSMContext):
+async def cmd_start(message: Message, state: FSMContext, db: AsyncSession):
     """Начало регистрации с выбором сети аптек"""
+    # Проверяем, не зарегистрирован ли уже пользователь
+    from routers.pharmacist_auth import get_pharmacist_by_telegram_id
+    pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
+
+    if pharmacist:
+        await message.answer(
+            "👨‍⚕️ Вы уже зарегистрированы как фармацевт!\n\n"
+            f"Сеть: {pharmacist.pharmacy_info.get('chain', 'Не указана')}\n"
+            f"Аптека №: {pharmacist.pharmacy_info.get('number', 'Не указан')}\n"
+            f"Роль: {pharmacist.pharmacy_info.get('role', 'Не указана')}\n\n"
+            "Используйте /help для списка команд"
+        )
+        return
+
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="Новамедика")],
-            [KeyboardButton(text="Эклиния")]
+            [KeyboardButton(text="Эклиния")],
+            [KeyboardButton(text="❌ Отмена регистрации")]
         ],
         resize_keyboard=True,
         one_time_keyboard=True
@@ -37,6 +52,18 @@ async def cmd_start(message: Message, state: FSMContext):
     )
     await state.set_state(RegistrationStates.waiting_pharmacy_chain)
 
+@router.message(RegistrationStates.waiting_pharmacy_chain, F.text == "❌ Отмена регистрации")
+@router.message(RegistrationStates.waiting_pharmacy_number, F.text == "❌ Отмена регистрации")
+@router.message(RegistrationStates.waiting_pharmacy_role, F.text == "❌ Отмена регистрации")
+@router.message(RegistrationStates.waiting_secret_word, F.text == "❌ Отмена регистрации")
+async def cancel_registration(message: Message, state: FSMContext):
+    """Отмена регистрации"""
+    await state.clear()
+    await message.answer(
+        "❌ Регистрация отменена.",
+        reply_markup=ReplyKeyboardRemove()
+    )
+
 @router.message(RegistrationStates.waiting_pharmacy_chain)
 async def process_pharmacy_chain(message: Message, state: FSMContext):
     """Обработка выбора сети аптек"""
@@ -46,9 +73,15 @@ async def process_pharmacy_chain(message: Message, state: FSMContext):
         return
 
     await state.update_data(pharmacy_chain=chain)
+
+    cancel_keyboard = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]],
+        resize_keyboard=True
+    )
+
     await message.answer(
         "🔢 Введите номер аптеки (только цифры):",
-        reply_markup=None  # Убираем клавиатуру
+        reply_markup=cancel_keyboard
     )
     await state.set_state(RegistrationStates.waiting_pharmacy_number)
 
@@ -65,7 +98,8 @@ async def process_pharmacy_number(message: Message, state: FSMContext):
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="Фармацевт")],
-            [KeyboardButton(text="Провизор")]
+            [KeyboardButton(text="Провизор")],
+            [KeyboardButton(text="❌ Отмена регистрации")]
         ],
         resize_keyboard=True,
         one_time_keyboard=True
@@ -83,9 +117,15 @@ async def process_pharmacy_role(message: Message, state: FSMContext):
         return
 
     await state.update_data(pharmacy_role=role)
+
+    cancel_keyboard = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]],
+        resize_keyboard=True
+    )
+
     await message.answer(
         "🔐 Введите секретное слово для завершения регистрации:",
-        reply_markup=None  # Убираем клавиатуру
+        reply_markup=cancel_keyboard
     )
     await state.set_state(RegistrationStates.waiting_secret_word)
 
@@ -131,7 +171,9 @@ async def process_secret_word(message: Message, state: FSMContext, db: AsyncSess
             "Теперь вы можете:\n"
             "• Просматривать вопросы (/questions)\n"
             "• Отвечать пользователям\n"
-            "• Получать уведомления о новых вопросах"
+            "• Получать уведомления о новых вопросах\n"
+            "• Управлять своим онлайн статусом (/online, /offline)",
+            reply_markup=ReplyKeyboardRemove()
         )
         await state.clear()
 
@@ -139,8 +181,6 @@ async def process_secret_word(message: Message, state: FSMContext, db: AsyncSess
         logger.error(f"Registration error: {e}")
         await message.answer("❌ Ошибка регистрации. Попробуйте еще раз.")
         await state.clear()
-
-
 
 @router.message(Command("login"))
 async def cmd_login(message: Message, db: AsyncSession):
@@ -165,9 +205,24 @@ async def cmd_login(message: Message, db: AsyncSession):
 
 # registration.py - ОБНОВИТЬ cmd_help
 @router.message(Command("help"))
-async def cmd_help(message: Message):
+async def cmd_help(message: Message, db: AsyncSession):
     """Справка по командам для фармацевтов"""
+    from sqlalchemy import select, func
+    from db.qa_models import Pharmacist
+    from utils.time_utils import get_utc_now_naive
+    from datetime import timedelta
+
+    # Получаем количество онлайн фармацевтов
+    online_threshold = get_utc_now_naive() - timedelta(minutes=5)
+    result = await db.execute(
+        select(func.count(Pharmacist.uuid))
+        .where(Pharmacist.is_online == True)
+        .where(Pharmacist.last_seen >= online_threshold)
+    )
+    online_count = result.scalar() or 0
+
     help_text = (
+        f"👥 Фармацевтов онлайн: {online_count}\n\n"
         "📋 Доступные команды:\n\n"
         "👤 Регистрация и вход:\n"
         "/start - Регистрация фармацевта\n"
@@ -175,6 +230,10 @@ async def cmd_help(message: Message):
         "❓ Работа с вопросами:\n"
         "/questions - Показать вопросы для ответа\n"
         "/my_questions - Мои назначенные вопросы\n\n"
+        "🌐 Статус:\n"
+        "/online - Перейти в онлайн\n"
+        "/offline - Перейти в офлайн\n"
+        "/status - Мой текущий статус\n\n"
         "ℹ️ Справка:\n"
         "/help - Эта справка\n\n"
         "После регистрации вы сможете:\n"
@@ -183,3 +242,4 @@ async def cmd_help(message: Message):
         "• Просматривать историю ответов"
     )
     await message.answer(help_text)
+
