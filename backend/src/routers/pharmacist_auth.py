@@ -52,7 +52,6 @@ async def get_or_create_user(telegram_data: dict, db: AsyncSession) -> User:
 
     return user
 
-# В pharmacist_auth.py в функции register_pharmacist
 @router.post("/register-from-telegram/", response_model=PharmacistResponse)
 async def register_pharmacist(
     telegram_data: dict,
@@ -63,18 +62,18 @@ async def register_pharmacist(
         user = await get_or_create_user(telegram_data, db)
         pharmacy_info = telegram_data.get("pharmacy_info", {})
 
-        # Проверяем, нет ли уже такой же записи
+        # ПРОВЕРКА ДУБЛИКАТОВ - ИСПРАВЛЕННАЯ ВЕРСИЯ
         result = await db.execute(
             select(Pharmacist)
             .where(Pharmacist.user_id == user.uuid)
-            .where(Pharmacist.pharmacy_info["name"].astext == pharmacy_info.get("name"))
+            .where(Pharmacist.pharmacy_info["name"].as_string() == pharmacy_info.get("name"))
         )
         existing_pharmacist = result.scalar_one_or_none()
 
         if existing_pharmacist:
             # Если запись уже есть, активируем ее
             existing_pharmacist.is_active = True
-            existing_pharmacist.is_online = True  # Автоматически ставим онлайн при регистрации
+            existing_pharmacist.is_online = True
             existing_pharmacist.last_seen = get_utc_now_naive()
             pharmacist = existing_pharmacist
         else:
@@ -84,7 +83,7 @@ async def register_pharmacist(
                 user_id=user.uuid,
                 pharmacy_info=pharmacy_info,
                 is_active=True,
-                is_online=True,  # Автоматически ставим онлайн при регистрации
+                is_online=True,
                 last_seen=get_utc_now_naive()
             )
             db.add(pharmacist)

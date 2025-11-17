@@ -11,7 +11,7 @@ import os
 
 from routers.pharmacist_auth import get_pharmacist_by_telegram_id
 
-from db.qa_models import Pharmacist, User  # ДОБАВИТЬ импорт моделей
+from db.qa_models import Pharmacist, User  
 
 logger = logging.getLogger(__name__)
 router = Router()
