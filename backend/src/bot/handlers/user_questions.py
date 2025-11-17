@@ -8,6 +8,7 @@ from sqlalchemy import select, func
 import logging
 import uuid
 from datetime import timedelta
+from routers.pharmacist_auth import get_pharmacist_by_telegram_id
 
 from db.qa_models import User, Question, Pharmacist, Answer
 from utils.time_utils import get_utc_now_naive

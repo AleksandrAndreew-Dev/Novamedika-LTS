@@ -25,7 +25,6 @@ async def get_pharmacist_by_telegram_id(telegram_id: int, db: AsyncSession) -> P
         .where(User.telegram_id == telegram_id)
         .where(Pharmacist.is_active == True)
     )
-    # ЗАМЕНИТЬ scalar_one_or_none() на first()
     return result.scalars().first()
 
 # pharmacist_auth.py - ДОБАВИТЬ эту функцию

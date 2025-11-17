@@ -111,7 +111,6 @@ async def get_status(message: Message, db: AsyncSession):
         logger.error(f"Error getting status: {e}")
         await message.answer("❌ Ошибка при получении статуса")
 
-# qa_handlers.py - ОБНОВЛЕННЫЙ ФРАГМЕНТ
 @router.message(Command("questions"))
 async def cmd_questions(message: Message, state: FSMContext, db: AsyncSession):
     """Показать вопросы, ожидающие ответа"""
@@ -240,6 +239,46 @@ async def process_answer_text(message: Message, state: FSMContext, db: AsyncSess
         logger.error(f"Error processing answer: {e}")
         await message.answer("❌ Ошибка при отправке ответа")
         await state.clear()
+
+@router.message(Command("help"))
+async def cmd_help(message: Message, db: AsyncSession):
+    """Справка для фармацевтов"""
+    try:
+        from routers.pharmacist_auth import get_pharmacist_by_telegram_id
+        pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
+
+        if pharmacist:
+            # Справка для фармацевтов
+            help_text = (
+                "👨‍⚕️ Справка для фармацевтов:\n\n"
+                "📋 Основные команды:\n"
+                "/online - Перейти в онлайн\n"
+                "/offline - Перейти в офлайн\n"
+                "/status - Мой статус\n"
+                "/questions - Вопросы для ответа\n"
+                "/my_questions - Мои назначенные вопросы\n\n"
+                "💡 В онлайн-режиме вы получаете уведомления о новых вопросах"
+            )
+        else:
+            # Справка для обычных пользователей
+            help_text = (
+                "💊 Бот вопрос-ответ Novamedika\n\n"
+                "📋 Доступные команды:\n\n"
+                "❓ Задать вопрос:\n"
+                "/ask - Начать новый вопрос\n"
+                "/done - Завершить текущий диалог\n"
+                "/cancel - Отменить текущее действие\n\n"
+                "📊 Мои вопросы:\n"
+                "/my_questions - Мои вопросы и ответы\n\n"
+                "💡 После команды /ask все ваши сообщения будут добавляться к текущему вопросу"
+            )
+
+        await message.answer(help_text)
+
+    except Exception as e:
+        logger.error(f"Error in help command: {e}")
+        await message.answer("💊 Основные команды:\n/ask - Задать вопрос\n/my_questions - Мои вопросы\n/help - Справка")
+
 
 # В этом файле определен только router, поэтому __all__ должен содержать только его
 __all__ = ['router']
