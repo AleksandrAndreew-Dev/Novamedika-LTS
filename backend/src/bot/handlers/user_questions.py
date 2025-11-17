@@ -308,7 +308,7 @@ async def handle_user_message(message: Message, state: FSMContext, db: AsyncSess
 async def universal_help(message: Message, db: AsyncSession):
     """Универсальная справка, которая определяет тип пользователя"""
     try:
-        from routers.pharmacist_auth import get_pharmacist_by_telegram_id
+        from bot.handlers.registration import get_pharmacist_by_telegram_id
         pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
 
         # Получаем количество онлайн фармацевтов (общее для обоих случаев)

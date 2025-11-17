@@ -6,6 +6,15 @@ import json
 
 from bot.core import bot_manager
 
+
+from fastapi import Depends, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text, select, func
+
+
+from db.database import get_db
+from db.qa_models import User, Question, Pharmacist, Answer
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -146,3 +155,203 @@ async def get_webhook_info():
     except Exception as e:
         logger.error(f"Get webhook info error: {str(e)}")
         return {"status": "error", "detail": str(e)}
+
+
+ADMIN_API_KEYS = [key.strip() for key in os.getenv("ADMIN_API_KEYS", "").split(",") if key.strip()]
+
+async def verify_admin_api_key(api_key: str = Depends(lambda: "")):
+    """Проверка API ключа админа"""
+    if not ADMIN_API_KEYS:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Admin API keys not configured"
+        )
+
+    if api_key not in ADMIN_API_KEYS:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid admin API key"
+        )
+    return True
+
+@router.post("/qa/drop", summary="Очистка всей базы QA")
+async def drop_qa_database(
+    admin: bool = Depends(verify_admin_api_key),
+    db: AsyncSession = Depends(get_db)
+):
+    """Очистка всей базы QA (только для админов)"""
+    try:
+        # Отключаем внешние ключи (для PostgreSQL)
+        await db.execute(text("SET session_replication_role = 'replica';"))
+
+        # Очищаем таблицы в правильном порядке (с учетом foreign keys)
+        tables = ["qa_answers", "qa_questions", "qa_pharmacists", "qa_users"]
+
+        cleared_tables = []
+        for table in tables:
+            await db.execute(text(f"TRUNCATE TABLE {table} CASCADE;"))
+            cleared_tables.append(table)
+            logger.info(f"Cleared table: {table}")
+
+        # Включаем обратно внешние ключи
+        await db.execute(text("SET session_replication_role = 'origin';"))
+        await db.commit()
+
+        return {
+            "status": "success",
+            "message": "QA database cleared successfully",
+            "cleared_tables": cleared_tables
+        }
+
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error dropping QA database: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error clearing database: {str(e)}"
+        )
+
+@router.get("/qa/stats", summary="Статистика базы QA")
+async def get_qa_stats(
+    admin: bool = Depends(verify_admin_api_key),
+    db: AsyncSession = Depends(get_db)
+):
+    """Получить статистику базы QA"""
+    try:
+        # Считаем количество записей в каждой таблице
+        user_count = await db.execute(select(func.count(User.uuid)))
+        pharmacist_count = await db.execute(select(func.count(Pharmacist.uuid)))
+        question_count = await db.execute(select(func.count(Question.uuid)))
+        answer_count = await db.execute(select(func.count(Answer.uuid)))
+
+        # Вопросы по статусам
+        pending_questions = await db.execute(
+            select(func.count(Question.uuid)).where(Question.status == "pending")
+        )
+        answered_questions = await db.execute(
+            select(func.count(Question.uuid)).where(Question.status == "answered")
+        )
+
+        # Активные фармацевты
+        active_pharmacists = await db.execute(
+            select(func.count(Pharmacist.uuid)).where(Pharmacist.is_active == True)
+        )
+
+        # Онлайн фармацевты (активные за последние 5 минут)
+        from utils.time_utils import get_utc_now_naive
+        from datetime import timedelta
+
+        online_threshold = get_utc_now_naive() - timedelta(minutes=5)
+        online_pharmacists = await db.execute(
+            select(func.count(Pharmacist.uuid))
+            .where(Pharmacist.is_active == True)
+            .where(Pharmacist.is_online == True)
+            .where(Pharmacist.last_seen >= online_threshold)
+        )
+
+        stats = {
+            "users": user_count.scalar(),
+            "pharmacists": {
+                "total": pharmacist_count.scalar(),
+                "active": active_pharmacists.scalar(),
+                "online": online_pharmacists.scalar()
+            },
+            "questions": {
+                "total": question_count.scalar(),
+                "pending": pending_questions.scalar(),
+                "answered": answered_questions.scalar(),
+                "answer_rate": answered_questions.scalar() / question_count.scalar() if question_count.scalar() > 0 else 0
+            },
+            "answers": answer_count.scalar()
+        }
+
+        return {
+            "status": "success",
+            "stats": stats,
+            "timestamp": get_utc_now_naive().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting QA stats: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting statistics: {str(e)}"
+        )
+
+@router.post("/qa/reset-pharmacists-status", summary="Сброс статуса фармацевтов")
+async def reset_pharmacists_status(
+    admin: bool = Depends(verify_admin_api_key),
+    db: AsyncSession = Depends(get_db)
+):
+    """Сбросить всех фармацевтов в офлайн статус"""
+    try:
+        result = await db.execute(
+            select(Pharmacist).where(Pharmacist.is_online == True)
+        )
+        online_pharmacists = result.scalars().all()
+
+        for pharmacist in online_pharmacists:
+            pharmacist.is_online = False
+
+        await db.commit()
+
+        return {
+            "status": "success",
+            "message": f"Reset {len(online_pharmacists)} pharmacists to offline",
+            "reset_count": len(online_pharmacists)
+        }
+
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error resetting pharmacists status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error resetting pharmacists status: {str(e)}"
+        )
+
+@router.get("/qa/questions/pending", summary="Список ожидающих вопросов")
+async def get_pending_questions(
+    admin: bool = Depends(verify_admin_api_key),
+    db: AsyncSession = Depends(get_db)
+):
+    """Получить список всех ожидающих вопросов"""
+    try:
+        from sqlalchemy.orm import selectinload
+
+        result = await db.execute(
+            select(Question)
+            .options(
+                selectinload(Question.user),
+                selectinload(Question.answers)
+            )
+            .where(Question.status == "pending")
+            .order_by(Question.created_at.desc())
+        )
+        questions = result.scalars().all()
+
+        questions_data = []
+        for question in questions:
+            questions_data.append({
+                "id": str(question.uuid),
+                "text": question.text,
+                "created_at": question.created_at.isoformat(),
+                "user": {
+                    "telegram_id": question.user.telegram_id,
+                    "first_name": question.user.first_name,
+                    "username": question.user.telegram_username
+                },
+                "answer_count": len(question.answers)
+            })
+
+        return {
+            "status": "success",
+            "count": len(questions_data),
+            "questions": questions_data
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting pending questions: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting pending questions: {str(e)}"
+        )
