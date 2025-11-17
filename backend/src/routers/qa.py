@@ -236,3 +236,52 @@ async def get_user_questions(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ошибка при получении вопросов: {str(e)}"
         )
+
+# routers/qa.py - ДОПОЛНЕНИЯ
+
+@router.get("/pharmacist/questions", response_model=List[QuestionResponse])
+async def get_pharmacist_questions(
+    pharmacist: Pharmacist = Depends(get_current_pharmacist),
+    db: AsyncSession = Depends(get_db)
+):
+    """Получить вопросы, назначенные текущему фармацевту"""
+    try:
+        result = await db.execute(
+            select(Question)
+            .options(
+                selectinload(Question.user),
+                selectinload(Question.answers).selectinload(Answer.pharmacist).selectinload(Pharmacist.user)
+            )
+            .where(Question.assigned_to == pharmacist.uuid)
+            .order_by(Question.created_at.desc())
+        )
+        questions = result.scalars().all()
+        return [QuestionResponse.model_validate(q) for q in questions]
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка при получении вопросов: {str(e)}")
+
+@router.get("/questions/stats/")
+async def get_questions_stats(db: AsyncSession = Depends(get_db)):
+    """Статистика по вопросам"""
+    try:
+        # Общее количество вопросов
+        total_result = await db.execute(select(Question))
+        total = total_result.scalars().all()
+
+        # Вопросы по статусам
+        pending_result = await db.execute(select(Question).where(Question.status == "pending"))
+        pending = pending_result.scalars().all()
+
+        answered_result = await db.execute(select(Question).where(Question.status == "answered"))
+        answered = answered_result.scalars().all()
+
+        return {
+            "total": len(total),
+            "pending": len(pending),
+            "answered": len(answered),
+            "answer_rate": len(answered) / len(total) if total else 0
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка при получении статистики: {str(e)}")

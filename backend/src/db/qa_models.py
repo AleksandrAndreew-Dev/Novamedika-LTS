@@ -1,5 +1,6 @@
+# db/qa_models.py
 import uuid
-from sqlalchemy import Column, String, Text, Boolean, BigInteger, DateTime, JSON
+from sqlalchemy import Column, String, Text, Boolean, BigInteger, DateTime, JSON, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from db.database import Base
@@ -25,7 +26,7 @@ class Pharmacist(Base):
     uuid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("qa_users.uuid"), nullable=False)
 
-    # Вместо ForeignKey к Pharmacy - храним данные в JSON
+    # Обновленная структура pharmacy_info
     pharmacy_info = Column(JSON, nullable=False, default=dict)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=get_utc_now_naive)
@@ -46,7 +47,7 @@ class Question(Base):
     assigned_to = Column(UUID(as_uuid=True), ForeignKey("qa_pharmacists.uuid"), nullable=True)
     answered_by = Column(UUID(as_uuid=True), ForeignKey("qa_pharmacists.uuid"), nullable=True)
 
-    context_data = Column(JSON, nullable=True)  
+    context_data = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=get_utc_now_naive)
     answered_at = Column(DateTime, nullable=True)
 

@@ -1,5 +1,3 @@
-# main.py - ИСПРАВЛЕННЫЕ ИМПОРТЫ
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -10,14 +8,16 @@ from sqlalchemy import text
 from db.database import Base, engine, get_db, async_session_maker
 import asyncio
 
-# ИСПРАВЛЕННЫЕ ИМПОРТЫ - routers вместо router
+
 from routers.upload import router as upload_router
 from routers.search import router as search_router
 from routers.pharmacies_info import router as pharm_info_router
 from routers.telegram_bot import router as telegram_router
 from routers.pharmacist_auth import router as pharmacist_router
 from routers.qa import router as qa_router
-from auth.auth import router as auth_router  # добавлен auth router
+from auth.auth import router as auth_router
+from bot.handlers.user_questions import router as user_questions_router
+from bot.handlers.qa_handlers import router as qa_handlers_router
 from bot.middleware.db import DbMiddleware
 
 logging.basicConfig(level=logging.INFO)
@@ -39,6 +39,8 @@ async def lifespan(app: FastAPI):
         print("✅ Telegram bot initialized")
         dp.update.middleware(DbMiddleware())
         dp.include_router(registration_router)
+        dp.include_router(qa_handlers_router)  # ИСПРАВЛЕНО
+        dp.include_router(user_questions_router)
 
         # Автоматически устанавливаем webhook в production
         if os.getenv("ENVIRONMENT") == "production":

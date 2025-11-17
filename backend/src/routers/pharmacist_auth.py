@@ -7,39 +7,55 @@ import uuid
 from db.database import get_db
 from db.qa_models import User, Pharmacist
 
+
 from db.qa_schemas import PharmacistCreate, PharmacistResponse, UserResponse, PharmacyInfoSimple
 from auth.auth import create_access_token, get_current_pharmacist
 from utils.time_utils import get_utc_now_naive
 
 router = APIRouter()
 
-# ЗАМЕНИТЬ импорты
-from db.qa_schemas import PharmacistCreate, PharmacistResponse, UserResponse, PharmacyInfoSimple
-# УДАЛИТЬ: from db.models import Pharmacy
-# УДАЛИТЬ: from db.schemas import PharmacyRead
+# pharmacist_auth.py - ДОБАВИТЬ эту функцию
+async def get_or_create_user(telegram_data: dict, db: AsyncSession) -> User:
+    """Найти или создать пользователя"""
+    from sqlalchemy import select
+    import uuid
+
+    result = await db.execute(
+        select(User).where(User.telegram_id == telegram_data["telegram_user_id"])
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        user = User(
+            uuid=uuid.uuid4(),
+            telegram_id=telegram_data["telegram_user_id"],
+            first_name=telegram_data.get("first_name"),
+            last_name=telegram_data.get("last_name"),
+            telegram_username=telegram_data.get("telegram_username"),
+            user_type="pharmacist"
+        )
+        db.add(user)
+        await db.flush()
+
+    return user
 
 @router.post("/register-from-telegram/", response_model=PharmacistResponse)
 async def register_pharmacist(
     telegram_data: dict,
     db: AsyncSession = Depends(get_db)
 ):
-    """Регистрация фармацевта с данными об аптеке в JSON"""
+    """Регистрация фармацевта с обновленной структурой данных"""
     try:
         user = await get_or_create_user(telegram_data, db)
 
-        # Данные об аптеке (из Telegram)
-        pharmacy_info = {
-            "name": telegram_data.get("pharmacy_name", ""),
-            "number": telegram_data.get("pharmacy_number", ""),
-            "city": telegram_data.get("pharmacy_city", ""),
-            "chain": telegram_data.get("pharmacy_chain", "Новамедика")
-        }
+        # Используем готовые данные об аптеке из telegram_data
+        pharmacy_info = telegram_data.get("pharmacy_info", {})
 
         # Создаем фармацевта
         pharmacist = Pharmacist(
             uuid=uuid.uuid4(),
             user_id=user.uuid,
-            pharmacy_info=pharmacy_info,  # ✅ Сохраняем в JSON
+            pharmacy_info=pharmacy_info,
             is_active=True
         )
 
@@ -50,7 +66,7 @@ async def register_pharmacist(
         return PharmacistResponse(
             uuid=pharmacist.uuid,
             user=UserResponse.model_validate(user),
-            pharmacy_info=pharmacy_info,
+            pharmacy_info=PharmacyInfoSimple(**pharmacy_info),
             is_active=pharmacist.is_active
         )
 

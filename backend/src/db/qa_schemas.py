@@ -1,3 +1,4 @@
+# db/qa_schemas.py
 from pydantic import BaseModel
 from datetime import datetime
 from typing import List, Optional, Dict, Any
@@ -18,25 +19,26 @@ class UserResponse(UserBase):
 
     model_config = {"from_attributes": True}
 
+# Обновленная схема информации об аптеке
+class PharmacyInfoSimple(BaseModel):
+    name: str
+    number: str
+    city: Optional[str] = ""  # Теперь необязательное поле
+    chain: str
+    role: str  # Новое поле: "Фармацевт" или "Провизор"
+
+    model_config = {"from_attributes": True}
+
 class PharmacistBase(BaseModel):
     pharmacy_info: Dict[str, Any]
 
 class PharmacistCreate(PharmacistBase):
     user_data: UserBase
 
-
-
-class PharmacyInfoSimple(BaseModel):
-    name: str
-    number: str
-    city: str
-    chain: str
-
-    
 class PharmacistResponse(BaseModel):
     uuid: uuid.UUID
     user: UserResponse
-    pharmacy_info: PharmacyInfoSimple  # ✅ Заменяем PharmacyRead
+    pharmacy_info: PharmacyInfoSimple
     is_active: bool
 
     model_config = {"from_attributes": True}
@@ -75,6 +77,3 @@ class AnswerResponse(BaseModel):
     pharmacist: PharmacistResponse
 
     model_config = {"from_attributes": True}
-
-
-
