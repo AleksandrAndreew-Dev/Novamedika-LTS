@@ -39,27 +39,39 @@ async def get_or_create_user(telegram_data: dict, db: AsyncSession) -> User:
 
     return user
 
+# В pharmacist_auth.py в функции register_pharmacist
 @router.post("/register-from-telegram/", response_model=PharmacistResponse)
 async def register_pharmacist(
     telegram_data: dict,
     db: AsyncSession = Depends(get_db)
 ):
-    """Регистрация фармацевта с обновленной структурой данных"""
+    """Регистрация фармацевта с проверкой дубликатов"""
     try:
         user = await get_or_create_user(telegram_data, db)
-
-        # Используем готовые данные об аптеке из telegram_data
         pharmacy_info = telegram_data.get("pharmacy_info", {})
 
-        # Создаем фармацевта
-        pharmacist = Pharmacist(
-            uuid=uuid.uuid4(),
-            user_id=user.uuid,
-            pharmacy_info=pharmacy_info,
-            is_active=True
+        # Проверяем, нет ли уже такой же записи
+        result = await db.execute(
+            select(Pharmacist)
+            .where(Pharmacist.user_id == user.uuid)
+            .where(Pharmacist.pharmacy_info["name"].astext == pharmacy_info.get("name"))
         )
+        existing_pharmacist = result.scalar_one_or_none()
 
-        db.add(pharmacist)
+        if existing_pharmacist:
+            # Если запись уже есть, активируем ее
+            existing_pharmacist.is_active = True
+            pharmacist = existing_pharmacist
+        else:
+            # Создаем новую запись
+            pharmacist = Pharmacist(
+                uuid=uuid.uuid4(),
+                user_id=user.uuid,
+                pharmacy_info=pharmacy_info,
+                is_active=True
+            )
+            db.add(pharmacist)
+
         await db.commit()
         await db.refresh(pharmacist)
 
@@ -79,18 +91,26 @@ async def pharmacist_login(
     telegram_user_id: int,
     db: AsyncSession = Depends(get_db)
 ):
-    """Логин фармацевта по Telegram ID"""
+    """Логин фармацевта по Telegram ID (поддерживает несколько аптек)"""
     try:
         result = await db.execute(
             select(Pharmacist)
             .join(User, Pharmacist.user_id == User.uuid)
             .options(selectinload(Pharmacist.user))
             .where(User.telegram_id == telegram_user_id)
+            .where(Pharmacist.is_active == True)
         )
-        pharmacist = result.scalar_one_or_none()
+        pharmacists = result.scalars().all()
 
-        if not pharmacist:
+        if not pharmacists:
             raise HTTPException(status_code=404, detail="Фармацевт не найден")
+
+        # Берем первого активного фармацевта
+        pharmacist = pharmacists[0]
+
+        # Если нужно, можно вернуть список всех аптек для выбора
+        if len(pharmacists) > 1:
+            logger.info(f"User {telegram_user_id} has {len(pharmacists)} active pharmacist profiles")
 
         # Создаем JWT токен
         access_token = create_access_token(data={"sub": str(pharmacist.uuid)})
@@ -103,13 +123,12 @@ async def pharmacist_login(
                 user=UserResponse.model_validate(pharmacist.user),
                 pharmacy_info=pharmacist.pharmacy_info,
                 is_active=pharmacist.is_active
-            )
+            ),
+            "total_pharmacies": len(pharmacists)  # Информация о количестве аптек
         }
     except HTTPException:
-        # Пробрасываем ожидаемые ошибки как есть
         raise
     except Exception as e:
-        # Непредвиденная ошибка
         raise HTTPException(status_code=500, detail=str(e))
 
 

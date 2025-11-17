@@ -86,19 +86,28 @@ async def process_answer_text(message: Message, state: FSMContext, db: AsyncSess
             await state.clear()
             return
 
-        # Находим фармацевта
+        # ИСПРАВЛЕННЫЙ ПОИСК: получаем ВСЕХ фармацевтов для пользователя
         result = await db.execute(
             select(Pharmacist)
             .join(User, Pharmacist.user_id == User.uuid)
             .where(User.telegram_id == message.from_user.id)
+            .where(Pharmacist.is_active == True)  # только активные
             .options(selectinload(Pharmacist.user))
         )
-        pharmacist = result.scalar_one_or_none()
+        pharmacists = result.scalars().all()
 
-        if not pharmacist:
+        if not pharmacists:
             await message.answer("❌ Фармацевт не найден. Пройдите регистрацию /start")
             await state.clear()
             return
+
+        # Если несколько фармацевтов, берем первого активного
+        pharmacist = pharmacists[0]
+
+        # Если нужно дать выбор аптеки, можно добавить клавиатуру выбора
+        if len(pharmacists) > 1:
+            # Пока берем первого, но можно добавить выбор аптеки
+            logger.info(f"User {message.from_user.id} has {len(pharmacists)} pharmacist profiles, using first active")
 
         # Используем внутреннюю функцию
         from routers.qa import answer_question_internal
