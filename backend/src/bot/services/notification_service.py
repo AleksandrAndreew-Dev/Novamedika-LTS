@@ -10,48 +10,52 @@ from utils.time_utils import get_utc_now_naive
 
 logger = logging.getLogger(__name__)
 
+# notification_service.py - ИСПРАВЛЕННАЯ ФУНКЦИЯ
 async def notify_pharmacists_about_new_question(question, db: AsyncSession):
     """Уведомить всех активных фармацевтов о новом вопросе"""
     try:
-        bot, _ = await bot_manager.initialize()
-        if not bot:
-            return
+        from db.database import async_session_maker
 
-        # Используем правильные названия колонок
-        online_threshold = get_utc_now_naive() - timedelta(minutes=5)
-        result = await db.execute(
-            select(Pharmacist)
-            .join(Pharmacist.user)
-            .where(Pharmacist.is_active == True)
-            .where(Pharmacist.is_online == True)  # Теперь колонка существует
-            .where(Pharmacist.last_seen >= online_threshold)
-        )
-        pharmacists = result.scalars().all()
+        # Используем отдельную сессию для уведомлений
+        async with async_session_maker() as notify_session:
+            bot, _ = await bot_manager.initialize()
+            if not bot:
+                return
 
-        if not pharmacists:
-            logger.info("No online pharmacists to notify")
-            return
+            online_threshold = get_utc_now_naive() - timedelta(minutes=5)
+            result = await notify_session.execute(
+                select(Pharmacist)
+                .join(Pharmacist.user)
+                .where(Pharmacist.is_active == True)
+                .where(Pharmacist.is_online == True)
+                .where(Pharmacist.last_seen >= online_threshold)
+            )
+            pharmacists = result.scalars().all()
 
-        message_text = (
-            "🆕 Новый вопрос от пользователя!\n\n"
-            f"❓ Вопрос: {question.text[:200]}...\n"
-            f"📅 Время: {question.created_at.strftime('%H:%M %d.%m.%Y')}\n\n"
-            "Для ответа используйте команду /questions"
-        )
+            if not pharmacists:
+                logger.info("No online pharmacists to notify")
+                return
 
-        notified_count = 0
-        for pharmacist in pharmacists:
-            try:
-                if pharmacist.user.telegram_id:
-                    await bot.send_message(
-                        chat_id=pharmacist.user.telegram_id,
-                        text=message_text
-                    )
-                    notified_count += 1
-            except Exception as e:
-                logger.error(f"Failed to notify pharmacist {pharmacist.uuid}: {e}")
+            message_text = (
+                "🆕 Новый вопрос от пользователя!\n\n"
+                f"❓ Вопрос: {question.text[:200]}...\n"
+                f"📅 Время: {question.created_at.strftime('%H:%M %d.%m.%Y')}\n\n"
+                "Для ответа используйте команду /questions"
+            )
 
-        logger.info(f"Notified {notified_count} online pharmacists about new question")
+            notified_count = 0
+            for pharmacist in pharmacists:
+                try:
+                    if pharmacist.user.telegram_id:
+                        await bot.send_message(
+                            chat_id=pharmacist.user.telegram_id,
+                            text=message_text
+                        )
+                        notified_count += 1
+                except Exception as e:
+                    logger.error(f"Failed to notify pharmacist {pharmacist.uuid}: {e}")
+
+            logger.info(f"Notified {notified_count} online pharmacists about new question")
 
     except Exception as e:
         logger.error(f"Error in notification service: {e}")

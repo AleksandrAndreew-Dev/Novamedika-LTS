@@ -11,6 +11,7 @@ from bot.core import bot_manager
 
 logger = logging.getLogger(__name__)
 
+
 async def answer_question_internal(
     question_id: str,
     answer: AnswerBase,
@@ -36,7 +37,7 @@ async def answer_question_internal(
             text=answer.text
         )
 
-        question.status = 'answered'
+        question.status = "answered"
         question.answered_by = pharmacist.uuid
 
         db.add(new_answer)
@@ -44,7 +45,7 @@ async def answer_question_internal(
         await db.refresh(new_answer)
 
         # Отправка ответа пользователю
-        await send_answer_to_user(question, answer.text, db)
+        await send_answer_to_user(question, answer.text, pharmacist, db)
 
         return new_answer
 
@@ -53,21 +54,32 @@ async def answer_question_internal(
         logger.error(f"Error in answer_question_internal: {e}")
         raise
 
-async def send_answer_to_user(question, answer_text: str, db: AsyncSession):
+
+async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncSession):
     """Отправка ответа пользователю в Telegram"""
     try:
-        from bot.core import bot_manager
         bot, _ = await bot_manager.initialize()
 
         if not bot:
             logger.error("Bot not initialized for sending answer to user")
             return
 
-        if question.user.telegram_id:
+        if question.user and question.user.telegram_id:
+            # Формируем информацию о фармацевте
+            pharmacy_info = getattr(pharmacist, "pharmacy_info", {}) or {}
+            chain = pharmacy_info.get("chain", "Не указана")
+            number = pharmacy_info.get("number", "Не указан")
+            role = pharmacy_info.get("role", "Фармацевт")
+
+            pharmacist_info = f"{chain}, аптека №{number}"
+            if role:
+                pharmacist_info += f" ({role})"
+
             message_text = (
                 "💊 Получен ответ на ваш вопрос!\n\n"
                 f"❓ Ваш вопрос: {question.text}\n\n"
-                f"💬 Ответ фармацевта: {answer_text}\n\n"
+                f"💬 Ответ: {answer_text}\n\n"
+                f"👨‍⚕️ Ответ предоставил: {pharmacist_info}\n\n"
                 "Спасибо, что пользуйтесь нашим сервисом! ❤️"
             )
 
@@ -75,7 +87,7 @@ async def send_answer_to_user(question, answer_text: str, db: AsyncSession):
                 chat_id=question.user.telegram_id,
                 text=message_text
             )
-            logger.info(f"Answer sent to user {question.user.telegram_id}")
+            logger.info(f"Answer sent to user {question.user.telegram_id} from pharmacist {pharmacist.uuid}")
 
     except Exception as e:
         logger.error(f"Failed to send answer to user: {e}")

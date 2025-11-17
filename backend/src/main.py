@@ -8,7 +8,6 @@ import logging
 from db.database import Base, engine
 
 
-
 from routers.upload import router as upload_router
 from routers.search import router as search_router
 from routers.pharmacies_info import router as pharm_info_router
@@ -25,6 +24,7 @@ from bot.handlers.qa_states import QAStates, UserQAStates
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 async def lifespan(app: FastAPI):
     print("🚀 Backend starting up...")
@@ -75,6 +75,7 @@ async def lifespan(app: FastAPI):
     await bot_manager.shutdown()
     await engine.dispose()
 
+
 app = FastAPI(
     title="Novamedika API",
     description="Backend API for Novamedika",
@@ -91,6 +92,7 @@ app.include_router(pharmacist_router, tags=["pharmacists"])
 app.include_router(qa_router, tags=["q&a"])
 app.include_router(auth_router, tags=["auth"])  # добавлен
 
+
 # Более безопасная обработка CORS
 origins_raw = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
 origins = [origin.strip() for origin in origins_raw.split(",") if origin.strip()]
@@ -103,13 +105,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.get("/")
 async def get_main():
     return {"message": "Hello Novamedika API", "status": "running"}
 
+
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "backend", "version": "1.0.0"}
+
 
 @app.get("/api/info")
 async def api_info():
@@ -119,6 +124,8 @@ async def api_info():
         "environment": os.getenv("ENVIRONMENT", "development"),
     }
 
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

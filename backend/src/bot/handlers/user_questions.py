@@ -58,11 +58,21 @@ async def cmd_ask(message: Message, state: FSMContext, db: AsyncSession):
     )
     online_count = result.scalar() or 0
 
-    status_text = (
-        f"👥 Фармацевтов онлайн: {online_count}\n\n"
-        if online_count > 0
-        else "⏳ В настоящее время фармацевтов нет онлайн, но ваш вопрос будет сохранен\n\n"
-    )
+    # Более информативный статус
+    if online_count > 0:
+        status_text = f"👥 Фармацевтов онлайн: {online_count}\n💬 Ваш вопрос будет обработан в ближайшее время\n\n"
+    elif online_count == 0:
+        # Получаем общее количество активных фармацевтов (не обязательно онлайн)
+        total_result = await db.execute(
+            select(func.count(Pharmacist.uuid))
+            .where(Pharmacist.is_active == True)
+        )
+        total_pharmacists = total_result.scalar() or 0
+
+        if total_pharmacists > 0:
+            status_text = f"⏳ Сейчас нет фармацевтов онлайн (всего в системе: {total_pharmacists})\n📝 Ваш вопрос будет сохранен и обработан при появлении фармацевтов\n\n"
+        else:
+            status_text = "⏳ В системе пока нет фармацевтов\n📝 Ваш вопрос будет сохранен и обработан при подключении фармацевтов\n\n"
 
     await message.answer(
         f"{status_text}"
@@ -158,13 +168,35 @@ async def process_dialog_message(message: Message, state: FSMContext, db: AsyncS
         await message.answer("❌ Ошибка при обработке сообщения.")
 
 @router.message(Command("done"))
-async def cmd_done(message: Message, state: FSMContext):
+async def cmd_done(message: Message, state: FSMContext, db: AsyncSession):
     """Завершить текущий диалог"""
+    current_state = await state.get_state()
+
+    if current_state == UserQAStates.in_dialog:
+        data = await state.get_data()
+        question_id = data.get('current_question_id')
+
+        if question_id:
+            # Можно добавить логику отметки вопроса как завершенного
+            try:
+                result = await db.execute(
+                    select(Question).where(Question.uuid == uuid.UUID(question_id))
+                )
+                question = result.scalar_one_or_none()
+                if question:
+                    # Можно добавить поле "user_completed" или подобное
+                    logger.info(f"User completed question {question_id}")
+            except Exception as e:
+                logger.error(f"Error updating question completion: {e}")
+
     await state.clear()
     await message.answer(
         "✅ Диалог завершен. Если у вас появится новый вопрос, используйте /ask\n\n"
         "📋 Чтобы посмотреть историю вопросов, используйте /my_questions"
     )
+
+
+
 
 @router.message(Command("cancel"))
 async def cmd_cancel(message: Message, state: FSMContext):
@@ -250,8 +282,19 @@ async def handle_user_message(message: Message, state: FSMContext, db: AsyncSess
             # Если ждем вопроса, обрабатываем как новый вопрос
             await process_user_question(message, state, db)
         else:
-            # Если не в состоянии диалога, предлагаем начать его
+            # Если не в состоянии диалога, предлагаем начать его с информацией об онлайн статусе
+            online_threshold = get_utc_now_naive() - timedelta(minutes=5)
+            result = await db.execute(
+                select(func.count(Pharmacist.uuid))
+                .where(Pharmacist.is_online == True)
+                .where(Pharmacist.last_seen >= online_threshold)
+            )
+            online_count = result.scalar() or 0
+
+            online_info = f"👥 Фармацевтов онлайн: {online_count}\n\n" if online_count > 0 else ""
+
             await message.answer(
+                f"{online_info}"
                 "💊 Чтобы задать вопрос фармацевту, используйте команду /ask\n\n"
                 "📋 Для справки используйте /help"
             )
@@ -261,27 +304,64 @@ async def handle_user_message(message: Message, state: FSMContext, db: AsyncSess
         await message.answer("❌ Произошла ошибка. Попробуйте позже.")
 
 @router.message(Command("help"))
-async def user_help(message: Message, db: AsyncSession):
-    """Справка для пользователей"""
-    # Проверяем, не является ли пользователь фармацевтом
-    from routers.pharmacist_auth import get_pharmacist_by_telegram_id
-    pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
+async def universal_help(message: Message, db: AsyncSession):
+    """Универсальная справка, которая определяет тип пользователя"""
+    try:
+        from routers.pharmacist_auth import get_pharmacist_by_telegram_id
+        pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
 
-    if pharmacist:
-        await message.answer("ℹ️ Вы фармацевт. Используйте /help в контексте фармацевта.")
-        return
+        # Получаем количество онлайн фармацевтов (общее для обоих случаев)
+        online_threshold = get_utc_now_naive() - timedelta(minutes=5)
+        result = await db.execute(
+            select(func.count(Pharmacist.uuid))
+            .where(Pharmacist.is_online == True)
+            .where(Pharmacist.last_seen >= online_threshold)
+        )
+        online_count = result.scalar() or 0
 
-    help_text = (
-        "💊 Бот вопрос-ответ Novamedika\n\n"
-        "📋 Доступные команды:\n\n"
-        "❓ Задать вопрос:\n"
-        "/ask - Начать новый вопрос\n"
-        "/done - Завершить текущий диалог\n"
-        "/cancel - Отменить текущее действие\n\n"
-        "📊 Мои вопросы:\n"
-        "/my_questions - Мои вопросы и ответы\n\n"
-        "ℹ️ Справка:\n"
-        "/help - Эта справка\n\n"
-        "💡 После команды /ask все ваши сообщения будут добавляться к текущему вопросу до тех пор, пока вы не используете /done"
-    )
-    await message.answer(help_text)
+        if pharmacist:
+            # Справка для фармацевтов
+            help_text = (
+                f"👥 Фармацевтов онлайн: {online_count}\n\n"
+                "👨‍⚕️ Справка для фармацевтов:\n\n"
+                "📋 Основные команды:\n"
+                "/online - Перейти в онлайн\n"
+                "/offline - Перейти в офлайн\n"
+                "/status - Мой статус\n"
+                "/questions - Вопросы для ответа\n"
+                "/my_questions - Мои назначенные вопросы\n\n"
+                "💡 В онлайн-режиме вы получаете уведомления о новых вопросах"
+            )
+        else:
+            # Справка для обычных пользователей с информацией об онлайн фармацевтах
+            online_status = (
+                f"👥 Сейчас онлайн: {online_count} фармацевт(ов)\n\n"
+                if online_count > 0
+                else "⏳ В настоящее время фармацевтов нет онлайн, но вопросы сохраняются\n\n"
+            )
+
+            help_text = (
+                f"{online_status}"
+                "💊 Бот вопрос-ответ Novamedika\n\n"
+                "📋 Доступные команды:\n\n"
+                "❓ Задать вопрос:\n"
+                "/ask - Начать новый вопрос\n"
+                "/done - Завершить текущий диалог\n"
+                "/cancel - Отменить текущее действие\n\n"
+                "📊 Мои вопросы:\n"
+                "/my_questions - Мои вопросы и ответы\n\n"
+                "💡 После команды /ask все ваши сообщения будут добавляться к текущему вопросу до тех пор, пока вы не используете /done"
+            )
+
+        await message.answer(help_text)
+
+    except Exception as e:
+        logger.error(f"Error in universal help: {e}")
+        # Упрощенная справка при ошибке
+        await message.answer(
+            "💊 Бот вопрос-ответ Novamedika\n\n"
+            "Основные команды:\n"
+            "/ask - Задать вопрос фармацевту\n"
+            "/my_questions - Мои вопросы\n"
+            "/help - Справка"
+        )
