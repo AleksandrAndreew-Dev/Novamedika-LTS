@@ -23,6 +23,7 @@ class RegistrationStates(StatesGroup):
     waiting_secret_word = State()
 
 
+# В функции cmd_start заменить приветствие для незарегистрированных:
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext, db: AsyncSession):
     """Улучшенное приветственное сообщение"""
@@ -30,7 +31,7 @@ async def cmd_start(message: Message, state: FSMContext, db: AsyncSession):
     pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
 
     if pharmacist:
-        # Показываем статус для зарегистрированного фармацевта
+        # Показываем статус для зарегистрированного фармацевта (С ИМЕНЕМ)
         status_text = "🟢 Онлайн" if pharmacist.is_online else "🔴 Офлайн"
         await message.answer(
             f"👨‍⚕️ Добро пожаловать назад, {message.from_user.first_name}!\n\n"
@@ -47,9 +48,9 @@ async def cmd_start(message: Message, state: FSMContext, db: AsyncSession):
         )
         return
 
-    # Для незарегистрированных пользователей
+    # Для незарегистрированных пользователей (БЕЗ ИМЕНИ)
     await message.answer(
-        f"👋 Добро пожаловать в Novamedika Q&A Bot, {message.from_user.first_name}!\n\n"
+        "👋 Добро пожаловать в Novamedika Q&A Bot!\n\n"
         "🤖 Я помогу вам получить ответы на вопросы о лекарствах и здоровье.\n\n"
         "👥 **Для пользователей:**\n"
         "• /ask - задать вопрос фармацевту\n"

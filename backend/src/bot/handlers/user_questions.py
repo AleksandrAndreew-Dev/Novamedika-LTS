@@ -271,6 +271,7 @@ async def cmd_my_questions(message: Message, db: AsyncSession):
         logger.error(f"Error getting user questions: {e}")
         await message.answer("❌ Ошибка при получении ваших вопросов")
 
+# В функции handle_user_message заменить приветствие:
 @router.message(F.text & ~F.command)
 async def handle_user_message(message: Message, state: FSMContext, db: AsyncSession):
     """Обработка обычных сообщений с улучшенным приветствием"""
@@ -290,7 +291,7 @@ async def handle_user_message(message: Message, state: FSMContext, db: AsyncSess
         elif current_state == UserQAStates.waiting_for_question:
             await process_user_question(message, state, db)
         else:
-            # ПРИВЕТСТВЕННОЕ СООБЩЕНИЕ ДЛЯ НОВЫХ ПОЛЬЗОВАТЕЛЕЙ
+            # ПРИВЕТСТВЕННОЕ СООБЩЕНИЕ ДЛЯ НОВЫХ ПОЛЬЗОВАТЕЛЕЙ (БЕЗ ИМЕНИ)
             online_threshold = get_utc_now_naive() - timedelta(minutes=5)
             result = await db.execute(
                 select(func.count(Pharmacist.uuid))
@@ -300,8 +301,8 @@ async def handle_user_message(message: Message, state: FSMContext, db: AsyncSess
             online_count = result.scalar() or 0
 
             welcome_text = (
-                f"👋 Привет, {message.from_user.first_name}!\n\n"
-                f"💊 **Добро пожаловать в Novamedika Q&A Bot!**\n\n"
+                "👋 Привет!\n\n"
+                "💊 **Добро пожаловать в Novamedika Q&A Bot!**\n\n"
             )
 
             if online_count > 0:
