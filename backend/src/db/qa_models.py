@@ -1,10 +1,19 @@
-
 import uuid
-from sqlalchemy import Column, String, Text, Boolean, BigInteger, DateTime, JSON, ForeignKey
+from sqlalchemy import (
+    Column,
+    String,
+    Text,
+    Boolean,
+    BigInteger,
+    DateTime,
+    JSON,
+    ForeignKey,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from db.database import Base
 from utils.time_utils import get_utc_now_naive
+
 
 class User(Base):
     __tablename__ = "qa_users"
@@ -20,6 +29,7 @@ class User(Base):
 
     questions = relationship("Question", back_populates="user")
 
+
 class Pharmacist(Base):
     __tablename__ = "qa_pharmacists"
 
@@ -30,12 +40,19 @@ class Pharmacist(Base):
     pharmacy_info = Column(JSON, nullable=False, default=dict)
     is_active = Column(Boolean, default=True)
     is_online = Column(Boolean, default=False)  # Новое поле для онлайн статуса
-    last_seen = Column(DateTime, default=get_utc_now_naive)  # Время последней активности
+    last_seen = Column(
+        DateTime, default=get_utc_now_naive
+    )  # Время последней активности
     created_at = Column(DateTime, default=get_utc_now_naive)
 
     user = relationship("User")
-    assigned_questions = relationship("Question", foreign_keys="Question.assigned_to", back_populates="assigned_pharmacist")
+    assigned_questions = relationship(
+        "Question",
+        foreign_keys="Question.assigned_to",
+        back_populates="assigned_pharmacist",
+    )
     answers = relationship("Answer", back_populates="pharmacist")
+
 
 class Question(Base):
     __tablename__ = "qa_questions"
@@ -43,30 +60,39 @@ class Question(Base):
     uuid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("qa_users.uuid"), nullable=False)
     text = Column(Text, nullable=False)
-    status = Column(String(20), default="pending")  # pending, answered, closed
+    status = Column(String(20), default="pending")
     category = Column(String(50), default="general")
 
-    assigned_to = Column(UUID(as_uuid=True), ForeignKey("qa_pharmacists.uuid"), nullable=True)
-    answered_by = Column(UUID(as_uuid=True), ForeignKey("qa_pharmacists.uuid"), nullable=True)
+    assigned_to = Column(
+        UUID(as_uuid=True), ForeignKey("qa_pharmacists.uuid"), nullable=True
+    )
+    answered_by = Column(
+        UUID(as_uuid=True), ForeignKey("qa_pharmacists.uuid"), nullable=True
+    )
 
     context_data = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=get_utc_now_naive)
     answered_at = Column(DateTime, nullable=True)
-    status = Column(String(20), default="pending")
 
     user = relationship("User", back_populates="questions")
-    assigned_pharmacist = relationship("Pharmacist", foreign_keys=[assigned_to], back_populates="assigned_questions")
+    assigned_pharmacist = relationship(
+        "Pharmacist", foreign_keys=[assigned_to], back_populates="assigned_questions"
+    )
     answers = relationship("Answer", back_populates="question")
+
 
 class Answer(Base):
     __tablename__ = "qa_answers"
 
     uuid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    question_id = Column(UUID(as_uuid=True), ForeignKey("qa_questions.uuid"), nullable=False)
-    pharmacist_id = Column(UUID(as_uuid=True), ForeignKey("qa_pharmacists.uuid"), nullable=False)
+    question_id = Column(
+        UUID(as_uuid=True), ForeignKey("qa_questions.uuid"), nullable=False
+    )
+    pharmacist_id = Column(
+        UUID(as_uuid=True), ForeignKey("qa_pharmacists.uuid"), nullable=False
+    )
     text = Column(Text, nullable=False)
     created_at = Column(DateTime, default=get_utc_now_naive)
 
     question = relationship("Question", back_populates="answers")
     pharmacist = relationship("Pharmacist", back_populates="answers")
-

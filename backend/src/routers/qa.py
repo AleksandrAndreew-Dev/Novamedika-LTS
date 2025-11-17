@@ -8,6 +8,10 @@ from db.database import get_db
 from db.qa_models import User, Question, Answer, Pharmacist
 from db.qa_schemas import QuestionCreate, QuestionResponse, AnswerBase, AnswerResponse
 from auth.auth import get_current_pharmacist
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -21,7 +25,9 @@ async def answer_question_internal(
     """Внутренняя функция для ответа на вопрос (используется ботом)"""
     try:
         result = await db.execute(
-            select(Question).where(Question.uuid == uuid.UUID(question_id))
+            select(Question)
+            .options(selectinload(Question.user))
+            .where(Question.uuid == uuid.UUID(question_id))
         )
         question = result.scalar_one_or_none()
 
@@ -42,6 +48,9 @@ async def answer_question_internal(
         await db.commit()
         await db.refresh(new_answer)
 
+        # 🔴 ВАЖНО: ОТПРАВКА ОТВЕТА ПОЛЬЗОВАТЕЛЮ
+        await send_answer_to_user(question, answer.text, db)
+
         return AnswerResponse.model_validate(new_answer)
 
     except Exception as e:
@@ -50,6 +59,33 @@ async def answer_question_internal(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ошибка при создании ответа: {str(e)}"
         )
+
+async def send_answer_to_user(question, answer_text: str, db: AsyncSession):
+    """Отправка ответа пользователю в Telegram"""
+    try:
+        from bot.core import bot_manager
+        bot, _ = await bot_manager.initialize()
+
+        if not bot:
+            logger.error("Bot not initialized for sending answer to user")
+            return
+
+        if question.user.telegram_id:
+            message_text = (
+                "💊 Получен ответ на ваш вопрос!\n\n"
+                f"❓ Ваш вопрос: {question.text}\n\n"
+                f"💬 Ответ фармацевта: {answer_text}\n\n"
+                "Спасибо, что пользуйтесь нашим сервисом! ❤️"
+            )
+
+            await bot.send_message(
+                chat_id=question.user.telegram_id,
+                text=message_text
+            )
+            logger.info(f"Answer sent to user {question.user.telegram_id}")
+
+    except Exception as e:
+        logger.error(f"Failed to send answer to user: {e}")
 
 # Вспомогательные функции
 async def get_or_create_user(telegram_data: dict, db: AsyncSession) -> User:
@@ -277,6 +313,7 @@ async def get_user_questions(
             detail=f"Ошибка при получении вопросов: {str(e)}"
         )
 
+# routers/qa.py - ДОПОЛНЕНИЯ
 
 @router.get("/pharmacist/questions", response_model=List[QuestionResponse])
 async def get_pharmacist_questions(

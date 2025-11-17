@@ -17,13 +17,13 @@ async def notify_pharmacists_about_new_question(question, db: AsyncSession):
         if not bot:
             return
 
-        # Получаем только онлайн фармацевтов (активных за последние 5 минут)
+        # Используем правильные названия колонок
         online_threshold = get_utc_now_naive() - timedelta(minutes=5)
         result = await db.execute(
             select(Pharmacist)
             .join(Pharmacist.user)
             .where(Pharmacist.is_active == True)
-            .where(Pharmacist.is_online == True)
+            .where(Pharmacist.is_online == True)  # Теперь колонка существует
             .where(Pharmacist.last_seen >= online_threshold)
         )
         pharmacists = result.scalars().all()
@@ -55,4 +55,3 @@ async def notify_pharmacists_about_new_question(question, db: AsyncSession):
 
     except Exception as e:
         logger.error(f"Error in notification service: {e}")
-

@@ -6,13 +6,16 @@ from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
-import logging
+
 from typing import List
 from datetime import timedelta
 
 from db.qa_models import Question, Pharmacist, User
 from bot.handlers.qa_states import QAStates
 from utils.time_utils import get_utc_now_naive
+import logging
+
+
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -219,7 +222,7 @@ async def process_answer_text(message: Message, state: FSMContext, db: AsyncSess
             logger.info(f"User {message.from_user.id} has {len(pharmacists)} pharmacist profiles, using first active")
 
         # Используем внутреннюю функцию
-        from routers.qa import answer_question_internal
+        from bot.services.qa_service import answer_question_internal
         from db.qa_schemas import AnswerBase
 
         answer_data = AnswerBase(text=message.text)

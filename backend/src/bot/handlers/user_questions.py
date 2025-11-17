@@ -1,4 +1,3 @@
-
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.filters import Command
@@ -16,11 +15,12 @@ from utils.time_utils import get_utc_now_naive
 logger = logging.getLogger(__name__)
 router = Router()
 
-async def get_or_create_user(telegram_id: int, first_name: str, username: str, db: AsyncSession) -> User:
+
+async def get_or_create_user(
+    telegram_id: int, first_name: str, username: str, db: AsyncSession
+) -> User:
     """Создать или найти пользователя - БЕЗ РЕГИСТРАЦИИ"""
-    result = await db.execute(
-        select(User).where(User.telegram_id == telegram_id)
-    )
+    result = await db.execute(select(User).where(User.telegram_id == telegram_id))
     user = result.scalar_one_or_none()
 
     if not user:
@@ -29,12 +29,13 @@ async def get_or_create_user(telegram_id: int, first_name: str, username: str, d
             telegram_id=telegram_id,
             first_name=first_name,
             telegram_username=username,
-            user_type="customer"
+            user_type="customer",
         )
         db.add(user)
         await db.flush()
 
     return user
+
 
 @router.message(Command("ask"))
 async def cmd_ask(message: Message, state: FSMContext, db: AsyncSession):
@@ -48,7 +49,11 @@ async def cmd_ask(message: Message, state: FSMContext, db: AsyncSession):
     )
     online_count = result.scalar() or 0
 
-    status_text = f"👥 Фармацевтов онлайн: {online_count}\n\n" if online_count > 0 else "⏳ В настоящее время фармацевтов нет онлайн, но ваш вопрос будет сохранен\n\n"
+    status_text = (
+        f"👥 Фармацевтов онлайн: {online_count}\n\n"
+        if online_count > 0
+        else "⏳ В настоящее время фармацевтов нет онлайн, но ваш вопрос будет сохранен\n\n"
+    )
 
     await message.answer(
         f"{status_text}"
@@ -57,16 +62,26 @@ async def cmd_ask(message: Message, state: FSMContext, db: AsyncSession):
         "Фармацевты ответят вам в ближайшее время."
     )
 
+
 @router.message(F.text & ~F.command)
 async def handle_user_question(message: Message, db: AsyncSession):
-    """Обработка вопросов от пользователей (без регистрации)"""
+    """Обработка вопросов от пользователей (только для пользователей)"""
     try:
+        # ПРОВЕРЯЕМ, ЯВЛЯЕТСЯ ЛИ ПОЛЬЗОВАТЕЛЬ ФАРМАЦЕВТОМ
+        from routers.pharmacist_auth import get_pharmacist_by_telegram_id
+        pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
+
+        if pharmacist:
+            # Если это фармацевт, игнорируем обычные сообщения
+            logger.info(f"Pharmacist {pharmacist.uuid} sent message, ignoring as user question")
+            return
+        
         # Создаем или находим пользователя
         user = await get_or_create_user(
             telegram_id=message.from_user.id,
             first_name=message.from_user.first_name,
             username=message.from_user.username,
-            db=db
+            db=db,
         )
 
         # Создаем вопрос
@@ -75,7 +90,7 @@ async def handle_user_question(message: Message, db: AsyncSession):
             user_id=user.uuid,
             text=message.text,
             status="pending",
-            category="general"
+            category="general",
         )
 
         db.add(question)
@@ -83,7 +98,10 @@ async def handle_user_question(message: Message, db: AsyncSession):
         await db.refresh(question)
 
         # Уведомляем фармацевтов
-        from bot.services.notification_service import notify_pharmacists_about_new_question
+        from bot.services.notification_service import (
+            notify_pharmacists_about_new_question,
+        )
+
         await notify_pharmacists_about_new_question(question, db)
 
         await message.answer(
@@ -95,7 +113,10 @@ async def handle_user_question(message: Message, db: AsyncSession):
 
     except Exception as e:
         logger.error(f"Error processing user question: {e}")
-        await message.answer("❌ Произошла ошибка при отправке вопроса. Попробуйте позже.")
+        await message.answer(
+            "❌ Произошла ошибка при отправке вопроса. Попробуйте позже."
+        )
+
 
 @router.message(Command("my_questions"))
 async def cmd_my_questions(message: Message, db: AsyncSession):
@@ -111,7 +132,9 @@ async def cmd_my_questions(message: Message, db: AsyncSession):
         questions = result.scalars().all()
 
         if not questions:
-            await message.answer("📭 У вас пока нет вопросов. Задайте вопрос с помощью команды /ask")
+            await message.answer(
+                "📭 У вас пока нет вопросов. Задайте вопрос с помощью команды /ask"
+            )
             return
 
         for question in questions:
@@ -129,3 +152,18 @@ async def cmd_my_questions(message: Message, db: AsyncSession):
         logger.error(f"Error getting user questions: {e}")
         await message.answer("❌ Ошибка при получении ваших вопросов")
 
+
+@router.message(Command("help"))
+async def user_help(message: Message, db: AsyncSession):
+    """Справка для пользователей"""
+    help_text = (
+        "💊 Бот вопрос-ответ Novamedika\n\n"
+        "📋 Доступные команды:\n\n"
+        "❓ Задать вопрос:\n"
+        "/ask - Задать вопрос фармацевту\n"
+        "/my_questions - Мои вопросы и ответы\n\n"
+        "ℹ️ Справка:\n"
+        "/help - Эта справка\n\n"
+        "Просто напишите ваш вопрос и отправьте его - фармацевты ответят вам в ближайшее время!"
+    )
+    await message.answer(help_text)

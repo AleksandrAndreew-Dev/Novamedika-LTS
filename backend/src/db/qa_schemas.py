@@ -23,7 +23,7 @@ class UserResponse(UserBase):
 class PharmacyInfoSimple(BaseModel):
     name: str
     number: str
-    city: Optional[str] = ""  
+    city: Optional[str] = ""
     chain: str
     role: str
 
@@ -51,6 +51,16 @@ class QuestionBase(BaseModel):
 class QuestionCreate(QuestionBase):
     telegram_user_id: int
 
+
+class AnswerResponse(BaseModel):
+    uuid: uuid.UUID
+    text: str
+    created_at: datetime
+    pharmacist: PharmacistResponse
+
+    model_config = {"from_attributes": True}
+
+# ДОБАВИТЬ в QuestionResponse:
 class QuestionResponse(BaseModel):
     uuid: uuid.UUID
     text: str
@@ -61,6 +71,7 @@ class QuestionResponse(BaseModel):
     context_data: Optional[Dict[str, Any]]
     assigned_to: Optional[PharmacistResponse] = None
     answered_by: Optional[PharmacistResponse] = None
+    answers: List[AnswerResponse] = []
 
     model_config = {"from_attributes": True}
 
@@ -70,10 +81,4 @@ class AnswerBase(BaseModel):
 class AnswerCreate(AnswerBase):
     question_id: uuid.UUID
 
-class AnswerResponse(BaseModel):
-    uuid: uuid.UUID
-    text: str
-    created_at: datetime
-    pharmacist: PharmacistResponse
 
-    model_config = {"from_attributes": True}

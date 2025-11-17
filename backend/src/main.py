@@ -16,6 +16,7 @@ from routers.telegram_bot import router as telegram_router
 from routers.pharmacist_auth import router as pharmacist_router
 from routers.qa import router as qa_router
 from auth.auth import router as auth_router
+
 from bot.handlers.user_questions import router as user_questions_router
 from bot.handlers.qa_handlers import router as qa_handlers_router
 from bot.middleware.db import DbMiddleware
