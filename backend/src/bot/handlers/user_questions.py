@@ -1,17 +1,18 @@
-# user_questions.py - ОБНОВЛЕННАЯ ВЕРСИЯ
+# user_questions.py - ФИНАЛЬНАЯ ИСПРАВЛЕННАЯ ВЕРСИЯ
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 import logging
 import uuid
 from datetime import timedelta
-from routers.pharmacist_auth import get_pharmacist_by_telegram_id
 
 from db.qa_models import User, Question, Pharmacist, Answer
 from utils.time_utils import get_utc_now_naive
+from routers.pharmacist_auth import get_pharmacist_by_telegram_id
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -43,12 +44,20 @@ async def get_or_create_user(
 async def cmd_ask(message: Message, state: FSMContext, db: AsyncSession):
     """Начать диалог с вопросом"""
     # Проверяем, не является ли пользователь фармацевтом
-    from routers.pharmacist_auth import get_pharmacist_by_telegram_id
     pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
 
     if pharmacist:
         await message.answer("ℹ️ Вы зарегистрированы как фармацевт. Используйте команды /questions для ответов на вопросы.")
         return
+
+    # Проверяем, не находится ли пользователь уже в диалоге
+    current_state = await state.get_state()
+    if current_state == UserQAStates.in_dialog:
+        data = await state.get_data()
+        question_id = data.get('current_question_id')
+        if question_id:
+            await message.answer("⚠️ У вас уже есть активный вопрос. Завершите его с помощью /done прежде чем задавать новый.")
+            return
 
     # Показываем количество онлайн фармацевтов
     online_threshold = get_utc_now_naive() - timedelta(minutes=5)
@@ -59,28 +68,23 @@ async def cmd_ask(message: Message, state: FSMContext, db: AsyncSession):
     )
     online_count = result.scalar() or 0
 
-    # Более информативный статус
     if online_count > 0:
         status_text = f"👥 Фармацевтов онлайн: {online_count}\n💬 Ваш вопрос будет обработан в ближайшее время\n\n"
-    elif online_count == 0:
-        # Получаем общее количество активных фармацевтов (не обязательно онлайн)
+    else:
         total_result = await db.execute(
             select(func.count(Pharmacist.uuid))
             .where(Pharmacist.is_active == True)
         )
         total_pharmacists = total_result.scalar() or 0
-
-        if total_pharmacists > 0:
-            status_text = f"⏳ Сейчас нет фармацевтов онлайн (всего в системе: {total_pharmacists})\n📝 Ваш вопрос будет сохранен и обработан при появлении фармацевтов\n\n"
-        else:
-            status_text = "⏳ В системе пока нет фармацевтов\n📝 Ваш вопрос будет сохранен и обработан при подключении фармацевтов\n\n"
+        status_text = f"⏳ Сейчас нет фармацевтов онлайн (всего в системе: {total_pharmacists})\n📝 Ваш вопрос будет сохранен\n\n"
 
     await message.answer(
         f"{status_text}"
         "💊 Задайте ваш вопрос фармацевту:\n\n"
         "Просто напишите ваш вопрос и отправьте его. "
         "Фармацевты ответят вам в ближайшее время.\n\n"
-        "❌ Чтобы отменить, используйте /cancel"
+        "❌ Чтобы отменить, используйте /cancel\n"
+        "✅ Чтобы завершить вопрос, используйте /done"
     )
     await state.set_state(UserQAStates.waiting_for_question)
 
@@ -113,24 +117,25 @@ async def process_user_question(message: Message, state: FSMContext, db: AsyncSe
         from bot.services.notification_service import notify_pharmacists_about_new_question
         await notify_pharmacists_about_new_question(question, db)
 
-        # Сохраняем ID вопроса для продолжения диалога
+        # Сохраняем ID вопрос для продолжения диалога
         await state.update_data(current_question_id=str(question.uuid))
 
         await message.answer(
             "✅ Ваш вопрос принят! Ожидайте ответа от фармацевта.\n\n"
             "Вы получите уведомление, когда на ваш вопрос ответят.\n"
             "Можете продолжать писать сообщения - они добавятся к этому же вопросу.\n\n"
-            "❌ Чтобы завершить вопрос, используйте /done"
+            "✅ Чтобы завершить вопрос, используйте /done\n"
+            "❌ Чтобы отменить, используйте /cancel"
         )
 
         # Переходим в состояние диалога
         await state.set_state(UserQAStates.in_dialog)
-
         logger.info(f"New question from user {user.uuid}: {message.text[:100]}...")
 
     except Exception as e:
         logger.error(f"Error processing user question: {e}")
         await message.answer("❌ Произошла ошибка при отправке вопроса. Попробуйте позже.")
+        await state.clear()
 
 @router.message(UserQAStates.in_dialog)
 async def process_dialog_message(message: Message, state: FSMContext, db: AsyncSession):
@@ -161,7 +166,8 @@ async def process_dialog_message(message: Message, state: FSMContext, db: AsyncS
 
         await message.answer(
             "✅ Ваше сообщение добавлено к вопросу. Фармацевт увидит его когда будет отвечать.\n\n"
-            "❌ Чтобы завершить вопрос, используйте /done"
+            "✅ Чтобы завершить вопрос, используйте /done\n"
+            "❌ Чтобы отменить, используйте /cancel"
         )
 
     except Exception as e:
@@ -170,7 +176,7 @@ async def process_dialog_message(message: Message, state: FSMContext, db: AsyncS
 
 @router.message(Command("done"))
 async def cmd_done(message: Message, state: FSMContext, db: AsyncSession):
-    """Завершить текущий диалог"""
+    """Завершить текущий диалог и отметить вопрос как завершенный пользователем"""
     current_state = await state.get_state()
 
     if current_state == UserQAStates.in_dialog:
@@ -178,14 +184,17 @@ async def cmd_done(message: Message, state: FSMContext, db: AsyncSession):
         question_id = data.get('current_question_id')
 
         if question_id:
-            # Можно добавить логику отметки вопроса как завершенного
             try:
                 result = await db.execute(
                     select(Question).where(Question.uuid == uuid.UUID(question_id))
                 )
                 question = result.scalar_one_or_none()
                 if question:
-                    # Можно добавить поле "user_completed" или подобное
+                    # Добавляем пометку, что пользователь завершил диалог
+                    question.context_data = question.context_data or {}
+                    question.context_data["user_completed"] = True
+                    question.context_data["completed_at"] = get_utc_now_naive().isoformat()
+                    await db.commit()
                     logger.info(f"User completed question {question_id}")
             except Exception as e:
                 logger.error(f"Error updating question completion: {e}")
@@ -195,9 +204,6 @@ async def cmd_done(message: Message, state: FSMContext, db: AsyncSession):
         "✅ Диалог завершен. Если у вас появится новый вопрос, используйте /ask\n\n"
         "📋 Чтобы посмотреть историю вопросов, используйте /my_questions"
     )
-
-
-
 
 @router.message(Command("cancel"))
 async def cmd_cancel(message: Message, state: FSMContext):
@@ -214,8 +220,8 @@ async def cmd_cancel(message: Message, state: FSMContext):
 async def cmd_my_questions(message: Message, db: AsyncSession):
     """Показать вопросы пользователя и ответы на них"""
     try:
-        # Проверяем, не является ли пользователь фармацевтом
-        from routers.pharmacist_auth import get_pharmacist_by_telegram_id
+        from sqlalchemy.orm import selectinload
+
         pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
 
         if pharmacist:
@@ -226,15 +232,14 @@ async def cmd_my_questions(message: Message, db: AsyncSession):
             select(Question)
             .join(User)
             .where(User.telegram_id == message.from_user.id)
+            .options(selectinload(Question.answers))
             .order_by(Question.created_at.desc())
             .limit(10)
         )
         questions = result.scalars().all()
 
         if not questions:
-            await message.answer(
-                "📭 У вас пока нет вопросов. Задайте вопрос с помощью команды /ask"
-            )
+            await message.answer("📭 У вас пока нет вопросов. Задайте вопрос с помощью команды /ask")
             return
 
         for question in questions:
@@ -245,8 +250,14 @@ async def cmd_my_questions(message: Message, db: AsyncSession):
             text += f"📅 Дата: {question.created_at.strftime('%d.%m.%Y %H:%M')}\n"
 
             if question.answers:
-                text += f"\n💊 Ответ фармацевта:\n{question.answers[0].text}\n"
-                text += f"📅 Ответ дан: {question.answers[0].created_at.strftime('%d.%m.%Y %H:%M')}"
+                if len(question.answers) == 1:
+                    text += f"\n💊 Ответ фармацевта:\n{question.answers[0].text}\n"
+                    text += f"📅 Ответ дан: {question.answers[0].created_at.strftime('%d.%m.%Y %H:%M')}"
+                else:
+                    text += f"\n💊 Ответы фармацевтов ({len(question.answers)}):\n"
+                    for i, answer in enumerate(question.answers, 1):
+                        text += f"\n{i}. {answer.text}\n"
+                        text += f"📅 Ответ дан: {answer.created_at.strftime('%d.%m.%Y %H:%M')}\n"
 
             # Разделяем длинные сообщения
             if len(text) > 4000:
@@ -265,7 +276,6 @@ async def handle_user_message(message: Message, state: FSMContext, db: AsyncSess
     """Обработка обычных сообщений от пользователей"""
     try:
         # Проверяем, не является ли пользователь фармацевтом
-        from routers.pharmacist_auth import get_pharmacist_by_telegram_id
         pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
 
         if pharmacist:
@@ -308,7 +318,6 @@ async def handle_user_message(message: Message, state: FSMContext, db: AsyncSess
 async def universal_help(message: Message, db: AsyncSession):
     """Универсальная справка, которая определяет тип пользователя"""
     try:
-        from bot.handlers.registration import get_pharmacist_by_telegram_id
         pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
 
         # Получаем количество онлайн фармацевтов (общее для обоих случаев)

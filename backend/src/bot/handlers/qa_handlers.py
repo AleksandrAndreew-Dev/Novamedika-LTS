@@ -15,27 +15,14 @@ from bot.handlers.qa_states import QAStates
 from utils.time_utils import get_utc_now_naive
 import logging
 
+from routers.pharmacist_auth import get_pharmacist_by_telegram_id
+
 
 
 logger = logging.getLogger(__name__)
 router = Router()
 
 
-# ДОБАВИТЬ в начало файла:
-async def get_pharmacist_by_telegram_id(telegram_id: int, db: AsyncSession):
-    """Найти фармацевта по Telegram ID"""
-    from sqlalchemy import select
-    from sqlalchemy.orm import selectinload
-    from db.qa_models import Pharmacist, User
-
-    result = await db.execute(
-        select(Pharmacist)
-        .join(User, Pharmacist.user_id == User.uuid)
-        .options(selectinload(Pharmacist.user))
-        .where(User.telegram_id == telegram_id)
-        .where(Pharmacist.is_active == True)
-    )
-    return result.scalars().first()
 
 @router.message(Command("online"))
 async def set_online(message: Message, db: AsyncSession):
@@ -261,7 +248,7 @@ async def process_answer_text(message: Message, state: FSMContext, db: AsyncSess
 async def cmd_help(message: Message, db: AsyncSession):
     """Справка для фармацевтов"""
     try:
-        from bot.handlers.registration import get_pharmacist_by_telegram_id
+        
         pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
 
         if pharmacist:

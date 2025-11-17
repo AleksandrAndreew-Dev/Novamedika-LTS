@@ -202,3 +202,13 @@ async def get_status(
         "pharmacy_info": pharmacist.pharmacy_info
     }
 
+
+
+# В конце pharmacist_auth.py добавить:
+__all__ = [
+    'router',
+    'get_pharmacist_by_telegram_id',
+    'get_or_create_user',
+    'register_pharmacist',
+    'pharmacist_login'
+]

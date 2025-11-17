@@ -9,6 +9,8 @@ from sqlalchemy.orm import selectinload
 import logging
 import os
 
+from routers.pharmacist_auth import get_pharmacist_by_telegram_id
+
 from db.qa_models import Pharmacist, User  # ДОБАВИТЬ импорт моделей
 
 logger = logging.getLogger(__name__)
@@ -21,22 +23,12 @@ class RegistrationStates(StatesGroup):
     waiting_secret_word = State()
 
 
-async def get_pharmacist_by_telegram_id(telegram_id: int, db: AsyncSession):
-    """Найти фармацевта по Telegram ID"""
-    result = await db.execute(
-        select(Pharmacist)
-        .join(User, Pharmacist.user_id == User.uuid)
-        .options(selectinload(Pharmacist.user))
-        .where(User.telegram_id == telegram_id)
-        .where(Pharmacist.is_active == True)
-    )
-    return result.scalars().first()
 
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext, db: AsyncSession):
     """Начало регистрации с выбором сети аптек"""
     # Проверяем, не зарегистрирован ли уже пользователь
-    pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)  # УДАЛИТЬ импорт из routers
+    pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
 
     if pharmacist:
         await message.answer(
