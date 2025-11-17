@@ -165,24 +165,18 @@ async def get_webhook_info():
 from dotenv import load_dotenv
 from fastapi import Header
 
-load_dotenv(".env")
+from fastapi import Header, HTTPException, status
 
 ADMIN_API_KEYS = [k.strip() for k in os.getenv("ADMIN_API_KEYS", "").split(",") if k.strip()]
 
-async def verify_admin_api_key(x_api_key: str | None = Header(None)):
-    """Проверка API ключа админа. Ожидает заголовок X-Api-Key"""
+async def verify_admin_api_key(x_api_key: str = Header(..., alias="X-Api-Key")):
     if not ADMIN_API_KEYS:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Admin API keys not configured",
-        )
-
-    if not x_api_key or x_api_key not in ADMIN_API_KEYS:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid admin API key",
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail="Admin API keys not configured")
+    if x_api_key not in ADMIN_API_KEYS:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin API key")
     return True
+
 
 
 
