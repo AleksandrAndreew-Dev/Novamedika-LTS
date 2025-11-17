@@ -18,6 +18,7 @@ from db.qa_models import User, Question, Pharmacist, Answer
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+
 @router.post("/webhook/")
 async def telegram_webhook(request: Request):
     """Webhook endpoint для Telegram бота"""
@@ -27,7 +28,9 @@ async def telegram_webhook(request: Request):
         if secret_token:
             received_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
             if received_secret != secret_token:
-                logger.warning(f"Invalid secret token. Received: {received_secret}, Expected: {secret_token}")
+                logger.warning(
+                    f"Invalid secret token. Received: {received_secret}, Expected: {secret_token}"
+                )
                 return {"status": "error", "detail": "Unauthorized"}
 
         bot, dp = await bot_manager.initialize()
@@ -52,6 +55,7 @@ async def telegram_webhook(request: Request):
     except Exception as e:
         logger.error(f"Webhook processing error: {str(e)}")
         return {"status": "error", "detail": str(e)}
+
 
 @router.post("/set_webhook/")
 async def set_webhook():
@@ -95,7 +99,7 @@ async def set_webhook():
             "bot_info": {
                 "username": bot_info.username,
                 "first_name": bot_info.first_name,
-                "id": bot_info.id
+                "id": bot_info.id,
             },
             "webhook_info": {
                 "url": webhook_info.url,
@@ -105,13 +109,14 @@ async def set_webhook():
                 "last_error_date": webhook_info.last_error_date,
                 "last_error_message": webhook_info.last_error_message,
                 "max_connections": webhook_info.max_connections,
-                "allowed_updates": webhook_info.allowed_updates
-            }
+                "allowed_updates": webhook_info.allowed_updates,
+            },
         }
 
     except Exception as e:
         logger.error(f"Set webhook error: {str(e)}")
         return {"status": "error", "detail": str(e)}
+
 
 @router.post("/delete_webhook/")
 async def delete_webhook():
@@ -127,6 +132,7 @@ async def delete_webhook():
     except Exception as e:
         logger.error(f"Delete webhook error: {str(e)}")
         return {"status": "error", "detail": str(e)}
+
 
 @router.get("/webhook_info/")
 async def get_webhook_info():
@@ -148,36 +154,41 @@ async def get_webhook_info():
                 "last_error_date": webhook_info.last_error_date,
                 "last_error_message": webhook_info.last_error_message,
                 "max_connections": webhook_info.max_connections,
-                "allowed_updates": webhook_info.allowed_updates
-            }
+                "allowed_updates": webhook_info.allowed_updates,
+            },
         }
 
     except Exception as e:
         logger.error(f"Get webhook info error: {str(e)}")
         return {"status": "error", "detail": str(e)}
 
+from dotenv import load_dotenv
+from fastapi import Header
 
-ADMIN_API_KEYS = [key.strip() for key in os.getenv("ADMIN_API_KEYS", "").split(",") if key.strip()]
+load_dotenv(".env")
 
-async def verify_admin_api_key(api_key: str = Depends(lambda: "")):
-    """Проверка API ключа админа"""
+ADMIN_API_KEYS = [k.strip() for k in os.getenv("ADMIN_API_KEYS", "").split(",") if k.strip()]
+
+async def verify_admin_api_key(x_api_key: str | None = Header(None)):
+    """Проверка API ключа админа. Ожидает заголовок X-Api-Key"""
     if not ADMIN_API_KEYS:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Admin API keys not configured"
+            detail="Admin API keys not configured",
         )
 
-    if api_key not in ADMIN_API_KEYS:
+    if not x_api_key or x_api_key not in ADMIN_API_KEYS:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid admin API key"
+            detail="Invalid admin API key",
         )
     return True
 
+
+
 @router.post("/qa/drop", summary="Очистка всей базы QA")
 async def drop_qa_database(
-    admin: bool = Depends(verify_admin_api_key),
-    db: AsyncSession = Depends(get_db)
+    admin: bool = Depends(verify_admin_api_key), db: AsyncSession = Depends(get_db)
 ):
     """Очистка всей базы QA (только для админов)"""
     try:
@@ -200,7 +211,7 @@ async def drop_qa_database(
         return {
             "status": "success",
             "message": "QA database cleared successfully",
-            "cleared_tables": cleared_tables
+            "cleared_tables": cleared_tables,
         }
 
     except Exception as e:
@@ -208,13 +219,13 @@ async def drop_qa_database(
         logger.error(f"Error dropping QA database: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error clearing database: {str(e)}"
+            detail=f"Error clearing database: {str(e)}",
         )
+
 
 @router.get("/qa/stats", summary="Статистика базы QA")
 async def get_qa_stats(
-    admin: bool = Depends(verify_admin_api_key),
-    db: AsyncSession = Depends(get_db)
+    admin: bool = Depends(verify_admin_api_key), db: AsyncSession = Depends(get_db)
 ):
     """Получить статистику базы QA"""
     try:
@@ -254,34 +265,38 @@ async def get_qa_stats(
             "pharmacists": {
                 "total": pharmacist_count.scalar(),
                 "active": active_pharmacists.scalar(),
-                "online": online_pharmacists.scalar()
+                "online": online_pharmacists.scalar(),
             },
             "questions": {
                 "total": question_count.scalar(),
                 "pending": pending_questions.scalar(),
                 "answered": answered_questions.scalar(),
-                "answer_rate": answered_questions.scalar() / question_count.scalar() if question_count.scalar() > 0 else 0
+                "answer_rate": (
+                    answered_questions.scalar() / question_count.scalar()
+                    if question_count.scalar() > 0
+                    else 0
+                ),
             },
-            "answers": answer_count.scalar()
+            "answers": answer_count.scalar(),
         }
 
         return {
             "status": "success",
             "stats": stats,
-            "timestamp": get_utc_now_naive().isoformat()
+            "timestamp": get_utc_now_naive().isoformat(),
         }
 
     except Exception as e:
         logger.error(f"Error getting QA stats: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error getting statistics: {str(e)}"
+            detail=f"Error getting statistics: {str(e)}",
         )
+
 
 @router.post("/qa/reset-pharmacists-status", summary="Сброс статуса фармацевтов")
 async def reset_pharmacists_status(
-    admin: bool = Depends(verify_admin_api_key),
-    db: AsyncSession = Depends(get_db)
+    admin: bool = Depends(verify_admin_api_key), db: AsyncSession = Depends(get_db)
 ):
     """Сбросить всех фармацевтов в офлайн статус"""
     try:
@@ -298,7 +313,7 @@ async def reset_pharmacists_status(
         return {
             "status": "success",
             "message": f"Reset {len(online_pharmacists)} pharmacists to offline",
-            "reset_count": len(online_pharmacists)
+            "reset_count": len(online_pharmacists),
         }
 
     except Exception as e:
@@ -306,13 +321,13 @@ async def reset_pharmacists_status(
         logger.error(f"Error resetting pharmacists status: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error resetting pharmacists status: {str(e)}"
+            detail=f"Error resetting pharmacists status: {str(e)}",
         )
+
 
 @router.get("/qa/questions/pending", summary="Список ожидающих вопросов")
 async def get_pending_questions(
-    admin: bool = Depends(verify_admin_api_key),
-    db: AsyncSession = Depends(get_db)
+    admin: bool = Depends(verify_admin_api_key), db: AsyncSession = Depends(get_db)
 ):
     """Получить список всех ожидающих вопросов"""
     try:
@@ -320,10 +335,7 @@ async def get_pending_questions(
 
         result = await db.execute(
             select(Question)
-            .options(
-                selectinload(Question.user),
-                selectinload(Question.answers)
-            )
+            .options(selectinload(Question.user), selectinload(Question.answers))
             .where(Question.status == "pending")
             .order_by(Question.created_at.desc())
         )
@@ -331,27 +343,29 @@ async def get_pending_questions(
 
         questions_data = []
         for question in questions:
-            questions_data.append({
-                "id": str(question.uuid),
-                "text": question.text,
-                "created_at": question.created_at.isoformat(),
-                "user": {
-                    "telegram_id": question.user.telegram_id,
-                    "first_name": question.user.first_name,
-                    "username": question.user.telegram_username
-                },
-                "answer_count": len(question.answers)
-            })
+            questions_data.append(
+                {
+                    "id": str(question.uuid),
+                    "text": question.text,
+                    "created_at": question.created_at.isoformat(),
+                    "user": {
+                        "telegram_id": question.user.telegram_id,
+                        "first_name": question.user.first_name,
+                        "username": question.user.telegram_username,
+                    },
+                    "answer_count": len(question.answers),
+                }
+            )
 
         return {
             "status": "success",
             "count": len(questions_data),
-            "questions": questions_data
+            "questions": questions_data,
         }
 
     except Exception as e:
         logger.error(f"Error getting pending questions: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error getting pending questions: {str(e)}"
+            detail=f"Error getting pending questions: {str(e)}",
         )
