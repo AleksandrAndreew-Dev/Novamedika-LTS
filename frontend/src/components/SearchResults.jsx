@@ -111,7 +111,11 @@ export default function SearchResults({
       <div className="bg-white rounded-2xl shadow-sm border border-telegram-border overflow-hidden">
         {/* Header */}
         <div className="border-b border-telegram-border px-4 py-3">
-          <div className={isTelegram ? "space-y-3" : "flex justify-between items-start"}>
+          <div
+            className={
+              isTelegram ? "space-y-3" : "flex justify-between items-start"
+            }
+          >
             <div className={isTelegram ? "space-y-2" : "flex-1"}>
               <h2 className="text-lg font-semibold text-gray-800">
                 Результаты поиска:
@@ -130,29 +134,22 @@ export default function SearchResults({
             {!isTelegram && (
               <div className="flex gap-2">
                 <button
-                  onClick={onBackToForms}
-                  disabled={loading}
-                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center text-sm"
-                >
-                  <svg
-                    className="w-4 h-4 mr-2"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                    />
-                  </svg>
-                  Выбор формы
-                </button>
-                <button
                   onClick={onNewSearch}
                   disabled={loading}
                   className="bg-telegram-primary text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center text-sm"
+                >
+                  Новый поиск
+                </button>
+              </div>
+            )}
+
+            {/* Кнопки для Telegram версии */}
+            {isTelegram && (
+              <div className="flex gap-2 pt-3">
+                <button
+                  onClick={onNewSearch}
+                  disabled={loading}
+                  className="flex-1 bg-telegram-primary text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center text-sm"
                 >
                   Новый поиск
                 </button>
