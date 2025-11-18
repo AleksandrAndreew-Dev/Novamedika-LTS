@@ -157,11 +157,6 @@ export default function FormSelection({
                           <div className="text-sm font-medium text-gray-800">
                             {group.displayName}
                           </div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            {group.names.size > 1
-                              ? `${group.names.size} вариантов`
-                              : "1 вариант"}
-                          </div>
                         </td>
                         <td className="py-3 px-4">
                           <div className="text-sm text-gray-600">
