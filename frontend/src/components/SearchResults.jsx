@@ -12,39 +12,41 @@ export default function SearchResults({
 }) {
   // Функция для группировки и суммирования количества одинаковых продуктов в одной аптеке
   const getGroupedResults = () => {
-    const grouped = {};
+  const grouped = {};
 
-    results.forEach((item) => {
-      // Ключ группировки: аптека + название + форма + производитель + страна
-      const key = `${item.pharmacy_number}-${item.name}-${item.form}-${item.manufacturer}-${item.country}`;
+  results.forEach((item) => {
+    // Ключ группировки: аптека + название + форма + производитель (без страны)
+    const key = `${item.pharmacy_number}-${item.name}-${item.form}-${item.manufacturer}`;
 
-      if (!grouped[key]) {
-        // Первое вхождение - создаем новую запись
-        grouped[key] = {
-          ...item,
-          // Преобразуем quantity в число для последующего суммирования
-          quantity: Math.round((parseFloat(item.quantity) || 0) * 1000) / 1000,
-        };
-      } else {
-        // Уже существует - суммируем количество
-        grouped[key].quantity += parseFloat(item.quantity) || 0;
+    if (!grouped[key]) {
+      // Первое вхождение - создаем новую запись
+      grouped[key] = {
+        ...item,
+        quantity: parseFloat(item.quantity) || 0,
+      };
+    } else {
+      // Уже существует - суммируем количество
+      grouped[key].quantity += parseFloat(item.quantity) || 0;
 
-        // Берем самую свежую дату обновления
-        const currentDate = new Date(grouped[key].updated_at);
-        const newDate = new Date(item.updated_at);
-        if (newDate > currentDate) {
-          grouped[key].updated_at = item.updated_at;
-        }
+      // Берем самую свежую дату обновления
+      const currentDate = new Date(grouped[key].updated_at);
+      const newDate = new Date(item.updated_at);
+      if (newDate > currentDate) {
+        grouped[key].updated_at = item.updated_at;
       }
-    });
+    }
+  });
 
-    return Object.values(grouped);
-  };
+  return Object.values(grouped);
+};
   const formatQuantity = (quantity) => {
-    const num = parseFloat(quantity);
-    if (isNaN(num)) return "0";
-    return Math.round(num * 1000) / 1000;
-  };
+  const num = parseFloat(quantity);
+  if (isNaN(num)) return "0";
+
+  // Округляем до 3 знаков после запятой и убираем лишние нули
+  const formatted = Math.round(num * 1000) / 1000;
+  return formatted.toString().replace(/\.?0+$/, '');
+};
 
   const groupedResults = getGroupedResults();
 
