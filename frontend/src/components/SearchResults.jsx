@@ -6,7 +6,6 @@ export default function SearchResults({
   pagination,
   onPageChange,
   onNewSearch,
-  onBackToForms,
   loading,
   isTelegram,
 }) {
@@ -157,7 +156,7 @@ export default function SearchResults({
             )}
           </div>
 
-         
+
           {/* Кнопки для Telegram версии */}
           {isTelegram && (
             <div className="flex gap-2 pt-3">
