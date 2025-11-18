@@ -309,7 +309,7 @@ export default function Search() {
                 setResults([]);
                 setSearchContext(null);
               }}
-              onBackToForms={() => setStep(2)}
+              onBackToForms={() => setStep(2)} // Добавьте эту строку
               loading={loading}
               isTelegram={isTelegram}
             />

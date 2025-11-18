@@ -49,8 +49,6 @@ export default function FormSelection({
       <div className="bg-white rounded-2xl shadow-sm border border-telegram-border overflow-hidden">
         {/* Header */}
         <div className="border-b border-telegram-border px-6 py-4">
-          
-          button на:
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-lg font-semibold text-gray-800">

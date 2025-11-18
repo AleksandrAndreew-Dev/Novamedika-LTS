@@ -6,6 +6,7 @@ export default function SearchResults({
   pagination,
   onPageChange,
   onNewSearch,
+  onBackToForms,
   loading,
   isTelegram,
 }) {
@@ -109,13 +110,9 @@ export default function SearchResults({
     <div className={`${isTelegram ? "p-2" : "p-4"} max-w-6xl mx-auto`}>
       <div className="bg-white rounded-2xl shadow-sm border border-telegram-border overflow-hidden">
         {/* Header */}
-        <div className="border-b border-telegram-border px-4 py-3">
-          <div
-            className={
-              isTelegram ? "space-y-3" : "flex justify-between items-start"
-            }
-          >
-            <div className={isTelegram ? "space-y-2" : "flex-1"}>
+        <div className="border-b border-telegram-border px-6 py-4">
+          <div className="flex justify-between items-center">
+            <div>
               <h2 className="text-lg font-semibold text-gray-800">
                 Результаты поиска:
               </h2>
@@ -129,9 +126,29 @@ export default function SearchResults({
               </p>
             </div>
 
-            {/* Кнопки для веб-версии */}
+            {/* Кнопки для веб-версии - идентичные FormSelection */}
             {!isTelegram && (
               <div className="flex gap-2">
+                <button
+                  onClick={onBackToForms}
+                  disabled={loading}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center text-sm"
+                >
+                  <svg
+                    className="w-4 h-4 mr-2"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                    />
+                  </svg>
+                  Назад
+                </button>
                 <button
                   onClick={onNewSearch}
                   disabled={loading}
@@ -158,7 +175,7 @@ export default function SearchResults({
 
           {/* Кнопка "Новый поиск" для Telegram */}
           {isTelegram && (
-            <div className="mb-4">
+            <div className="mt-4">
               <button
                 onClick={onNewSearch}
                 disabled={loading}
