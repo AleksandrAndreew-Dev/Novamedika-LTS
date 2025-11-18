@@ -111,55 +111,55 @@ export default function Search() {
   };
 
   // Обновим функцию handleFormSelect
-const handleFormSelect = async (name, form, manufacturer, country) => {
-  setLoading(true);
-  setError(null);
-  try {
-    const params = {
-      name, // добавляем конкретное название
-      form,
-      manufacturer,
-      country,
-      page: 1,
-      size: pagination.size,
-    };
+  const handleFormSelect = async (name, form, manufacturer, country) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = {
+        name, // добавляем конкретное название
+        form,
+        manufacturer,
+        country,
+        page: 1,
+        size: pagination.size,
+      };
 
-    // Добавляем city если есть
-    if (searchData.city) {
-      params.city = searchData.city;
+      // Добавляем city если есть
+      if (searchData.city) {
+        params.city = searchData.city;
+      }
+
+      // Используем searchId если есть
+      if (searchContext?.searchId) {
+        params.search_id = searchContext.searchId;
+      }
+
+      const response = await api.get("/search/", {
+        params,
+      });
+
+      setSearchData((prev) => ({
+        ...prev,
+        name, // обновляем на конкретное название
+        form,
+        manufacturer,
+        country,
+      }));
+      setResults(response.data.items);
+      setPagination((prev) => ({
+        ...prev,
+        page: response.data.page,
+        total: response.data.total,
+        totalPages: response.data.total_pages,
+      }));
+      setStep(3);
+    } catch (error) {
+      console.error("Form selection error:", error);
+      setError("Ошибка при загрузке результатов.");
+    } finally {
+      setLoading(false);
     }
-
-    // Используем searchId если есть
-    if (searchContext?.searchId) {
-      params.search_id = searchContext.searchId;
-    }
-
-    const response = await api.get("/search/", {
-      params,
-    });
-
-    setSearchData((prev) => ({
-      ...prev,
-      name, // обновляем на конкретное название
-      form,
-      manufacturer,
-      country
-    }));
-    setResults(response.data.items);
-    setPagination((prev) => ({
-      ...prev,
-      page: response.data.page,
-      total: response.data.total,
-      totalPages: response.data.total_pages,
-    }));
-    setStep(3);
-  } catch (error) {
-    console.error("Form selection error:", error);
-    setError("Ошибка при загрузке результатов.");
-  } finally {
-    setLoading(false);
-  }
-};
+  };
   const handlePageChange = async (newPage) => {
     setLoading(true);
     try {
@@ -292,7 +292,7 @@ const handleFormSelect = async (name, form, manufacturer, country) => {
               onFormSelect={handleFormSelect}
               onBack={() => setStep(1)}
               loading={loading}
-              isTelegram={isTelegram}
+              isTelegram={isTelegram} // добавляем эту строку
             />
           )}
 

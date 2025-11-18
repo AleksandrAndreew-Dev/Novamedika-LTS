@@ -6,28 +6,29 @@ export default function FormSelection({
   onFormSelect,
   onBack,
   loading,
+  isTelegram, // добавляем этот проп
 }) {
   const [selectedForm, setSelectedForm] = useState("");
 
   // Группируем продукты по уникальной комбинации: форма + производитель + страна
   const groupedByForm = previewProducts.reduce((acc, product) => {
-  // Добавляем name в ключ группировки
-  const key = `${product.name}|${product.form}|${product.manufacturer}|${product.country}`;
+    // Добавляем name в ключ группировки
+    const key = `${product.name}|${product.form}|${product.manufacturer}|${product.country}`;
 
-  if (!acc[key]) {
-    acc[key] = {
-      name: product.name, // добавляем name
-      form: product.form,
-      manufacturer: product.manufacturer,
-      country: product.country,
-      names: new Set([product.name]),
-      example: product,
-    };
-  } else {
-    acc[key].names.add(product.name);
-  }
-  return acc;
-}, {});
+    if (!acc[key]) {
+      acc[key] = {
+        name: product.name, // добавляем name
+        form: product.form,
+        manufacturer: product.manufacturer,
+        country: product.country,
+        names: new Set([product.name]),
+        example: product,
+      };
+    } else {
+      acc[key].names.add(product.name);
+    }
+    return acc;
+  }, {});
 
   // Преобразуем в массив и обрабатываем названия
   const formGroups = Object.values(groupedByForm).map((group) => ({
@@ -37,47 +38,78 @@ export default function FormSelection({
   }));
 
   const handleFormClick = (group) => {
-  const selectedKey = `${group.name}|${group.form}|${group.manufacturer}|${group.country}`;
-  setSelectedForm(selectedKey);
-  // Передаем все параметры включая name
-  onFormSelect(group.name, group.form, group.manufacturer, group.country);
-};
+    const selectedKey = `${group.name}|${group.form}|${group.manufacturer}|${group.country}`;
+    setSelectedForm(selectedKey);
+    // Передаем все параметры включая name
+    onFormSelect(group.name, group.form, group.manufacturer, group.country);
+  };
 
   return (
     <div className="p-4 max-w-6xl mx-auto">
       <div className="bg-white rounded-2xl shadow-sm border border-telegram-border overflow-hidden">
         {/* Header */}
         <div className="border-b border-telegram-border px-6 py-4">
+          // В FormSelection.jsx, внутри header секции, замените существующий
+          button на:
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-lg font-semibold text-gray-800">
                 Выберите форму препарата
               </h2>
               <p className="text-gray-600 text-sm mt-1">
-                для "<span className="font-semibold uppercase">{searchData.name}</span>"
-                {searchData.city && ` в городе ${searchData.city}`}
+                для "
+                <span className="font-semibold uppercase">
+                  {searchData.name}
+                </span>
+                "{searchData.city && ` в городе ${searchData.city}`}
               </p>
             </div>
-            <button
-              onClick={onBack}
-              disabled={loading}
-              className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center text-sm"
-            >
-              <svg
-                className="w-4 h-4 mr-2"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+            <div className="flex gap-2">
+              {/* Добавляем кнопку "Назад" для веб-версии */}
+              {!isTelegram && (
+                <button
+                  onClick={onBack}
+                  disabled={loading}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center text-sm"
+                >
+                  <svg
+                    className="w-4 h-4 mr-2"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                    />
+                  </svg>
+                  Назад
+                </button>
+              )}
+              {/* Существующая кнопка "Новый поиск" */}
+              <button
+                onClick={onBack}
+                disabled={loading}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center text-sm"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                />
-              </svg>
-              Новый поиск
-            </button>
+                <svg
+                  className="w-4 h-4 mr-2"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                  />
+                </svg>
+                Новый поиск
+              </button>
+            </div>
           </div>
         </div>
         <div className="p-6">
@@ -184,9 +216,18 @@ export default function FormSelection({
               <h3 className="text-lg font-medium text-gray-500 mb-2">
                 Формы не найдены
               </h3>
-              <p className="text-gray-400 text-sm">
+              <p className="text-gray-400 text-sm mb-4">
                 Попробуйте изменить параметры поиска
               </p>
+              {/* Добавляем кнопку для возврата */}
+              {!isTelegram && (
+                <button
+                  onClick={onBack}
+                  className="bg-telegram-primary text-white font-medium py-2 px-6 rounded-lg transition-colors hover:bg-blue-600"
+                >
+                  Вернуться к поиску
+                </button>
+              )}
             </div>
           )}
         </div>
