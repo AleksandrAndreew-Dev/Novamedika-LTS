@@ -11,24 +11,23 @@ export default function FormSelection({
 
   // Группируем продукты по уникальной комбинации: форма + производитель + страна
   const groupedByForm = previewProducts.reduce((acc, product) => {
-    const key = `${product.form}|${product.manufacturer}|${product.country}`;
+  // Добавляем name в ключ группировки
+  const key = `${product.name}|${product.form}|${product.manufacturer}|${product.country}`;
 
-    if (!acc[key]) {
-      acc[key] = {
-        form: product.form,
-        manufacturer: product.manufacturer,
-        country: product.country,
-        // Собираем все уникальные названия для этой группы
-        names: new Set([product.name]),
-        // Берем первый продукт как пример для отображения
-        example: product,
-      };
-    } else {
-      // Добавляем новое название в набор
-      acc[key].names.add(product.name);
-    }
-    return acc;
-  }, {});
+  if (!acc[key]) {
+    acc[key] = {
+      name: product.name, // добавляем name
+      form: product.form,
+      manufacturer: product.manufacturer,
+      country: product.country,
+      names: new Set([product.name]),
+      example: product,
+    };
+  } else {
+    acc[key].names.add(product.name);
+  }
+  return acc;
+}, {});
 
   // Преобразуем в массив и обрабатываем названия
   const formGroups = Object.values(groupedByForm).map((group) => ({
@@ -38,10 +37,11 @@ export default function FormSelection({
   }));
 
   const handleFormClick = (group) => {
-    const selectedKey = `${group.form}|${group.manufacturer}|${group.country}`;
-    setSelectedForm(selectedKey);
-    onFormSelect(group.form, group.manufacturer, group.country);
-  };
+  const selectedKey = `${group.name}|${group.form}|${group.manufacturer}|${group.country}`;
+  setSelectedForm(selectedKey);
+  // Передаем все параметры включая name
+  onFormSelect(group.name, group.form, group.manufacturer, group.country);
+};
 
   return (
     <div className="p-4 max-w-6xl mx-auto">

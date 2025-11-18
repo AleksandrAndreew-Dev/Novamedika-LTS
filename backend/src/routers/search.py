@@ -124,89 +124,93 @@ async def search_two_step(
     }
 
 
+# В эндпоинте /search/ обновим логику фильтрации
 @router.get("/search/", response_model=dict)
 async def search_products(
     search_id: Optional[str] = Query(None),
+    name: Optional[str] = Query(None),  # добавляем параметр для конкретного названия
     form: Optional[str] = Query(None),
-    manufacturer: Optional[str] = Query(None),  # добавляем фильтр по производителю
-    country: Optional[str] = Query(None),       # добавляем фильтр по стране
-    name: Optional[str] = Query(None),
-    city: Optional[str] = Query(None),
+    manufacturer: Optional[str] = Query(None),
+    country: Optional[str] = Query(None),
+    city: Optional[str] = Query(None),  # добавляем city как параметр
     page: int = Query(1, ge=1),
     size: int = Query(100, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Второй этап поиска - с выбранной формой препарата, производителем и страной
-    """
-    # Очищаем старые контексты
     _clean_old_contexts()
 
     # Определяем параметры поиска
-    search_name = name
+    search_name = name  # используем переданное конкретное название
     search_city = city
 
     if search_id and search_id in _search_context:
         context = _search_context[search_id]
-        search_name = context["name"]
-        search_city = context["city"]
+        # Если не передано конкретное название, используем из контекста
+        if not search_name:
+            search_name = context["name"]
+        if not search_city:
+            search_city = context["city"]
 
-    # Базовый запрос с пагинацией
+    # Базовый запрос
     query = (
         select(Product)
         .options(joinedload(Product.pharmacy))
         .join(Pharmacy)
-        .where(Product.name.ilike(f"%{search_name}%"))
     )
+
+    # Фильтрация по названию - точное совпадение или LIKE в зависимости от контекста
+    if search_name:
+        if search_id:
+            # Для поиска по ID используем точное совпадение с конкретным названием
+            query = query.where(Product.name == search_name)
+        else:
+            # Для прямого поиска используем LIKE
+            query = query.where(Product.name.ilike(f"%{search_name}%"))
 
     if search_city and search_city != "Все города":
         query = query.where(Pharmacy.city.ilike(f"%{search_city}%"))
     if form:
         query = query.where(Product.form == form)
-    if manufacturer:  # добавляем фильтр по производителю
+    if manufacturer:
         query = query.where(Product.manufacturer == manufacturer)
-    if country:       # добавляем фильтр по стране
+    if country:
         query = query.where(Product.country == country)
 
-    # Получаем общее количество ДО пагинации
+    # Остальная логика остается без изменений...
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
     total = total_result.scalar()
 
-    # Применяем пагинацию
     total_pages = ceil(total / size) if total > 0 else 1
     if page > total_pages:
         page = total_pages
 
     query = (
-        query.order_by(Product.updated_at.desc()).offset((page - 1) * size).limit(size)
+        query.order_by(Product.updated_at.desc())
+        .offset((page - 1) * size)
+        .limit(size)
     )
     result = await db.execute(query)
     products = result.unique().scalars().all()
 
-    # Форматируем результаты
     items = []
     for product in products:
         pharmacy = product.pharmacy
-        items.append(
-            {
-                "uuid": str(product.uuid),
-                "name": product.name,
-                "form": product.form,
-                "manufacturer": product.manufacturer,
-                "country": product.country,
-                "price": float(product.price) if product.price else 0.0,
-                "quantity": float(product.quantity) if product.quantity else 0.0,
-                "pharmacy_name": pharmacy.name if pharmacy else "Unknown",
-                "pharmacy_city": pharmacy.city if pharmacy else "Unknown",
-                "pharmacy_address": pharmacy.address if pharmacy else "Unknown",
-                "pharmacy_phone": pharmacy.phone if pharmacy else "Unknown",
-                "pharmacy_number": pharmacy.pharmacy_number if pharmacy else "N/A",
-                "updated_at": (
-                    product.updated_at.isoformat() if product.updated_at else None
-                ),
-            }
-        )
+        items.append({
+            "uuid": str(product.uuid),
+            "name": product.name,
+            "form": product.form,
+            "manufacturer": product.manufacturer,
+            "country": product.country,
+            "price": float(product.price) if product.price else 0.0,
+            "quantity": float(product.quantity) if product.quantity else 0.0,
+            "pharmacy_name": pharmacy.name if pharmacy else "Unknown",
+            "pharmacy_city": pharmacy.city if pharmacy else "Unknown",
+            "pharmacy_address": pharmacy.address if pharmacy else "Unknown",
+            "pharmacy_phone": pharmacy.phone if pharmacy else "Unknown",
+            "pharmacy_number": pharmacy.pharmacy_number if pharmacy else "N/A",
+            "updated_at": product.updated_at.isoformat() if product.updated_at else None,
+        })
 
     return {
         "items": items,

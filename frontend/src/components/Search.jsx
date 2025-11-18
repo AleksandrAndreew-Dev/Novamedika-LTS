@@ -110,32 +110,41 @@ export default function Search() {
     }
   };
 
-  // В функции handleFormSelect заменить:
-const handleFormSelect = async (form, manufacturer, country) => {
+  // Обновим функцию handleFormSelect
+const handleFormSelect = async (name, form, manufacturer, country) => {
   setLoading(true);
   setError(null);
   try {
     const params = {
+      name, // добавляем конкретное название
       form,
-      manufacturer, // добавляем производителя
-      country,      // добавляем страну
+      manufacturer,
+      country,
       page: 1,
       size: pagination.size,
     };
 
-    // Используем searchId если есть, иначе прямой поиск
+    // Добавляем city если есть
+    if (searchData.city) {
+      params.city = searchData.city;
+    }
+
+    // Используем searchId если есть
     if (searchContext?.searchId) {
       params.search_id = searchContext.searchId;
-    } else {
-      params.name = searchData.name;
-      params.city = searchData.city;
     }
 
     const response = await api.get("/search/", {
       params,
     });
 
-    setSearchData((prev) => ({ ...prev, form, manufacturer, country }));
+    setSearchData((prev) => ({
+      ...prev,
+      name, // обновляем на конкретное название
+      form,
+      manufacturer,
+      country
+    }));
     setResults(response.data.items);
     setPagination((prev) => ({
       ...prev,

@@ -121,11 +121,12 @@ export default function SearchResults({
               <h2 className="text-lg font-semibold text-gray-800">
                 Результаты поиска:
               </h2>
-              // Заменить в заголовке:
+              // Заменить в заголовке: // В заголовке результатов обновим
+              отображение
               <p className="text-telegram-primary font-bold text-sm mt-1 uppercase">
                 {searchData.name} {searchData.form}
                 {searchData.manufacturer && ` - ${searchData.manufacturer}`}
-                {searchData.country && ` ${searchData.country}`}
+                {searchData.country && ` (${searchData.country})`}
               </p>
               <p className="text-gray-600 text-sm mt-1">
                 Найдено {pagination.total} результатов
