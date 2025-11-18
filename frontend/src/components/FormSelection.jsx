@@ -49,7 +49,7 @@ export default function FormSelection({
       <div className="bg-white rounded-2xl shadow-sm border border-telegram-border overflow-hidden">
         {/* Header */}
         <div className="border-b border-telegram-border px-6 py-4">
-          // В FormSelection.jsx, внутри header секции, замените существующий
+          
           button на:
           <div className="flex justify-between items-center">
             <div>
