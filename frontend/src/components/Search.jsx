@@ -110,45 +110,47 @@ export default function Search() {
     }
   };
 
-  const handleFormSelect = async (form) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = {
-        form,
-        page: 1,
-        size: pagination.size,
-      };
+  // В функции handleFormSelect заменить:
+const handleFormSelect = async (form, manufacturer, country) => {
+  setLoading(true);
+  setError(null);
+  try {
+    const params = {
+      form,
+      manufacturer, // добавляем производителя
+      country,      // добавляем страну
+      page: 1,
+      size: pagination.size,
+    };
 
-      // Используем searchId если есть, иначе прямой поиск
-      if (searchContext?.searchId) {
-        params.search_id = searchContext.searchId;
-      } else {
-        params.name = searchData.name;
-        params.city = searchData.city;
-      }
-
-      const response = await api.get("/search/", {
-        params,
-      });
-
-      setSearchData((prev) => ({ ...prev, form }));
-      setResults(response.data.items);
-      setPagination((prev) => ({
-        ...prev,
-        page: response.data.page,
-        total: response.data.total,
-        totalPages: response.data.total_pages,
-      }));
-      setStep(3);
-    } catch (error) {
-      console.error("Form selection error:", error);
-      setError("Ошибка при загрузке результатов.");
-    } finally {
-      setLoading(false);
+    // Используем searchId если есть, иначе прямой поиск
+    if (searchContext?.searchId) {
+      params.search_id = searchContext.searchId;
+    } else {
+      params.name = searchData.name;
+      params.city = searchData.city;
     }
-  };
 
+    const response = await api.get("/search/", {
+      params,
+    });
+
+    setSearchData((prev) => ({ ...prev, form, manufacturer, country }));
+    setResults(response.data.items);
+    setPagination((prev) => ({
+      ...prev,
+      page: response.data.page,
+      total: response.data.total,
+      totalPages: response.data.total_pages,
+    }));
+    setStep(3);
+  } catch (error) {
+    console.error("Form selection error:", error);
+    setError("Ошибка при загрузке результатов.");
+  } finally {
+    setLoading(false);
+  }
+};
   const handlePageChange = async (newPage) => {
     setLoading(true);
     try {

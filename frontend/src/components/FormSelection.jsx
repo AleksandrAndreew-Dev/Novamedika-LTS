@@ -37,9 +37,10 @@ export default function FormSelection({
     displayName: Array.from(group.names).join(", "),
   }));
 
-  const handleFormClick = (form) => {
-    setSelectedForm(form);
-    onFormSelect(form);
+  const handleFormClick = (group) => {
+    const selectedKey = `${group.form}|${group.manufacturer}|${group.country}`;
+    setSelectedForm(selectedKey);
+    onFormSelect(group.form, group.manufacturer, group.country);
   };
 
   return (
@@ -110,51 +111,54 @@ export default function FormSelection({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {formGroups.map((group, index) => (
-                    <tr
-                      key={index}
-                      className={`hover:bg-telegram-primary hover:bg-opacity-5 transition-colors cursor-pointer ${
-                        selectedForm === group.form
-                          ? "bg-telegram-primary bg-opacity-10"
-                          : ""
-                      }`}
-                      onClick={() => handleFormClick(group.form)}
-                    >
-                      <td className="py-3 px-4">
-                        <div className="text-sm font-medium text-gray-800">
-                          {group.displayName}
-                        </div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          {group.names.size > 1
-                            ? `${group.names.size} вариантов`
-                            : "1 вариант"}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="text-sm text-gray-600">
-                          {group.form}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="text-sm text-gray-600">
-                          {group.manufacturer}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="text-sm text-gray-600">
-                          {group.country}
-                        </div>
-                        {loading && selectedForm === group.form && (
-                          <div className="flex items-center mt-1">
-                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-telegram-primary mr-2"></div>
-                            <span className="text-xs text-gray-500">
-                              Загрузка...
-                            </span>
+                  {formGroups.map((group, index) => {
+                    const groupKey = `${group.form}|${group.manufacturer}|${group.country}`;
+                    return (
+                      <tr
+                        key={index}
+                        className={`hover:bg-telegram-primary hover:bg-opacity-5 transition-colors cursor-pointer ${
+                          selectedForm === groupKey
+                            ? "bg-telegram-primary bg-opacity-10"
+                            : ""
+                        }`}
+                        onClick={() => handleFormClick(group)}
+                      >
+                        <td className="py-3 px-4">
+                          <div className="text-sm font-medium text-gray-800">
+                            {group.displayName}
                           </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                          <div className="text-xs text-gray-500 mt-1">
+                            {group.names.size > 1
+                              ? `${group.names.size} вариантов`
+                              : "1 вариант"}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="text-sm text-gray-600">
+                            {group.form}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="text-sm text-gray-600">
+                            {group.manufacturer}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="text-sm text-gray-600">
+                            {group.country}
+                          </div>
+                          {loading && selectedForm === groupKey && (
+                            <div className="flex items-center mt-1">
+                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-telegram-primary mr-2"></div>
+                              <span className="text-xs text-gray-500">
+                                Загрузка...
+                              </span>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

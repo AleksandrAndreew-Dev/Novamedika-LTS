@@ -128,6 +128,8 @@ async def search_two_step(
 async def search_products(
     search_id: Optional[str] = Query(None),
     form: Optional[str] = Query(None),
+    manufacturer: Optional[str] = Query(None),  # добавляем фильтр по производителю
+    country: Optional[str] = Query(None),       # добавляем фильтр по стране
     name: Optional[str] = Query(None),
     city: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
@@ -135,7 +137,7 @@ async def search_products(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Второй этап поиска - с выбранной формой препарата
+    Второй этап поиска - с выбранной формой препарата, производителем и страной
     """
     # Очищаем старые контексты
     _clean_old_contexts()
@@ -161,6 +163,10 @@ async def search_products(
         query = query.where(Pharmacy.city.ilike(f"%{search_city}%"))
     if form:
         query = query.where(Product.form == form)
+    if manufacturer:  # добавляем фильтр по производителю
+        query = query.where(Product.manufacturer == manufacturer)
+    if country:       # добавляем фильтр по стране
+        query = query.where(Product.country == country)
 
     # Получаем общее количество ДО пагинации
     count_query = select(func.count()).select_from(query.subquery())
@@ -208,7 +214,13 @@ async def search_products(
         "page": page,
         "size": size,
         "total_pages": total_pages,
-        "filters": {"name": search_name, "city": search_city, "form": form},
+        "filters": {
+            "name": search_name,
+            "city": search_city,
+            "form": form,
+            "manufacturer": manufacturer,
+            "country": country
+        },
         "search_id": search_id,
     }
 
