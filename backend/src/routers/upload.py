@@ -1,8 +1,9 @@
-
+# upload.py - обновленная версия
 import os
 from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import secrets
+import uuid
 
 import logging
 from tasks.tasks_increment import process_csv_incremental

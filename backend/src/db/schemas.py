@@ -110,3 +110,23 @@ class TwoStepSearchResponse(BaseModel):
     preview_products: List[ProductPreview]
     total_found: int
     filters: dict
+
+
+class PharmacyUpdate(BaseModel):
+    city: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    opening_hours: Optional[str] = None
+
+class PharmacyResponse(BaseModel):
+    uuid: uuid.UUID
+    name: str
+    pharmacy_number: str
+    city: Optional[str]
+    address: Optional[str]
+    phone: Optional[str]
+    opening_hours: Optional[str]
+    chain: str
+
+    class Config:
+        from_attributes = True

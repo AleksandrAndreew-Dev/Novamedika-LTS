@@ -15,6 +15,7 @@ from routers.pharmacist_auth import router as pharmacist_router
 from routers.qa import router as qa_router
 from auth.auth import router as auth_router
 
+
 # Импорты бота
 from bot.core import bot_manager
 from bot.middleware.db import DbMiddleware
@@ -41,7 +42,7 @@ async def lifespan(app: FastAPI):
         dp.update.middleware(DbMiddleware())
 
         # Регистрируем роутеры в правильном порядке
-        dp.include_router(common_handlers_router) 
+        dp.include_router(common_handlers_router)
         dp.include_router(registration_router)
         dp.include_router(user_questions_router)
         dp.include_router(qa_handlers_router)

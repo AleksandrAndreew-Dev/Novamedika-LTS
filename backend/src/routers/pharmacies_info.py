@@ -1,5 +1,8 @@
 # routers/pharmacies_info.py
 from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+import secrets
+import os
 import csv
 import uuid
 from pathlib import Path
@@ -12,11 +15,19 @@ from db.models import Pharmacy
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
+
+from db.schemas import PharmacyUpdate
+
 from db.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from db.models import Pharmacy, Product
 
+import logging
+
+
+logger = logging.getLogger(__name__)
 router = APIRouter()
+security = HTTPBasic()
 
 def parse_pharmacy_name(full_name: str) -> tuple[str, str, str]:
     """Разбирает полное название аптеки на название, номер и сеть"""
@@ -229,4 +240,148 @@ async def clear_all_data(db: AsyncSession = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ошибка при удалении данных: {str(e)}",
+        )
+
+
+CORRECT_USERNAME = os.getenv('CORRECT_USERNAME')
+CORRECT_PASSWORD = os.getenv('CORRECT_PASSWORD')
+
+def authenticate_pharmacy(credentials: HTTPBasicCredentials = Depends(security)):
+    if not CORRECT_USERNAME or not CORRECT_PASSWORD:
+        logger.error("Auth credentials not configured")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Server auth not configured"
+        )
+
+    is_user = secrets.compare_digest(credentials.username, CORRECT_USERNAME)
+    is_pass = secrets.compare_digest(credentials.password, CORRECT_PASSWORD)
+
+    if not (is_user and is_pass):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": 'Basic realm="Pharmacy"'},
+        )
+    return credentials.username
+
+@router.put("/pharmacy/{pharmacy_name}/{pharmacy_number}/")
+async def update_pharmacy_info(
+    pharmacy_name: str,
+    pharmacy_number: str,
+    pharmacy_data: PharmacyUpdate,
+    username: str = Depends(authenticate_pharmacy)
+):
+    """
+    Обновление информации об аптеке (город, адрес, телефон, часы работы)
+    """
+    try:
+        pharmacy_map = {"novamedika": "Новамедика", "ekliniya": "ЭКЛИНИЯ"}
+        normalized_name = pharmacy_map.get(pharmacy_name.lower())
+
+        if not normalized_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid pharmacy name: {pharmacy_name}"
+            )
+
+        async with async_session_maker() as session:
+            # Ищем аптеку
+            result = await session.execute(
+                select(Pharmacy).where(
+                    and_(
+                        Pharmacy.name == normalized_name,
+                        Pharmacy.pharmacy_number == str(pharmacy_number),
+                    )
+                )
+            )
+            pharmacy = result.scalar_one_or_none()
+
+            if not pharmacy:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Pharmacy not found: {normalized_name} number {pharmacy_number}"
+                )
+
+            # Обновляем поля
+            update_data = pharmacy_data.dict(exclude_unset=True)
+            for field, value in update_data.items():
+                if hasattr(pharmacy, field):
+                    setattr(pharmacy, field, value)
+
+            await session.commit()
+            await session.refresh(pharmacy)
+
+            logger.info(f"Updated pharmacy info: {pharmacy.uuid}")
+
+            return {
+                "status": "success",
+                "message": "Pharmacy information updated successfully",
+                "pharmacy_id": str(pharmacy.uuid),
+                "updated_fields": list(update_data.keys())
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating pharmacy info: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating pharmacy information: {str(e)}"
+        )
+
+@router.get("/pharmacy/{pharmacy_name}/{pharmacy_number}/")
+async def get_pharmacy_info(
+    pharmacy_name: str,
+    pharmacy_number: str,
+    username: str = Depends(authenticate_pharmacy)
+):
+    """
+    Получение информации об аптеке
+    """
+    try:
+        pharmacy_map = {"novamedika": "Новамедика", "ekliniya": "ЭКЛИНИЯ"}
+        normalized_name = pharmacy_map.get(pharmacy_name.lower())
+
+        if not normalized_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid pharmacy name: {pharmacy_name}"
+            )
+
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(Pharmacy).where(
+                    and_(
+                        Pharmacy.name == normalized_name,
+                        Pharmacy.pharmacy_number == str(pharmacy_number),
+                    )
+                )
+            )
+            pharmacy = result.scalar_one_or_none()
+
+            if not pharmacy:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Pharmacy not found: {normalized_name} number {pharmacy_number}"
+                )
+
+            return {
+                "uuid": pharmacy.uuid,
+                "name": pharmacy.name,
+                "pharmacy_number": pharmacy.pharmacy_number,
+                "city": pharmacy.city,
+                "address": pharmacy.address,
+                "phone": pharmacy.phone,
+                "opening_hours": pharmacy.opening_hours,
+                "chain": pharmacy.chain
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting pharmacy info: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting pharmacy information: {str(e)}"
         )

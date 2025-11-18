@@ -81,7 +81,7 @@ def process_csv_incremental(
         logger.error(f"Error in process_csv_incremental wrapper: {str(e)}")
         raise self.retry(exc=e, countdown=60)
 
-
+# tasks_increment.py - обновленная версия (только измененные функции)
 async def process_csv_incremental_async(
     file_content: str, pharmacy_name: str, pharmacy_number: str
 ):
@@ -92,7 +92,7 @@ async def process_csv_incremental_async(
             raise ValueError(f"Invalid pharmacy: {pharmacy_name}")
 
         async with async_session_maker() as session:
-            # Ищем аптеку по названию и номеру - НЕ СОЗДАЕМ НОВУЮ И НЕ ОБНОВЛЯЕМ
+            # Ищем аптеку по названию и номеру
             result = await session.execute(
                 select(Pharmacy).where(
                     and_(
@@ -103,19 +103,30 @@ async def process_csv_incremental_async(
             )
             pharmacy = result.scalar_one_or_none()
 
-            # ЕСЛИ АПТЕКА НЕ НАЙДЕНА - ВОЗВРАЩАЕМ ОШИБКУ И НЕ ПРОДОЛЖАЕМ ЗАГРУЗКУ
+            # ЕСЛИ АПТЕКА НЕ НАЙДЕНА - СОЗДАЕМ НОВУЮ
             if not pharmacy:
-                logger.error(
-                    f"Pharmacy not found: {normalized_name}, number: {pharmacy_number}"
+                logger.info(
+                    f"Creating new pharmacy: {normalized_name}, number: {pharmacy_number}"
                 )
-                return {
-                    "status": "error",
-                    "error": f"Аптека не найдена: {normalized_name} номер {pharmacy_number}. Загрузка продуктов невозможна.",
-                }
+                pharmacy = Pharmacy(
+                    uuid=uuid.uuid4(),
+                    name=normalized_name,
+                    pharmacy_number=str(pharmacy_number),
+                    chain=normalized_name,
+                    # Остальные поля остаются пустыми для заполнения через отдельный API
+                    city="",
+                    address="",
+                    phone="",
+                    opening_hours=""
+                )
+                session.add(pharmacy)
+                await session.commit()
+                await session.refresh(pharmacy)
+                logger.info(f"Created new pharmacy: {pharmacy.uuid}")
 
-            logger.info(f"Found pharmacy: {pharmacy.uuid}")
+            logger.info(f"Using pharmacy: {pharmacy.uuid}")
 
-            # Обрабатываем CSV только для найденной аптеки
+            # Обрабатываем CSV для найденной/созданной аптеки
             csv_data, csv_hashes = process_csv_data_with_hashes(
                 file_content, pharmacy.uuid
             )
@@ -144,6 +155,7 @@ async def process_csv_incremental_async(
                 "pharmacy_id": str(pharmacy.uuid),
                 "stats": stats,
                 "processed_rows": len(csv_data),
+                "pharmacy_created": not pharmacy,  # Флаг создания новой аптеки
             }
 
     except Exception as e:
