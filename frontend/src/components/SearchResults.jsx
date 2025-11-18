@@ -1,3 +1,4 @@
+
 import React from "react";
 
 export default function SearchResults({
@@ -173,13 +174,13 @@ export default function SearchResults({
             )}
           </div>
 
-          {/* Кнопка "Новый поиск" для Telegram */}
+          {/* Кнопка "Новый поиск" для Telegram - выровнена по правому краю */}
           {isTelegram && (
-            <div className="mt-4">
+            <div className="flex justify-end mt-4">
               <button
                 onClick={onNewSearch}
                 disabled={loading}
-                className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center text-sm"
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center text-sm"
               >
                 <svg
                   className="w-4 h-4 mr-2"
