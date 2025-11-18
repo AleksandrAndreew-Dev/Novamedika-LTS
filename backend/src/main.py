@@ -21,6 +21,7 @@ from bot.middleware.db import DbMiddleware
 from bot.handlers.registration import router as registration_router
 from bot.handlers.user_questions import router as user_questions_router
 from bot.handlers.qa_handlers import router as qa_handlers_router
+from bot.handlers.common_handlers import router as common_handlers_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ async def lifespan(app: FastAPI):
         dp.update.middleware(DbMiddleware())
 
         # Регистрируем роутеры в правильном порядке
+        dp.include_router(common_handlers_router) 
         dp.include_router(registration_router)
         dp.include_router(user_questions_router)
         dp.include_router(qa_handlers_router)
