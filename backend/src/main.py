@@ -9,7 +9,12 @@ from aiogram.types import BotCommand  # ДОБАВИТЬ ЭТОТ ИМПОРТ
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot.core import bot_manager
-from bot.handlers import common_router, registration, user_questions_router, qa_handlers
+from bot.handlers import (
+    common_router,
+    registration_router,
+    user_questions_router,
+    qa_handlers,
+)
 from bot.middleware.role_middleware import RoleMiddleware
 from db.database import async_session_maker
 from bot.middleware.db import DbMiddleware
@@ -17,9 +22,10 @@ from bot.middleware.db import DbMiddleware
 # Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
 
 # ВЫНЕСТИ ФУНКЦИЮ НАРУЖУ
 async def set_bot_commands(bot: Bot):
@@ -30,9 +36,12 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="/help", description="Помощь"),
         BotCommand(command="/online", description="Войти в онлайн (фармацевт)"),
         BotCommand(command="/offline", description="Выйти из онлайн (фармацевт)"),
-        BotCommand(command="/questions", description="Вопросы пользователей (фармацевт)"),
+        BotCommand(
+            command="/questions", description="Вопросы пользователей (фармацевт)"
+        ),
     ]
     await bot.set_my_commands(commands)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -56,7 +65,7 @@ async def lifespan(app: FastAPI):
 
     # Регистрация роутеров
     dp.include_router(common_router)
-    dp.include_router(registration)
+    dp.include_router(registration_router)
     dp.include_router(qa_handlers)
     dp.include_router(user_questions_router)
 
@@ -97,26 +106,38 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Error deleting webhook: {e}")
 
+
 app = FastAPI(lifespan=lifespan, title="Novamedika Q&A Bot API")
 
 # Подключение API роутеров
-from routers import pharmacist_auth, qa, telegram_bot, search, upload, pharmacies_info  # ДОБАВИТЬ НЕДОСТАЮЩИЕ РОУТЫ
+from routers import (
+    pharmacist_auth,
+    qa,
+    telegram_bot,
+    search,
+    upload,
+    pharmacies_info,
+)  # ДОБАВИТЬ НЕДОСТАЮЩИЕ РОУТЫ
 
-app.include_router(pharmacist_auth.router,  tags=["auth"])
-app.include_router(qa.router,  tags=["qa"])
-app.include_router(telegram_bot.router,  tags=["bot"])
-app.include_router(search.router,  tags=["search"])
-app.include_router(upload.router,  tags=["upload"])
-app.include_router(pharmacies_info.router,  tags=["pharmacies"])
+app.include_router(pharmacist_auth.router, tags=["auth"])
+app.include_router(qa.router, tags=["qa"])
+app.include_router(telegram_bot.router, tags=["bot"])
+app.include_router(search.router, tags=["search"])
+app.include_router(upload.router, tags=["upload"])
+app.include_router(pharmacies_info.router, tags=["pharmacies"])
+
 
 @app.get("/")
 async def root():
     return {"status": "ok", "message": "Novamedika Q&A Bot API"}
 
+
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
 
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

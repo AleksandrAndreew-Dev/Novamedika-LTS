@@ -65,10 +65,18 @@ class BotManager:
     async def shutdown(self):
         """Корректное завершение работы бота"""
         if self._bot:
-            await self._bot.session.close()
-            self._bot = None
-            self._dp = None
-            logger.info("Bot shutdown completed")
+            try:
+                # Закрываем сессию бота
+                await self._bot.session.close()
+                # Также закрываем внутреннюю сессию aiohttp
+                if hasattr(self._bot, '_session') and self._bot._session:
+                    await self._bot._session.close()
+            except Exception as e:
+                logger.error(f"Error during bot shutdown: {e}")
+            finally:
+                self._bot = None
+                self._dp = None
+                logger.info("Bot shutdown completed")
 
 # Глобальный экземпляр менеджера
 bot_manager = BotManager()
