@@ -124,62 +124,53 @@ async def cmd_status(
 async def cmd_questions(
     message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: User
 ):
-    """Показать список вопросов для фармацевта"""
-    logger.info(
-        f"Command /questions from user {message.from_user.id}, is_pharmacist: {is_pharmacist}"
-    )
-
+    """Показать вопросы с пагинацией"""
     if not is_pharmacist or not pharmacist:
-        logger.warning(
-            f"User {message.from_user.id} is not pharmacist but tried to use /questions"
-        )
-        await message.answer(
-            "❌ Эта команда доступна только для зарегистрированных фармацевтов"
-        )
+        await message.answer("❌ Эта команда доступна только фармацевтам")
         return
 
     try:
-        # Получаем вопросы со статусом "pending"
         result = await db.execute(
             select(Question)
             .where(Question.status == "pending")
-            .order_by(Question.created_at.desc())
-            .limit(10)
+            .order_by(Question.created_at.asc())  # Сначала старые вопросы
+            .limit(5)  # Ограничиваем количество
         )
         questions = result.scalars().all()
 
-        logger.info(
-            f"Found {len(questions)} pending questions for pharmacist {pharmacist.telegram_id}"
-        )
-
         if not questions:
-            await message.answer("📝 На данный момент нет вопросов от пользователей.")
+            await message.answer(
+                "📝 На данный момент нет новых вопросов.\n\n"
+                "Пользователи задают вопросы через команду /ask"
+            )
             return
 
-        for question in questions:
-            question_text = f"❓ Вопрос: {question.text}\n\n"
-            question_text += (
+        for i, question in enumerate(questions, 1):
+            question_text = (
+                f"❓ Вопрос #{i}:\n{question.text}\n\n"
                 f"🕒 Создан: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
             )
 
-            # Получаем пользователя, задавшего вопрос
+            # Получаем пользователя
             user_result = await db.execute(
                 select(User).where(User.uuid == question.user_id)
             )
             user = user_result.scalar_one_or_none()
 
             if user:
-                question_text += f"\n👤 Пользователь: {user.full_name or 'Аноним'}"
+                user_info = user.full_name or user.telegram_username or "Аноним"
+                question_text += f"\n👤 Пользователь: {user_info}"
 
             await message.answer(
-                question_text, reply_markup=make_question_keyboard(question.uuid)
+                question_text,
+                reply_markup=make_question_keyboard(question.uuid)
             )
 
+        if len(questions) == 5:
+            await message.answer("💡 Показаны первые 5 вопросов. Ответьте на них чтобы увидеть следующие.")
+
     except Exception as e:
-        logger.error(
-            f"Error in cmd_questions for pharmacist {message.from_user.id}: {e}",
-            exc_info=True,
-        )
+        logger.error(f"Error in cmd_questions: {e}")
         await message.answer("❌ Ошибка при получении вопросов")
 
 
