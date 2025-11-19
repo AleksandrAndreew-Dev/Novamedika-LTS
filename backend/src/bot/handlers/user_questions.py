@@ -10,6 +10,7 @@ import logging
 import uuid
 from datetime import timedelta
 
+
 from db.qa_models import User, Question, Pharmacist, Answer
 from utils.time_utils import get_utc_now_naive
 from routers.pharmacist_auth import get_pharmacist_by_telegram_id
@@ -19,6 +20,23 @@ router = Router()
 
 # Состояния для диалога
 from bot.handlers.qa_states import UserQAStates
+
+
+
+async def get_pharmacist_by_telegram_id(telegram_id: int, db: AsyncSession):
+    """Найти фармацевта по Telegram ID"""
+    from sqlalchemy import select
+    from db.qa_models import Pharmacist, User
+
+    result = await db.execute(
+        select(Pharmacist)
+        .join(User, Pharmacist.user_id == User.uuid)
+        .options(selectinload(Pharmacist.user))
+        .where(User.telegram_id == telegram_id)
+        .where(Pharmacist.is_active == True)
+    )
+    return result.scalars().first()
+
 
 async def get_or_create_user(
     telegram_id: int, first_name: str, username: str, db: AsyncSession
@@ -239,43 +257,21 @@ async def process_user_question(message: Message, state: FSMContext, db: AsyncSe
 @router.message(UserQAStates.in_dialog)
 async def process_dialog_message(message: Message, state: FSMContext, db: AsyncSession):
     """Обработка сообщений в диалоге"""
-    try:
-        # Пропускаем команды
-        if message.text and message.text.startswith('/'):
-            return
+    # Пропускаем команды для обработки другими хендлерами
+    if message.text and message.text.startswith('/'):
+        return
 
-        data = await state.get_data()
-        question_id = data.get('current_question_id')
+    data = await state.get_data()
+    question_id = data.get('current_question_id')
 
-        if not question_id:
-            await message.answer("❌ Не найден активный вопрос. Используйте /ask чтобы задать новый вопрос.")
-            await state.clear()
-            return
+    if not question_id:
+        await message.answer("❌ Активный вопрос не найден. Используйте /ask для нового вопроса.")
+        await state.clear()
+        return
 
-        # Находим вопрос
-        result = await db.execute(
-            select(Question).where(Question.uuid == uuid.UUID(question_id))
-        )
-        question = result.scalar_one_or_none()
-
-        if not question:
-            await message.answer("❌ Вопрос не найден. Используйте /ask чтобы задать новый вопрос.")
-            await state.clear()
-            return
-
-        # Добавляем сообщение к существующему вопросу
-        question.text += f"\n\n[Дополнение]: {message.text}"
-        await db.commit()
-
-        await message.answer(
-            "✅ Ваше сообщение добавлено к вопросу. Фармацевт увидит его когда будет отвечать.\n\n"
-            "✅ Чтобы завершить вопрос, используйте /done\n"
-            "❌ Чтобы отменить, используйте /cancel"
-        )
-
-    except Exception as e:
-        logger.error(f"Error processing dialog message: {e}")
-        await message.answer("❌ Ошибка при обработке сообщения.")
+    # Обновить вопрос дополнительным сообщением
+    await update_question_with_additional_text(question_id, message.text, db)
+    await message.answer("✅ Сообщение добавлено к вопросу...")
 
 # В функции handle_user_message заменить приветствие:
 @router.message(F.text & ~F.command)
@@ -335,3 +331,27 @@ async def handle_user_message(message: Message, state: FSMContext, db: AsyncSess
     except Exception as e:
         logger.error(f"Error processing user message: {e}")
         await message.answer("❌ Произошла ошибка. Попробуйте позже.")
+
+
+# user_questions.py - ДОБАВЛЯЕМ В КОНЕЦ ФАЙЛА
+
+async def update_question_with_additional_text(question_id: str, additional_text: str, db: AsyncSession):
+    """Обновить вопрос дополнительным текстом"""
+    try:
+        from sqlalchemy import select
+        import uuid
+
+        result = await db.execute(
+            select(Question).where(Question.uuid == uuid.UUID(question_id))
+        )
+        question = result.scalar_one_or_none()
+
+        if question:
+            # Добавляем текст к существующему вопросу
+            question.text += f"\n\n[Дополнение]: {additional_text}"
+            await db.commit()
+            logger.info(f"Question {question_id} updated with additional text")
+
+    except Exception as e:
+        logger.error(f"Error updating question with additional text: {e}")
+        raise

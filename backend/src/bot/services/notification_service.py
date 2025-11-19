@@ -35,6 +35,13 @@ async def notify_pharmacists_about_new_question(question, db: AsyncSession):
         )
         pharmacists = result.scalars().all()
 
+        if not pharmacists:
+            logger.info("No online pharmacists found for notification")
+
+            # Сохранить вопрос для отложенной обработки
+            await save_question_for_later_notification(question, db)
+            return
+
         logger.info(f"Found {len(pharmacists)} online pharmacists to notify")
 
         if not pharmacists:

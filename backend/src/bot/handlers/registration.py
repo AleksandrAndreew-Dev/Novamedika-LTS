@@ -1,3 +1,4 @@
+# registration.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
 from aiogram import Router, F
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram.filters import Command
@@ -5,12 +6,10 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 import logging
 import os
 
-from routers.pharmacist_auth import get_pharmacist_by_telegram_id
-
+from routers.pharmacist_auth import get_pharmacist_by_telegram_id, register_pharmacist
 from db.qa_models import Pharmacist, User
 
 logger = logging.getLogger(__name__)
@@ -22,45 +21,68 @@ class RegistrationStates(StatesGroup):
     waiting_pharmacy_role = State()
     waiting_secret_word = State()
 
-
-# В функции cmd_start заменить приветствие для незарегистрированных:
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext, db: AsyncSession):
-    """Улучшенное приветственное сообщение"""
-    # Проверяем, не зарегистрирован ли уже пользователь
+    """Универсальный старт для всех пользователей"""
     pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
 
     if pharmacist:
-        # Показываем статус для зарегистрированного фармацевта (С ИМЕНЕМ)
+        # Фармацевт
         status_text = "🟢 Онлайн" if pharmacist.is_online else "🔴 Офлайн"
         await message.answer(
-            f"👨‍⚕️ Добро пожаловать назад, {message.from_user.first_name}!\n\n"
-            f"📊 Ваш текущий статус: {status_text}\n"
-            f"🏥 Аптека: {pharmacist.pharmacy_info.get('chain', 'Не указана')} №{pharmacist.pharmacy_info.get('number', 'Не указан')}\n"
-            f"💼 Роль: {pharmacist.pharmacy_info.get('role', 'Не указана')}\n\n"
-            "📋 Доступные команды:\n"
-            "• /online - перейти в онлайн\n"
-            "• /offline - перейти в офлайн  \n"
-            "• /questions - вопросы для ответа\n"
-            "• /status - мой статус\n"
-            "• /help - полная справка\n\n"
-            "💡 В онлайн-режиме вы будете получать уведомления о новых вопросах!"
+            f"👨‍⚕️ Добро пожаловать назад, {pharmacist.user.first_name or 'фармацевт'}!\n\n"
+            f"Статус: {status_text}\n"
+            f"Аптека: {pharmacist.pharmacy_info.get('name', 'Не указана')}\n\n"
+            "Доступные команды:\n"
+            "/online - перейти в онлайн\n"
+            "/offline - перейти в офлайн\n"
+            "/questions - просмотреть вопросы\n"
+            "/status - показать статус\n"
+            "/help - помощь"
         )
+    else:
+        # Обычный пользователь
+        keyboard = ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="💊 Задать вопрос"), KeyboardButton(text="👨‍⚕️ Я фармацевт")],
+                [KeyboardButton(text="📋 Мои вопросы"), KeyboardButton(text="❓ Помощь")]
+            ],
+            resize_keyboard=True
+        )
+
+        await message.answer(
+            "👋 Добро пожаловать в Novamedika Q&A Bot!\n\n"
+            "Я помогу вам получить профессиональные ответы от фармацевтов.\n\n"
+            "Выберите действие:",
+            reply_markup=keyboard
+        )
+
+
+
+
+@router.message(Command("register"))
+async def cmd_register(message: Message, state: FSMContext):
+    """Начать регистрацию фармацевта"""
+    pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
+
+    if pharmacist:
+        await message.answer("❌ Вы уже зарегистрированы как фармацевт!")
         return
 
-    # Для незарегистрированных пользователей (БЕЗ ИМЕНИ)
-    await message.answer(
-        "👋 Добро пожаловать в Novamedika Q&A Bot!\n\n"
-        "🤖 Я помогу вам получить ответы на вопросы о лекарствах и здоровье.\n\n"
-        "👥 **Для пользователей:**\n"
-        "• /ask - задать вопрос фармацевту\n"
-        "• /my_questions - мои вопросы и ответы\n"
-        "• /help - справка\n\n"
-        "👨‍⚕️ **Для фармацевтов:**\n"
-        "• /start - регистрация в системе\n"
-        "• /questions - ответить на вопросы\n\n"
-        "💊 Задавайте вопросы о лекарствах, дозировках, противопоказаниях и получите профессиональный ответ от наших фармацевтов!"
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Новамедика"), KeyboardButton(text="Эклиния")],
+            [KeyboardButton(text="❌ Отмена регистрации")]
+        ],
+        resize_keyboard=True
     )
+
+    await message.answer(
+        "👨‍⚕️ Регистрация фармацевта\n\n"
+        "Выберите сеть аптек:",
+        reply_markup=keyboard
+    )
+    await state.set_state(RegistrationStates.waiting_pharmacy_chain)
 
 @router.message(RegistrationStates.waiting_pharmacy_chain, F.text == "❌ Отмена регистрации")
 @router.message(RegistrationStates.waiting_pharmacy_number, F.text == "❌ Отмена регистрации")

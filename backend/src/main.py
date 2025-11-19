@@ -18,7 +18,7 @@ from auth.auth import router as auth_router
 
 # Импорты бота
 from bot.core import bot_manager
-from bot.middleware.db import DbMiddleware
+
 from bot.handlers.registration import router as registration_router
 from bot.handlers.user_questions import router as user_questions_router
 from bot.handlers.qa_handlers import router as qa_handlers_router
@@ -38,8 +38,12 @@ async def lifespan(app: FastAPI):
     if bot and dp:
         print("✅ Telegram bot initialized")
 
+        from bot.middleware.db import DbMiddleware
+        from bot.middleware.role_middleware import RoleMiddleware
+
         # Регистрируем middleware
         dp.update.middleware(DbMiddleware())
+        dp.update.middleware(RoleMiddleware())
 
         # Регистрируем роутеры в правильном порядке
         dp.include_router(common_handlers_router)

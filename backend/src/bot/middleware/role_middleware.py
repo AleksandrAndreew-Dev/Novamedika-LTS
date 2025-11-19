@@ -1,26 +1,18 @@
-# bot/middleware/db.py
+# bot/middleware/role_middleware.py
 from aiogram import BaseMiddleware
-from aiogram.types import Message, CallbackQuery  # Импортируйте отсюда
+from aiogram.types import Message, CallbackQuery
 from typing import Callable, Dict, Any, Awaitable, Union
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from routers.pharmacist_auth import get_pharmacist_by_telegram_id
 
-from db.database import async_session_maker
-
-class DbMiddleware(BaseMiddleware):
+class RoleMiddleware(BaseMiddleware):
     async def __call__(
         self,
         handler: Callable[[Union[Message, CallbackQuery], Dict[str, Any]], Awaitable[Any]],
         event: Union[Message, CallbackQuery],
         data: Dict[str, Any]
     ) -> Any:
-        async with async_session_maker() as session:
-            data['db'] = session
-            return await handler(event, data)
-
-
-class UserTypeMiddleware(BaseMiddleware):
-    async def __call__(self, handler, event, data):
         db = data['db']
         user_id = event.from_user.id
 
@@ -28,5 +20,6 @@ class UserTypeMiddleware(BaseMiddleware):
         pharmacist = await get_pharmacist_by_telegram_id(user_id, db)
         data['is_pharmacist'] = pharmacist is not None
         data['pharmacist'] = pharmacist
+        data['user_role'] = 'pharmacist' if pharmacist else 'customer'
 
         return await handler(event, data)
