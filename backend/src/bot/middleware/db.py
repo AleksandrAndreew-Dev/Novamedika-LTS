@@ -14,17 +14,12 @@ class DbMiddleware(BaseMiddleware):
     ) -> Any:
         async with async_session_maker() as session:
             data['db'] = session
-            return await handler(event, data)
-
-
-class UserTypeMiddleware(BaseMiddleware):
-    async def __call__(self, handler, event, data):
-        db = data['db']
-        user_id = event.from_user.id
-
-        # Определяем тип пользователя
-        pharmacist = await get_pharmacist_by_telegram_id(user_id, db)
-        data['is_pharmacist'] = pharmacist is not None
-        data['pharmacist'] = pharmacist
-
-        return await handler(event, data)
+            try:
+                result = await handler(event, data)
+                await session.commit()
+                return result
+            except Exception as e:
+                await session.rollback()
+                raise
+            finally:
+                await session.close()

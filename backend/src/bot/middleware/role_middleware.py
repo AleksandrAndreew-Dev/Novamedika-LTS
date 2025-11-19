@@ -1,11 +1,12 @@
 # Исправленная версия role_middleware.py
+from routers.pharmacist_auth import get_pharmacist_by_telegram_id
 import logging
 from aiogram import BaseMiddleware
 from aiogram.types import Message, CallbackQuery, Update
 from typing import Callable, Dict, Any, Awaitable, Union
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from routers.pharmacist_auth import get_pharmacist_by_telegram_id
+
 
 logger = logging.getLogger(__name__)
 

@@ -68,6 +68,7 @@ class BotManager:
             await self._bot.session.close()
             self._bot = None
             self._dp = None
+            logger.info("Bot shutdown completed")
 
 # Глобальный экземпляр менеджера
 bot_manager = BotManager()

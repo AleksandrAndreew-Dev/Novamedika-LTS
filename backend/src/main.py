@@ -28,9 +28,9 @@ async def lifespan(app: FastAPI):
         logger.error("Failed to initialize bot")
         return
 
-    # Подключение middleware
-    dp.update.middleware(DbMiddleware(async_session_maker))
-    dp.update.middleware(RoleMiddleware())
+    # ПОДКЛЮЧЕНИЕ MIDDLEWARE - ИСПРАВЛЕННАЯ ВЕРСИЯ
+    dp.update.outer_middleware(DbMiddleware())
+    dp.update.outer_middleware(RoleMiddleware())
 
     # Регистрация роутеров
     dp.include_router(common_router)
@@ -38,21 +38,51 @@ async def lifespan(app: FastAPI):
     dp.include_router(qa_handlers_router)
     dp.include_router(user_questions_router)
 
-    logger.info("Bot started successfully")
+    # УСТАНОВКА WEBHOOK ПРИ ЗАПУСКЕ
+    try:
+        webhook_url = os.getenv("TELEGRAM_WEBHOOK_URL")
+        secret_token = os.getenv("TELEGRAM_WEBHOOK_SECRET")
+
+        if webhook_url:
+            webhook_config = {
+                "url": webhook_url,
+                "drop_pending_updates": True,
+                "max_connections": 40,
+            }
+
+            if secret_token:
+                webhook_config["secret_token"] = secret_token
+
+            await bot.set_webhook(**webhook_config)
+            logger.info(f"Webhook set successfully: {webhook_url}")
+        else:
+            logger.error("TELEGRAM_WEBHOOK_URL not set")
+
+    except Exception as e:
+        logger.error(f"Failed to set webhook: {e}")
+
+    logger.info("Bot started successfully with webhook")
 
     yield
 
     # Завершение работы бота
     await bot_manager.shutdown()
 
-app = FastAPI(lifespan=lifespan)
+    # УДАЛЕНИЕ WEBHOOK ПРИ ЗАВЕРШЕНИИ
+    try:
+        await bot.delete_webhook(drop_pending_updates=True)
+        logger.info("Webhook deleted on shutdown")
+    except Exception as e:
+        logger.error(f"Error deleting webhook: {e}")
+
+app = FastAPI(lifespan=lifespan, title="Novamedika Q&A Bot API")
 
 # Подключение API роутеров
 from routers import pharmacist_auth, qa, telegram_bot
 
-app.include_router(pharmacist_auth.router, prefix="/api/auth", tags=["auth"])
-app.include_router(qa.router, prefix="/api/qa", tags=["qa"])
-app.include_router(telegram_bot.router, prefix="/api/bot", tags=["bot"])
+app.include_router(pharmacist_auth.router,  tags=["auth"])
+app.include_router(qa.router, tags=["qa"])
+app.include_router(telegram_bot.router, tags=["bot"])
 
 @app.get("/")
 async def root():
