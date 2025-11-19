@@ -60,7 +60,7 @@ async def answer_question_internal(
             detail=f"Ошибка при создании ответа: {str(e)}"
         )
 
-async def send_answer_to_user(question, answer_text: str, db: AsyncSession):
+async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncSession):
     """Отправка ответа пользователю в Telegram"""
     try:
         from bot.core import bot_manager

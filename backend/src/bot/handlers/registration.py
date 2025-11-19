@@ -42,7 +42,7 @@ async def cmd_register(message: Message, state: FSMContext, db: AsyncSession, is
         "Выберите сеть аптек:",
         reply_markup=keyboard
     )
-    await state.set_state(RegistrationStates.waiting_pharmacy_chain)
+
 
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist):
