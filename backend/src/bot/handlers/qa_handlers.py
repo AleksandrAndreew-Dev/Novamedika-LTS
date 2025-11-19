@@ -19,7 +19,12 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 @router.message(Command("online"))
-async def set_online(message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist):
+async def set_online(
+    message: Message,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: Pharmacist  # Добавляем
+):
     """Перевести фармацевта в онлайн"""
     if not is_pharmacist or not pharmacist:
         await message.answer("❌ Эта команда доступна только для зарегистрированных фармацевтов")

@@ -59,6 +59,21 @@ async def update_question_with_additional_text(question_id: str, additional_text
         logger.error(f"Error updating question with additional text: {e}")
         raise
 
+
+# В user_questions.py - для пользователей
+@router.message(Command("help"))
+async def user_help(message: Message, db: AsyncSession, is_pharmacist: bool):
+    if is_pharmacist:
+        return  # Пропускаем для фармацевтов
+    await show_customer_help(message, db)
+
+# В qa_handlers.py - для фармацевтов
+@router.message(Command("help"))
+async def pharmacist_help(message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist):
+    if not is_pharmacist:
+        return  # Пропускаем для пользователей
+    await show_pharmacist_help(message, db)
+
 @router.message(Command("ask"))
 async def cmd_ask(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool):
     """Начать диалог с вопросом"""
@@ -249,8 +264,13 @@ async def process_user_question(message: Message, state: FSMContext, db: AsyncSe
         await state.clear()
 
 @router.message(UserQAStates.in_dialog)
-async def process_dialog_message(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool):
-    """Обработка сообщений в диалоге"""
+async def process_dialog_message(
+    message: Message,
+    state: FSMContext,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: Pharmacist
+):
     if is_pharmacist:
         return
 
