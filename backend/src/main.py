@@ -102,12 +102,12 @@ app = FastAPI(lifespan=lifespan, title="Novamedika Q&A Bot API")
 # Подключение API роутеров
 from routers import pharmacist_auth, qa, telegram_bot, search, upload, pharmacies_info  # ДОБАВИТЬ НЕДОСТАЮЩИЕ РОУТЫ
 
-app.include_router(pharmacist_auth.router, prefix="/api/v1", tags=["auth"])
-app.include_router(qa.router, prefix="/api/v1", tags=["qa"])
-app.include_router(telegram_bot.router, prefix="/api/v1", tags=["bot"])
-app.include_router(search.router, prefix="/api/v1", tags=["search"])
-app.include_router(upload.router, prefix="/api/v1", tags=["upload"])
-app.include_router(pharmacies_info.router, prefix="/api/v1", tags=["pharmacies"])
+app.include_router(pharmacist_auth.router,  tags=["auth"])
+app.include_router(qa.router,  tags=["qa"])
+app.include_router(telegram_bot.router,  tags=["bot"])
+app.include_router(search.router,  tags=["search"])
+app.include_router(upload.router,  tags=["upload"])
+app.include_router(pharmacies_info.router,  tags=["pharmacies"])
 
 @app.get("/")
 async def root():
