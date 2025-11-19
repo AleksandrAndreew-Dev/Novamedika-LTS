@@ -1,128 +1,51 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-import os
+import asyncio
 import logging
+import os
+from aiogram import Bot, Dispatcher
+from aiogram.fsm.storage.memory import MemoryStorage
 
-from db.database import Base, engine
-
-# Импорты роутеров
-from routers.upload import router as upload_router
-from routers.search import router as search_router
-from routers.pharmacies_info import router as pharm_info_router
-from routers.telegram_bot import router as telegram_router
-from routers.pharmacist_auth import router as pharmacist_router
-from routers.qa import router as qa_router
-from auth.auth import router as auth_router
-
-
-# Импорты бота
-from bot.core import bot_manager
-
-from bot.handlers.registration import router as registration_router
-from bot.handlers.user_questions import router as user_questions_router
+from bot.handlers.common_handlers import router as common_router
+from bot.handlers.registration_handlers import router as registration_router
+from bot.handlers.user_questions_handlers import router as user_questions_router
 from bot.handlers.qa_handlers import router as qa_handlers_router
-from bot.handlers.common_handlers import router as common_handlers_router
+from bot.middleware.db_middleware import DbMiddleware
+from bot.middleware.role_middleware import RoleMiddleware
+from bot.db import create_engine, create_session_maker
 
-logging.basicConfig(level=logging.INFO)
+# Настройка логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+)
 logger = logging.getLogger(__name__)
 
-# В lifespan функцию добавьте:
-async def lifespan(app: FastAPI):
-    print("🚀 Backend starting up...")
+token = os.getenv("TELEGRAM_BOT_TOKEN")
 
-    # Создаем таблицы
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+async def main():
+    bot = Bot(token=token)
+    storage = MemoryStorage()
+    dp = Dispatcher(storage=storage)
 
-    # Инициализируем бота
-    bot, dp = await bot_manager.initialize()
-    if bot and dp:
-        print("✅ Telegram bot initialized")
+    # Подключение к базе данных
+    engine = create_engine()
+    session_maker = create_session_maker(engine)
 
-        # Регистрируем middleware
-        from bot.middleware.db import DbMiddleware
-        from bot.middleware.role_middleware import RoleMiddleware
+    # Подключение middleware
+    dp.update.middleware(DbMiddleware(session_maker))
+    dp.update.middleware(RoleMiddleware())
 
-        dp.update.middleware(DbMiddleware())
-        dp.update.middleware(RoleMiddleware())
+    # Регистрация роутеров в правильном порядке
+    dp.include_router(common_router)
+    dp.include_router(registration_router)
+    dp.include_router(qa_handlers_router)  # Важно: до user_questions_router!
+    dp.include_router(user_questions_router)
 
-        # Регистрируем роутеры
-        from bot.handlers import common_router, registration_router, user_questions_router, qa_handlers_router
+    logger.info("Bot started with updated router order")
 
-        dp.include_router(common_router)
-        dp.include_router(registration_router)
-        dp.include_router(user_questions_router)
-        dp.include_router(qa_handlers_router)
-
-        print("✅ Handlers registered")
-
-        # Установка webhook
-        webhook_url = os.getenv("TELEGRAM_WEBHOOK_URL")
-        if webhook_url:
-            try:
-                secret_token = os.getenv("TELEGRAM_WEBHOOK_SECRET")
-                await bot.set_webhook(
-                    url=webhook_url,
-                    secret_token=secret_token,
-                    drop_pending_updates=True
-                )
-                print(f"✅ Webhook set: {webhook_url}")
-            except Exception as e:
-                print(f"❌ Webhook setup failed: {e}")
-    else:
-        print("❌ Bot initialization failed")
-
-    yield
-
-    print("🔴 Backend shutting down...")
-    await bot_manager.shutdown()
-    await engine.dispose()
-
-app = FastAPI(
-    title="Novamedika API",
-    description="Backend API for Novamedika",
-    version="1.0.0",
-    lifespan=lifespan,
-)
-
-# Включение роутеров с префиксами
-app.include_router(upload_router, tags=["upload"])
-app.include_router(search_router, tags=["search"])
-app.include_router(pharm_info_router, tags=["pharmacies"])
-app.include_router(telegram_router, tags=["telegram"])
-app.include_router(pharmacist_router, tags=["pharmacists"])
-app.include_router(qa_router, tags=["q&a"])
-app.include_router(auth_router, tags=["auth"])
-
-# Более безопасная обработка CORS
-origins_raw = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
-origins = [origin.strip() for origin in origins_raw.split(",") if origin.strip()]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.get("/")
-async def get_main():
-    return {"message": "Hello Novamedika API", "status": "running"}
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "service": "backend", "version": "1.0.0"}
-
-@app.get("/api/info")
-async def api_info():
-    return {
-        "name": "Novamedika Backend",
-        "version": "1.0.0",
-        "environment": os.getenv("ENVIRONMENT", "development"),
-    }
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await bot.session.close()
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    asyncio.run(main())

@@ -1,98 +1,119 @@
-# qa_handlers.py - ИСПРАВЛЕННАЯ ВЕРСИЯ С MIDDLEWARE
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
-from sqlalchemy.orm import selectinload
-
-from typing import List
-from datetime import timedelta
-
-from db.qa_models import Question, Pharmacist, User
-from bot.handlers.qa_states import QAStates
-from utils.time_utils import get_utc_now_naive
+from sqlalchemy import select, and_
+from bot.models.user import User
+from bot.models.question import Question
+from bot.models.answer import Answer
+from bot.states.qa_states import QAStates
+from bot.keyboards.qa_keyboards import make_question_keyboard
 import logging
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
+
 router = Router()
+
+def get_utc_now_naive():
+    return datetime.utcnow()
 
 @router.message(Command("online"))
 async def set_online(
     message: Message,
     db: AsyncSession,
     is_pharmacist: bool,
-    pharmacist: Pharmacist  # Добавляем
+    pharmacist: User
 ):
-    """Перевести фармацевта в онлайн"""
+    """Установка статуса онлайн для фармацевта"""
+    logger.info(f"Command /online from user {message.from_user.id}, is_pharmacist: {is_pharmacist}")
+
     if not is_pharmacist or not pharmacist:
+        logger.warning(f"User {message.from_user.id} is not pharmacist but tried to use /online")
         await message.answer("❌ Эта команда доступна только для зарегистрированных фармацевтов")
         return
 
     try:
-        # Обновляем статус фармацевта
         pharmacist.is_online = True
         pharmacist.last_seen = get_utc_now_naive()
         await db.commit()
+        logger.info(f"Pharmacist {pharmacist.telegram_id} successfully set online status")
 
         await message.answer("✅ Вы теперь онлайн и готовы принимать вопросы!")
 
     except Exception as e:
-        logger.error(f"Error setting online status: {e}")
+        logger.error(f"Error setting online status for user {message.from_user.id}: {e}", exc_info=True)
         await message.answer("❌ Ошибка при изменении статуса")
 
 @router.message(Command("offline"))
-async def set_offline(message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist):
-    """Перевести фармацевта в офлайн"""
+async def set_offline(
+    message: Message,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: User
+):
+    """Установка статуса офлайн для фармацевта"""
+    logger.info(f"Command /offline from user {message.from_user.id}, is_pharmacist: {is_pharmacist}")
+
     if not is_pharmacist or not pharmacist:
+        logger.warning(f"User {message.from_user.id} is not pharmacist but tried to use /offline")
         await message.answer("❌ Эта команда доступна только для зарегистрированных фармацевтов")
         return
 
     try:
-        # Обновляем статус фармацевта
         pharmacist.is_online = False
         pharmacist.last_seen = get_utc_now_naive()
         await db.commit()
+        logger.info(f"Pharmacist {pharmacist.telegram_id} successfully set offline status")
 
-        await message.answer("✅ Вы теперь офлайн и не будете получать новые уведомления")
+        await message.answer("✅ Вы теперь офлайн.")
 
     except Exception as e:
-        logger.error(f"Error setting offline status: {e}")
+        logger.error(f"Error setting offline status for user {message.from_user.id}: {e}", exc_info=True)
         await message.answer("❌ Ошибка при изменении статуса")
 
 @router.message(Command("status"))
-async def get_status(message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist):
+async def cmd_status(
+    message: Message,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: User
+):
     """Показать статус фармацевта"""
+    logger.info(f"Command /status from user {message.from_user.id}, is_pharmacist: {is_pharmacist}")
+
     if not is_pharmacist or not pharmacist:
         await message.answer("❌ Эта команда доступна только для зарегистрированных фармацевтов")
         return
 
-    try:
-        status_text = "🟢 Онлайн" if pharmacist.is_online else "🔴 Офлайн"
+    status = "онлайн" if pharmacist.is_online else "офлайн"
+    last_seen = pharmacist.last_seen.strftime("%d.%m.%Y %H:%M") if pharmacist.last_seen else "никогда"
 
-        await message.answer(
-            f"📊 Ваш статус:\n\n"
-            f"{status_text}\n"
-            f"Сеть: {pharmacist.pharmacy_info.get('chain', 'Не указана')}\n"
-            f"Аптека №: {pharmacist.pharmacy_info.get('number', 'Не указан')}\n"
-            f"Роль: {pharmacist.pharmacy_info.get('role', 'Не указана')}\n"
-            f"Последняя активность: {pharmacist.last_seen.strftime('%H:%M %d.%m.%Y')}"
-        )
-
-    except Exception as e:
-        logger.error(f"Error getting status: {e}")
-        await message.answer("❌ Ошибка при получении статуса")
+    await message.answer(
+        f"📊 Ваш статус:\n\n"
+        f"• Статус: {status}\n"
+        f"• Последняя активность: {last_seen}\n"
+        f"• Зарегистрирован: {pharmacist.created_at.strftime('%d.%m.%Y')}"
+    )
 
 @router.message(Command("questions"))
-async def cmd_questions(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool):
-    """Показать вопросы, ожидающие ответа"""
-    if not is_pharmacist:
-        await message.answer("❌ Доступ только для зарегистрированных фармацевтов")
+async def cmd_questions(
+    message: Message,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: User
+):
+    """Показать список вопросов для фармацевта"""
+    logger.info(f"Command /questions from user {message.from_user.id}, is_pharmacist: {is_pharmacist}")
+
+    if not is_pharmacist or not pharmacist:
+        logger.warning(f"User {message.from_user.id} is not pharmacist but tried to use /questions")
+        await message.answer("❌ Эта команда доступна только для зарегистрированных фармацевтов")
         return
 
     try:
-        # Получаем незавершенные вопросы
+        # Получаем вопросы со статусом "pending"
         result = await db.execute(
             select(Question)
             .where(Question.status == "pending")
@@ -101,125 +122,217 @@ async def cmd_questions(message: Message, state: FSMContext, db: AsyncSession, i
         )
         questions = result.scalars().all()
 
+        logger.info(f"Found {len(questions)} pending questions for pharmacist {pharmacist.telegram_id}")
+
         if not questions:
-            await message.answer("📭 Нет вопросов, ожидающих ответа")
+            await message.answer("📝 На данный момент нет вопросов от пользователей.")
             return
 
-        # Показываем количество онлайн фармацевтов
-        online_threshold = get_utc_now_naive() - timedelta(minutes=5)
-        result = await db.execute(
-            select(func.count(Pharmacist.uuid))
-            .where(Pharmacist.is_online == True)
-            .where(Pharmacist.last_seen >= online_threshold)
-        )
-        online_count = result.scalar() or 0
-
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[])
         for question in questions:
-            # Обрезаем текст вопроса для кнопки
-            question_preview = question.text[:100] + "..." if len(question.text) > 100 else question.text
-            btn = InlineKeyboardButton(
-                text=f"❓ {question_preview}",
-                callback_data=f"answer_{question.uuid}"
+            question_text = f"❓ Вопрос: {question.text}\n\n"
+            question_text += f"🕒 Создан: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
+
+            # Получаем пользователя, задавшего вопрос
+            user_result = await db.execute(
+                select(User).where(User.uuid == question.user_id)
             )
-            keyboard.inline_keyboard.append([btn])
+            user = user_result.scalar_one_or_none()
 
-        status_text = f"\n👥 Фармацевтов онлайн: {online_count}" if online_count > 0 else "\n⚠️ Сейчас нет фармацевтов онлайн"
+            if user:
+                question_text += f"\n👤 Пользователь: {user.full_name or 'Аноним'}"
 
-        await message.answer(
-            f"Выберите вопрос для ответа:{status_text}\n\n"
-            "💡 Нажмите на вопрос чтобы ответить на него",
-            reply_markup=keyboard
-        )
-        await state.set_state(QAStates.viewing_questions)
+            await message.answer(
+                question_text,
+                reply_markup=make_question_keyboard(question.uuid)
+            )
 
     except Exception as e:
-        logger.error(f"Error getting questions: {e}")
+        logger.error(f"Error in cmd_questions for pharmacist {message.from_user.id}: {e}", exc_info=True)
         await message.answer("❌ Ошибка при получении вопросов")
 
 @router.callback_query(F.data.startswith("answer_"))
-async def process_answer_callback(callback: CallbackQuery, state: FSMContext, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist):
-    """Обработка выбора вопроса для ответа"""
+async def answer_question_callback(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: User
+):
+    """Обработка нажатия на кнопку ответа на вопрос"""
+    question_uuid = callback.data.replace("answer_", "")
+
+    logger.info(f"Answer callback for question {question_uuid} from user {callback.from_user.id}")
+
     if not is_pharmacist or not pharmacist:
-        await callback.answer("Доступ только для фармацевтов")
+        await callback.answer("❌ Эта функция доступна только фармацевтам", show_alert=True)
         return
 
-    question_id = callback.data.replace("answer_", "")
-
     try:
+        # Получаем вопрос
         result = await db.execute(
-            select(Question).where(Question.uuid == question_id)
+            select(Question).where(Question.uuid == question_uuid)
         )
         question = result.scalar_one_or_none()
 
         if not question:
-            await callback.answer("Вопрос не найден")
+            await callback.answer("❌ Вопрос не найден", show_alert=True)
             return
 
-        await state.update_data(selected_question_id=question_id)
-        await callback.message.answer(
-            f"✍️ Введите ответ на вопрос:\n\n{question.text}"
-        )
+        # Сохраняем ID вопроса в состоянии
+        await state.update_data(question_uuid=question_uuid)
         await state.set_state(QAStates.waiting_for_answer)
+
+        question_preview = question.text[:100] + "..." if len(question.text) > 100 else question.text
+
+        await callback.message.answer(
+            f"💬 Вы отвечаете на вопрос:\n\n"
+            f"«{question_preview}»\n\n"
+            f"Напишите ваш ответ ниже:\n"
+            f"(или /cancel для отмены)"
+        )
+
         await callback.answer()
 
     except Exception as e:
-        logger.error(f"Error processing answer callback: {e}")
-        await callback.answer("Ошибка при выборе вопроса")
+        logger.error(f"Error in answer_question_callback for user {callback.from_user.id}: {e}", exc_info=True)
+        await callback.answer("❌ Ошибка при обработке запроса", show_alert=True)
 
 @router.message(QAStates.waiting_for_answer)
-async def process_answer_text(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist):
-    """Обработка текста ответа"""
+async def process_answer_text(
+    message: Message,
+    state: FSMContext,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: User
+):
+    """Обработка текста ответа на вопрос"""
+    logger.info(f"Processing answer from pharmacist {message.from_user.id}")
+
     if not is_pharmacist or not pharmacist:
-        await message.answer("❌ Доступ только для фармацевтов")
+        await message.answer("❌ Эта функция доступна только фармацевтам")
         await state.clear()
         return
 
     try:
-        data = await state.get_data()
-        question_id = data.get('selected_question_id')
+        # Получаем данные из состояния
+        state_data = await state.get_data()
+        question_uuid = state_data.get('question_uuid')
 
-        if not question_id:
-            await message.answer("❌ Ошибка: вопрос не выбран")
+        if not question_uuid:
+            await message.answer("❌ Не удалось найти вопрос для ответа")
             await state.clear()
             return
 
-        # Обновляем время последней активности
-        pharmacist.last_seen = get_utc_now_naive()
+        # Получаем вопрос
+        result = await db.execute(
+            select(Question).where(Question.uuid == question_uuid)
+        )
+        question = result.scalar_one_or_none()
+
+        if not question:
+            await message.answer("❌ Вопрос не найден")
+            await state.clear()
+            return
+
+        # Создаем ответ
+        answer = Answer(
+            text=message.text,
+            question_id=question.uuid,
+            pharmacist_id=pharmacist.uuid,
+            created_at=get_utc_now_naive()
+        )
+
+        db.add(answer)
+
+        # Обновляем статус вопроса
+        question.status = "answered"
+        question.answered_at = get_utc_now_naive()
+
         await db.commit()
+        logger.info(f"Pharmacist {pharmacist.telegram_id} successfully answered question {question.uuid}")
 
-        # Используем внутреннюю функцию
-        from bot.services.qa_service import answer_question_internal
-        from db.qa_schemas import AnswerBase
+        # Уведомляем пользователя
+        user_result = await db.execute(
+            select(User).where(User.uuid == question.user_id)
+        )
+        user = user_result.scalar_one_or_none()
 
-        answer_data = AnswerBase(text=message.text)
-        await answer_question_internal(question_id, answer_data, pharmacist, db)
+        if user and user.telegram_id:
+            try:
+                answer_preview = message.text[:100] + "..." if len(message.text) > 100 else message.text
+                await message.bot.send_message(
+                    chat_id=user.telegram_id,
+                    text=f"💊 На ваш вопрос получен ответ от фармацевта:\n\n"
+                         f"❓ Ваш вопрос: {question.text}\n\n"
+                         f"💬 Ответ: {answer_preview}\n\n"
+                         f"Если ответ неполный, задайте уточняющий вопрос через /ask"
+                )
+                logger.info(f"Notification sent to user {user.telegram_id} about answer")
+            except Exception as e:
+                logger.error(f"Failed to send notification to user {user.telegram_id}: {e}")
 
-        await message.answer("✅ Ответ успешно отправлен!")
+        await message.answer(
+            "✅ Ответ успешно отправлен пользователю!\n\n"
+            "Используйте /questions для просмотра других вопросов."
+        )
+
         await state.clear()
 
     except Exception as e:
-        logger.error(f"Error processing answer: {e}")
+        logger.error(f"Error in process_answer_text for pharmacist {message.from_user.id}: {e}", exc_info=True)
         await message.answer("❌ Ошибка при отправке ответа")
         await state.clear()
 
-@router.message(QAStates.viewing_questions)
-async def handle_viewing_questions_state(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool):
-    """Обработка сообщений в состоянии просмотра вопросов"""
-    if not is_pharmacist:
-        await message.answer("❌ Доступ только для зарегистрированных фармацевтов")
-        await state.clear()
-        return
+async def answer_question_internal(question_uuid: str, answer_text: str, pharmacist: User, db: AsyncSession, bot):
+    """Внутренняя функция для ответа на вопрос"""
+    try:
+        logger.info(f"Internal answer for question {question_uuid} from pharmacist {pharmacist.telegram_id}")
 
-    # Если фармацевт отправил команду, пропускаем для обработки другими хендлерами
-    if message.text.startswith('/'):
-        return
+        # Получаем вопрос
+        result = await db.execute(
+            select(Question).where(Question.uuid == question_uuid)
+        )
+        question = result.scalar_one_or_none()
 
-    # Если обычное сообщение - напоминаем о необходимости выбрать вопрос
-    await message.answer(
-        "ℹ️ Вы находитесь в режиме просмотра вопросов.\n\n"
-        "📋 Чтобы ответить на вопрос:\n"
-        "1. Используйте /questions чтобы увидеть список\n"
-        "2. Нажмите на вопрос из списка для ответа\n"
-        "3. Или используйте /cancel для выхода из этого режима"
-    )
+        if not question:
+            logger.error(f"Question {question_uuid} not found")
+            return False
+
+        # Создаем ответ
+        answer = Answer(
+            text=answer_text,
+            question_id=question.uuid,
+            pharmacist_id=pharmacist.uuid,
+            created_at=get_utc_now_naive()
+        )
+
+        db.add(answer)
+        question.status = "answered"
+        question.answered_at = get_utc_now_naive()
+
+        await db.commit()
+        logger.info(f"Internal answer committed for question {question.uuid}")
+
+        # Уведомляем пользователя
+        user_result = await db.execute(
+            select(User).where(User.uuid == question.user_id)
+        )
+        user = user_result.scalar_one_or_none()
+
+        if user and user.telegram_id:
+            try:
+                await bot.send_message(
+                    chat_id=user.telegram_id,
+                    text=f"💊 На ваш вопрос получен ответ:\n\n"
+                         f"❓ Вопрос: {question.text}\n\n"
+                         f"💬 Ответ: {answer_text}\n\n"
+                         f"Если нужна дополнительная консультация, задайте уточняющий вопрос через /ask"
+                )
+            except Exception as e:
+                logger.error(f"Failed to send internal notification to user {user.telegram_id}: {e}")
+
+        return True
+
+    except Exception as e:
+        logger.error(f"Error in answer_question_internal: {e}", exc_info=True)
+        return False
