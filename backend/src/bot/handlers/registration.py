@@ -6,6 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 import logging
 import os
 
@@ -21,12 +22,32 @@ class RegistrationStates(StatesGroup):
     waiting_pharmacy_role = State()
     waiting_secret_word = State()
 
-@router.message(Command("start"))
-async def cmd_start(message: Message, state: FSMContext, db: AsyncSession):
-    """Универсальный старт для всех пользователей"""
-    pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
+@router.message(Command("register"))
+async def cmd_register(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool):
+    """Начать регистрацию фармацевта"""
+    if is_pharmacist:
+        await message.answer("❌ Вы уже зарегистрированы как фармацевт!")
+        return
 
-    if pharmacist:
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Новамедика"), KeyboardButton(text="Эклиния")],
+            [KeyboardButton(text="❌ Отмена регистрации")]
+        ],
+        resize_keyboard=True
+    )
+
+    await message.answer(
+        "👨‍⚕️ Регистрация фармацевта\n\n"
+        "Выберите сеть аптек:",
+        reply_markup=keyboard
+    )
+    await state.set_state(RegistrationStates.waiting_pharmacy_chain)
+
+@router.message(Command("start"))
+async def cmd_start(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist):
+    """Универсальный старт для всех пользователей"""
+    if is_pharmacist and pharmacist:
         # Фармацевт
         status_text = "🟢 Онлайн" if pharmacist.is_online else "🔴 Офлайн"
         await message.answer(
@@ -58,30 +79,6 @@ async def cmd_start(message: Message, state: FSMContext, db: AsyncSession):
         )
 
 
-
-
-@router.message(Command("register"))
-async def cmd_register(message: Message, state: FSMContext):
-    """Начать регистрацию фармацевта"""
-    pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
-
-    if pharmacist:
-        await message.answer("❌ Вы уже зарегистрированы как фармацевт!")
-        return
-
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="Новамедика"), KeyboardButton(text="Эклиния")],
-            [KeyboardButton(text="❌ Отмена регистрации")]
-        ],
-        resize_keyboard=True
-    )
-
-    await message.answer(
-        "👨‍⚕️ Регистрация фармацевта\n\n"
-        "Выберите сеть аптек:",
-        reply_markup=keyboard
-    )
     await state.set_state(RegistrationStates.waiting_pharmacy_chain)
 
 @router.message(RegistrationStates.waiting_pharmacy_chain, F.text == "❌ Отмена регистрации")

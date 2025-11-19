@@ -1,9 +1,7 @@
-# bot/middleware/db.py
 from aiogram import BaseMiddleware
-from aiogram.types import Message, CallbackQuery  # Импортируйте отсюда
+from aiogram.types import Message, CallbackQuery, Update
 from typing import Callable, Dict, Any, Awaitable, Union
 from sqlalchemy.ext.asyncio import AsyncSession
-from routers.pharmacist_auth import get_pharmacist_by_telegram_id
 
 from db.database import async_session_maker
 
@@ -11,7 +9,7 @@ class DbMiddleware(BaseMiddleware):
     async def __call__(
         self,
         handler: Callable[[Union[Message, CallbackQuery], Dict[str, Any]], Awaitable[Any]],
-        event: Union[Message, CallbackQuery],
+        event: Union[Update, Message, CallbackQuery],
         data: Dict[str, Any]
     ) -> Any:
         async with async_session_maker() as session:

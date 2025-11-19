@@ -1,4 +1,4 @@
-
+# qa_handlers.py - ИСПРАВЛЕННАЯ ВЕРСИЯ С MIDDLEWARE
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
@@ -15,36 +15,20 @@ from bot.handlers.qa_states import QAStates
 from utils.time_utils import get_utc_now_naive
 import logging
 
-from routers.pharmacist_auth import get_pharmacist_by_telegram_id
-
-
-
 logger = logging.getLogger(__name__)
 router = Router()
 
-
-
 @router.message(Command("online"))
-async def set_online(message: Message, db: AsyncSession):
+async def set_online(message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist):
     """Перевести фармацевта в онлайн"""
+    if not is_pharmacist or not pharmacist:
+        await message.answer("❌ Эта команда доступна только для зарегистрированных фармацевтов")
+        return
+
     try:
-        result = await db.execute(
-            select(Pharmacist)
-            .join(User, Pharmacist.user_id == User.uuid)
-            .where(User.telegram_id == message.from_user.id)
-            .where(Pharmacist.is_active == True)
-        )
-        pharmacists = result.scalars().all()
-
-        if not pharmacists:
-            await message.answer("❌ Фармацевт не найден. Пройдите регистрацию /start")
-            return
-
-        # Обновляем статус всех фармацевтов пользователя
-        for pharmacist in pharmacists:
-            pharmacist.is_online = True
-            pharmacist.last_seen = get_utc_now_naive()
-
+        # Обновляем статус фармацевта
+        pharmacist.is_online = True
+        pharmacist.last_seen = get_utc_now_naive()
         await db.commit()
 
         await message.answer("✅ Вы теперь онлайн и готовы принимать вопросы!")
@@ -54,26 +38,16 @@ async def set_online(message: Message, db: AsyncSession):
         await message.answer("❌ Ошибка при изменении статуса")
 
 @router.message(Command("offline"))
-async def set_offline(message: Message, db: AsyncSession):
+async def set_offline(message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist):
     """Перевести фармацевта в офлайн"""
+    if not is_pharmacist or not pharmacist:
+        await message.answer("❌ Эта команда доступна только для зарегистрированных фармацевтов")
+        return
+
     try:
-        result = await db.execute(
-            select(Pharmacist)
-            .join(User, Pharmacist.user_id == User.uuid)
-            .where(User.telegram_id == message.from_user.id)
-            .where(Pharmacist.is_active == True)
-        )
-        pharmacists = result.scalars().all()
-
-        if not pharmacists:
-            await message.answer("❌ Фармацевт не найден. Пройдите регистрацию /start")
-            return
-
-        # Обновляем статус всех фармацевтов пользователя
-        for pharmacist in pharmacists:
-            pharmacist.is_online = False
-            pharmacist.last_seen = get_utc_now_naive()
-
+        # Обновляем статус фармацевта
+        pharmacist.is_online = False
+        pharmacist.last_seen = get_utc_now_naive()
         await db.commit()
 
         await message.answer("✅ Вы теперь офлайн и не будете получать новые уведомления")
@@ -83,23 +57,13 @@ async def set_offline(message: Message, db: AsyncSession):
         await message.answer("❌ Ошибка при изменении статуса")
 
 @router.message(Command("status"))
-async def get_status(message: Message, db: AsyncSession):
+async def get_status(message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist):
     """Показать статус фармацевта"""
+    if not is_pharmacist or not pharmacist:
+        await message.answer("❌ Эта команда доступна только для зарегистрированных фармацевтов")
+        return
+
     try:
-        result = await db.execute(
-            select(Pharmacist)
-            .join(User, Pharmacist.user_id == User.uuid)
-            .where(User.telegram_id == message.from_user.id)
-            .where(Pharmacist.is_active == True)
-        )
-        pharmacists = result.scalars().all()
-
-        if not pharmacists:
-            await message.answer("❌ Фармацевт не найден. Пройдите регистрацию /start")
-            return
-
-        pharmacist = pharmacists[0]  # Берем первого
-
         status_text = "🟢 Онлайн" if pharmacist.is_online else "🔴 Офлайн"
 
         await message.answer(
@@ -116,8 +80,12 @@ async def get_status(message: Message, db: AsyncSession):
         await message.answer("❌ Ошибка при получении статуса")
 
 @router.message(Command("questions"))
-async def cmd_questions(message: Message, state: FSMContext, db: AsyncSession):
+async def cmd_questions(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool):
     """Показать вопросы, ожидающие ответа"""
+    if not is_pharmacist:
+        await message.answer("❌ Доступ только для зарегистрированных фармацевтов")
+        return
+
     try:
         # Получаем незавершенные вопросы
         result = await db.execute(
@@ -165,8 +133,12 @@ async def cmd_questions(message: Message, state: FSMContext, db: AsyncSession):
         await message.answer("❌ Ошибка при получении вопросов")
 
 @router.callback_query(F.data.startswith("answer_"))
-async def process_answer_callback(callback: CallbackQuery, state: FSMContext, db: AsyncSession):
+async def process_answer_callback(callback: CallbackQuery, state: FSMContext, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist):
     """Обработка выбора вопроса для ответа"""
+    if not is_pharmacist or not pharmacist:
+        await callback.answer("Доступ только для фармацевтов")
+        return
+
     question_id = callback.data.replace("answer_", "")
 
     try:
@@ -191,8 +163,13 @@ async def process_answer_callback(callback: CallbackQuery, state: FSMContext, db
         await callback.answer("Ошибка при выборе вопроса")
 
 @router.message(QAStates.waiting_for_answer)
-async def process_answer_text(message: Message, state: FSMContext, db: AsyncSession):
+async def process_answer_text(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist):
     """Обработка текста ответа"""
+    if not is_pharmacist or not pharmacist:
+        await message.answer("❌ Доступ только для фармацевтов")
+        await state.clear()
+        return
+
     try:
         data = await state.get_data()
         question_id = data.get('selected_question_id')
@@ -202,32 +179,9 @@ async def process_answer_text(message: Message, state: FSMContext, db: AsyncSess
             await state.clear()
             return
 
-        # ИСПРАВЛЕННЫЙ ПОИСК: получаем ВСЕХ фармацевтов для пользователя
-        result = await db.execute(
-            select(Pharmacist)
-            .join(User, Pharmacist.user_id == User.uuid)
-            .where(User.telegram_id == message.from_user.id)
-            .where(Pharmacist.is_active == True)  # только активные
-            .options(selectinload(Pharmacist.user))
-        )
-        pharmacists = result.scalars().all()
-
-        if not pharmacists:
-            await message.answer("❌ Фармацевт не найден. Пройдите регистрацию /start")
-            await state.clear()
-            return
-
-        # Если несколько фармацевтов, берем первого активного
-        pharmacist = pharmacists[0]
-
         # Обновляем время последней активности
         pharmacist.last_seen = get_utc_now_naive()
         await db.commit()
-
-        # Если нужно дать выбор аптеки, можно добавить клавиатуру выбора
-        if len(pharmacists) > 1:
-            # Пока берем первого, но можно добавить выбор аптеки
-            logger.info(f"User {message.from_user.id} has {len(pharmacists)} pharmacist profiles, using first active")
 
         # Используем внутреннюю функцию
         from bot.services.qa_service import answer_question_internal
@@ -244,40 +198,23 @@ async def process_answer_text(message: Message, state: FSMContext, db: AsyncSess
         await message.answer("❌ Ошибка при отправке ответа")
         await state.clear()
 
-
 @router.message(QAStates.viewing_questions)
-async def handle_viewing_questions_state(message: Message, state: FSMContext, db: AsyncSession):
-    """
-    Обработка сообщений в состоянии просмотра вопросов
-    """
-    try:
-        # Проверяем, является ли отправитель фармацевтом
-        pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
-
-        if not pharmacist:
-            await message.answer("❌ Доступ только для зарегистрированных фармацевтов")
-            await state.clear()
-            return
-
-        # Если фармацевт отправил команду, пропускаем для обработки другими хендлерами
-        if message.text.startswith('/'):
-            return
-
-        # Если обычное сообщение - напоминаем о необходимости выбрать вопрос
-        await message.answer(
-            "ℹ️ Вы находитесь в режиме просмотра вопросов.\n\n"
-            "📋 Чтобы ответить на вопрос:\n"
-            "1. Используйте /questions чтобы увидеть список\n"
-            "2. Нажмите на вопрос из списка для ответа\n"
-            "3. Или используйте /cancel для выхода из этого режима"
-        )
-
-    except Exception as e:
-        logger.error(f"Error in viewing_questions state handler: {e}")
-        await message.answer("❌ Произошла ошибка")
+async def handle_viewing_questions_state(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool):
+    """Обработка сообщений в состоянии просмотра вопросов"""
+    if not is_pharmacist:
+        await message.answer("❌ Доступ только для зарегистрированных фармацевтов")
         await state.clear()
+        return
 
+    # Если фармацевт отправил команду, пропускаем для обработки другими хендлерами
+    if message.text.startswith('/'):
+        return
 
-# В этом файле определен только router, поэтому __all__ должен содержать только его
-__all__ = ['router']
-
+    # Если обычное сообщение - напоминаем о необходимости выбрать вопрос
+    await message.answer(
+        "ℹ️ Вы находитесь в режиме просмотра вопросов.\n\n"
+        "📋 Чтобы ответить на вопрос:\n"
+        "1. Используйте /questions чтобы увидеть список\n"
+        "2. Нажмите на вопрос из списка для ответа\n"
+        "3. Или используйте /cancel для выхода из этого режима"
+    )

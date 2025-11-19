@@ -6,8 +6,6 @@ from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
-from routers.pharmacist_auth import get_pharmacist_by_telegram_id
-
 logger = logging.getLogger(__name__)
 router = Router()
 
@@ -74,12 +72,10 @@ async def show_general_help(message: Message, db: AsyncSession):
     await message.answer(help_text)
 
 @router.message(Command("help"))
-async def universal_help(message: Message, db: AsyncSession):
+async def universal_help(message: Message, db: AsyncSession, is_pharmacist: bool):
     """Универсальная помощь с правильным определением роли"""
     try:
-        pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
-
-        if pharmacist:
+        if is_pharmacist:
             await show_pharmacist_help(message, db)
         else:
             # Проверяем, есть ли у пользователя вопросы (значит он не новый)
@@ -103,11 +99,9 @@ async def universal_help(message: Message, db: AsyncSession):
         await message.answer("❌ Ошибка при получении справки")
 
 @router.message(Command("cancel"))
-async def universal_cancel(message: Message, state: FSMContext, db: AsyncSession):
+async def universal_cancel(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool):
     """Универсальная отмена для всех пользователей"""
     try:
-        pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
-
         current_state = await state.get_state()
         if current_state is None:
             await message.answer("ℹ️ Нечего отменять.")
@@ -115,7 +109,7 @@ async def universal_cancel(message: Message, state: FSMContext, db: AsyncSession
 
         await state.clear()
 
-        if pharmacist:
+        if is_pharmacist:
             await message.answer("❌ Действие отменено. Возврат к режиму фармацевта.")
         else:
             await message.answer("❌ Действие отменено.")

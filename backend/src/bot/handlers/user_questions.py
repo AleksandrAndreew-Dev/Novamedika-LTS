@@ -1,4 +1,4 @@
-# user_questions.py - ФИНАЛЬНАЯ ИСПРАВЛЕННАЯ ВЕРСИЯ
+
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.filters import Command
@@ -10,33 +10,14 @@ import logging
 import uuid
 from datetime import timedelta
 
-
 from db.qa_models import User, Question, Pharmacist, Answer
 from utils.time_utils import get_utc_now_naive
-from routers.pharmacist_auth import get_pharmacist_by_telegram_id
 
 logger = logging.getLogger(__name__)
 router = Router()
 
 # Состояния для диалога
 from bot.handlers.qa_states import UserQAStates
-
-
-
-async def get_pharmacist_by_telegram_id(telegram_id: int, db: AsyncSession):
-    """Найти фармацевта по Telegram ID"""
-    from sqlalchemy import select
-    from db.qa_models import Pharmacist, User
-
-    result = await db.execute(
-        select(Pharmacist)
-        .join(User, Pharmacist.user_id == User.uuid)
-        .options(selectinload(Pharmacist.user))
-        .where(User.telegram_id == telegram_id)
-        .where(Pharmacist.is_active == True)
-    )
-    return result.scalars().first()
-
 
 async def get_or_create_user(
     telegram_id: int, first_name: str, username: str, db: AsyncSession
@@ -58,12 +39,31 @@ async def get_or_create_user(
 
     return user
 
+async def update_question_with_additional_text(question_id: str, additional_text: str, db: AsyncSession):
+    """Обновить вопрос дополнительным текстом"""
+    try:
+        from sqlalchemy import select
+
+        result = await db.execute(
+            select(Question).where(Question.uuid == uuid.UUID(question_id))
+        )
+        question = result.scalar_one_or_none()
+
+        if question:
+            # Добавляем текст к существующему вопросу
+            question.text += f"\n\n[Дополнение]: {additional_text}"
+            await db.commit()
+            logger.info(f"Question {question_id} updated with additional text")
+
+    except Exception as e:
+        logger.error(f"Error updating question with additional text: {e}")
+        raise
+
 @router.message(Command("ask"))
-async def cmd_ask(message: Message, state: FSMContext, db: AsyncSession):
+async def cmd_ask(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool):
     """Начать диалог с вопросом"""
-    # Проверяем, не является ли пользователь фармацевтом
-    pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
-    if pharmacist:
+    # Используем is_pharmacist из middleware
+    if is_pharmacist:
         await message.answer("ℹ️ Вы зарегистрированы как фармацевт. Используйте команды /questions для ответов на вопросы.")
         return
 
@@ -108,14 +108,12 @@ async def cmd_ask(message: Message, state: FSMContext, db: AsyncSession):
     )
     await state.set_state(UserQAStates.waiting_for_question)
 
-
-
 @router.message(Command("done"))
-async def cmd_done_user(message: Message, state: FSMContext, db: AsyncSession):
+async def cmd_done_user(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool):
     """Завершение вопроса для пользователей"""
-    pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
-    if pharmacist:
+    if is_pharmacist:
         return
+
     current_state = await state.get_state()
 
     if current_state == UserQAStates.in_dialog:
@@ -144,18 +142,13 @@ async def cmd_done_user(message: Message, state: FSMContext, db: AsyncSession):
         "📋 Чтобы посмотреть историю вопросов, используйте /my_questions"
     )
 
-
-
-
 @router.message(Command("my_questions"))
-async def cmd_my_questions(message: Message, db: AsyncSession):
+async def cmd_my_questions(message: Message, db: AsyncSession, is_pharmacist: bool):
     """Показать вопросы пользователя и ответы на них"""
     try:
         from sqlalchemy.orm import selectinload
 
-        pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
-
-        if pharmacist:
+        if is_pharmacist:
             await message.answer("ℹ️ Вы фармацевт. Используйте /questions для просмотра вопросов.")
             return
 
@@ -202,12 +195,13 @@ async def cmd_my_questions(message: Message, db: AsyncSession):
         logger.error(f"Error getting user questions: {e}")
         await message.answer("❌ Ошибка при получении ваших вопросов")
 
-
-
-
 @router.message(UserQAStates.waiting_for_question)
-async def process_user_question(message: Message, state: FSMContext, db: AsyncSession):
+async def process_user_question(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool):
     """Обработка вопроса пользователя"""
+    if is_pharmacist:
+        await message.answer("ℹ️ Вы фармацевт. Используйте /questions для ответов на вопросы.")
+        return
+
     try:
         # Создаем или находим пользователя
         user = await get_or_create_user(
@@ -255,8 +249,11 @@ async def process_user_question(message: Message, state: FSMContext, db: AsyncSe
         await state.clear()
 
 @router.message(UserQAStates.in_dialog)
-async def process_dialog_message(message: Message, state: FSMContext, db: AsyncSession):
+async def process_dialog_message(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool):
     """Обработка сообщений в диалоге"""
+    if is_pharmacist:
+        return
+
     # Пропускаем команды для обработки другими хендлерами
     if message.text and message.text.startswith('/'):
         return
@@ -273,27 +270,23 @@ async def process_dialog_message(message: Message, state: FSMContext, db: AsyncS
     await update_question_with_additional_text(question_id, message.text, db)
     await message.answer("✅ Сообщение добавлено к вопросу...")
 
-# В функции handle_user_message заменить приветствие:
 @router.message(F.text & ~F.command)
-async def handle_user_message(message: Message, state: FSMContext, db: AsyncSession):
+async def handle_user_message(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool):
     """Обработка обычных сообщений с улучшенным приветствием"""
     try:
-        # Проверяем, не является ли пользователь фармацевтом
-        pharmacist = await get_pharmacist_by_telegram_id(message.from_user.id, db)
-
-        if pharmacist:
-            logger.info(f"Pharmacist {pharmacist.uuid} sent message, ignoring as user question")
+        if is_pharmacist:
+            logger.info(f"Pharmacist sent message, ignoring as user question")
             return
 
         # Проверяем состояние
         current_state = await state.get_state()
 
         if current_state == UserQAStates.in_dialog:
-            await process_dialog_message(message, state, db)
+            await process_dialog_message(message, state, db, is_pharmacist)
         elif current_state == UserQAStates.waiting_for_question:
-            await process_user_question(message, state, db)
+            await process_user_question(message, state, db, is_pharmacist)
         else:
-            # ПРИВЕТСТВЕННОЕ СООБЩЕНИЕ ДЛЯ НОВЫХ ПОЛЬЗОВАТЕЛЕЙ (БЕЗ ИМЕНИ)
+            # ПРИВЕТСТВЕННОЕ СООБЩЕНИЕ ДЛЯ НОВЫХ ПОЛЬЗОВАТЕЛЕЙ
             online_threshold = get_utc_now_naive() - timedelta(minutes=5)
             result = await db.execute(
                 select(func.count(Pharmacist.uuid))
@@ -331,27 +324,3 @@ async def handle_user_message(message: Message, state: FSMContext, db: AsyncSess
     except Exception as e:
         logger.error(f"Error processing user message: {e}")
         await message.answer("❌ Произошла ошибка. Попробуйте позже.")
-
-
-# user_questions.py - ДОБАВЛЯЕМ В КОНЕЦ ФАЙЛА
-
-async def update_question_with_additional_text(question_id: str, additional_text: str, db: AsyncSession):
-    """Обновить вопрос дополнительным текстом"""
-    try:
-        from sqlalchemy import select
-        import uuid
-
-        result = await db.execute(
-            select(Question).where(Question.uuid == uuid.UUID(question_id))
-        )
-        question = result.scalar_one_or_none()
-
-        if question:
-            # Добавляем текст к существующему вопросу
-            question.text += f"\n\n[Дополнение]: {additional_text}"
-            await db.commit()
-            logger.info(f"Question {question_id} updated with additional text")
-
-    except Exception as e:
-        logger.error(f"Error updating question with additional text: {e}")
-        raise
