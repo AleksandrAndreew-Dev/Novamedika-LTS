@@ -8,17 +8,14 @@ from db.qa_models import User
 from db.qa_models import Question
 from db.qa_models import Answer
 from bot.handlers.qa_states import QAStates
-from bot.keyboards.qa_keyboards import make_question_keyboard
+from bot.keyboards.qa_keyboard import make_question_keyboard
 import logging
 from datetime import datetime, timedelta
+from utils.time_utils import get_utc_now_naive
 
 logger = logging.getLogger(__name__)
 
 router = Router()
-
-
-def get_utc_now_naive():
-    return datetime.utcnow()
 
 
 @router.message(Command("online"))
