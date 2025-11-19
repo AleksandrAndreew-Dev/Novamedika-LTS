@@ -4,20 +4,20 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from bot.models.user import User
-from bot.models.question import Question
-from bot.models.answer import Answer
-from bot.models.pharmacist import Pharmacist
-from bot.states.user_states import UserQAStates
+from db.qa_models import User
+from db.qa_models import Question
+from db.qa_models import Answer
+from db.qa_models import Pharmacist
+from bot.handlers.qa_states import UserQAStates
 import logging
 from datetime import datetime, timedelta
+from utils.time_utils import get_utc_now_naive
 
 logger = logging.getLogger(__name__)
 
 router = Router()
 
-def get_utc_now_naive():
-    return datetime.utcnow()
+
 
 @router.message(Command("ask"))
 async def cmd_ask(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool):
