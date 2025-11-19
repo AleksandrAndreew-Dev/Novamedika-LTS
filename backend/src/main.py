@@ -1,16 +1,17 @@
 import asyncio
 import logging
 import os
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from bot.handlers.common_handlers import router as common_router
-from bot.handlers.registration_handlers import router as registration_router
-from bot.handlers.user_questions_handlers import router as user_questions_router
-from bot.handlers.qa_handlers import router as qa_handlers_router
-from bot.middleware.db_middleware import DbMiddleware
+from bot.core import bot_manager
+from bot.handlers import common_router, registration_router, user_questions_router, qa_handlers_router
 from bot.middleware.role_middleware import RoleMiddleware
-from bot.db import create_engine, create_session_maker
+from db.database import async_session_maker
+from bot.middleware.db import DbMiddleware
 
 # Настройка логирования
 logging.basicConfig(
@@ -19,33 +20,48 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-token = os.getenv("TELEGRAM_BOT_TOKEN")
-
-async def main():
-    bot = Bot(token=token)
-    storage = MemoryStorage()
-    dp = Dispatcher(storage=storage)
-
-    # Подключение к базе данных
-    engine = create_engine()
-    session_maker = create_session_maker(engine)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Инициализация бота при запуске
+    bot, dp = await bot_manager.initialize()
+    if not bot or not dp:
+        logger.error("Failed to initialize bot")
+        return
 
     # Подключение middleware
-    dp.update.middleware(DbMiddleware(session_maker))
+    dp.update.middleware(DbMiddleware(async_session_maker))
     dp.update.middleware(RoleMiddleware())
 
-    # Регистрация роутеров в правильном порядке
+    # Регистрация роутеров
     dp.include_router(common_router)
     dp.include_router(registration_router)
-    dp.include_router(qa_handlers_router)  # Важно: до user_questions_router!
+    dp.include_router(qa_handlers_router)
     dp.include_router(user_questions_router)
 
-    logger.info("Bot started with updated router order")
+    logger.info("Bot started successfully")
 
-    try:
-        await dp.start_polling(bot)
-    finally:
-        await bot.session.close()
+    yield
+
+    # Завершение работы бота
+    await bot_manager.shutdown()
+
+app = FastAPI(lifespan=lifespan)
+
+# Подключение API роутеров
+from routers import pharmacist_auth, qa, telegram_bot
+
+app.include_router(pharmacist_auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(qa.router, prefix="/api/qa", tags=["qa"])
+app.include_router(telegram_bot.router, prefix="/api/bot", tags=["bot"])
+
+@app.get("/")
+async def root():
+    return {"status": "ok", "message": "Novamedika Q&A Bot API"}
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
