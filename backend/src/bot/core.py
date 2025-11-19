@@ -17,6 +17,14 @@ class BotManager:
             cls._instance = super(BotManager, cls).__new__(cls)
         return cls._instance
 
+    async def is_initialized(self):
+        return self._bot is not None and self._dp is not None
+
+    async def ensure_initialized(self):
+        if not await self.is_initialized():
+            return await self.initialize()
+        return self._bot, self._dp
+
     async def initialize(self):
         """Инициализация бота один раз при старте приложения"""
         if self._bot is not None:

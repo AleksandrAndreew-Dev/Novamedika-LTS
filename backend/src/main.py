@@ -27,56 +27,55 @@ from bot.handlers.common_handlers import router as common_handlers_router
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# В lifespan функцию добавьте:
 async def lifespan(app: FastAPI):
     print("🚀 Backend starting up...")
 
-    # Создаем таблицы при старте
+    # Создаем таблицы
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    # Инициализируем бота
     bot, dp = await bot_manager.initialize()
     if bot and dp:
         print("✅ Telegram bot initialized")
 
+        # Регистрируем middleware
         from bot.middleware.db import DbMiddleware
         from bot.middleware.role_middleware import RoleMiddleware
 
-        # Регистрируем middleware
         dp.update.middleware(DbMiddleware())
         dp.update.middleware(RoleMiddleware())
 
-        # Регистрируем роутеры в правильном порядке
-        dp.include_router(common_handlers_router)
+        # Регистрируем роутеры
+        from bot.handlers import common_router, registration_router, user_questions_router, qa_handlers_router
+
+        dp.include_router(common_router)
         dp.include_router(registration_router)
         dp.include_router(user_questions_router)
         dp.include_router(qa_handlers_router)
 
-        # Автоматически устанавливаем webhook в production
-        if os.getenv("ENVIRONMENT") == "production":
+        print("✅ Handlers registered")
+
+        # Установка webhook
+        webhook_url = os.getenv("TELEGRAM_WEBHOOK_URL")
+        if webhook_url:
             try:
-                webhook_url = os.getenv("TELEGRAM_WEBHOOK_URL")
-                if webhook_url:
-                    secret_token = os.getenv("TELEGRAM_WEBHOOK_SECRET")
-                    webhook_config = {
-                        "url": webhook_url,
-                        "drop_pending_updates": True,
-                        "max_connections": 40,
-                    }
-                    if secret_token:
-                        webhook_config["secret_token"] = secret_token
-
-                    await bot.set_webhook(**webhook_config)
-                    print(f"✅ Production webhook set: {webhook_url}")
+                secret_token = os.getenv("TELEGRAM_WEBHOOK_SECRET")
+                await bot.set_webhook(
+                    url=webhook_url,
+                    secret_token=secret_token,
+                    drop_pending_updates=True
+                )
+                print(f"✅ Webhook set: {webhook_url}")
             except Exception as e:
-                print(f"❌ Failed to set production webhook: {e}")
+                print(f"❌ Webhook setup failed: {e}")
     else:
-        print("❌ Telegram bot not configured")
+        print("❌ Bot initialization failed")
 
-    print("✅ Database tables created/verified")
     yield
 
     print("🔴 Backend shutting down...")
-    # Корректное завершение работы бота
     await bot_manager.shutdown()
     await engine.dispose()
 

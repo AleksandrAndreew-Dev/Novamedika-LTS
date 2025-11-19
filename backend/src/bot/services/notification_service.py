@@ -17,10 +17,14 @@ logger = logging.getLogger(__name__)
 async def notify_pharmacists_about_new_question(question, db: AsyncSession):
     """Уведомить всех активных фармацевтов о новом вопросе"""
     try:
-        bot, _ = await bot_manager.initialize()  # ✅ Правильная инициализация
+        bot, _ = await bot_manager.ensure_initialized()
         if not bot:
-            logger.error("Bot not available for notifications")
+            logger.error("❌ Bot not available for notifications")
             return
+
+        from utils.time_utils import get_utc_now_naive
+        from datetime import timedelta
+        from sqlalchemy import select
 
         online_threshold = get_utc_now_naive() - timedelta(minutes=5)
 
@@ -34,7 +38,7 @@ async def notify_pharmacists_about_new_question(question, db: AsyncSession):
         pharmacists = result.scalars().all()
 
         if not pharmacists:
-            logger.info("No online pharmacists found for notification")
+            logger.info("ℹ️ No online pharmacists found for notification")
             return
 
         message_text = (
@@ -44,6 +48,7 @@ async def notify_pharmacists_about_new_question(question, db: AsyncSession):
             "Для ответа используйте команду /questions"
         )
 
+        notified_count = 0
         for pharmacist in pharmacists:
             try:
                 if pharmacist.user and pharmacist.user.telegram_id:
@@ -51,9 +56,14 @@ async def notify_pharmacists_about_new_question(question, db: AsyncSession):
                         chat_id=pharmacist.user.telegram_id,
                         text=message_text
                     )
-                    logger.info(f"Notified pharmacist {pharmacist.uuid}")
+                    notified_count += 1
+                    logger.info(f"✅ Notified pharmacist {pharmacist.uuid}")
+                    # Небольшая задержка между отправками
+                    await asyncio.sleep(0.1)
             except Exception as e:
-                logger.error(f"Failed to notify pharmacist {pharmacist.uuid}: {e}")
+                logger.error(f"❌ Failed to notify pharmacist {pharmacist.uuid}: {e}")
+
+        logger.info(f"📢 Notified {notified_count} pharmacists about new question")
 
     except Exception as e:
-        logger.error(f"Error in notification service: {e}")
+        logger.error(f"❌ Error in notification service: {e}")
