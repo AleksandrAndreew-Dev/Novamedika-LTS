@@ -158,7 +158,10 @@ async def cmd_questions(
             user = user_result.scalar_one_or_none()
 
             if user:
-                user_info = user.full_name or user.telegram_username or "Аноним"
+                # ИСПРАВЛЕНИЕ: используем правильные поля
+                user_info = user.first_name or user.telegram_username or "Аноним"
+                if user.last_name:
+                    user_info = f"{user.first_name} {user.last_name}"
                 question_text += f"\n👤 Пользователь: {user_info}"
 
             await message.answer(

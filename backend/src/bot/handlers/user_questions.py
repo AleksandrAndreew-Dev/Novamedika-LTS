@@ -82,7 +82,7 @@ async def cmd_my_questions(
                 )
                 answer = answer_result.scalar_one_or_none()
 
-                questions_text += f"{i}. ❓ Вопрос: {question.text}\n"
+                questions_text += f"{i}. ❓ Вопрос: {question.text[:100]}{'...' if len(question.text) > 100 else ''}\n"
                 if answer:
                     answer_preview = answer.text[:100] + "..." if len(answer.text) > 100 else answer.text
                     questions_text += f"   💬 Ваш ответ: {answer_preview}\n"
@@ -115,16 +115,29 @@ async def cmd_my_questions(
                 questions_text += f"{i}. ❓ Вопрос: {question.text}\n"
                 questions_text += f"   📊 Статус: {question.status}\n"
 
-                if question.answers:
+                # ИСПРАВЛЕНИЕ: избегаем ленивой загрузки answers
+                # Вместо question.answers делаем отдельный запрос
+                answers_result = await db.execute(
+                    select(Answer)
+                    .where(Answer.question_id == question.uuid)
+                    .order_by(Answer.created_at.asc())
+                )
+                answers = answers_result.scalars().all()
+
+                if answers:
                     questions_text += "   💬 Ответы:\n"
-                    for answer in question.answers:
+                    for answer in answers:
                         # Получаем информацию о фармацевте
                         pharmacist_result = await db.execute(
                             select(Pharmacist).where(Pharmacist.uuid == answer.pharmacist_id)
                         )
                         pharmacist = pharmacist_result.scalar_one_or_none()
 
-                        pharmacist_name = pharmacist.full_name if pharmacist else "Фармацевт"
+                        pharmacist_name = "Фармацевт"
+                        if pharmacist and pharmacist.pharmacy_info:
+                            pharmacy_name = pharmacist.pharmacy_info.get('name', 'Фармацевт')
+                            pharmacist_name = pharmacy_name
+
                         answer_preview = answer.text[:80] + "..." if len(answer.text) > 80 else answer.text
                         questions_text += f"     - {pharmacist_name}: {answer_preview}\n"
 
