@@ -4,7 +4,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from db.qa_models import User
+from db.qa_models import User, Pharmacist
 from db.qa_models import Question
 from db.qa_models import Answer
 from bot.handlers.qa_states import QAStates
