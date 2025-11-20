@@ -4,8 +4,9 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware  # ДОБАВИТЬ
 from aiogram import Bot, Dispatcher
-from aiogram.types import BotCommand  # ДОБАВИТЬ ЭТОТ ИМПОРТ
+from aiogram.types import BotCommand
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot.core import bot_manager
@@ -26,8 +27,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
-# ВЫНЕСТИ ФУНКЦИЮ НАРУЖУ
 async def set_bot_commands(bot: Bot):
     commands = [
         BotCommand(command="/start", description="Главное меню"),
@@ -41,7 +40,6 @@ async def set_bot_commands(bot: Bot):
         ),
     ]
     await bot.set_my_commands(commands)
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -106,8 +104,20 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Error deleting webhook: {e}")
 
-
 app = FastAPI(lifespan=lifespan, title="Novamedika Q&A Bot API")
+
+# ДОБАВИТЬ CORS MIDDLEWARE
+origins = os.getenv("CORS_ORIGINS", "").split(",")
+if not origins or origins == [""]:
+    origins = ["http://localhost:3000", "https://spravka.novamedika.com"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Подключение API роутеров
 from routers import (
@@ -117,7 +127,7 @@ from routers import (
     search,
     upload,
     pharmacies_info,
-)  # ДОБАВИТЬ НЕДОСТАЮЩИЕ РОУТЫ
+)
 
 app.include_router(pharmacist_auth.router, tags=["auth"])
 app.include_router(qa.router, tags=["qa"])
@@ -126,18 +136,14 @@ app.include_router(search.router, tags=["search"])
 app.include_router(upload.router, tags=["upload"])
 app.include_router(pharmacies_info.router, tags=["pharmacies"])
 
-
 @app.get("/")
 async def root():
     return {"status": "ok", "message": "Novamedika Q&A Bot API"}
-
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
 
-
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(app, host="0.0.0.0", port=8000)

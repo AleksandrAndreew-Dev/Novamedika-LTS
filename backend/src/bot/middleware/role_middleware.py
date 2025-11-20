@@ -1,14 +1,29 @@
-# Исправленная версия role_middleware.py
-from routers.pharmacist_auth import get_pharmacist_by_telegram_id
-import logging
 from aiogram import BaseMiddleware
 from aiogram.types import Message, CallbackQuery, Update
 from typing import Callable, Dict, Any, Awaitable, Union
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+import logging
 
-
+from db.qa_models import Pharmacist, User
 
 logger = logging.getLogger(__name__)
+
+async def get_pharmacist_by_telegram_id(telegram_id: int, db: AsyncSession):
+    """Найти фармацевта по Telegram ID"""
+    try:
+        result = await db.execute(
+            select(Pharmacist)
+            .join(User, Pharmacist.user_id == User.uuid)
+            .options(selectinload(Pharmacist.user))
+            .where(User.telegram_id == telegram_id)
+            .where(Pharmacist.is_active == True)
+        )
+        return result.scalars().first()
+    except Exception as e:
+        logger.error(f"Error getting pharmacist by telegram_id {telegram_id}: {e}")
+        return None
 
 class RoleMiddleware(BaseMiddleware):
     async def __call__(
@@ -28,22 +43,26 @@ class RoleMiddleware(BaseMiddleware):
                 elif event.edited_message:
                     real_event = event.edited_message
                 else:
+                    # Если не можем определить событие, пропускаем
+                    data["is_pharmacist"] = False
+                    data["pharmacist"] = None
+                    data["user_role"] = "customer"
                     return await handler(event, data)
 
             # Проверяем наличие from_user
             if not hasattr(real_event, "from_user") or not real_event.from_user:
                 data["is_pharmacist"] = False
                 data["pharmacist"] = None
-                data["user_role"] = "unknown"
-                data["user_id"] = None
+                data["user_role"] = "customer"
                 return await handler(event, data)
 
             # Определяем тип пользователя
             db = data.get("db")
-            if not db:
-                logger.error("Database session not found in data")
+            if not db or not isinstance(db, AsyncSession):
+                logger.error("Database session not found or invalid in data")
                 data["is_pharmacist"] = False
                 data["pharmacist"] = None
+                data["user_role"] = "customer"
                 return await handler(event, data)
 
             user_id = real_event.from_user.id
@@ -54,6 +73,8 @@ class RoleMiddleware(BaseMiddleware):
             data["user_role"] = "pharmacist" if pharmacist else "customer"
             data["user_id"] = user_id
 
+            logger.debug(f"Role middleware: user {user_id}, is_pharmacist: {pharmacist is not None}")
+
             return await handler(event, data)
 
         except Exception as e:
@@ -62,19 +83,3 @@ class RoleMiddleware(BaseMiddleware):
             data["pharmacist"] = None
             data["user_role"] = "customer"
             return await handler(event, data)
-
-# role_middleware.py - ДОБАВИТЬ ЭТУ ФУНКЦИЮ
-async def get_pharmacist_by_telegram_id(telegram_id: int, db):
-    """Найти фармацевта по Telegram ID"""
-    from sqlalchemy import select
-    from sqlalchemy.orm import selectinload
-    from db.qa_models import Pharmacist, User
-
-    result = await db.execute(
-        select(Pharmacist)
-        .join(User, Pharmacist.user_id == User.uuid)
-        .options(selectinload(Pharmacist.user))
-        .where(User.telegram_id == telegram_id)
-        .where(Pharmacist.is_active == True)
-    )
-    return result.scalars().first()

@@ -72,15 +72,17 @@ async def universal_cancel(message: Message, state: FSMContext):
     await state.clear()
     await message.answer("✅ Текущее действие отменено.")
 
+# ПЕРЕМЕСТИТЬ ЭТОТ ОБРАБОТЧИК В САМЫЙ КОНЕЦ
 @router.message(F.command)
 async def unknown_command(message: Message):
-    """Обработка неизвестных команд"""
+    """Обработка неизвестных команд - ДОЛЖЕН БЫТЬ ПОСЛЕДНИМ"""
     logger.info(f"Unknown command from user {message.from_user.id}: {message.text}")
     await message.answer(
         "❌ Неизвестная команда.\n\n"
         "Используйте /help для просмотра доступных команд."
     )
 
+# ИСПРАВИТЬ: Добавить фильтр для исключения команд
 @router.message(F.text & ~F.command)
 async def handle_user_message(
     message: Message,
