@@ -62,10 +62,11 @@ async def lifespan(app: FastAPI):
     dp.update.outer_middleware(RoleMiddleware())
 
     # Регистрация роутеров
-    dp.include_router(common_router)
+
     dp.include_router(registration_router)
     dp.include_router(qa_handlers_router)
     dp.include_router(user_questions_router)
+    dp.include_router(common_router)
 
     # УСТАНОВКА WEBHOOK ПРИ ЗАПУСКЕ
     try:

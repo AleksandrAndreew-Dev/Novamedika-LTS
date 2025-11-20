@@ -65,6 +65,7 @@ async def get_pharmacist_by_telegram_id(
 
 class RoleMiddleware(BaseMiddleware):
     async def __call__(self, handler, event, data: Dict[str, Any]):
+        logger.info(f"RoleMiddleware: Processing update {event.update_id if hasattr(event, 'update_id') else 'unknown'}")
         # defaults — всегда ставим ключи
         data.setdefault("is_pharmacist", False)
         data.setdefault("pharmacist", None)
@@ -108,4 +109,7 @@ class RoleMiddleware(BaseMiddleware):
             logger.exception("Error in role middleware user processing for %s", user_id)
             # оставить defaults, не прерываем поток
 
+        logger.info(f"RoleMiddleware: User {user_id} - is_pharmacist: {pharmacist is not None}")
         return await handler(event, data)
+
+
