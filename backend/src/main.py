@@ -13,7 +13,7 @@ from bot.handlers import (
     common_router,
     registration_router,
     user_questions_router,
-    qa_handlers,
+    qa_handlers_router,
 )
 from bot.middleware.role_middleware import RoleMiddleware
 from db.database import async_session_maker
@@ -66,7 +66,7 @@ async def lifespan(app: FastAPI):
     # Регистрация роутеров
     dp.include_router(common_router)
     dp.include_router(registration_router)
-    dp.include_router(qa_handlers)
+    dp.include_router(qa_handlers_router)
     dp.include_router(user_questions_router)
 
     # УСТАНОВКА WEBHOOK ПРИ ЗАПУСКЕ
