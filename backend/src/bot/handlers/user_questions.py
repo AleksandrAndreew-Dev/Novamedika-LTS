@@ -170,6 +170,127 @@ async def cmd_done(message: Message, state: FSMContext, db: AsyncSession, is_pha
     else:
         await message.answer("ℹ️ В данный момент у вас нет активного диалога.")
 
+
+@router.message(Command("clarify"))
+async def cmd_clarify(message: Message, state: FSMContext, db: AsyncSession, user: User):
+    """Уточнение к предыдущему вопросу"""
+    try:
+        # Получаем последний отвеченный вопрос пользователя
+        result = await db.execute(
+            select(Question)
+            .where(Question.user_id == user.uuid)
+            .where(Question.status == "answered")
+            .order_by(Question.answered_at.desc())
+            .limit(1)
+        )
+        last_question = result.scalar_one_or_none()
+
+        if not last_question:
+            await message.answer("❌ У вас нет отвеченных вопросов для уточнения.")
+            return
+
+        await state.update_data(clarify_question_id=str(last_question.uuid))
+        await state.set_state(UserQAStates.waiting_for_clarification)
+
+        await message.answer(
+            f"💬 Уточнение к вопросу:\n\n"
+            f"❓ {last_question.text}\n\n"
+            f"Напишите ваше уточнение ниже:\n"
+            f"(или /cancel для отмены)"
+        )
+
+    except Exception as e:
+        logger.error(f"Error in cmd_clarify: {e}")
+        await message.answer("❌ Ошибка при создании уточнения.")
+
+@router.message(UserQAStates.waiting_for_clarification)
+async def process_clarification(
+    message: Message,
+    state: FSMContext,
+    db: AsyncSession,
+    user: User
+):
+    """Обработка уточнения пользователя"""
+    try:
+        state_data = await state.get_data()
+        question_uuid = state_data.get("clarify_question_id")
+
+        if not question_uuid:
+            await message.answer("❌ Не удалось найти вопрос для уточнения.")
+            await state.clear()
+            return
+
+        # Получаем исходный вопрос
+        result = await db.execute(
+            select(Question).where(Question.uuid == question_uuid)
+        )
+        original_question = result.scalar_one_or_none()
+
+        if not original_question:
+            await message.answer("❌ Вопрос не найден.")
+            await state.clear()
+            return
+
+        # Создаем новый вопрос как уточнение
+        clarification_question = Question(
+            text=f"Уточнение: {message.text}",
+            user_id=user.uuid,
+            status="pending",
+            category=original_question.category,
+            context_data={
+                "is_clarification": True,
+                "original_question_id": str(original_question.uuid),
+                "original_question_text": original_question.text
+            }
+        )
+
+        db.add(clarification_question)
+        await db.commit()
+
+        # Уведомляем фармацевтов
+        from sqlalchemy.orm import selectinload
+        five_minutes_ago = get_utc_now_naive() - timedelta(minutes=5)
+
+        result = await db.execute(
+            select(Pharmacist)
+            .options(selectinload(Pharmacist.user))
+            .where(
+                and_(
+                    Pharmacist.is_online == True,
+                    Pharmacist.last_seen >= five_minutes_ago
+                )
+            )
+        )
+        online_pharmacists = result.scalars().all()
+
+        notified_count = 0
+        for pharmacist in online_pharmacists:
+            if pharmacist.user and pharmacist.user.telegram_id:
+                try:
+                    await message.bot.send_message(
+                        chat_id=pharmacist.user.telegram_id,
+                        text=f"🔍 Уточнение к вопросу!\n\n"
+                             f"❓ Исходный вопрос: {original_question.text}\n\n"
+                             f"💬 Уточнение: {message.text}\n\n"
+                             f"Используйте /questions чтобы ответить"
+                    )
+                    notified_count += 1
+                except Exception as e:
+                    logger.error(f"Failed to notify pharmacist {pharmacist.user.telegram_id}: {e}")
+
+        await message.answer(
+            "✅ Ваше уточнение отправлено фармацевтам!\n\n"
+            f"👨‍⚕️ Уведомлено фармацевтов: {notified_count}\n\n"
+            "Фармацевт скоро ответит на ваше уточнение."
+        )
+
+        await state.clear()
+
+    except Exception as e:
+        logger.error(f"Error processing clarification: {e}")
+        await message.answer("❌ Ошибка при отправке уточнения.")
+        await state.clear()
+
 @router.message(UserQAStates.waiting_for_question)
 async def process_user_question(
     message: Message,

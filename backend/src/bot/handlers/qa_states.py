@@ -9,3 +9,4 @@ class QAStates(StatesGroup):
 class UserQAStates(StatesGroup):
     waiting_for_question = State()
     in_dialog = State()
+    waiting_for_clarification = State()

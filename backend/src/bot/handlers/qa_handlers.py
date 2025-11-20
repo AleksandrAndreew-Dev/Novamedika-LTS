@@ -310,11 +310,13 @@ async def process_answer_text(
                     text=f"💊 На ваш вопрос получен ответ от фармацевта:\n\n"
                     f"❓ Ваш вопрос: {question.text}\n\n"
                     f"💬 Ответ: {answer_preview}\n\n"
-                    f"Если ответ неполный, задайте уточняющий вопрос через /ask",
+                    f"💡 Если ответ неполный или у вас есть уточняющий вопрос, "
+                 "используйте команду /clarify",
                 )
                 logger.info(
                     f"Notification sent to user {user.telegram_id} about answer"
                 )
+
             except Exception as e:
                 logger.error(
                     f"Failed to send notification to user {user.telegram_id}: {e}"
