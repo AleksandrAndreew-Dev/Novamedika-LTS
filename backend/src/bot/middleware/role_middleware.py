@@ -5,13 +5,50 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 import logging
+from sqlalchemy.exc import IntegrityError
+from typing import Optional
 
 from db.qa_models import Pharmacist, User
 
+
+import uuid
+
 logger = logging.getLogger(__name__)
 
-async def get_pharmacist_by_telegram_id(telegram_id: int, db: AsyncSession):
-    """Найти фармацевта по Telegram ID"""
+
+async def get_or_create_user(telegram_id: int, db: AsyncSession) -> User:
+    try:
+        result = await db.execute(select(User).where(User.telegram_id == telegram_id))
+        user = result.scalar_one_or_none()
+        if user:
+            return user
+
+        new_user = User(
+            uuid=str(uuid.uuid4()), telegram_id=telegram_id, user_type="customer"
+        )
+        db.add(new_user)
+        try:
+            await db.commit()
+            await db.refresh(new_user)
+            logger.info("Created new user with telegram_id: %s", telegram_id)
+            return new_user
+        except IntegrityError:
+            await db.rollback()
+            result = await db.execute(
+                select(User).where(User.telegram_id == telegram_id)
+            )
+            user = result.scalar_one_or_none()
+            if user:
+                return user
+            raise
+    except Exception:
+        logger.exception("Error in get_or_create_user for %s", telegram_id)
+        raise
+
+
+async def get_pharmacist_by_telegram_id(
+    telegram_id: int, db: AsyncSession
+) -> Optional[Pharmacist]:
     try:
         result = await db.execute(
             select(Pharmacist)
@@ -20,66 +57,56 @@ async def get_pharmacist_by_telegram_id(telegram_id: int, db: AsyncSession):
             .where(User.telegram_id == telegram_id)
             .where(Pharmacist.is_active == True)
         )
-        return result.scalars().first()
-    except Exception as e:
-        logger.error(f"Error getting pharmacist by telegram_id {telegram_id}: {e}")
+        # Лучше ожидать max 1 запись; однообразное поведение при отсутствии/дубликатах
+        return result.scalars().one_or_none()
+    except Exception:
+        logger.exception("Error getting pharmacist by telegram_id %s", telegram_id)
         return None
 
+
 class RoleMiddleware(BaseMiddleware):
-    async def __call__(
-        self,
-        handler: Callable[[Union[Message, CallbackQuery], Dict[str, Any]], Awaitable[Any]],
-        event: Union[Update, Message, CallbackQuery],
-        data: Dict[str, Any],
-    ) -> Any:
+    async def __call__(self, handler, event, data: Dict[str, Any]):
+        # defaults — всегда ставим ключи
+        data.setdefault("is_pharmacist", False)
+        data.setdefault("pharmacist", None)
+        data.setdefault("user_role", "customer")
+        data.setdefault("user", None)
+        data.setdefault("user_id", None)
+
+        real_event = event
+        if isinstance(event, Update):
+            # предпочитаем последовательность: message, edited_message, callback_query
+            real_event = event.message or event.edited_message or event.callback_query
+            if real_event is None:
+                return await handler(event, data)
+
+        if not getattr(real_event, "from_user", None):
+            return await handler(event, data)
+
+        db = data.get("db")
+        if not (hasattr(db, "execute") and hasattr(db, "commit")):
+            logger.error("Database session not found or invalid in data")
+            return await handler(event, data)
+
+        user_id = real_event.from_user.id
+        data["user_id"] = user_id
+
         try:
-            # Получаем реальное событие
-            real_event = event
-            if isinstance(event, Update):
-                if event.message:
-                    real_event = event.message
-                elif event.callback_query:
-                    real_event = event.callback_query
-                elif event.edited_message:
-                    real_event = event.edited_message
-                else:
-                    # Если не можем определить событие, пропускаем
-                    data["is_pharmacist"] = False
-                    data["pharmacist"] = None
-                    data["user_role"] = "customer"
-                    return await handler(event, data)
-
-            # Проверяем наличие from_user
-            if not hasattr(real_event, "from_user") or not real_event.from_user:
-                data["is_pharmacist"] = False
-                data["pharmacist"] = None
-                data["user_role"] = "customer"
-                return await handler(event, data)
-
-            # Определяем тип пользователя
-            db = data.get("db")
-            if not db or not isinstance(db, AsyncSession):
-                logger.error("Database session not found or invalid in data")
-                data["is_pharmacist"] = False
-                data["pharmacist"] = None
-                data["user_role"] = "customer"
-                return await handler(event, data)
-
-            user_id = real_event.from_user.id
+            user = await get_or_create_user(user_id, db)
             pharmacist = await get_pharmacist_by_telegram_id(user_id, db)
 
+            data["user"] = user
             data["is_pharmacist"] = pharmacist is not None
             data["pharmacist"] = pharmacist
             data["user_role"] = "pharmacist" if pharmacist else "customer"
-            data["user_id"] = user_id
 
-            logger.debug(f"Role middleware: user {user_id}, is_pharmacist: {pharmacist is not None}")
+            logger.debug(
+                "Role middleware: user %s is_pharmacist=%s",
+                user_id,
+                pharmacist is not None,
+            )
+        except Exception:
+            logger.exception("Error in role middleware user processing for %s", user_id)
+            # оставить defaults, не прерываем поток
 
-            return await handler(event, data)
-
-        except Exception as e:
-            logger.error(f"RoleMiddleware error: {e}")
-            data["is_pharmacist"] = False
-            data["pharmacist"] = None
-            data["user_role"] = "customer"
-            return await handler(event, data)
+        return await handler(event, data)

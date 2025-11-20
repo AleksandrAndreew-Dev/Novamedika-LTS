@@ -82,16 +82,23 @@ async def unknown_command(message: Message):
         "Используйте /help для просмотра доступных команд."
     )
 
-# ИСПРАВИТЬ: Добавить фильтр для исключения команд
-@router.message(F.text & ~F.command)
+
+# ПЕРЕМЕСТИТЬ ЭТОТ ОБРАБОТЧИК В САМЫЙ КОНЕЦ ФАЙЛА
+@router.message(F.text)
 async def handle_user_message(
     message: Message,
     state: FSMContext,
     db: AsyncSession,
     is_pharmacist: bool,
     pharmacist: object,
+    user: User  # ✅ Добавляем user как зависимость
 ):
-    """Обработка текстовых сообщений без команд и состояний"""
+    """Обработка текстовых сообщений без команд и состояний - ДОЛЖЕН БЫТЬ ПОСЛЕДНИМ"""
+
+    # Пропускаем команды
+    if message.text.startswith('/'):
+        return
+
     current_state = await state.get_state()
 
     # Если есть какое-либо состояние - не обрабатываем здесь
@@ -99,7 +106,7 @@ async def handle_user_message(
         logger.debug(f"Message in state {current_state} ignored by handle_user_message, user: {message.from_user.id}")
         return
 
-    logger.info(f"Handle user message from {message.from_user.id} with no state")
+    logger.info(f"Handle user message from {message.from_user.id} with no state, user: {user.uuid}")
 
     # Показываем приветственное сообщение
     if is_pharmacist and pharmacist:
