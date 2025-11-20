@@ -6,12 +6,12 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 import logging
 import os
+import uuid
 
-from routers.pharmacist_auth import get_pharmacist_by_telegram_id, register_pharmacist
 from db.qa_models import Pharmacist, User
+from utils.time_utils import get_utc_now_naive
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -22,9 +22,71 @@ class RegistrationStates(StatesGroup):
     waiting_pharmacy_role = State()
     waiting_secret_word = State()
 
+async def get_or_create_user(telegram_data: dict, db: AsyncSession) -> User:
+    """Найти или создать пользователя"""
+    result = await db.execute(
+        select(User).where(User.telegram_id == telegram_data["telegram_user_id"])
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        user = User(
+            uuid=uuid.uuid4(),
+            telegram_id=telegram_data["telegram_user_id"],
+            first_name=telegram_data.get("first_name"),
+            last_name=telegram_data.get("last_name"),
+            telegram_username=telegram_data.get("telegram_username"),
+            user_type="pharmacist"
+        )
+        db.add(user)
+        await db.flush()
+
+    return user
+
+async def register_pharmacist_from_telegram(telegram_data: dict, db: AsyncSession):
+    """Регистрация фармацевта с проверкой дубликатов"""
+    try:
+        user = await get_or_create_user(telegram_data, db)
+        pharmacy_info = telegram_data.get("pharmacy_info", {})
+
+        # Проверяем, есть ли уже фармацевт с таким user_id
+        result = await db.execute(
+            select(Pharmacist).where(Pharmacist.user_id == user.uuid)
+        )
+        existing_pharmacist = result.scalar_one_or_none()
+
+        if existing_pharmacist:
+            # Если запись уже есть, активируем ее
+            existing_pharmacist.is_active = True
+            existing_pharmacist.is_online = True
+            existing_pharmacist.last_seen = get_utc_now_naive()
+            pharmacist = existing_pharmacist
+        else:
+            # Создаем новую запись
+            pharmacist = Pharmacist(
+                uuid=uuid.uuid4(),
+                user_id=user.uuid,
+                pharmacy_info=pharmacy_info,
+                is_active=True,
+                is_online=True,
+                last_seen=get_utc_now_naive()
+            )
+            db.add(pharmacist)
+
+        await db.commit()
+        await db.refresh(pharmacist)
+        return pharmacist
+
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Registration error: {e}")
+        raise
+
 @router.message(Command("register"))
 async def cmd_register(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool):
     """Начать регистрацию фармацевта"""
+    logger.info(f"Command /register from user {message.from_user.id}, is_pharmacist: {is_pharmacist}")
+
     if is_pharmacist:
         await message.answer("❌ Вы уже зарегистрированы как фармацевт!")
         return
@@ -42,43 +104,6 @@ async def cmd_register(message: Message, state: FSMContext, db: AsyncSession, is
         "Выберите сеть аптек:",
         reply_markup=keyboard
     )
-
-
-@router.message(Command("start"))
-async def cmd_start(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist):
-    """Универсальный старт для всех пользователей"""
-    if is_pharmacist and pharmacist:
-        # Фармацевт
-        status_text = "🟢 Онлайн" if pharmacist.is_online else "🔴 Офлайн"
-        await message.answer(
-            f"👨‍⚕️ Добро пожаловать назад, {pharmacist.user.first_name or 'фармацевт'}!\n\n"
-            f"Статус: {status_text}\n"
-            f"Аптека: {pharmacist.pharmacy_info.get('name', 'Не указана')}\n\n"
-            "Доступные команды:\n"
-            "/online - перейти в онлайн\n"
-            "/offline - перейти в офлайн\n"
-            "/questions - просмотреть вопросы\n"
-            "/status - показать статус\n"
-            "/help - помощь"
-        )
-    else:
-        # Обычный пользователь
-        keyboard = ReplyKeyboardMarkup(
-            keyboard=[
-                [KeyboardButton(text="💊 Задать вопрос"), KeyboardButton(text="👨‍⚕️ Я фармацевт")],
-                [KeyboardButton(text="📋 Мои вопросы"), KeyboardButton(text="❓ Помощь")]
-            ],
-            resize_keyboard=True
-        )
-
-        await message.answer(
-            "👋 Добро пожаловать в Novamedika Q&A Bot!\n\n"
-            "Я помогу вам получить профессиональные ответы от фармацевтов.\n\n"
-            "Выберите действие:",
-            reply_markup=keyboard
-        )
-
-
     await state.set_state(RegistrationStates.waiting_pharmacy_chain)
 
 @router.message(RegistrationStates.waiting_pharmacy_chain, F.text == "❌ Отмена регистрации")
@@ -171,13 +196,12 @@ async def process_secret_word(message: Message, state: FSMContext, db: AsyncSess
     try:
         data = await state.get_data()
 
-        # Формируем данные для регистрации с новой структурой
+        # Формируем данные для регистрации
         pharmacy_info = {
             "name": f"{data['pharmacy_chain']} №{data['pharmacy_number']}",
             "number": data['pharmacy_number'],
-            "city": "",  # Город больше не запрашиваем
             "chain": data['pharmacy_chain'],
-            "role": data['pharmacy_role']  # Новое поле
+            "role": data['pharmacy_role']
         }
 
         telegram_data = {
@@ -185,12 +209,11 @@ async def process_secret_word(message: Message, state: FSMContext, db: AsyncSess
             "first_name": message.from_user.first_name,
             "last_name": message.from_user.last_name,
             "telegram_username": message.from_user.username,
-            "pharmacy_info": pharmacy_info  # Передаем всю информацию об аптеке
+            "pharmacy_info": pharmacy_info
         }
 
         # Вызываем функцию регистрации
-        from routers.pharmacist_auth import register_pharmacist
-        result = await register_pharmacist(telegram_data, db)
+        pharmacist = await register_pharmacist_from_telegram(telegram_data, db)
 
         await message.answer(
             "✅ Регистрация успешна!\n\n"
@@ -210,24 +233,3 @@ async def process_secret_word(message: Message, state: FSMContext, db: AsyncSess
         logger.error(f"Registration error: {e}")
         await message.answer("❌ Ошибка регистрации. Попробуйте еще раз.")
         await state.clear()
-
-@router.message(Command("login"))
-async def cmd_login(message: Message, db: AsyncSession):
-    """Вход для зарегистрированных фармацевтов"""
-    from routers.pharmacist_auth import pharmacist_login
-
-    try:
-        result = await pharmacist_login(message.from_user.id, db)
-
-        # Сохраняем токен (в реальном приложении нужно безопасное хранилище)
-        await message.answer(
-            "✅ Вход выполнен успешно!\n\n"
-            "Теперь вы можете работать с вопросами пользователей.\n"
-            "Используйте /help для списка команд"
-        )
-
-    except Exception as e:
-        await message.answer(
-            "❌ Не удалось войти. Возможно, вы не зарегистрированы.\n"
-            "Для регистрации используйте /start"
-        )

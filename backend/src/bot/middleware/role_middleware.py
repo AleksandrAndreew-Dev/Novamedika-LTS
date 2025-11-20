@@ -62,3 +62,19 @@ class RoleMiddleware(BaseMiddleware):
             data["pharmacist"] = None
             data["user_role"] = "customer"
             return await handler(event, data)
+
+# role_middleware.py - ДОБАВИТЬ ЭТУ ФУНКЦИЮ
+async def get_pharmacist_by_telegram_id(telegram_id: int, db):
+    """Найти фармацевта по Telegram ID"""
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+    from db.qa_models import Pharmacist, User
+
+    result = await db.execute(
+        select(Pharmacist)
+        .join(User, Pharmacist.user_id == User.uuid)
+        .options(selectinload(Pharmacist.user))
+        .where(User.telegram_id == telegram_id)
+        .where(Pharmacist.is_active == True)
+    )
+    return result.scalars().first()
