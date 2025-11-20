@@ -19,11 +19,15 @@ async def notify_pharmacists_about_new_question(question, db: AsyncSession):
             logger.error("Bot not initialized for notifications")
             return
 
-        # Получаем онлайн фармацевтов
+        # Получаем онлайн фармацевтов с подгрузкой пользователя
         five_minutes_ago = get_utc_now_naive() - timedelta(minutes=5)
+
+        from sqlalchemy.orm import selectinload
+
         result = await db.execute(
             select(Pharmacist)
             .join(User, Pharmacist.user_id == User.uuid)
+            .options(selectinload(Pharmacist.user))  # Подгружаем пользователя
             .where(
                 Pharmacist.is_online == True,
                 Pharmacist.last_seen >= five_minutes_ago
@@ -43,15 +47,19 @@ async def notify_pharmacists_about_new_question(question, db: AsyncSession):
         notified_count = 0
         for pharmacist in online_pharmacists:
             try:
-                await bot.send_message(
-                    chat_id=pharmacist.user.telegram_id,
-                    text=f"❓ Новый вопрос от пользователя:\n\n{question_preview}",
-                    reply_markup=make_question_keyboard(question.uuid)
-                )
-                notified_count += 1
-                logger.info(f"Notification sent to pharmacist {pharmacist.user.telegram_id}")
+                # ИСПРАВЛЕНИЕ: используем pharmacist.user.telegram_id
+                if pharmacist.user and pharmacist.user.telegram_id:
+                    await bot.send_message(
+                        chat_id=pharmacist.user.telegram_id,  # ИСПРАВЛЕНО
+                        text=f"❓ Новый вопрос от пользователя:\n\n{question_preview}",
+                        reply_markup=make_question_keyboard(question.uuid)
+                    )
+                    notified_count += 1
+                    logger.info(f"Notification sent to pharmacist {pharmacist.user.telegram_id}")  # ИСПРАВЛЕНО
             except Exception as e:
-                logger.error(f"Failed to notify pharmacist {pharmacist.user.telegram_id}: {e}")
+                # ИСПРАВЛЕНИЕ: в логировании тоже исправляем
+                pharmacist_id = pharmacist.user.telegram_id if pharmacist.user else "unknown"
+                logger.error(f"Failed to notify pharmacist {pharmacist_id}: {e}")
 
         logger.info(f"Notified {notified_count} pharmacists about new question")
 

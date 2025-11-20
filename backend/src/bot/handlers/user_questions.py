@@ -179,16 +179,11 @@ async def process_user_question(
     user: User
 ):
     """Обработка вопроса от пользователя"""
-
     logger.info(f"Processing question from user {message.from_user.id}, state: {await state.get_state()}")
 
     if is_pharmacist:
         await message.answer("ℹ️ Вы фармацевт. Используйте /questions для ответов на вопросы.")
         await state.clear()
-        return
-
-    if message.text.startswith('/'):
-        await message.answer("❌ Пожалуйста, завершите текущий вопрос или используйте /cancel")
         return
 
     try:
@@ -204,11 +199,14 @@ async def process_user_question(
         await db.commit()
         logger.info(f"Question created for user {user.telegram_id}, question_id: {question.uuid}")
 
-        # Ищем онлайн фармацевтов
+        # Ищем онлайн фармацевтов с подгрузкой пользователя
         five_minutes_ago = get_utc_now_naive() - timedelta(minutes=5)
+
+        from sqlalchemy.orm import selectinload
 
         result = await db.execute(
             select(Pharmacist)
+            .options(selectinload(Pharmacist.user))  # Подгружаем связанного пользователя
             .where(
                 and_(
                     Pharmacist.is_online == True,
@@ -224,17 +222,21 @@ async def process_user_question(
         notified_count = 0
         for pharmacist in online_pharmacists:
             try:
-                question_preview = message.text[:100] + "..." if len(message.text) > 100 else message.text
-                await message.bot.send_message(
-                    chat_id=pharmacist.telegram_id,
-                    text=f"🔔 Новый вопрос от пользователя!\n\n"
-                         f"❓ Вопрос: {question_preview}\n\n"
-                         f"Используйте /questions чтобы ответить"
-                )
-                notified_count += 1
-                logger.info(f"Notification sent to pharmacist {pharmacist.telegram_id}")
+                # ИСПРАВЛЕНИЕ: используем pharmacist.user.telegram_id
+                if pharmacist.user and pharmacist.user.telegram_id:
+                    question_preview = message.text[:100] + "..." if len(message.text) > 100 else message.text
+                    await message.bot.send_message(
+                        chat_id=pharmacist.user.telegram_id,  # ИСПРАВЛЕНО
+                        text=f"🔔 Новый вопрос от пользователя!\n\n"
+                             f"❓ Вопрос: {question_preview}\n\n"
+                             f"Используйте /questions чтобы ответить"
+                    )
+                    notified_count += 1
+                    logger.info(f"Notification sent to pharmacist {pharmacist.user.telegram_id}")  # ИСПРАВЛЕНО
             except Exception as e:
-                logger.error(f"Failed to notify pharmacist {pharmacist.telegram_id}: {e}")
+                # ИСПРАВЛЕНИЕ: в логировании тоже исправляем
+                pharmacist_id = pharmacist.user.telegram_id if pharmacist.user else "unknown"
+                logger.error(f"Failed to notify pharmacist {pharmacist_id}: {e}")
 
         await message.answer(
             "✅ Ваш вопрос отправлен фармацевтам!\n\n"
