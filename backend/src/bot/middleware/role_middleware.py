@@ -16,6 +16,7 @@ import uuid
 logger = logging.getLogger(__name__)
 
 
+# ЗАМЕНИТЬ эту функцию в role_middleware.py
 async def get_or_create_user(telegram_id: int, db: AsyncSession) -> User:
     try:
         result = await db.execute(select(User).where(User.telegram_id == telegram_id))
@@ -23,26 +24,24 @@ async def get_or_create_user(telegram_id: int, db: AsyncSession) -> User:
         if user:
             return user
 
+        # Создаем нового пользователя с правильными полями
         new_user = User(
-            uuid=str(uuid.uuid4()), telegram_id=telegram_id, user_type="customer"
+            uuid=uuid.uuid4(),
+            telegram_id=telegram_id,
+            first_name=None,
+            last_name=None,
+            telegram_username=None,
+            user_type="customer"
         )
         db.add(new_user)
-        try:
-            await db.commit()
-            await db.refresh(new_user)
-            logger.info("Created new user with telegram_id: %s", telegram_id)
-            return new_user
-        except IntegrityError:
-            await db.rollback()
-            result = await db.execute(
-                select(User).where(User.telegram_id == telegram_id)
-            )
-            user = result.scalar_one_or_none()
-            if user:
-                return user
-            raise
-    except Exception:
-        logger.exception("Error in get_or_create_user for %s", telegram_id)
+        await db.commit()
+        await db.refresh(new_user)
+        logger.info(f"Created new user with telegram_id: {telegram_id}")
+        return new_user
+
+    except Exception as e:
+        await db.rollback()
+        logger.exception(f"Error in get_or_create_user for {telegram_id}: {e}")
         raise
 
 
