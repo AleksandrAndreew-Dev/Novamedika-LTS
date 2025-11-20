@@ -41,8 +41,8 @@ async def set_online(
         pharmacist.last_seen = get_utc_now_naive()
         await db.commit()
         logger.info(
-            f"Pharmacist {pharmacist.telegram_id} successfully set online status"
-        )
+        f"Pharmacist {message.from_user.id} successfully set online status"  # вместо pharmacist.telegram_id
+    )
 
         await message.answer("✅ Вы теперь онлайн и готовы принимать вопросы!")
 
@@ -77,8 +77,8 @@ async def set_offline(
         pharmacist.last_seen = get_utc_now_naive()
         await db.commit()
         logger.info(
-            f"Pharmacist {pharmacist.telegram_id} successfully set offline status"
-        )
+        f"Pharmacist {message.from_user.id} successfully set offline status"  # вместо pharmacist.telegram_id
+    )
 
         await message.answer("✅ Вы теперь офлайн.")
 
@@ -240,7 +240,7 @@ async def process_answer_text(
     state: FSMContext,
     db: AsyncSession,
     is_pharmacist: bool,
-    pharmacist: User,
+    pharmacist: Pharmacist,  # Это объект Pharmacist, а не User
 ):
     """Обработка текста ответа на вопрос"""
     logger.info(f"Processing answer from pharmacist {message.from_user.id}")
@@ -286,8 +286,10 @@ async def process_answer_text(
         question.answered_at = get_utc_now_naive()
 
         await db.commit()
+
+        # ИСПРАВЛЕНИЕ: используем message.from_user.id вместо pharmacist.telegram_id
         logger.info(
-            f"Pharmacist {pharmacist.telegram_id} successfully answered question {question.uuid}"
+            f"Pharmacist {message.from_user.id} successfully answered question {question.uuid}"
         )
 
         # Уведомляем пользователя
@@ -332,4 +334,3 @@ async def process_answer_text(
         )
         await message.answer("❌ Ошибка при отправке ответа")
         await state.clear()
-
