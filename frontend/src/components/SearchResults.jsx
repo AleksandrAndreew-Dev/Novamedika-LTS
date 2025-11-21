@@ -209,7 +209,7 @@ export default function SearchResults({
                       </h3>
                       <p className="text-sm text-gray-600">{item.form}</p>
                     </div>
-                    <span className="bg-telegram-primary text-white text-sm font-medium py-1 px-2 rounded-full">
+                    <span className="bg-telegram-primary text-gray-600 text-sm font-medium py-1 px-2 rounded-full">
                       {item.price} Br
                     </span>
                   </div>
@@ -303,7 +303,7 @@ export default function SearchResults({
                           {item.form}
                         </td>
                         <td className="py-3 px-4">
-                          <span className="inline-block bg-telegram-primary text-white text-sm font-medium py-1 px-3 rounded-full">
+                          <span className="inline-block bg-telegram-primary text-gray-600 text-sm font-medium py-1 px-3 rounded-full">
                             {item.price} Br
                           </span>
                         </td>
