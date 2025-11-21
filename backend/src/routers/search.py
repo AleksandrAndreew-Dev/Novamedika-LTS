@@ -60,9 +60,9 @@ async def search_two_step(
                 name_conditions.append(
                     or_(
                         Product.name.ilike(f"% {term} %"),  # слово отдельно
-                        Product.name.ilike(f"{term} %"),    # слово в начале
-                        Product.name.ilike(f"% {term}"),    # слово в конце
-                        Product.name.ilike(f"%{term}%"),    # часть слова
+                        Product.name.ilike(f"{term} %"),  # слово в начале
+                        Product.name.ilike(f"% {term}"),  # слово в конце
+                        Product.name.ilike(f"%{term}%"),  # часть слова
                     )
                 )
             else:
@@ -88,16 +88,17 @@ async def search_two_step(
     forms_query = (
         select(
             Product.form,
-            func.count(Product.uuid).label('count'),
+            func.count(Product.uuid).label("count"),
             # Добавляем оценку релевантности
             func.max(
                 case(
-                    [
-                        (Product.name.ilike(f"%{search_name}%"), 3),  # полное совпадение - высший приоритет
-                    ],
-                    else_=1
+                    (
+                        Product.name.ilike(f"%{search_name}%"),
+                        3,
+                    ),  # полное совпадение - высший приоритет
+                    else_=1,
                 )
-            ).label('relevance')
+            ).label("relevance"),
         )
         .join(Pharmacy, Product.pharmacy_id == Pharmacy.uuid)
         .where(or_(*name_conditions))
@@ -106,10 +107,8 @@ async def search_two_step(
     if city and city != "Все города" and city.strip():
         forms_query = forms_query.where(Pharmacy.city == city)
 
-    forms_query = (
-        forms_query
-        .group_by(Product.form)
-        .order_by(text('relevance DESC, count DESC, form'))
+    forms_query = forms_query.group_by(Product.form).order_by(
+        text("relevance DESC, count DESC, form")
     )
 
     forms_result = await db.execute(forms_query)
@@ -133,12 +132,9 @@ async def search_two_step(
         base_query.options(joinedload(Product.pharmacy))
         .order_by(
             # Сначала товары с полным совпадением названия
-            case(
-                [(Product.name.ilike(f"%{search_name}%"), 1)],
-                else_=0
-            ).desc(),
+            case((Product.name.ilike(f"%{search_name}%"), 1), else_=0).desc(),
             # Затем по цене
-            Product.price.asc()
+            Product.price.asc(),
         )
         .limit(20)
     )
@@ -210,11 +206,7 @@ async def search_products(
         search_name = search_name.strip().lower()
 
     # Базовый запрос
-    query = (
-        select(Product)
-        .options(joinedload(Product.pharmacy))
-        .join(Pharmacy)
-    )
+    query = select(Product).options(joinedload(Product.pharmacy)).join(Pharmacy)
 
     # Улучшенная фильтрация по названию
     if search_name:
@@ -260,13 +252,8 @@ async def search_products(
     # Улучшенная сортировка с учетом релевантности
     if search_name:
         query = query.order_by(
-            # Высший приоритет - полное совпадение
-            case(
-                [(Product.name.ilike(f"%{search_name}%"), 1)],
-                else_=0
-            ).desc(),
-            # Затем по цене
-            Product.price.asc()
+            case((Product.name.ilike(f"%{search_name}%"), 1), else_=0).desc(),
+            Product.price.asc(),
         )
     else:
         query = query.order_by(Product.price.asc())
@@ -288,21 +275,25 @@ async def search_products(
     items = []
     for product in products:
         pharmacy = product.pharmacy
-        items.append({
-            "uuid": str(product.uuid),
-            "name": product.name,
-            "form": product.form,
-            "manufacturer": product.manufacturer,
-            "country": product.country,
-            "price": float(product.price) if product.price else 0.0,
-            "quantity": float(product.quantity) if product.quantity else 0.0,
-            "pharmacy_name": pharmacy.name if pharmacy else "Unknown",
-            "pharmacy_city": pharmacy.city if pharmacy else "Unknown",
-            "pharmacy_address": pharmacy.address if pharmacy else "Unknown",
-            "pharmacy_phone": pharmacy.phone if pharmacy else "Unknown",
-            "pharmacy_number": pharmacy.pharmacy_number if pharmacy else "N/A",
-            "updated_at": product.updated_at.isoformat() if product.updated_at else None,
-        })
+        items.append(
+            {
+                "uuid": str(product.uuid),
+                "name": product.name,
+                "form": product.form,
+                "manufacturer": product.manufacturer,
+                "country": product.country,
+                "price": float(product.price) if product.price else 0.0,
+                "quantity": float(product.quantity) if product.quantity else 0.0,
+                "pharmacy_name": pharmacy.name if pharmacy else "Unknown",
+                "pharmacy_city": pharmacy.city if pharmacy else "Unknown",
+                "pharmacy_address": pharmacy.address if pharmacy else "Unknown",
+                "pharmacy_phone": pharmacy.phone if pharmacy else "Unknown",
+                "pharmacy_number": pharmacy.pharmacy_number if pharmacy else "N/A",
+                "updated_at": (
+                    product.updated_at.isoformat() if product.updated_at else None
+                ),
+            }
+        )
 
     return {
         "items": items,
@@ -315,7 +306,7 @@ async def search_products(
             "city": search_city,
             "form": form,
             "manufacturer": manufacturer,
-            "country": country
+            "country": country,
         },
         "search_id": search_id,
     }
@@ -340,17 +331,21 @@ async def search_flexible(
     for term in search_terms:
         if len(term) >= 3:
             # Для длинных слов ищем в разных позициях
-            conditions.extend([
-                Product.name.ilike(f"{term}%"),  # начало слова
-                Product.name.ilike(f"%{term}%"), # любая позиция
-            ])
+            conditions.extend(
+                [
+                    Product.name.ilike(f"{term}%"),  # начало слова
+                    Product.name.ilike(f"%{term}%"),  # любая позиция
+                ]
+            )
         else:
             # Для коротких слов - только точные вхождения
-            conditions.extend([
-                Product.name.ilike(f"% {term} %"),
-                Product.name.ilike(f"{term} %"),
-                Product.name.ilike(f"% {term}"),
-            ])
+            conditions.extend(
+                [
+                    Product.name.ilike(f"% {term} %"),
+                    Product.name.ilike(f"{term} %"),
+                    Product.name.ilike(f"% {term}"),
+                ]
+            )
 
     query = (
         select(Product)
@@ -364,13 +359,7 @@ async def search_flexible(
 
     # Сложная сортировка по релевантности
     query = query.order_by(
-        # Приоритет 1: полное совпадение со всем запросом
-        case(
-            [(Product.name.ilike(f"%{name}%"), 3)],
-            else_=0
-        ).desc(),
-        # Приоритет 3: цена
-        Product.price.asc()
+        case((Product.name.ilike(f"%{name}%"), 3), else_=0).desc(), Product.price.asc()
     )
 
     # Пагинация и выполнение запроса
@@ -389,21 +378,25 @@ async def search_flexible(
     items = []
     for product in products:
         pharmacy = product.pharmacy
-        items.append({
-            "uuid": str(product.uuid),
-            "name": product.name,
-            "form": product.form,
-            "manufacturer": product.manufacturer,
-            "country": product.country,
-            "price": float(product.price) if product.price else 0.0,
-            "quantity": float(product.quantity) if product.quantity else 0.0,
-            "pharmacy_name": pharmacy.name if pharmacy else "Unknown",
-            "pharmacy_city": pharmacy.city if pharmacy else "Unknown",
-            "pharmacy_address": pharmacy.address if pharmacy else "Unknown",
-            "pharmacy_phone": pharmacy.phone if pharmacy else "Unknown",
-            "pharmacy_number": pharmacy.pharmacy_number if pharmacy else "N/A",
-            "updated_at": product.updated_at.isoformat() if product.updated_at else None,
-        })
+        items.append(
+            {
+                "uuid": str(product.uuid),
+                "name": product.name,
+                "form": product.form,
+                "manufacturer": product.manufacturer,
+                "country": product.country,
+                "price": float(product.price) if product.price else 0.0,
+                "quantity": float(product.quantity) if product.quantity else 0.0,
+                "pharmacy_name": pharmacy.name if pharmacy else "Unknown",
+                "pharmacy_city": pharmacy.city if pharmacy else "Unknown",
+                "pharmacy_address": pharmacy.address if pharmacy else "Unknown",
+                "pharmacy_phone": pharmacy.phone if pharmacy else "Unknown",
+                "pharmacy_number": pharmacy.pharmacy_number if pharmacy else "N/A",
+                "updated_at": (
+                    product.updated_at.isoformat() if product.updated_at else None
+                ),
+            }
+        )
 
     return {
         "items": items,
@@ -430,7 +423,8 @@ async def search_trigram(
         raise HTTPException(status_code=400, detail="Параметр 'name' обязателен")
 
     # Используем триграммное сходство
-    trigram_query = text("""
+    trigram_query = text(
+        """
         SELECT p.*, ph.*,
         similarity(p.name, :name) as similarity_score
         FROM products p
@@ -439,11 +433,11 @@ async def search_trigram(
         AND (:city IS NULL OR ph.city = :city)
         ORDER BY similarity_score DESC, p.price ASC
         LIMIT 100
-    """)
+    """
+    )
 
     result = await db.execute(
-        trigram_query,
-        {"name": name, "city": city, "similarity": similarity}
+        trigram_query, {"name": name, "city": city, "similarity": similarity}
     )
     products_data = result.fetchall()
 
@@ -451,21 +445,41 @@ async def search_trigram(
     items = []
     for row in products_data:
         product_data = row._mapping
-        items.append({
-            "uuid": str(product_data['uuid']),
-            "name": product_data['name'],
-            "form": product_data['form'],
-            "manufacturer": product_data['manufacturer'],
-            "country": product_data['country'],
-            "price": float(product_data['price']) if product_data['price'] else 0.0,
-            "quantity": float(product_data['quantity']) if product_data['quantity'] else 0.0,
-            "pharmacy_name": product_data['name'] if product_data['name'] else "Unknown",
-            "pharmacy_city": product_data['city'] if product_data['city'] else "Unknown",
-            "pharmacy_address": product_data['address'] if product_data['address'] else "Unknown",
-            "pharmacy_phone": product_data['phone'] if product_data['phone'] else "Unknown",
-            "pharmacy_number": product_data['pharmacy_number'] if product_data['pharmacy_number'] else "N/A",
-            "updated_at": product_data['updated_at'].isoformat() if product_data['updated_at'] else None,
-        })
+        items.append(
+            {
+                "uuid": str(product_data["uuid"]),
+                "name": product_data["name"],
+                "form": product_data["form"],
+                "manufacturer": product_data["manufacturer"],
+                "country": product_data["country"],
+                "price": float(product_data["price"]) if product_data["price"] else 0.0,
+                "quantity": (
+                    float(product_data["quantity"]) if product_data["quantity"] else 0.0
+                ),
+                "pharmacy_name": (
+                    product_data["name"] if product_data["name"] else "Unknown"
+                ),
+                "pharmacy_city": (
+                    product_data["city"] if product_data["city"] else "Unknown"
+                ),
+                "pharmacy_address": (
+                    product_data["address"] if product_data["address"] else "Unknown"
+                ),
+                "pharmacy_phone": (
+                    product_data["phone"] if product_data["phone"] else "Unknown"
+                ),
+                "pharmacy_number": (
+                    product_data["pharmacy_number"]
+                    if product_data["pharmacy_number"]
+                    else "N/A"
+                ),
+                "updated_at": (
+                    product_data["updated_at"].isoformat()
+                    if product_data["updated_at"]
+                    else None
+                ),
+            }
+        )
 
     return {"items": items, "total": len(items)}
 
@@ -492,6 +506,7 @@ async def get_forms(db: AsyncSession = Depends(get_db)):
     )
     forms = [row[0] for row in result.all() if row[0]]
     return forms
+
 
 @router.get("/search-advanced/", response_model=dict)
 async def search_advanced(
@@ -532,13 +547,11 @@ async def search_advanced(
         .where(or_(*conditions))
         .order_by(
             case(
-                [
-                    (Product.name.ilike(f"%{search_name}%"), 3),  # полное совпадение
-                    (Product.name.ilike(f"{search_name}%"), 2),   # начало с запроса
-                ],
-                else_=1
+                (Product.name.ilike(f"%{search_name}%"), 3),  # полное совпадение
+                (Product.name.ilike(f"{search_name}%"), 2),  # начало с запроса
+                else_=1,
             ).desc(),
-            Product.price.asc()
+            Product.price.asc(),
         )
     )
 
@@ -560,21 +573,25 @@ async def search_advanced(
     items = []
     for product in products:
         pharmacy = product.pharmacy
-        items.append({
-            "uuid": str(product.uuid),
-            "name": product.name,
-            "form": product.form,
-            "manufacturer": product.manufacturer,
-            "country": product.country,
-            "price": float(product.price) if product.price else 0.0,
-            "quantity": float(product.quantity) if product.quantity else 0.0,
-            "pharmacy_name": pharmacy.name if pharmacy else "Unknown",
-            "pharmacy_city": pharmacy.city if pharmacy else "Unknown",
-            "pharmacy_address": pharmacy.address if pharmacy else "Unknown",
-            "pharmacy_phone": pharmacy.phone if pharmacy else "Unknown",
-            "pharmacy_number": pharmacy.pharmacy_number if pharmacy else "N/A",
-            "updated_at": product.updated_at.isoformat() if product.updated_at else None,
-        })
+        items.append(
+            {
+                "uuid": str(product.uuid),
+                "name": product.name,
+                "form": product.form,
+                "manufacturer": product.manufacturer,
+                "country": product.country,
+                "price": float(product.price) if product.price else 0.0,
+                "quantity": float(product.quantity) if product.quantity else 0.0,
+                "pharmacy_name": pharmacy.name if pharmacy else "Unknown",
+                "pharmacy_city": pharmacy.city if pharmacy else "Unknown",
+                "pharmacy_address": pharmacy.address if pharmacy else "Unknown",
+                "pharmacy_phone": pharmacy.phone if pharmacy else "Unknown",
+                "pharmacy_number": pharmacy.pharmacy_number if pharmacy else "N/A",
+                "updated_at": (
+                    product.updated_at.isoformat() if product.updated_at else None
+                ),
+            }
+        )
 
     return {
         "items": items,
