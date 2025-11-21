@@ -40,20 +40,41 @@ async def search_two_step(
 
     _clean_old_contexts()
 
-    # Разбиваем поисковый запрос на отдельные слова
-    search_terms = name.strip().split()
+    # Нормализуем поисковый запрос
+    search_name = name.strip().lower()
 
-    # Создаем условия для поиска по каждому слову
+    # Улучшенный поиск: учитываем разные варианты
     name_conditions = []
+
+    # 1. Полное совпадение (самый высокий приоритет)
+    name_conditions.append(Product.name.ilike(f"%{search_name}%"))
+
+    # 2. Разбиваем на слова и ищем каждое слово
+    search_terms = search_name.split()
+
     for term in search_terms:
-        if len(term) > 2:  # Игнорируем слишком короткие слова
-            name_conditions.append(Product.name.ilike(f"%{term}%"))
+        term = term.strip()
+        if term:
+            # Для коротких слов (2 символа) ищем точное вхождение
+            if len(term) <= 2:
+                name_conditions.append(
+                    or_(
+                        Product.name.ilike(f"% {term} %"),  # слово отдельно
+                        Product.name.ilike(f"{term} %"),    # слово в начале
+                        Product.name.ilike(f"% {term}"),    # слово в конце
+                        Product.name.ilike(f"%{term}%"),    # часть слова
+                    )
+                )
+            else:
+                # Для длинных слов ищем разные варианты
+                name_conditions.append(Product.name.ilike(f"%{term}%"))
 
-    # Если после фильтрации не осталось условий, используем оригинальный запрос
-    if not name_conditions:
-        name_conditions.append(Product.name.ilike(f"%{name}%"))
+    # 3. Добавляем поиск по началу слова
+    for term in search_terms:
+        if len(term) >= 3:
+            name_conditions.append(Product.name.ilike(f"{term}%"))
 
-    # Базовый запрос с комбинированными условиями
+    # Базовый запрос
     base_query = (
         select(Product)
         .join(Pharmacy, Product.pharmacy_id == Pharmacy.uuid)
@@ -63,9 +84,18 @@ async def search_two_step(
     if city and city != "Все города" and city.strip():
         base_query = base_query.where(Pharmacy.city == city)
 
-    # Запрос для получения форм с правильной фильтрацией
+    # Улучшенный запрос для форм с релевантностью
     forms_query = (
-        select(Product.form, func.count(Product.uuid))
+        select(
+            Product.form,
+            func.count(Product.uuid).label('count'),
+            # Добавляем оценку релевантности
+            func.max(
+                case([
+                    (Product.name.ilike(f"%{search_name}%"), 3),  # полное совпадение - высший приоритет
+                ], else_=1)
+            ).label('relevance')
+        )
         .join(Pharmacy, Product.pharmacy_id == Pharmacy.uuid)
         .where(or_(*name_conditions))
     )
@@ -73,7 +103,11 @@ async def search_two_step(
     if city and city != "Все города" and city.strip():
         forms_query = forms_query.where(Pharmacy.city == city)
 
-    forms_query = forms_query.group_by(Product.form).order_by(Product.form)
+    forms_query = (
+        forms_query
+        .group_by(Product.form)
+        .order_by(text('relevance DESC, count DESC, form'))
+    )
 
     forms_result = await db.execute(forms_query)
     forms_data = forms_result.all()
@@ -88,14 +122,21 @@ async def search_two_step(
             "message": "Товары не найдены",
         }
 
-    available_forms = [form for form, count in forms_data if form]
-    total_found = sum(count for form, count in forms_data)
+    available_forms = [form for form, count, relevance in forms_data if form]
+    total_found = sum(count for form, count, relevance in forms_data)
 
-    # Превью товаров с сортировкой по релевантности и цене
+    # Улучшенный превью с релевантностью
     preview_query = (
         base_query.options(joinedload(Product.pharmacy))
-        .order_by(Product.price.asc())
-        .limit(20)  # Увеличиваем лимит для лучшего покрытия
+        .order_by(
+            # Сначала товары с полным совпадением названия
+            case([(Product.name.ilike(f"%{search_name}%"), 1)], else_=0).desc(),
+            # Затем по количеству совпадающих слов
+            func.length(Product.name) - func.length(func.replace(Product.name, ' ', '')).asc(),
+            # Затем по цене
+            Product.price.asc()
+        )
+        .limit(20)
     )
 
     preview_result = await db.execute(preview_query)
@@ -116,13 +157,13 @@ async def search_two_step(
             }
         )
 
-    # Создаем контекст поиска
+    # Сохраняем нормализованный запрос
     search_id = str(uuid.uuid4())
     _search_context[search_id] = {
-        "name": name,
+        "name": search_name,  # сохраняем нормализованное имя
         "city": city,
         "available_forms": available_forms,
-        "search_terms": search_terms,  # Сохраняем термины для поиска
+        "search_terms": search_terms,
         "created_at": datetime.now(),
     }
 
@@ -152,20 +193,17 @@ async def search_products(
     # Определяем параметры поиска
     search_name = name
     search_city = city
-    search_terms = []
 
     if search_id and search_id in _search_context:
         context = _search_context[search_id]
         if not search_name:
             search_name = context["name"]
-        # Используем сохраненные поисковые термины для более точного поиска
-        search_terms = context.get("search_terms", [search_name])
         if not search_city:
             search_city = context["city"]
 
-    # Если search_terms пуст, создаем из search_name
-    if not search_terms and search_name:
-        search_terms = search_name.strip().split()
+    # Нормализуем поисковый запрос
+    if search_name:
+        search_name = search_name.strip().lower()
 
     # Базовый запрос
     query = (
@@ -175,27 +213,60 @@ async def search_products(
     )
 
     # Улучшенная фильтрация по названию
-    if search_terms:
+    if search_name:
         name_conditions = []
+
+        # 1. Полное совпадение
+        name_conditions.append(Product.name.ilike(f"%{search_name}%"))
+
+        # 2. По словам
+        search_terms = search_name.split()
         for term in search_terms:
-            if len(term) > 2:
-                name_conditions.append(Product.name.ilike(f"%{term}%"))
+            term = term.strip()
+            if term:
+                if len(term) <= 2:
+                    # Для коротких слов
+                    name_conditions.append(
+                        or_(
+                            Product.name.ilike(f"% {term} %"),
+                            Product.name.ilike(f"{term} %"),
+                            Product.name.ilike(f"% {term}"),
+                        )
+                    )
+                else:
+                    name_conditions.append(Product.name.ilike(f"%{term}%"))
+
+        # 3. По началу слов для длинных терминов
+        for term in search_terms:
+            if len(term) >= 3:
+                name_conditions.append(Product.name.ilike(f"{term}%"))
 
         if name_conditions:
             query = query.where(or_(*name_conditions))
-        elif search_name:
-            query = query.where(Product.name.ilike(f"%{search_name}%"))
 
     if search_city and search_city != "Все города":
         query = query.where(Pharmacy.city.ilike(f"%{search_city}%"))
     if form:
         query = query.where(Product.form == form)
     if manufacturer:
-        query = query.where(Product.manufacturer == manufacturer)
+        query = query.where(Product.manufacturer.ilike(f"%{manufacturer}%"))
     if country:
-        query = query.where(Product.country == country)
+        query = query.where(Product.country.ilike(f"%{country}%"))
 
-    # Сортировка по цене (от меньшей к большей)
+    # Улучшенная сортировка с учетом релевантности
+    if search_name:
+        query = query.order_by(
+            # Высший приоритет - полное совпадение
+            case([(Product.name.ilike(f"%{search_name}%"), 1)], else_=0).desc(),
+            # Затем по количеству совпадающих слов
+            func.length(Product.name) - func.length(func.replace(Product.name, ' ', '')).asc(),
+            # Затем по цене
+            Product.price.asc()
+        )
+    else:
+        query = query.order_by(Product.price.asc())
+
+    # Пагинация
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
     total = total_result.scalar()
@@ -204,11 +275,7 @@ async def search_products(
     if page > total_pages:
         page = total_pages
 
-    query = (
-        query.order_by(Product.price.asc())
-        .offset((page - 1) * size)
-        .limit(size)
-    )
+    query = query.offset((page - 1) * size).limit(size)
 
     result = await db.execute(query)
     products = result.unique().scalars().all()
@@ -246,6 +313,79 @@ async def search_products(
             "country": country
         },
         "search_id": search_id,
+    }
+
+@router.get("/search-flexible/", response_model=dict)
+async def search_flexible(
+    name: str = Query(...),
+    city: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    size: int = Query(50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Гибкий поиск с улучшенной релевантностью
+    """
+    search_terms = name.strip().lower().split()
+
+    conditions = []
+
+    # Построение сложных условий поиска
+    for term in search_terms:
+        if len(term) >= 3:
+            # Для длинных слов ищем в разных позициях
+            conditions.extend([
+                Product.name.ilike(f"{term}%"),  # начало слова
+                Product.name.ilike(f"%{term}%"), # любая позиция
+            ])
+        else:
+            # Для коротких слов - только точные вхождения
+            conditions.extend([
+                Product.name.ilike(f"% {term} %"),
+                Product.name.ilike(f"{term} %"),
+                Product.name.ilike(f"% {term}"),
+            ])
+
+    query = (
+        select(Product)
+        .options(joinedload(Product.pharmacy))
+        .join(Pharmacy)
+        .where(or_(*conditions))
+    )
+
+    if city and city != "Все города":
+        query = query.where(Pharmacy.city == city)
+
+    # Сложная сортировка по релевантности
+    query = query.order_by(
+        # Приоритет 1: полное совпадение со всем запросом
+        case([(Product.name.ilike(f"%{name}%"), 3)], else_=0).desc(),
+        # Приоритет 2: количество совпадающих слов
+        func.length(Product.name) - func.length(func.replace(Product.name, ' ', '')).asc(),
+        # Приоритет 3: цена
+        Product.price.asc()
+    )
+
+    # Пагинация и выполнение запроса
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar()
+
+    total_pages = ceil(total / size) if total > 0 else 1
+    page = min(page, total_pages)
+
+    query = query.offset((page - 1) * size).limit(size)
+    result = await db.execute(query)
+    products = result.unique().scalars().all()
+
+    # Форматирование результатов...
+
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "size": size,
+        "total_pages": total_pages,
     }
 
 
