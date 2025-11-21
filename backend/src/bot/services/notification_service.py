@@ -27,13 +27,16 @@ async def notify_pharmacists_about_new_question(question, db: AsyncSession):
         result = await db.execute(
             select(Pharmacist)
             .join(User, Pharmacist.user_id == User.uuid)
-            .options(selectinload(Pharmacist.user))  # Подгружаем пользователя
+            .options(selectinload(Pharmacist.user))
             .where(
                 Pharmacist.is_online == True,
+                Pharmacist.is_active == True,
                 Pharmacist.last_seen >= five_minutes_ago
             )
         )
         online_pharmacists = result.scalars().all()
+
+        logger.info(f"Found {len(online_pharmacists)} online pharmacists to notify")
 
         if not online_pharmacists:
             logger.info("No online pharmacists to notify")
@@ -41,30 +44,29 @@ async def notify_pharmacists_about_new_question(question, db: AsyncSession):
 
         question_preview = question.text[:150] + "..." if len(question.text) > 150 else question.text
 
-        # Импортируем здесь чтобы избежать циклических импортов
         from bot.keyboards.qa_keyboard import make_question_keyboard
 
         notified_count = 0
         for pharmacist in online_pharmacists:
             try:
-                # ИСПРАВЛЕНИЕ: используем pharmacist.user.telegram_id
                 if pharmacist.user and pharmacist.user.telegram_id:
                     await bot.send_message(
-                        chat_id=pharmacist.user.telegram_id,  # ИСПРАВЛЕНО
-                        text=f"❓ Новый вопрос от пользователя:\n\n{question_preview}",
+                        chat_id=pharmacist.user.telegram_id,
+                        text=f"🔔 Новый вопрос от пользователя!\n\n"
+                             f"❓ Вопрос: {question_preview}\n\n"
+                             f"Используйте /questions чтобы ответить",
                         reply_markup=make_question_keyboard(question.uuid)
                     )
                     notified_count += 1
-                    logger.info(f"Notification sent to pharmacist {pharmacist.user.telegram_id}")  # ИСПРАВЛЕНО
+                    logger.info(f"Notification sent to pharmacist {pharmacist.user.telegram_id}")
             except Exception as e:
-                # ИСПРАВЛЕНИЕ: в логировании тоже исправляем
                 pharmacist_id = pharmacist.user.telegram_id if pharmacist.user else "unknown"
                 logger.error(f"Failed to notify pharmacist {pharmacist_id}: {e}")
 
-        logger.info(f"Notified {notified_count} pharmacists about new question")
+        logger.info(f"Notified {notified_count} pharmacists about new question {question.uuid}")
 
     except Exception as e:
-        logger.error(f"Error in notify_pharmacists_about_new_question: {e}")
+        logger.error(f"Error in notify_pharmacists_about_new_question: {e}", exc_info=True)
 
 
 async def get_online_pharmacists(db: AsyncSession):

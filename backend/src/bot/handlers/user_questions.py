@@ -318,51 +318,16 @@ async def process_user_question(
 
         db.add(question)
         await db.commit()
+        await db.refresh(question)
         logger.info(f"Question created for user {user.telegram_id}, question_id: {question.uuid}")
 
-        # Ищем онлайн фармацевтов с подгрузкой пользователя
-        five_minutes_ago = get_utc_now_naive() - timedelta(minutes=5)
-
-        from sqlalchemy.orm import selectinload
-
-        result = await db.execute(
-            select(Pharmacist)
-            .options(selectinload(Pharmacist.user))  # Подгружаем связанного пользователя
-            .where(
-                and_(
-                    Pharmacist.is_online == True,
-                    Pharmacist.last_seen >= five_minutes_ago
-                )
-            )
-        )
-        online_pharmacists = result.scalars().all()
-
-        logger.info(f"Found {len(online_pharmacists)} online pharmacists")
-
-        # Уведомляем онлайн фармацевтов
-        notified_count = 0
-        for pharmacist in online_pharmacists:
-            try:
-                # ИСПРАВЛЕНИЕ: используем pharmacist.user.telegram_id
-                if pharmacist.user and pharmacist.user.telegram_id:
-                    question_preview = message.text[:100] + "..." if len(message.text) > 100 else message.text
-                    await message.bot.send_message(
-                        chat_id=pharmacist.user.telegram_id,  # ИСПРАВЛЕНО
-                        text=f"🔔 Новый вопрос от пользователя!\n\n"
-                             f"❓ Вопрос: {question_preview}\n\n"
-                             f"Используйте /questions чтобы ответить"
-                    )
-                    notified_count += 1
-                    logger.info(f"Notification sent to pharmacist {pharmacist.user.telegram_id}")  # ИСПРАВЛЕНО
-            except Exception as e:
-                # ИСПРАВЛЕНИЕ: в логировании тоже исправляем
-                pharmacist_id = pharmacist.user.telegram_id if pharmacist.user else "unknown"
-                logger.error(f"Failed to notify pharmacist {pharmacist_id}: {e}")
+        # УВЕДОМЛЯЕМ ОНЛАЙН ФАРМАЦЕВТОВ - ИСПРАВЛЕННАЯ ВЕРСИЯ
+        from services.notification_service import notify_pharmacists_about_new_question
+        await notify_pharmacists_about_new_question(question, db)
 
         await message.answer(
             "✅ Ваш вопрос отправлен фармацевтам!\n\n"
-            f"📊 Статус: Ожидание ответа\n"
-            f"👨‍⚕️ Уведомлено фармацевтов: {notified_count}\n\n"
+            f"📊 Статус: Ожидание ответа\n\n"
             "Вы получите уведомление, когда фармацевт ответит на ваш вопрос.\n"
             "Используйте /my_questions чтобы посмотреть статус ваших вопросов."
         )

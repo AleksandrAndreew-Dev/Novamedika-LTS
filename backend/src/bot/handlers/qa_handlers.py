@@ -20,9 +20,9 @@ router = Router()
 
 @router.message(Command("online"))
 async def set_online(
-    message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: User
+    message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist
 ):
-    """Установка статуса онлайн для фармацевта"""
+    """Установка статуса онлайн для фармацевта с уведомлением о pending вопросах"""
     logger.info(
         f"Command /online from user {message.from_user.id}, is_pharmacist: {is_pharmacist}"
     )
@@ -41,10 +41,44 @@ async def set_online(
         pharmacist.last_seen = get_utc_now_naive()
         await db.commit()
         logger.info(
-        f"Pharmacist {message.from_user.id} successfully set online status"  # вместо pharmacist.telegram_id
-    )
+            f"Pharmacist {message.from_user.id} successfully set online status"
+        )
 
-        await message.answer("✅ Вы теперь онлайн и готовы принимать вопросы!")
+        # УВЕДОМЛЯЕМ О PENDING ВОПРОСАХ ПРИ ПЕРЕХОДЕ В ОНЛАЙН
+        from sqlalchemy import select, func
+        result = await db.execute(
+            select(func.count(Question.uuid))
+            .where(Question.status == "pending")
+        )
+        pending_count = result.scalar() or 0
+
+        if pending_count > 0:
+            await message.answer(
+                f"✅ Вы теперь онлайн и готовы принимать вопросы!\n\n"
+                f"📝 Ожидающих вопросов: {pending_count}\n"
+                f"Используйте /questions чтобы просмотреть вопросы."
+            )
+
+            # ПОКАЗЫВАЕМ ПЕРВЫЕ 3 PENDING ВОПРОСА
+            result = await db.execute(
+                select(Question)
+                .where(Question.status == "pending")
+                .order_by(Question.created_at.asc())
+                .limit(3)
+            )
+            questions = result.scalars().all()
+
+            for i, question in enumerate(questions, 1):
+                question_preview = question.text[:100] + "..." if len(question.text) > 100 else question.text
+                await message.answer(
+                    f"❓ Вопрос #{i}:\n{question_preview}\n",
+                    reply_markup=make_question_keyboard(question.uuid)
+                )
+        else:
+            await message.answer(
+                "✅ Вы теперь онлайн и готовы принимать вопросы!\n\n"
+                "На данный момент новых вопросов нет."
+            )
 
     except Exception as e:
         logger.error(
