@@ -1,23 +1,26 @@
 import React, { useState } from "react";
 
+// FormSelection.jsx - добавить проверку на undefined
 export default function FormSelection({
   previewProducts,
   searchData,
   onFormSelect,
   onBack,
   loading,
-  isTelegram, // добавляем этот проп
+  isTelegram,
 }) {
   const [selectedForm, setSelectedForm] = useState("");
 
+  // Защита от undefined
+  const safePreviewProducts = previewProducts || [];
+
   // Группируем продукты по уникальной комбинации: форма + производитель + страна
-  const groupedByForm = previewProducts.reduce((acc, product) => {
-    // Добавляем name в ключ группировки
+  const groupedByForm = safePreviewProducts.reduce((acc, product) => {
     const key = `${product.name}|${product.form}|${product.manufacturer}|${product.country}`;
 
     if (!acc[key]) {
       acc[key] = {
-        name: product.name, // добавляем name
+        name: product.name,
         form: product.form,
         manufacturer: product.manufacturer,
         country: product.country,
@@ -29,6 +32,8 @@ export default function FormSelection({
     }
     return acc;
   }, {});
+
+
 
   // Преобразуем в массив и обрабатываем названия
   const formGroups = Object.values(groupedByForm).map((group) => ({

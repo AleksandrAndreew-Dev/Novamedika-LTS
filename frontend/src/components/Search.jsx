@@ -77,27 +77,30 @@ export default function Search() {
       tg.BackButton.offClick();
     };
   }, [step, isTelegram, tg]);
-
+  // Search.jsx - исправить обработку ответа API
   const handleInitialSearch = async (name, city) => {
-  setLoading(true);
-  setError(null);
-  try {
-    const response = await api.get("/search-advanced/", {
-      params: {
-        name,
-        city,
-        use_fuzzy: true,
-        page: 1,  // Добавьте эту строку
-        size: 20  // И эту
-      },
-    });
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await api.get("/search-advanced/", {
+        params: {
+          name,
+          city,
+          use_fuzzy: true,
+          page: 1,
+          size: 20,
+        },
+      });
+
+      // Добавить проверку на существование данных
+      const responseData = response.data || {};
 
       setSearchData((prev) => ({ ...prev, name, city }));
       setSearchContext({
-        availableForms: response.data.available_forms,
-        previewProducts: response.data.preview_products,
-        totalFound: response.data.total_found,
-        searchId: response.data.search_id,
+        availableForms: responseData.available_forms || [],
+        previewProducts: responseData.preview_products || [], // Защита от undefined
+        totalFound: responseData.total_found || 0,
+        searchId: responseData.search_id,
       });
       setStep(2);
     } catch (error) {
@@ -118,26 +121,27 @@ export default function Search() {
 
   // Обновим функцию handleFormSelect
   const handleFormSelect = async (name, form, manufacturer, country) => {
-  setLoading(true);
-  setError(null);
-  try {
-    const params = {
-      name,
-      form,
-      manufacturer,
-      country,
-      use_fuzzy: true,  // Добавьте этот параметр
-      page: 1,
-      size: pagination.size,
-    };
+    setLoading(true);
+    setError(null);
+    try {
+      const params = {
+        name,
+        form,
+        manufacturer,
+        country,
+        use_fuzzy: true, // Добавьте этот параметр
+        page: 1,
+        size: pagination.size,
+      };
 
-    if (searchData.city) {
-      params.city = searchData.city;
-    }
+      if (searchData.city) {
+        params.city = searchData.city;
+      }
 
-    const response = await api.get("/search-advanced/", {  // Измените эндпоинт
-      params,
-    });
+      const response = await api.get("/search-advanced/", {
+        // Измените эндпоинт
+        params,
+      });
 
       setSearchData((prev) => ({
         ...prev,
@@ -161,15 +165,14 @@ export default function Search() {
       setLoading(false);
     }
   };
- const handlePageChange = async (newPage) => {
-  setLoading(true);
-  try {
-    const params = {
-      page: newPage,
-      size: pagination.size,
-      use_fuzzy: true,  // Добавьте этот параметр
-    };
-
+  const handlePageChange = async (newPage) => {
+    setLoading(true);
+    try {
+      const params = {
+        page: newPage,
+        size: pagination.size,
+        use_fuzzy: true, // Добавьте этот параметр
+      };
 
       // Приоритет: searchId > прямой поиск
       if (searchContext?.searchId) {
@@ -181,9 +184,10 @@ export default function Search() {
         params.form = searchData.form;
       }
 
-      const response = await api.get("/search-advanced/", {  // Измените эндпоинт
-      params,
-    });
+      const response = await api.get("/search-advanced/", {
+        // Измените эндпоинт
+        params,
+      });
 
       setResults(response.data.items);
       setPagination((prev) => ({
@@ -286,19 +290,19 @@ export default function Search() {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-telegram-primary"></div>
             </div>
           )}
+
           {step === 2 && searchContext && (
             <FormSelection
-              availableForms={searchContext.availableForms}
-              previewProducts={searchContext.previewProducts}
-              totalFound={searchContext.totalFound}
+              availableForms={searchContext.availableForms || []}
+              previewProducts={searchContext.previewProducts || []}
+              totalFound={searchContext.totalFound || 0}
               searchData={searchData}
               onFormSelect={handleFormSelect}
               onBack={() => setStep(1)}
               loading={loading}
-              isTelegram={isTelegram} // добавляем эту строку
+              isTelegram={isTelegram}
             />
           )}
-
           {step === 3 && (
             <SearchResults
               results={results}

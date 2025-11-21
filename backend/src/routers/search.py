@@ -508,6 +508,7 @@ async def get_forms(db: AsyncSession = Depends(get_db)):
     return forms
 
 
+# search.py - исправить эндпоинт search-advanced
 @router.get("/search-advanced/", response_model=dict)
 async def search_advanced(
     name: str = Query(...),
@@ -558,7 +559,7 @@ async def search_advanced(
     if city and city != "Все города":
         query = query.where(Pharmacy.city == city)
 
-    # Остальная логика пагинации и форматирования...
+    # Получаем общее количество
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
     total = total_result.scalar()
@@ -566,10 +567,46 @@ async def search_advanced(
     total_pages = ceil(total / size) if total > 0 else 1
     page = min(page, total_pages)
 
+    # Получаем данные для пагинации
     query = query.offset((page - 1) * size).limit(size)
     result = await db.execute(query)
     products = result.unique().scalars().all()
 
+    # Получаем доступные формы для превью
+    forms_query = (
+        select(Product.form)
+        .join(Pharmacy)
+        .where(or_(*conditions))
+        .group_by(Product.form)
+        .order_by(Product.form)
+    )
+
+    if city and city != "Все города":
+        forms_query = forms_query.where(Pharmacy.city == city)
+
+    forms_result = await db.execute(forms_query)
+    available_forms = [row[0] for row in forms_result.all() if row[0]]
+
+    # Формируем превью продуктов (первые 20)
+    preview_products = []
+    preview_query = query.limit(20)
+    preview_result = await db.execute(preview_query)
+    preview_products_data = preview_result.unique().scalars().all()
+
+    for product in preview_products_data:
+        pharmacy = product.pharmacy
+        preview_products.append(
+            {
+                "name": product.name,
+                "form": product.form,
+                "manufacturer": product.manufacturer,
+                "country": product.country,
+                "price": float(product.price) if product.price else 0.0,
+                "pharmacy_city": pharmacy.city if pharmacy else "Unknown",
+            }
+        )
+
+    # Формируем основные результаты
     items = []
     for product in products:
         pharmacy = product.pharmacy
@@ -599,4 +636,7 @@ async def search_advanced(
         "page": page,
         "size": size,
         "total_pages": total_pages,
+        "available_forms": available_forms,  # Добавляем доступные формы
+        "preview_products": preview_products,  # Добавляем превью продуктов
+        "total_found": total,  # Общее количество найденных
     }
