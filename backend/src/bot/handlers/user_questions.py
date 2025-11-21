@@ -322,7 +322,7 @@ async def process_user_question(
         logger.info(f"Question created for user {user.telegram_id}, question_id: {question.uuid}")
 
         # УВЕДОМЛЯЕМ ОНЛАЙН ФАРМАЦЕВТОВ - ИСПРАВЛЕННАЯ ВЕРСИЯ
-        from services.notification_service import notify_pharmacists_about_new_question
+        from bot.services.notification_service import notify_pharmacists_about_new_question
         await notify_pharmacists_about_new_question(question, db)
 
         await message.answer(
