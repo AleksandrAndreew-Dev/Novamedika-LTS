@@ -23,7 +23,7 @@ router = Router()
 async def set_online(
     message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist
 ):
-    """Установка статуса онлайн для фармацевта с улучшенной отладкой"""
+    """Установка статуса онлайн для фармацевта с проверкой ожидающих вопросов"""
     logger.info(
         f"Command /online from user {message.from_user.id}, is_pharmacist: {is_pharmacist}"
     )
@@ -45,12 +45,7 @@ async def set_online(
             f"Pharmacist {message.from_user.id} successfully set online status"
         )
 
-        # ОТЛАДОЧНАЯ ИНФОРМАЦИЯ: проверяем онлайн фармацевтов
-        from bot.services.notification_service import get_online_pharmacists
-        online_pharmacists = await get_online_pharmacists(db)
-        logger.info(f"DEBUG: Total online pharmacists after /online: {len(online_pharmacists)}")
-
-        # УВЕДОМЛЯЕМ О PENDING ВОПРОСАХ ПРИ ПЕРЕХОДЕ В ОНЛАЙН
+        # Проверяем есть ли ожидающие вопросы
         from sqlalchemy import select, func
         result = await db.execute(
             select(func.count(Question.uuid))
@@ -61,11 +56,13 @@ async def set_online(
         if pending_count > 0:
             await message.answer(
                 f"✅ Вы теперь онлайн и готовы принимать вопросы!\n\n"
-                f"📝 Ожидающих вопросов: {pending_count}\n"
-                f"Используйте /questions чтобы просмотреть вопросы."
+                f"📝 <b>Ожидающих вопросов:</b> {pending_count}\n"
+                f"Используйте /questions чтобы просмотреть вопросы.",
+                parse_mode="HTML",
+                reply_markup=get_pharmacist_keyboard()  # Добавляем клавиатуру
             )
 
-            # ПОКАЗЫВАЕМ ПЕРВЫЕ 3 PENDING ВОПРОСА
+            # Показываем первые 3 вопроса
             result = await db.execute(
                 select(Question)
                 .where(Question.status == "pending")
@@ -83,7 +80,9 @@ async def set_online(
         else:
             await message.answer(
                 "✅ Вы теперь онлайн и готовы принимать вопросы!\n\n"
-                "На данный момент новых вопросов нет."
+                "На данный момент новых вопросов нет. "
+                "Вы получите уведомление, когда появится новый вопрос.",
+                reply_markup=get_pharmacist_keyboard()
             )
 
     except Exception as e:
