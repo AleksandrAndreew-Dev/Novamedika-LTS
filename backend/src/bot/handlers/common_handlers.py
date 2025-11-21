@@ -1,10 +1,11 @@
+# bot/handlers/common_handlers.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
 from aiogram import Router, F
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from db.qa_models import User
-
+from utils.time_utils import get_utc_now_naive
 import logging
 
 logger = logging.getLogger(__name__)
@@ -101,28 +102,35 @@ async def cmd_help(message: Message, is_pharmacist: bool):
             reply_markup=get_user_keyboard()
         )
 
-@router.message(Command("cancel"))
-async def universal_cancel(message: Message, state: FSMContext):
-    """Отмена текущего действия"""
-    logger.info(f"Command /cancel from user {message.from_user.id}")
-
-    current_state = await state.get_state()
-    if current_state is None:
-        await message.answer("❌ Нечего отменять.")
-        return
-
-    await state.clear()
-    await message.answer("✅ Текущее действие отменено.")
-
-# ПЕРЕМЕСТИТЬ ЭТОТ ОБРАБОТЧИК В САМЫЙ КОНЕЦ
-@router.message(F.command)
-async def unknown_command(message: Message):
-    """Обработка неизвестных команд - ДОЛЖЕН БЫТЬ ПОСЛЕДНИМ"""
-    logger.info(f"Unknown command from user {message.from_user.id}: {message.text}")
-    await message.answer(
-        "❌ Неизвестная команда.\n\n"
-        "Используйте /help для просмотра доступных команд."
-    )
+# Добавить обработчики callback-кнопок
+@router.callback_query(F.data == "i_am_pharmacist")
+async def i_am_pharmacist_callback(callback: CallbackQuery, is_pharmacist: bool):
+    """Обработка нажатия 'Я фарм специалист'"""
+    if is_pharmacist:
+        await callback.answer("Вы уже зарегистрированы как фармацевт!", show_alert=True)
+        await callback.message.answer(
+            "👨‍⚕️ Вы уже зарегистрированы как фармацевт!\n\n"
+            "Используйте кнопки ниже для работы:",
+            reply_markup=get_pharmacist_keyboard()
+        )
+    else:
+        await callback.answer()
+        await callback.message.answer(
+            "👨‍⚕️ <b>Регистрация фармацевта</b>\n\n"
+            "Для регистрации в качестве фармацевта используйте команду:\n"
+            "<code>/register</code>\n\n"
+            "В процессе регистрации вам нужно будет:\n"
+            "• Выбрать сеть аптек\n"
+            "• Указать номер аптеки\n"
+            "• Выбрать вашу роль\n"
+            "• Ввести ФИО\n"
+            "• Ввести секретное слово\n\n"
+            "После регистрации вы сможете:\n"
+            "• Отвечать на вопросы пользователей\n"
+            "• Получать уведомления о новых вопросах\n"
+            "• Управлять своим онлайн-статусом",
+            parse_mode="HTML"
+        )
 
 @router.callback_query(F.data == "go_online")
 async def go_online_callback(callback: CallbackQuery, db: AsyncSession, is_pharmacist: bool, pharmacist: object):
@@ -209,6 +217,28 @@ async def pharmacist_help_callback(callback: CallbackQuery):
         parse_mode="HTML"
     )
 
+@router.message(Command("cancel"))
+async def universal_cancel(message: Message, state: FSMContext):
+    """Отмена текущего действия"""
+    logger.info(f"Command /cancel from user {message.from_user.id}")
+
+    current_state = await state.get_state()
+    if current_state is None:
+        await message.answer("❌ Нечего отменять.")
+        return
+
+    await state.clear()
+    await message.answer("✅ Текущее действие отменено.")
+
+# ПЕРЕМЕСТИТЬ ЭТОТ ОБРАБОТЧИК В САМЫЙ КОНЕЦ
+@router.message(F.command)
+async def unknown_command(message: Message):
+    """Обработка неизвестных команд - ДОЛЖЕН БЫТЬ ПОСЛЕДНИМ"""
+    logger.info(f"Unknown command from user {message.from_user.id}: {message.text}")
+    await message.answer(
+        "❌ Неизвестная команда.\n\n"
+        "Используйте /help для просмотра доступных команд."
+    )
 
 @router.message(F.text)
 async def handle_user_message(
@@ -246,7 +276,8 @@ async def handle_user_message(
             "• /status - ваш статус\n"
             "• /help - полная справка\n\n"
             "Чтобы начать работу, перейдите в онлайн!",
-            parse_mode="HTML"
+            parse_mode="HTML",
+            reply_markup=get_pharmacist_keyboard()
         )
     else:
         await message.answer(
@@ -260,5 +291,6 @@ async def handle_user_message(
             "• /my_questions - ваши вопросы\n"
             "• /help - подробная инструкция\n\n"
             "Фармацевты ответят вам в ближайшее время! 🕒",
-            parse_mode="HTML"
+            parse_mode="HTML",
+            reply_markup=get_user_keyboard()
         )

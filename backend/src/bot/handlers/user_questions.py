@@ -305,6 +305,7 @@ async def process_clarification(
         await message.answer("❌ Ошибка при отправке уточнения.")
         await state.clear()
 
+# В bot/handlers/user_questions.py - обновить функцию process_user_question
 @router.message(UserQAStates.waiting_for_question)
 async def process_user_question(
     message: Message,
@@ -323,6 +324,9 @@ async def process_user_question(
 
     try:
         # Создаем вопрос
+        from db.qa_models import Question
+        from utils.time_utils import get_utc_now_naive
+
         question = Question(
             text=message.text,
             user_id=user.uuid,
