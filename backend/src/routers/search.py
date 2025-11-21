@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func, or_, text
+from sqlalchemy import select, func, or_, text, case
 from sqlalchemy.orm import selectinload, joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
@@ -91,9 +91,12 @@ async def search_two_step(
             func.count(Product.uuid).label('count'),
             # Добавляем оценку релевантности
             func.max(
-                case([
-                    (Product.name.ilike(f"%{search_name}%"), 3),  # полное совпадение - высший приоритет
-                ], else_=1)
+                case(
+                    [
+                        (Product.name.ilike(f"%{search_name}%"), 3),  # полное совпадение - высший приоритет
+                    ],
+                    else_=1
+                )
             ).label('relevance')
         )
         .join(Pharmacy, Product.pharmacy_id == Pharmacy.uuid)
@@ -130,9 +133,10 @@ async def search_two_step(
         base_query.options(joinedload(Product.pharmacy))
         .order_by(
             # Сначала товары с полным совпадением названия
-            case([(Product.name.ilike(f"%{search_name}%"), 1)], else_=0).desc(),
-            # Затем по количеству совпадающих слов
-            func.length(Product.name) - func.length(func.replace(Product.name, ' ', '')).asc(),
+            case(
+                [(Product.name.ilike(f"%{search_name}%"), 1)],
+                else_=0
+            ).desc(),
             # Затем по цене
             Product.price.asc()
         )
@@ -257,9 +261,10 @@ async def search_products(
     if search_name:
         query = query.order_by(
             # Высший приоритет - полное совпадение
-            case([(Product.name.ilike(f"%{search_name}%"), 1)], else_=0).desc(),
-            # Затем по количеству совпадающих слов
-            func.length(Product.name) - func.length(func.replace(Product.name, ' ', '')).asc(),
+            case(
+                [(Product.name.ilike(f"%{search_name}%"), 1)],
+                else_=0
+            ).desc(),
             # Затем по цене
             Product.price.asc()
         )
@@ -315,6 +320,7 @@ async def search_products(
         "search_id": search_id,
     }
 
+
 @router.get("/search-flexible/", response_model=dict)
 async def search_flexible(
     name: str = Query(...),
@@ -359,9 +365,10 @@ async def search_flexible(
     # Сложная сортировка по релевантности
     query = query.order_by(
         # Приоритет 1: полное совпадение со всем запросом
-        case([(Product.name.ilike(f"%{name}%"), 3)], else_=0).desc(),
-        # Приоритет 2: количество совпадающих слов
-        func.length(Product.name) - func.length(func.replace(Product.name, ' ', '')).asc(),
+        case(
+            [(Product.name.ilike(f"%{name}%"), 3)],
+            else_=0
+        ).desc(),
         # Приоритет 3: цена
         Product.price.asc()
     )
@@ -378,7 +385,25 @@ async def search_flexible(
     result = await db.execute(query)
     products = result.unique().scalars().all()
 
-    # Форматирование результатов...
+    # Форматирование результатов
+    items = []
+    for product in products:
+        pharmacy = product.pharmacy
+        items.append({
+            "uuid": str(product.uuid),
+            "name": product.name,
+            "form": product.form,
+            "manufacturer": product.manufacturer,
+            "country": product.country,
+            "price": float(product.price) if product.price else 0.0,
+            "quantity": float(product.quantity) if product.quantity else 0.0,
+            "pharmacy_name": pharmacy.name if pharmacy else "Unknown",
+            "pharmacy_city": pharmacy.city if pharmacy else "Unknown",
+            "pharmacy_address": pharmacy.address if pharmacy else "Unknown",
+            "pharmacy_phone": pharmacy.phone if pharmacy else "Unknown",
+            "pharmacy_number": pharmacy.pharmacy_number if pharmacy else "N/A",
+            "updated_at": product.updated_at.isoformat() if product.updated_at else None,
+        })
 
     return {
         "items": items,
@@ -423,9 +448,26 @@ async def search_trigram(
     products_data = result.fetchall()
 
     # Обработка результатов...
-    # [аналогично предыдущим эндпоинтам]
+    items = []
+    for row in products_data:
+        product_data = row._mapping
+        items.append({
+            "uuid": str(product_data['uuid']),
+            "name": product_data['name'],
+            "form": product_data['form'],
+            "manufacturer": product_data['manufacturer'],
+            "country": product_data['country'],
+            "price": float(product_data['price']) if product_data['price'] else 0.0,
+            "quantity": float(product_data['quantity']) if product_data['quantity'] else 0.0,
+            "pharmacy_name": product_data['name'] if product_data['name'] else "Unknown",
+            "pharmacy_city": product_data['city'] if product_data['city'] else "Unknown",
+            "pharmacy_address": product_data['address'] if product_data['address'] else "Unknown",
+            "pharmacy_phone": product_data['phone'] if product_data['phone'] else "Unknown",
+            "pharmacy_number": product_data['pharmacy_number'] if product_data['pharmacy_number'] else "N/A",
+            "updated_at": product_data['updated_at'].isoformat() if product_data['updated_at'] else None,
+        })
 
-    return {"items": [], "total": len(products_data)}  # Заглушка
+    return {"items": items, "total": len(items)}
 
 
 @router.get("/cities/")
@@ -450,3 +492,94 @@ async def get_forms(db: AsyncSession = Depends(get_db)):
     )
     forms = [row[0] for row in result.all() if row[0]]
     return forms
+
+@router.get("/search-advanced/", response_model=dict)
+async def search_advanced(
+    name: str = Query(...),
+    city: Optional[str] = Query(None),
+    use_fuzzy: bool = Query(False),
+    page: int = Query(1, ge=1),
+    size: int = Query(50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Расширенный поиск с поддержкой нечеткого соответствия
+    """
+    search_name = name.strip().lower()
+    search_terms = search_name.split()
+
+    conditions = []
+
+    # Базовые условия
+    conditions.append(Product.name.ilike(f"%{search_name}%"))
+
+    # Поиск по отдельным словам
+    for term in search_terms:
+        if len(term) > 1:  # Игнорируем одиночные буквы
+            conditions.append(Product.name.ilike(f"%{term}%"))
+
+    # Дополнительные условия для нечеткого поиска
+    if use_fuzzy and len(search_terms) > 0:
+        first_term = search_terms[0]
+        if len(first_term) >= 3:
+            # Поиск с возможными опечатками (первые 3 символа должны совпадать)
+            conditions.append(Product.name.ilike(f"{first_term[:3]}%"))
+
+    query = (
+        select(Product)
+        .options(joinedload(Product.pharmacy))
+        .join(Pharmacy)
+        .where(or_(*conditions))
+        .order_by(
+            case(
+                [
+                    (Product.name.ilike(f"%{search_name}%"), 3),  # полное совпадение
+                    (Product.name.ilike(f"{search_name}%"), 2),   # начало с запроса
+                ],
+                else_=1
+            ).desc(),
+            Product.price.asc()
+        )
+    )
+
+    if city and city != "Все города":
+        query = query.where(Pharmacy.city == city)
+
+    # Остальная логика пагинации и форматирования...
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar()
+
+    total_pages = ceil(total / size) if total > 0 else 1
+    page = min(page, total_pages)
+
+    query = query.offset((page - 1) * size).limit(size)
+    result = await db.execute(query)
+    products = result.unique().scalars().all()
+
+    items = []
+    for product in products:
+        pharmacy = product.pharmacy
+        items.append({
+            "uuid": str(product.uuid),
+            "name": product.name,
+            "form": product.form,
+            "manufacturer": product.manufacturer,
+            "country": product.country,
+            "price": float(product.price) if product.price else 0.0,
+            "quantity": float(product.quantity) if product.quantity else 0.0,
+            "pharmacy_name": pharmacy.name if pharmacy else "Unknown",
+            "pharmacy_city": pharmacy.city if pharmacy else "Unknown",
+            "pharmacy_address": pharmacy.address if pharmacy else "Unknown",
+            "pharmacy_phone": pharmacy.phone if pharmacy else "Unknown",
+            "pharmacy_number": pharmacy.pharmacy_number if pharmacy else "N/A",
+            "updated_at": product.updated_at.isoformat() if product.updated_at else None,
+        })
+
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "size": size,
+        "total_pages": total_pages,
+    }
