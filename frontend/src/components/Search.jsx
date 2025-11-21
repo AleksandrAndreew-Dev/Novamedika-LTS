@@ -79,18 +79,18 @@ export default function Search() {
   }, [step, isTelegram, tg]);
 
   const handleInitialSearch = async (name, city) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await api.get("/search-advanced/", {
-        params: {
-          name,
-          city,
-          use_fuzzy: true,
-          page,
-          size: pagination.size,
-        },
-      });
+  setLoading(true);
+  setError(null);
+  try {
+    const response = await api.get("/search-advanced/", {
+      params: {
+        name,
+        city,
+        use_fuzzy: true,
+        page: 1,  // Добавьте эту строку
+        size: 20  // И эту
+      },
+    });
 
       setSearchData((prev) => ({ ...prev, name, city }));
       setSearchContext({
@@ -118,31 +118,26 @@ export default function Search() {
 
   // Обновим функцию handleFormSelect
   const handleFormSelect = async (name, form, manufacturer, country) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = {
-        name, // добавляем конкретное название
-        form,
-        manufacturer,
-        country,
-        page: 1,
-        size: pagination.size,
-      };
+  setLoading(true);
+  setError(null);
+  try {
+    const params = {
+      name,
+      form,
+      manufacturer,
+      country,
+      use_fuzzy: true,  // Добавьте этот параметр
+      page: 1,
+      size: pagination.size,
+    };
 
-      // Добавляем city если есть
-      if (searchData.city) {
-        params.city = searchData.city;
-      }
+    if (searchData.city) {
+      params.city = searchData.city;
+    }
 
-      // Используем searchId если есть
-      if (searchContext?.searchId) {
-        params.search_id = searchContext.searchId;
-      }
-
-      const response = await api.get("/search/", {
-        params,
-      });
+    const response = await api.get("/search-advanced/", {  // Измените эндпоинт
+      params,
+    });
 
       setSearchData((prev) => ({
         ...prev,
@@ -166,13 +161,15 @@ export default function Search() {
       setLoading(false);
     }
   };
-  const handlePageChange = async (newPage) => {
-    setLoading(true);
-    try {
-      const params = {
-        page: newPage,
-        size: pagination.size,
-      };
+ const handlePageChange = async (newPage) => {
+  setLoading(true);
+  try {
+    const params = {
+      page: newPage,
+      size: pagination.size,
+      use_fuzzy: true,  // Добавьте этот параметр
+    };
+
 
       // Приоритет: searchId > прямой поиск
       if (searchContext?.searchId) {
@@ -184,9 +181,9 @@ export default function Search() {
         params.form = searchData.form;
       }
 
-      const response = await api.get("/search/", {
-        params,
-      });
+      const response = await api.get("/search-advanced/", {  // Измените эндпоинт
+      params,
+    });
 
       setResults(response.data.items);
       setPagination((prev) => ({
