@@ -120,51 +120,56 @@ export default function Search() {
   };
 
   // Обновим функцию handleFormSelect
-  const handleFormSelect = async (name, form, manufacturer, country) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = {
-        name,
-        form,
-        manufacturer,
-        country,
-        use_fuzzy: true, // Добавьте этот параметр
-        page: 1,
-        size: pagination.size,
-      };
+  // Search.jsx - исправленный handleFormSelect
+const handleFormSelect = async (name, form, manufacturer, country) => {
+  setLoading(true);
+  setError(null);
+  try {
+    const params = {
+      name: searchData.name, // используем оригинальное название из поиска
+      form: form, // передаем выбранную форму
+      page: 1,
+      size: pagination.size,
+    };
 
-      if (searchData.city) {
-        params.city = searchData.city;
-      }
-
-      const response = await api.get("/search-advanced/", {
-        // Измените эндпоинт
-        params,
-      });
-
-      setSearchData((prev) => ({
-        ...prev,
-        name, // обновляем на конкретное название
-        form,
-        manufacturer,
-        country,
-      }));
-      setResults(response.data.items);
-      setPagination((prev) => ({
-        ...prev,
-        page: response.data.page,
-        total: response.data.total,
-        totalPages: response.data.total_pages,
-      }));
-      setStep(3);
-    } catch (error) {
-      console.error("Form selection error:", error);
-      setError("Ошибка при загрузке результатов.");
-    } finally {
-      setLoading(false);
+    // Добавляем дополнительные фильтры если они есть
+    if (manufacturer && manufacturer !== "Все производители") {
+      params.manufacturer = manufacturer;
     }
+    if (country && country !== "Все страны") {
+      params.country = country;
+    }
+    if (searchData.city) {
+      params.city = searchData.city;
+    }
+
+    const response = await api.get("/search-advanced/", {
+      params,
+    });
+
+    setSearchData((prev) => ({
+      ...prev,
+      form, // сохраняем выбранную форму
+      manufacturer,
+      country,
+    }));
+
+    setResults(response.data.items);
+    setPagination((prev) => ({
+      ...prev,
+      page: response.data.page,
+      total: response.data.total,
+      totalPages: response.data.total_pages,
+    }));
+    setStep(3);
+  } catch (error) {
+    console.error("Form selection error:", error);
+    setError("Ошибка при загрузке результатов.");
+  } finally {
+    setLoading(false);
+  }
   };
+  
   const handlePageChange = async (newPage) => {
     setLoading(true);
     try {

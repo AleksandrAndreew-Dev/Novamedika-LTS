@@ -508,11 +508,13 @@ async def get_forms(db: AsyncSession = Depends(get_db)):
     return forms
 
 
-# search.py - исправить эндпоинт search-advanced
 @router.get("/search-advanced/", response_model=dict)
 async def search_advanced(
     name: str = Query(...),
     city: Optional[str] = Query(None),
+    form: Optional[str] = Query(None),
+    manufacturer: Optional[str] = Query(None),
+    country: Optional[str] = Query(None),
     use_fuzzy: bool = Query(False),
     page: int = Query(1, ge=1),
     size: int = Query(50, ge=1, le=100),
@@ -538,7 +540,6 @@ async def search_advanced(
     if use_fuzzy and len(search_terms) > 0:
         first_term = search_terms[0]
         if len(first_term) >= 3:
-            # Поиск с возможными опечатками (первые 3 символа должны совпадать)
             conditions.append(Product.name.ilike(f"{first_term[:3]}%"))
 
     query = (
@@ -546,18 +547,28 @@ async def search_advanced(
         .options(joinedload(Product.pharmacy))
         .join(Pharmacy)
         .where(or_(*conditions))
-        .order_by(
-            case(
-                (Product.name.ilike(f"%{search_name}%"), 3),  # полное совпадение
-                (Product.name.ilike(f"{search_name}%"), 2),  # начало с запроса
-                else_=1,
-            ).desc(),
-            Product.price.asc(),
-        )
     )
 
+    # ВАЖНО: Добавляем фильтрацию по форме, производителю и стране если они указаны
+    if form and form != "Все формы":
+        query = query.where(Product.form == form)
+    if manufacturer and manufacturer != "Все производители":
+        query = query.where(Product.manufacturer == manufacturer)
+    if country and country != "Все страны":
+        query = query.where(Product.country == country)
+
+    # УСЛОВИЕ ГОРОДА ТОЛЬКО ЗДЕСЬ (удалил дублирование)
     if city and city != "Все города":
         query = query.where(Pharmacy.city == city)
+
+    query = query.order_by(
+        case(
+            (Product.name.ilike(f"%{search_name}%"), 3),  # полное совпадение
+            (Product.name.ilike(f"{search_name}%"), 2),  # начало с запроса
+            else_=1,
+        ).desc(),
+        Product.price.asc(),
+    )
 
     # Получаем общее количество
     count_query = select(func.count()).select_from(query.subquery())
@@ -572,27 +583,39 @@ async def search_advanced(
     result = await db.execute(query)
     products = result.unique().scalars().all()
 
-    # Получаем доступные формы для превью
+    # Получаем доступные формы для превью (БЕЗ фильтра по форме для шага 2)
     forms_query = (
         select(Product.form)
         .join(Pharmacy)
         .where(or_(*conditions))
-        .group_by(Product.form)
-        .order_by(Product.form)
     )
 
+    # Добавляем фильтры города для форм
     if city and city != "Все города":
         forms_query = forms_query.where(Pharmacy.city == city)
+
+    forms_query = forms_query.group_by(Product.form).order_by(Product.form)
 
     forms_result = await db.execute(forms_query)
     available_forms = [row[0] for row in forms_result.all() if row[0]]
 
-    # Формируем превью продуктов (первые 20)
-    preview_products = []
-    preview_query = query.limit(20)
+    # Формируем превью продуктов (первые 20) - ТОЖЕ БЕЗ фильтра по форме
+    preview_query = (
+        select(Product)
+        .options(joinedload(Product.pharmacy))
+        .join(Pharmacy)
+        .where(or_(*conditions))
+    )
+
+    if city and city != "Все города":
+        preview_query = preview_query.where(Pharmacy.city == city)
+
+    preview_query = preview_query.order_by(Product.price.asc()).limit(20)
+
     preview_result = await db.execute(preview_query)
     preview_products_data = preview_result.unique().scalars().all()
 
+    preview_products = []
     for product in preview_products_data:
         pharmacy = product.pharmacy
         preview_products.append(
@@ -636,7 +659,7 @@ async def search_advanced(
         "page": page,
         "size": size,
         "total_pages": total_pages,
-        "available_forms": available_forms,  # Добавляем доступные формы
-        "preview_products": preview_products,  # Добавляем превью продуктов
-        "total_found": total,  # Общее количество найденных
+        "available_forms": available_forms,
+        "preview_products": preview_products,
+        "total_found": total,
     }

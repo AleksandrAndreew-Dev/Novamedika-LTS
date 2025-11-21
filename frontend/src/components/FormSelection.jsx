@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 
-// FormSelection.jsx - добавить проверку на undefined
 export default function FormSelection({
   previewProducts,
   searchData,
@@ -14,39 +13,34 @@ export default function FormSelection({
   // Защита от undefined
   const safePreviewProducts = previewProducts || [];
 
-  // Группируем продукты по уникальной комбинации: форма + производитель + страна
+  // Группируем продукты по форме
   const groupedByForm = safePreviewProducts.reduce((acc, product) => {
-    const key = `${product.name}|${product.form}|${product.manufacturer}|${product.country}`;
+    const key = product.form || "Без формы";
 
     if (!acc[key]) {
       acc[key] = {
-        name: product.name,
         form: product.form,
-        manufacturer: product.manufacturer,
-        country: product.country,
-        names: new Set([product.name]),
-        example: product,
+        example: product, // сохраняем пример продукта для отображения
+        count: 1,
       };
     } else {
-      acc[key].names.add(product.name);
+      acc[key].count += 1;
     }
     return acc;
   }, {});
 
-
-
-  // Преобразуем в массив и обрабатываем названия
-  const formGroups = Object.values(groupedByForm).map((group) => ({
-    ...group,
-    // Объединяем уникальные названия через запятую
-    displayName: Array.from(group.names).join(", "),
-  }));
+  // Преобразуем в массив
+  const formGroups = Object.values(groupedByForm);
 
   const handleFormClick = (group) => {
-    const selectedKey = `${group.name}|${group.form}|${group.manufacturer}|${group.country}`;
-    setSelectedForm(selectedKey);
-    // Передаем все параметры включая name
-    onFormSelect(group.name, group.form, group.manufacturer, group.country);
+    setSelectedForm(group.form);
+    // Передаем параметры фильтрации
+    onFormSelect(
+      searchData.name, // оригинальное название из поиска
+      group.form, // выбранная форма
+      group.example?.manufacturer, // пример производителя
+      group.example?.country // пример страны
+    );
   };
 
   return (
@@ -143,52 +137,57 @@ export default function FormSelection({
                     <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
                       Страна
                     </th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
+                      Количество
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {formGroups.map((group, index) => {
-                    const groupKey = `${group.form}|${group.manufacturer}|${group.country}`;
-                    return (
-                      <tr
-                        key={index}
-                        className={`hover:bg-telegram-primary hover:bg-opacity-5 transition-colors cursor-pointer ${
-                          selectedForm === groupKey
-                            ? "bg-telegram-primary bg-opacity-10"
-                            : ""
-                        }`}
-                        onClick={() => handleFormClick(group)}
-                      >
-                        <td className="py-3 px-4">
-                          <div className="text-sm font-medium text-gray-800">
-                            {group.displayName}
+                  {formGroups.map((group, index) => (
+                    <tr
+                      key={index}
+                      className={`hover:bg-telegram-primary hover:bg-opacity-5 transition-colors cursor-pointer ${
+                        selectedForm === group.form
+                          ? "bg-telegram-primary bg-opacity-10"
+                          : ""
+                      }`}
+                      onClick={() => handleFormClick(group)}
+                    >
+                      <td className="py-3 px-4">
+                        <div className="text-sm font-medium text-gray-800">
+                          {searchData.name}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="text-sm text-gray-600">
+                          {group.form}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="text-sm text-gray-600">
+                          {group.example?.manufacturer || "Разные"}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="text-sm text-gray-600">
+                          {group.example?.country || "Разные"}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="text-sm text-gray-600">
+                          {group.count} вариантов
+                        </div>
+                        {loading && selectedForm === group.form && (
+                          <div className="flex items-center mt-1">
+                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-telegram-primary mr-2"></div>
+                            <span className="text-xs text-gray-500">
+                              Загрузка...
+                            </span>
                           </div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="text-sm text-gray-600">
-                            {group.form}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="text-sm text-gray-600">
-                            {group.manufacturer}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="text-sm text-gray-600">
-                            {group.country}
-                          </div>
-                          {loading && selectedForm === groupKey && (
-                            <div className="flex items-center mt-1">
-                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-telegram-primary mr-2"></div>
-                              <span className="text-xs text-gray-500">
-                                Загрузка...
-                              </span>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                        )}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
