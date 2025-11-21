@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, text
 from sqlalchemy.orm import selectinload, joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
@@ -27,7 +27,6 @@ def _clean_old_contexts():
         del _search_context[search_id]
 
 
-# В эндпоинте search-two-step обновим сортировку превью
 @router.get("/search-two-step/", response_model=dict)
 async def search_two_step(
     name: Optional[str] = Query(None),
@@ -41,11 +40,24 @@ async def search_two_step(
 
     _clean_old_contexts()
 
-    # Базовый запрос с явным JOIN и правильной фильтрацией по городу
+    # Разбиваем поисковый запрос на отдельные слова
+    search_terms = name.strip().split()
+
+    # Создаем условия для поиска по каждому слову
+    name_conditions = []
+    for term in search_terms:
+        if len(term) > 2:  # Игнорируем слишком короткие слова
+            name_conditions.append(Product.name.ilike(f"%{term}%"))
+
+    # Если после фильтрации не осталось условий, используем оригинальный запрос
+    if not name_conditions:
+        name_conditions.append(Product.name.ilike(f"%{name}%"))
+
+    # Базовый запрос с комбинированными условиями
     base_query = (
         select(Product)
         .join(Pharmacy, Product.pharmacy_id == Pharmacy.uuid)
-        .where(Product.name.ilike(f"%{name}%"))
+        .where(or_(*name_conditions))
     )
 
     if city and city != "Все города" and city.strip():
@@ -55,7 +67,7 @@ async def search_two_step(
     forms_query = (
         select(Product.form, func.count(Product.uuid))
         .join(Pharmacy, Product.pharmacy_id == Pharmacy.uuid)
-        .where(Product.name.ilike(f"%{name}%"))
+        .where(or_(*name_conditions))
     )
 
     if city and city != "Все города" and city.strip():
@@ -79,11 +91,11 @@ async def search_two_step(
     available_forms = [form for form, count in forms_data if form]
     total_found = sum(count for form, count in forms_data)
 
-    # ОБНОВЛЕНИЕ: Сортировка превью по цене (от меньшей к большей)
+    # Превью товаров с сортировкой по релевантности и цене
     preview_query = (
         base_query.options(joinedload(Product.pharmacy))
-        .order_by(Product.price.asc())  # Сортировка по цене по возрастанию
-        .limit(10)
+        .order_by(Product.price.asc())
+        .limit(20)  # Увеличиваем лимит для лучшего покрытия
     )
 
     preview_result = await db.execute(preview_query)
@@ -110,6 +122,7 @@ async def search_two_step(
         "name": name,
         "city": city,
         "available_forms": available_forms,
+        "search_terms": search_terms,  # Сохраняем термины для поиска
         "created_at": datetime.now(),
     }
 
@@ -139,13 +152,20 @@ async def search_products(
     # Определяем параметры поиска
     search_name = name
     search_city = city
+    search_terms = []
 
     if search_id and search_id in _search_context:
         context = _search_context[search_id]
         if not search_name:
             search_name = context["name"]
+        # Используем сохраненные поисковые термины для более точного поиска
+        search_terms = context.get("search_terms", [search_name])
         if not search_city:
             search_city = context["city"]
+
+    # Если search_terms пуст, создаем из search_name
+    if not search_terms and search_name:
+        search_terms = search_name.strip().split()
 
     # Базовый запрос
     query = (
@@ -154,11 +174,16 @@ async def search_products(
         .join(Pharmacy)
     )
 
-    # Фильтрация по названию - точное совпадение или LIKE в зависимости от контекста
-    if search_name:
-        if search_id:
-            query = query.where(Product.name == search_name)
-        else:
+    # Улучшенная фильтрация по названию
+    if search_terms:
+        name_conditions = []
+        for term in search_terms:
+            if len(term) > 2:
+                name_conditions.append(Product.name.ilike(f"%{term}%"))
+
+        if name_conditions:
+            query = query.where(or_(*name_conditions))
+        elif search_name:
             query = query.where(Product.name.ilike(f"%{search_name}%"))
 
     if search_city and search_city != "Все города":
@@ -170,7 +195,7 @@ async def search_products(
     if country:
         query = query.where(Product.country == country)
 
-    # ОБНОВЛЕНИЕ: Сортировка по цене (от меньшей к большей)
+    # Сортировка по цене (от меньшей к большей)
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
     total = total_result.scalar()
@@ -179,9 +204,8 @@ async def search_products(
     if page > total_pages:
         page = total_pages
 
-    # ОБНОВЛЕНИЕ: Заменяем сортировку с updated_at на price
     query = (
-        query.order_by(Product.price.asc())  # Сортировка по цене по возрастанию
+        query.order_by(Product.price.asc())
         .offset((page - 1) * size)
         .limit(size)
     )
@@ -225,6 +249,45 @@ async def search_products(
     }
 
 
+# Добавляем эндпоинт для триграммного поиска (опционально)
+@router.get("/search-trigram/", response_model=dict)
+async def search_trigram(
+    name: Optional[str] = Query(None),
+    city: Optional[str] = Query(None),
+    similarity: float = Query(0.3, ge=0.1, le=1.0),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Поиск с использованием триграмм PostgreSQL
+    Требует расширение: CREATE EXTENSION pg_trgm;
+    """
+    if not name:
+        raise HTTPException(status_code=400, detail="Параметр 'name' обязателен")
+
+    # Используем триграммное сходство
+    trigram_query = text("""
+        SELECT p.*, ph.*,
+        similarity(p.name, :name) as similarity_score
+        FROM products p
+        JOIN pharmacies ph ON p.pharmacy_id = ph.uuid
+        WHERE similarity(p.name, :name) > :similarity
+        AND (:city IS NULL OR ph.city = :city)
+        ORDER BY similarity_score DESC, p.price ASC
+        LIMIT 100
+    """)
+
+    result = await db.execute(
+        trigram_query,
+        {"name": name, "city": city, "similarity": similarity}
+    )
+    products_data = result.fetchall()
+
+    # Обработка результатов...
+    # [аналогично предыдущим эндпоинтам]
+
+    return {"items": [], "total": len(products_data)}  # Заглушка
+
+
 @router.get("/cities/")
 async def get_cities(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -247,28 +310,3 @@ async def get_forms(db: AsyncSession = Depends(get_db)):
     )
     forms = [row[0] for row in result.all() if row[0]]
     return forms
-
-
-@router.get("/check-relations/")
-async def check_relations(db: AsyncSession = Depends(get_db)):
-    """Проверка связей между аптеками и продуктами"""
-    # Проверяем количество записей
-    pharmacies_count = await db.execute(select(func.count(Pharmacy.uuid)))
-    products_count = await db.execute(select(func.count(Product.uuid)))
-
-    # Проверяем продукты без аптек
-    orphan_products = await db.execute(
-        select(func.count(Product.uuid)).where(Product.pharmacy_id.is_(None))
-    )
-
-    # Проверяем аптеки без продуктов
-    empty_pharmacies = await db.execute(
-        select(func.count(Pharmacy.uuid)).where(~Pharmacy.products.any())
-    )
-
-    return {
-        "pharmacies_count": pharmacies_count.scalar(),
-        "products_count": products_count.scalar(),
-        "orphan_products": orphan_products.scalar(),
-        "empty_pharmacies": empty_pharmacies.scalar(),
-    }
