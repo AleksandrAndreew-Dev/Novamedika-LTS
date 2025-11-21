@@ -299,7 +299,7 @@ async def process_user_question(
     is_pharmacist: bool,
     user: User
 ):
-    """Обработка вопроса от пользователя"""
+    """Обработка вопроса от пользователя - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
     logger.info(f"Processing question from user {message.from_user.id}, state: {await state.get_state()}")
 
     if is_pharmacist:
@@ -322,8 +322,11 @@ async def process_user_question(
         logger.info(f"Question created for user {user.telegram_id}, question_id: {question.uuid}")
 
         # УВЕДОМЛЯЕМ ОНЛАЙН ФАРМАЦЕВТОВ - ИСПРАВЛЕННАЯ ВЕРСИЯ
-        from bot.services.notification_service import notify_pharmacists_about_new_question
-        await notify_pharmacists_about_new_question(question, db)
+        try:
+            from bot.services.notification_service import notify_pharmacists_about_new_question
+            await notify_pharmacists_about_new_question(question, db)
+        except Exception as e:
+            logger.error(f"Error in notification service: {e}")
 
         await message.answer(
             "✅ Ваш вопрос отправлен фармацевтам!\n\n"

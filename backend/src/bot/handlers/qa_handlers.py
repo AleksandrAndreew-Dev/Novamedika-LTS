@@ -22,7 +22,7 @@ router = Router()
 async def set_online(
     message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist
 ):
-    """Установка статуса онлайн для фармацевта с уведомлением о pending вопросах"""
+    """Установка статуса онлайн для фармацевта с улучшенной отладкой"""
     logger.info(
         f"Command /online from user {message.from_user.id}, is_pharmacist: {is_pharmacist}"
     )
@@ -43,6 +43,11 @@ async def set_online(
         logger.info(
             f"Pharmacist {message.from_user.id} successfully set online status"
         )
+
+        # ОТЛАДОЧНАЯ ИНФОРМАЦИЯ: проверяем онлайн фармацевтов
+        from bot.services.notification_service import get_online_pharmacists
+        online_pharmacists = await get_online_pharmacists(db)
+        logger.info(f"DEBUG: Total online pharmacists after /online: {len(online_pharmacists)}")
 
         # УВЕДОМЛЯЕМ О PENDING ВОПРОСАХ ПРИ ПЕРЕХОДЕ В ОНЛАЙН
         from sqlalchemy import select, func
@@ -209,6 +214,57 @@ async def cmd_questions(
     except Exception as e:
         logger.error(f"Error in cmd_questions: {e}")
         await message.answer("❌ Ошибка при получении вопросов")
+
+
+
+@router.message(Command("debug_status"))
+async def debug_status(
+    message: Message, db: AsyncSession, is_pharmacist: bool
+):
+    """Команда для отладки статуса системы"""
+    try:
+        from sqlalchemy import select, func
+        from bot.services.notification_service import get_online_pharmacists
+
+        # Статистика по вопросам
+        total_questions = await db.execute(select(func.count(Question.uuid)))
+        pending_questions = await db.execute(
+            select(func.count(Question.uuid)).where(Question.status == "pending")
+        )
+
+        # Онлайн фармацевты
+        online_pharmacists = await get_online_pharmacists(db)
+
+        # Все активные фармацевты
+        all_pharmacists_result = await db.execute(
+            select(Pharmacist).where(Pharmacist.is_active == True)
+        )
+        all_pharmacists = all_pharmacists_result.scalars().all()
+
+        status_text = (
+            f"🔧 <b>Отладочная информация системы</b>\n\n"
+            f"📊 <b>Вопросы:</b>\n"
+            f"• Всего: {total_questions.scalar()}\n"
+            f"• Ожидают ответа: {pending_questions.scalar()}\n\n"
+            f"👨‍⚕️ <b>Фармацевты:</b>\n"
+            f"• Всего активных: {len(all_pharmacists)}\n"
+            f"• Сейчас онлайн: {len(online_pharmacists)}\n\n"
+            f"🕒 <b>Время сервера:</b>\n"
+            f"{get_utc_now_naive().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+
+        # Детальная информация об онлайн фармацевтах
+        if online_pharmacists:
+            status_text += f"\n\n<b>Онлайн фармацевты:</b>"
+            for i, pharm in enumerate(online_pharmacists, 1):
+                last_seen = pharm.last_seen.strftime('%H:%M:%S') if pharm.last_seen else "никогда"
+                status_text += f"\n{i}. ID: {pharm.user.telegram_id}, Последняя активность: {last_seen}"
+
+        await message.answer(status_text, parse_mode="HTML")
+
+    except Exception as e:
+        logger.error(f"Error in debug_status: {e}")
+        await message.answer("❌ Ошибка при получении статуса системы")
 
 
 @router.callback_query(F.data.startswith("answer_"))

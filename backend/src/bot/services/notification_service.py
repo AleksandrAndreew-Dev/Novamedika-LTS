@@ -1,17 +1,16 @@
 from bot.core import bot_manager
-from sqlalchemy import select
+from sqlalchemy import select, and_
 from datetime import timedelta
 from utils.time_utils import get_utc_now_naive
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from db.qa_models import Pharmacist, User
-import asyncio
+from sqlalchemy.orm import selectinload
 
 logger = logging.getLogger(__name__)
 
-
 async def notify_pharmacists_about_new_question(question, db: AsyncSession):
-    """Уведомление фармацевтов о новом вопросе"""
+    """Уведомление фармацевтов о новом вопросе - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
     try:
         # Получаем бота
         bot, _ = await bot_manager.initialize()
@@ -22,16 +21,16 @@ async def notify_pharmacists_about_new_question(question, db: AsyncSession):
         # Получаем онлайн фармацевтов с подгрузкой пользователя
         five_minutes_ago = get_utc_now_naive() - timedelta(minutes=5)
 
-        from sqlalchemy.orm import selectinload
-
         result = await db.execute(
             select(Pharmacist)
             .join(User, Pharmacist.user_id == User.uuid)
             .options(selectinload(Pharmacist.user))
             .where(
-                Pharmacist.is_online == True,
-                Pharmacist.is_active == True,
-                Pharmacist.last_seen >= five_minutes_ago
+                and_(
+                    Pharmacist.is_online == True,
+                    Pharmacist.is_active == True,
+                    Pharmacist.last_seen >= five_minutes_ago
+                )
             )
         )
         online_pharmacists = result.scalars().all()
@@ -59,6 +58,11 @@ async def notify_pharmacists_about_new_question(question, db: AsyncSession):
                     )
                     notified_count += 1
                     logger.info(f"Notification sent to pharmacist {pharmacist.user.telegram_id}")
+
+                    # Добавляем небольшую задержку между отправками
+                    import asyncio
+                    await asyncio.sleep(0.1)
+
             except Exception as e:
                 pharmacist_id = pharmacist.user.telegram_id if pharmacist.user else "unknown"
                 logger.error(f"Failed to notify pharmacist {pharmacist_id}: {e}")
@@ -68,21 +72,25 @@ async def notify_pharmacists_about_new_question(question, db: AsyncSession):
     except Exception as e:
         logger.error(f"Error in notify_pharmacists_about_new_question: {e}", exc_info=True)
 
-
 async def get_online_pharmacists(db: AsyncSession):
-    """Получить список онлайн фармацевтов"""
+    """Получить список онлайн фармацевтов - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
     try:
         five_minutes_ago = get_utc_now_naive() - timedelta(minutes=5)
         result = await db.execute(
             select(Pharmacist)
             .join(User, Pharmacist.user_id == User.uuid)
+            .options(selectinload(Pharmacist.user))
             .where(
-                Pharmacist.is_online == True,
-                Pharmacist.is_active == True,
-                Pharmacist.last_seen >= five_minutes_ago
+                and_(
+                    Pharmacist.is_online == True,
+                    Pharmacist.is_active == True,
+                    Pharmacist.last_seen >= five_minutes_ago
+                )
             )
         )
-        return result.scalars().all()
+        pharmacists = result.scalars().all()
+        logger.info(f"Found {len(pharmacists)} online pharmacists")
+        return pharmacists
     except Exception as e:
         logger.error(f"Error getting online pharmacists: {e}")
         return []
