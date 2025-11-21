@@ -274,7 +274,7 @@ async def process_answer_text(
     state: FSMContext,
     db: AsyncSession,
     is_pharmacist: bool,
-    pharmacist: Pharmacist,  # Это объект Pharmacist, а не User
+    pharmacist: Pharmacist,
 ):
     """Обработка текста ответа на вопрос"""
     logger.info(f"Processing answer from pharmacist {message.from_user.id}")
@@ -285,7 +285,6 @@ async def process_answer_text(
         return
 
     try:
-        # Получаем данные из состояния
         state_data = await state.get_data()
         question_uuid = state_data.get("question_uuid")
 
@@ -294,7 +293,6 @@ async def process_answer_text(
             await state.clear()
             return
 
-        # Получаем вопрос
         result = await db.execute(
             select(Question).where(Question.uuid == question_uuid)
         )
@@ -314,19 +312,11 @@ async def process_answer_text(
         )
 
         db.add(answer)
-
-        # Обновляем статус вопроса
         question.status = "answered"
         question.answered_at = get_utc_now_naive()
-
         await db.commit()
 
-        # ИСПРАВЛЕНИЕ: используем message.from_user.id вместо pharmacist.telegram_id
-        logger.info(
-            f"Pharmacist {message.from_user.id} successfully answered question {question.uuid}"
-        )
-
-        # Уведомляем пользователя
+        # Уведомляем пользователя с информацией о фармацевте
         user_result = await db.execute(
             select(User).where(User.uuid == question.user_id)
         )
@@ -334,18 +324,30 @@ async def process_answer_text(
 
         if user and user.telegram_id:
             try:
+                # Формируем информацию о фармацевте
+                pharmacy_info = pharmacist.pharmacy_info or {}
+                chain = pharmacy_info.get("chain", "Не указана")
+                number = pharmacy_info.get("number", "Не указан")
+                role = pharmacy_info.get("role", "Фармацевт")
+
+                pharmacist_info = f"{chain}, аптека №{number}"
+                if role:
+                    pharmacist_info += f" ({role})"
+
                 answer_preview = (
                     message.text[:100] + "..."
                     if len(message.text) > 100
                     else message.text
                 )
+
                 await message.bot.send_message(
                     chat_id=user.telegram_id,
-                    text=f"💊 На ваш вопрос получен ответ от фармацевта:\n\n"
-                    f"❓ Ваш вопрос: {question.text}\n\n"
-                    f"💬 Ответ: {answer_preview}\n\n"
-                    f"💡 Если ответ неполный или у вас есть уточняющий вопрос, "
-                 "используйте команду /clarify",
+                    text=f"💊 На ваш вопрос получен ответ!\n\n"
+                         f"❓ Ваш вопрос: {question.text}\n\n"
+                         f"💬 Ответ: {answer_preview}\n\n"
+                         f"👨‍⚕️ Ответ предоставил: {pharmacist_info}\n\n"
+                         f"💡 Если ответ неполный или у вас есть уточняющий вопрос, "
+                         "используйте команду /clarify",
                 )
                 logger.info(
                     f"Notification sent to user {user.telegram_id} about answer"
