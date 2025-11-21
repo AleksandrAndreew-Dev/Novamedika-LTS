@@ -15,19 +15,25 @@ export default function FormSelection({
 
   // Группируем продукты по форме
   const groupedByForm = safePreviewProducts.reduce((acc, product) => {
-    const key = product.form || "Без формы";
+  const key = product.form || "Без формы";
 
-    if (!acc[key]) {
-      acc[key] = {
-        form: product.form,
-        example: product, // сохраняем пример продукта для отображения
-        count: 1,
-      };
-    } else {
-      acc[key].count += 1;
-    }
-    return acc;
-  }, {});
+  if (!acc[key]) {
+    acc[key] = {
+      form: product.form,
+      example: product,
+      count: 1,
+      minPrice: product.price,
+      maxPrice: product.price,
+      pharmacies: new Set([product.pharmacy_city]) // для подсчета уникальных аптек
+    };
+  } else {
+    acc[key].count += 1;
+    acc[key].minPrice = Math.min(acc[key].minPrice, product.price);
+    acc[key].maxPrice = Math.max(acc[key].maxPrice, product.price);
+    acc[key].pharmacies.add(product.pharmacy_city);
+  }
+  return acc;
+}, {});
 
   // Преобразуем в массив
   const formGroups = Object.values(groupedByForm);

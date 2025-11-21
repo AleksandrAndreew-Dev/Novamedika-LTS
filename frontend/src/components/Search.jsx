@@ -85,29 +85,27 @@ export default function Search() {
       const response = await api.get("/search-advanced/", {
         params: {
           name,
-          city,
+          city: city || "", // передаем пустую строку вместо undefined
           use_fuzzy: true,
           page: 1,
           size: 20,
         },
       });
 
-      // Добавить проверку на существование данных
       const responseData = response.data || {};
 
-      setSearchData((prev) => ({ ...prev, name, city }));
+      setSearchData({ name, city: city || "" }); // сбрасываем форму при новом поиске
       setSearchContext({
         availableForms: responseData.available_forms || [],
-        previewProducts: responseData.preview_products || [], // Защита от undefined
+        previewProducts: responseData.preview_products || [],
         totalFound: responseData.total_found || 0,
-        searchId: responseData.search_id,
       });
       setStep(2);
     } catch (error) {
       console.error("Search error:", error);
       setError("Ошибка при поиске. Попробуйте еще раз.");
 
-      if (isTelegram) {
+      if (isTelegram && tg) {
         tg.showPopup({
           title: "Ошибка",
           message: "Ошибка при поиске. Попробуйте еще раз.",
@@ -121,55 +119,57 @@ export default function Search() {
 
   // Обновим функцию handleFormSelect
   // Search.jsx - исправленный handleFormSelect
-const handleFormSelect = async (name, form, manufacturer, country) => {
-  setLoading(true);
-  setError(null);
-  try {
-    const params = {
-      name: searchData.name, // используем оригинальное название из поиска
-      form: form, // передаем выбранную форму
-      page: 1,
-      size: pagination.size,
-    };
+  const handleFormSelect = async (name, form, manufacturer, country) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = {
+        name: searchData.name, // используем оригинальное название из поиска
+        form: form, // передаем выбранную форму
+        page: 1,
+        size: pagination.size,
+        use_fuzzy: true,
+      };
 
-    // Добавляем дополнительные фильтры если они есть
-    if (manufacturer && manufacturer !== "Все производители") {
-      params.manufacturer = manufacturer;
+      // НЕ передаем manufacturer и country в параметры - показываем все варианты выбранной формы
+      if (searchData.city) {
+        params.city = searchData.city;
+      }
+
+      const response = await api.get("/search-advanced/", {
+        params,
+      });
+
+      setSearchData((prev) => ({
+        ...prev,
+        form, // сохраняем выбранную форму
+        // НЕ сохраняем manufacturer и country
+      }));
+
+      setResults(response.data.items || []);
+      setPagination((prev) => ({
+        ...prev,
+        page: response.data.page || 1,
+        total: response.data.total || 0,
+        totalPages: response.data.total_pages || 1,
+      }));
+      setStep(3);
+    } catch (error) {
+      console.error("Form selection error:", error);
+      setError("Ошибка при загрузке результатов.");
+
+      if (isTelegram && tg) {
+        tg.showPopup({
+          title: "Ошибка",
+          message: "Ошибка при загрузке результатов.",
+          buttons: [{ type: "ok" }],
+        });
+      }
+    } finally {
+      setLoading(false);
     }
-    if (country && country !== "Все страны") {
-      params.country = country;
-    }
-    if (searchData.city) {
-      params.city = searchData.city;
-    }
-
-    const response = await api.get("/search-advanced/", {
-      params,
-    });
-
-    setSearchData((prev) => ({
-      ...prev,
-      form, // сохраняем выбранную форму
-      manufacturer,
-      country,
-    }));
-
-    setResults(response.data.items);
-    setPagination((prev) => ({
-      ...prev,
-      page: response.data.page,
-      total: response.data.total,
-      totalPages: response.data.total_pages,
-    }));
-    setStep(3);
-  } catch (error) {
-    console.error("Form selection error:", error);
-    setError("Ошибка при загрузке результатов.");
-  } finally {
-    setLoading(false);
-  }
   };
-  
+
   const handlePageChange = async (newPage) => {
     setLoading(true);
     try {
