@@ -82,8 +82,14 @@ export default function Search() {
     setLoading(true);
     setError(null);
     try {
-      const response = await api.get("/search-two-step/", {
-        params: { name, city },
+      const response = await api.get("/search-advanced/", {
+        params: {
+          name,
+          city,
+          use_fuzzy: true,
+          page,
+          size: pagination.size,
+        },
       });
 
       setSearchData((prev) => ({ ...prev, name, city }));
