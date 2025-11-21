@@ -27,13 +27,13 @@ def _clean_old_contexts():
         del _search_context[search_id]
 
 
+# В эндпоинте search-two-step обновим сортировку превью
 @router.get("/search-two-step/", response_model=dict)
 async def search_two_step(
     name: Optional[str] = Query(None),
     city: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
-    """Первый этап поиска - только по названию и городу"""
     if not name:
         raise HTTPException(
             status_code=400, detail="Параметр 'name' обязателен для поиска"
@@ -48,7 +48,6 @@ async def search_two_step(
         .where(Product.name.ilike(f"%{name}%"))
     )
 
-    # ИСПРАВЛЕНИЕ: Правильная фильтрация по городу
     if city and city != "Все города" and city.strip():
         base_query = base_query.where(Pharmacy.city == city)
 
@@ -59,7 +58,6 @@ async def search_two_step(
         .where(Product.name.ilike(f"%{name}%"))
     )
 
-    # ИСПРАВЛЕНИЕ: Такая же фильтрация по городу в forms_query
     if city and city != "Все города" and city.strip():
         forms_query = forms_query.where(Pharmacy.city == city)
 
@@ -81,11 +79,11 @@ async def search_two_step(
     available_forms = [form for form, count in forms_data if form]
     total_found = sum(count for form, count in forms_data)
 
-    # Получаем превью с правильной фильтрацией
+    # ОБНОВЛЕНИЕ: Сортировка превью по цене (от меньшей к большей)
     preview_query = (
         base_query.options(joinedload(Product.pharmacy))
+        .order_by(Product.price.asc())  # Сортировка по цене по возрастанию
         .limit(10)
-        .order_by(Product.updated_at.desc())
     )
 
     preview_result = await db.execute(preview_query)
@@ -124,15 +122,14 @@ async def search_two_step(
     }
 
 
-# В эндпоинте /search/ обновим логику фильтрации
 @router.get("/search/", response_model=dict)
 async def search_products(
     search_id: Optional[str] = Query(None),
-    name: Optional[str] = Query(None),  # добавляем параметр для конкретного названия
+    name: Optional[str] = Query(None),
     form: Optional[str] = Query(None),
     manufacturer: Optional[str] = Query(None),
     country: Optional[str] = Query(None),
-    city: Optional[str] = Query(None),  # добавляем city как параметр
+    city: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     size: int = Query(100, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
@@ -140,12 +137,11 @@ async def search_products(
     _clean_old_contexts()
 
     # Определяем параметры поиска
-    search_name = name  # используем переданное конкретное название
+    search_name = name
     search_city = city
 
     if search_id and search_id in _search_context:
         context = _search_context[search_id]
-        # Если не передано конкретное название, используем из контекста
         if not search_name:
             search_name = context["name"]
         if not search_city:
@@ -161,10 +157,8 @@ async def search_products(
     # Фильтрация по названию - точное совпадение или LIKE в зависимости от контекста
     if search_name:
         if search_id:
-            # Для поиска по ID используем точное совпадение с конкретным названием
             query = query.where(Product.name == search_name)
         else:
-            # Для прямого поиска используем LIKE
             query = query.where(Product.name.ilike(f"%{search_name}%"))
 
     if search_city and search_city != "Все города":
@@ -176,7 +170,7 @@ async def search_products(
     if country:
         query = query.where(Product.country == country)
 
-    # Остальная логика остается без изменений...
+    # ОБНОВЛЕНИЕ: Сортировка по цене (от меньшей к большей)
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
     total = total_result.scalar()
@@ -185,11 +179,13 @@ async def search_products(
     if page > total_pages:
         page = total_pages
 
+    # ОБНОВЛЕНИЕ: Заменяем сортировку с updated_at на price
     query = (
-        query.order_by(Product.updated_at.desc())
+        query.order_by(Product.price.asc())  # Сортировка по цене по возрастанию
         .offset((page - 1) * size)
         .limit(size)
     )
+
     result = await db.execute(query)
     products = result.unique().scalars().all()
 

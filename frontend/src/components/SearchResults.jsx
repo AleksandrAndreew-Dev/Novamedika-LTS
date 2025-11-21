@@ -122,6 +122,10 @@ export default function SearchResults({
                   {searchData.name}
                 </span>
                 "{searchData.city && ` в городе ${searchData.city}`}
+                {/* ОБНОВЛЕНИЕ: Добавляем информацию о сортировке */}
+                <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                  Сортировка: по цене (от меньшей)
+                </span>
               </p>
             </div>
 
@@ -183,7 +187,7 @@ export default function SearchResults({
               Найдено результатов: {pagination.total}
             </h3>
             <p className="text-gray-600 text-sm">
-              {searchData.name }
+              {searchData.name}
               {searchData.form}
               {searchData.manufacturer && ` - ${searchData.manufacturer}`}
               {searchData.country && ` (${searchData.country})`}
@@ -380,9 +384,7 @@ export default function SearchResults({
 
               <button
                 onClick={() => onPageChange(pagination.page + 1)}
-                disabled={
-                  pagination.page === pagination.totalPages || loading
-                }
+                disabled={pagination.page === pagination.totalPages || loading}
                 className="bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-300 text-gray-700 font-medium py-2 px-3 rounded-lg transition-colors flex items-center text-sm"
               >
                 Вперед
