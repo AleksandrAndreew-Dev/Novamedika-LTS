@@ -1,3 +1,4 @@
+
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -56,7 +57,7 @@ async def answer_question_internal(
 
 
 async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncSession):
-    """Отправка ответа пользователю в Telegram"""
+    """Отправка ответа пользователю в Telegram - ОБНОВЛЕННАЯ ВЕРСИЯ С ФИО"""
     try:
         bot, _ = await bot_manager.initialize()
 
@@ -65,14 +66,32 @@ async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncS
             return
 
         if question.user and question.user.telegram_id:
-            # Формируем информацию о фармацевте
+            # Формируем информацию о фармацевте с ФИО
             pharmacy_info = getattr(pharmacist, "pharmacy_info", {}) or {}
             chain = pharmacy_info.get("chain", "Не указана")
             number = pharmacy_info.get("number", "Не указан")
             role = pharmacy_info.get("role", "Фармацевт")
 
-            pharmacist_info = f"{chain}, аптека №{number}"
-            if role:
+            # Получаем ФИО фармацевта
+            first_name = pharmacy_info.get("first_name", "")
+            last_name = pharmacy_info.get("last_name", "")
+            patronymic = pharmacy_info.get("patronymic", "")
+
+            # Формируем строку с ФИО
+            pharmacist_name_parts = []
+            if last_name:
+                pharmacist_name_parts.append(last_name)
+            if first_name:
+                pharmacist_name_parts.append(first_name)
+            if patronymic:
+                pharmacist_name_parts.append(patronymic)
+
+            pharmacist_name = " ".join(pharmacist_name_parts) if pharmacist_name_parts else "Фармацевт"
+
+            pharmacist_info = f"{pharmacist_name}"
+            if chain and number:
+                pharmacist_info += f", {chain}, аптека №{number}"
+            if role and role != "Фармацевт":
                 pharmacist_info += f" ({role})"
 
             message_text = (
@@ -91,3 +110,4 @@ async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncS
 
     except Exception as e:
         logger.error(f"Failed to send answer to user: {e}")
+

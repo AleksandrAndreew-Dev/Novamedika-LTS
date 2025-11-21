@@ -1,3 +1,4 @@
+
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
@@ -332,7 +333,7 @@ async def process_answer_text(
     is_pharmacist: bool,
     pharmacist: Pharmacist,
 ):
-    """Обработка текста ответа на вопрос"""
+    """Обработка текста ответа на вопрос - ОБНОВЛЕННАЯ ВЕРСИЯ С ФИО"""
     logger.info(f"Processing answer from pharmacist {message.from_user.id}")
 
     if not is_pharmacist or not pharmacist:
@@ -372,7 +373,7 @@ async def process_answer_text(
         question.answered_at = get_utc_now_naive()
         await db.commit()
 
-        # Уведомляем пользователя с информацией о фармацевте
+        # Уведомляем пользователя с информацией о фармацевте (ВКЛЮЧАЯ ФИО)
         user_result = await db.execute(
             select(User).where(User.uuid == question.user_id)
         )
@@ -380,14 +381,32 @@ async def process_answer_text(
 
         if user and user.telegram_id:
             try:
-                # Формируем информацию о фармацевте
+                # Формируем информацию о фармацевте с ФИО
                 pharmacy_info = pharmacist.pharmacy_info or {}
                 chain = pharmacy_info.get("chain", "Не указана")
                 number = pharmacy_info.get("number", "Не указан")
                 role = pharmacy_info.get("role", "Фармацевт")
 
-                pharmacist_info = f"{chain}, аптека №{number}"
-                if role:
+                # Получаем ФИО фармацевта
+                first_name = pharmacy_info.get("first_name", "")
+                last_name = pharmacy_info.get("last_name", "")
+                patronymic = pharmacy_info.get("patronymic", "")
+
+                # Формируем строку с ФИО
+                pharmacist_name_parts = []
+                if last_name:
+                    pharmacist_name_parts.append(last_name)
+                if first_name:
+                    pharmacist_name_parts.append(first_name)
+                if patronymic:
+                    pharmacist_name_parts.append(patronymic)
+
+                pharmacist_name = " ".join(pharmacist_name_parts) if pharmacist_name_parts else "Фармацевт"
+
+                pharmacist_info = f"{pharmacist_name}"
+                if chain and number:
+                    pharmacist_info += f", {chain}, аптека №{number}"
+                if role and role != "Фармацевт":
                     pharmacist_info += f" ({role})"
 
                 answer_preview = (

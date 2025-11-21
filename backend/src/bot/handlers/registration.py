@@ -1,4 +1,4 @@
-# registration.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
+
 from aiogram import Router, F
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram.filters import Command
@@ -20,6 +20,9 @@ class RegistrationStates(StatesGroup):
     waiting_pharmacy_chain = State()
     waiting_pharmacy_number = State()
     waiting_pharmacy_role = State()
+    waiting_first_name = State()
+    waiting_last_name = State()
+    waiting_patronymic = State()
     waiting_secret_word = State()
 
 async def get_or_create_user(telegram_data: dict, db: AsyncSession) -> User:
@@ -49,6 +52,11 @@ async def register_pharmacist_from_telegram(telegram_data: dict, db: AsyncSessio
         user = await get_or_create_user(telegram_data, db)
         pharmacy_info = telegram_data.get("pharmacy_info", {})
 
+        # Добавляем ФИО в информацию о фармацевте
+        pharmacy_info["first_name"] = telegram_data.get("first_name", "")
+        pharmacy_info["last_name"] = telegram_data.get("last_name", "")
+        pharmacy_info["patronymic"] = telegram_data.get("patronymic", "")
+
         # Проверяем, есть ли уже фармацевт с таким user_id
         result = await db.execute(
             select(Pharmacist).where(Pharmacist.user_id == user.uuid)
@@ -56,10 +64,11 @@ async def register_pharmacist_from_telegram(telegram_data: dict, db: AsyncSessio
         existing_pharmacist = result.scalar_one_or_none()
 
         if existing_pharmacist:
-            # Если запись уже есть, активируем ее
+            # Если запись уже есть, активируем ее и обновляем информацию
             existing_pharmacist.is_active = True
             existing_pharmacist.is_online = True
             existing_pharmacist.last_seen = get_utc_now_naive()
+            existing_pharmacist.pharmacy_info = pharmacy_info
             pharmacist = existing_pharmacist
         else:
             # Создаем новую запись
@@ -109,6 +118,9 @@ async def cmd_register(message: Message, state: FSMContext, db: AsyncSession, is
 @router.message(RegistrationStates.waiting_pharmacy_chain, F.text == "❌ Отмена регистрации")
 @router.message(RegistrationStates.waiting_pharmacy_number, F.text == "❌ Отмена регистрации")
 @router.message(RegistrationStates.waiting_pharmacy_role, F.text == "❌ Отмена регистрации")
+@router.message(RegistrationStates.waiting_first_name, F.text == "❌ Отмена регистрации")
+@router.message(RegistrationStates.waiting_last_name, F.text == "❌ Отмена регистрации")
+@router.message(RegistrationStates.waiting_patronymic, F.text == "❌ Отмена регистрации")
 @router.message(RegistrationStates.waiting_secret_word, F.text == "❌ Отмена регистрации")
 async def cancel_registration(message: Message, state: FSMContext):
     """Отмена регистрации"""
@@ -178,6 +190,68 @@ async def process_pharmacy_role(message: Message, state: FSMContext):
     )
 
     await message.answer(
+        "👤 Введите ваше имя (обязательно):",
+        reply_markup=cancel_keyboard
+    )
+    await state.set_state(RegistrationStates.waiting_first_name)
+
+@router.message(RegistrationStates.waiting_first_name)
+async def process_first_name(message: Message, state: FSMContext):
+    """Обработка ввода имени"""
+    first_name = message.text.strip()
+    if not first_name:
+        await message.answer("Пожалуйста, введите ваше имя:")
+        return
+
+    await state.update_data(first_name=first_name)
+
+    cancel_keyboard = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]],
+        resize_keyboard=True
+    )
+
+    await message.answer(
+        "👤 Введите вашу фамилию (обязательно):",
+        reply_markup=cancel_keyboard
+    )
+    await state.set_state(RegistrationStates.waiting_last_name)
+
+@router.message(RegistrationStates.waiting_last_name)
+async def process_last_name(message: Message, state: FSMContext):
+    """Обработка ввода фамилии"""
+    last_name = message.text.strip()
+    if not last_name:
+        await message.answer("Пожалуйста, введите вашу фамилию:")
+        return
+
+    await state.update_data(last_name=last_name)
+
+    cancel_keyboard = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]],
+        resize_keyboard=True
+    )
+
+    await message.answer(
+        "👤 Введите ваше отчество (если есть, или отправьте '-' чтобы пропустить):",
+        reply_markup=cancel_keyboard
+    )
+    await state.set_state(RegistrationStates.waiting_patronymic)
+
+@router.message(RegistrationStates.waiting_patronymic)
+async def process_patronymic(message: Message, state: FSMContext):
+    """Обработка ввода отчества"""
+    patronymic = message.text.strip()
+    if patronymic == "-":
+        patronymic = ""
+
+    await state.update_data(patronymic=patronymic)
+
+    cancel_keyboard = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]],
+        resize_keyboard=True
+    )
+
+    await message.answer(
         "🔐 Введите секретное слово для завершения регистрации:",
         reply_markup=cancel_keyboard
     )
@@ -201,13 +275,17 @@ async def process_secret_word(message: Message, state: FSMContext, db: AsyncSess
             "name": f"{data['pharmacy_chain']} №{data['pharmacy_number']}",
             "number": data['pharmacy_number'],
             "chain": data['pharmacy_chain'],
-            "role": data['pharmacy_role']
+            "role": data['pharmacy_role'],
+            "first_name": data['first_name'],
+            "last_name": data['last_name'],
+            "patronymic": data.get('patronymic', '')
         }
 
         telegram_data = {
             "telegram_user_id": message.from_user.id,
-            "first_name": message.from_user.first_name,
-            "last_name": message.from_user.last_name,
+            "first_name": data['first_name'],
+            "last_name": data['last_name'],
+            "patronymic": data.get('patronymic', ''),
             "telegram_username": message.from_user.username,
             "pharmacy_info": pharmacy_info
         }
@@ -215,16 +293,31 @@ async def process_secret_word(message: Message, state: FSMContext, db: AsyncSess
         # Вызываем функцию регистрации
         pharmacist = await register_pharmacist_from_telegram(telegram_data, db)
 
-        await message.answer(
+        # Формируем приветственное сообщение с ФИО
+        welcome_message = (
             "✅ Регистрация успешна!\n\n"
-            f"Сеть: {data['pharmacy_chain']}\n"
-            f"Аптека №: {data['pharmacy_number']}\n"
-            f"Роль: {data['pharmacy_role']}\n\n"
+            f"👤 Ваши данные:\n"
+            f"• Имя: {data['first_name']}\n"
+            f"• Фамилия: {data['last_name']}\n"
+        )
+
+        if data.get('patronymic'):
+            welcome_message += f"• Отчество: {data['patronymic']}\n"
+
+        welcome_message += (
+            f"\n🏥 Данные аптеки:\n"
+            f"• Сеть: {data['pharmacy_chain']}\n"
+            f"• Аптека №: {data['pharmacy_number']}\n"
+            f"• Роль: {data['pharmacy_role']}\n\n"
             "Теперь вы можете:\n"
             "• Просматривать вопросы (/questions)\n"
             "• Отвечать пользователям\n"
             "• Получать уведомления о новых вопросах\n"
-            "• Управлять своим онлайн статусом (/online, /offline)",
+            "• Управлять своим онлайн статусом (/online, /offline)"
+        )
+
+        await message.answer(
+            welcome_message,
             reply_markup=ReplyKeyboardRemove()
         )
         await state.clear()
@@ -233,3 +326,4 @@ async def process_secret_word(message: Message, state: FSMContext, db: AsyncSess
         logger.error(f"Registration error: {e}")
         await message.answer("❌ Ошибка регистрации. Попробуйте еще раз.")
         await state.clear()
+

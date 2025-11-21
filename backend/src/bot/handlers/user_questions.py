@@ -1,3 +1,4 @@
+
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.filters import Command
@@ -42,7 +43,7 @@ async def cmd_my_questions(
     user: User,
     is_pharmacist: bool
 ):
-    """Показать вопросы пользователя или ответы фармацевта"""
+    """Показать вопросы пользователя или ответы фармацевта - ОБНОВЛЕННАЯ ВЕРСИЯ С ФИО"""
     logger.info(f"Command /my_questions from user {message.from_user.id}, is_pharmacist: {is_pharmacist}")
 
     try:
@@ -133,10 +134,22 @@ async def cmd_my_questions(
                         )
                         pharmacist = pharmacist_result.scalar_one_or_none()
 
+                        # Формируем имя фармацевта с ФИО
                         pharmacist_name = "Фармацевт"
                         if pharmacist and pharmacist.pharmacy_info:
-                            pharmacy_name = pharmacist.pharmacy_info.get('name', 'Фармацевт')
-                            pharmacist_name = pharmacy_name
+                            first_name = pharmacist.pharmacy_info.get('first_name', '')
+                            last_name = pharmacist.pharmacy_info.get('last_name', '')
+                            patronymic = pharmacist.pharmacy_info.get('patronymic', '')
+
+                            name_parts = []
+                            if last_name:
+                                name_parts.append(last_name)
+                            if first_name:
+                                name_parts.append(first_name)
+                            if patronymic:
+                                name_parts.append(patronymic)
+
+                            pharmacist_name = " ".join(name_parts) if name_parts else "Фармацевт"
 
                         answer_preview = answer.text[:80] + "..." if len(answer.text) > 80 else answer.text
                         questions_text += f"     - {pharmacist_name}: {answer_preview}\n"
@@ -153,6 +166,7 @@ async def cmd_my_questions(
     except Exception as e:
         logger.error(f"Error in cmd_my_questions for user {message.from_user.id}: {e}", exc_info=True)
         await message.answer("❌ Ошибка при получении ваших вопросов. Попробуйте позже.")
+
 
 @router.message(Command("done"))
 async def cmd_done(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool):
