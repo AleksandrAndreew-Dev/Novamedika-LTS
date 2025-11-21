@@ -119,56 +119,56 @@ export default function Search() {
 
   // Обновим функцию handleFormSelect
   // Search.jsx - исправленный handleFormSelect
-  const handleFormSelect = async (name, form, manufacturer, country) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = {
-        name: searchData.name, // используем оригинальное название из поиска
-        form: form, // передаем выбранную форму
-        page: 1,
-        size: pagination.size,
-        use_fuzzy: true,
-      };
+  // Search.jsx - исправленная функция handleFormSelect
+const handleFormSelect = async (name, form) => {
+  setLoading(true);
+  setError(null);
+  try {
+    const params = {
+      name: searchData.name, // используем оригинальное название из поиска
+      form: form, // передаем выбранную форму
+      page: 1,
+      size: pagination.size,
+      use_fuzzy: true,
+    };
 
-      // НЕ передаем manufacturer и country в параметры - показываем все варианты выбранной формы
-      if (searchData.city) {
-        params.city = searchData.city;
-      }
-
-      const response = await api.get("/search-advanced/", {
-        params,
-      });
-
-      setSearchData((prev) => ({
-        ...prev,
-        form, // сохраняем выбранную форму
-        // НЕ сохраняем manufacturer и country
-      }));
-
-      setResults(response.data.items || []);
-      setPagination((prev) => ({
-        ...prev,
-        page: response.data.page || 1,
-        total: response.data.total || 0,
-        totalPages: response.data.total_pages || 1,
-      }));
-      setStep(3);
-    } catch (error) {
-      console.error("Form selection error:", error);
-      setError("Ошибка при загрузке результатов.");
-
-      if (isTelegram && tg) {
-        tg.showPopup({
-          title: "Ошибка",
-          message: "Ошибка при загрузке результатов.",
-          buttons: [{ type: "ok" }],
-        });
-      }
-    } finally {
-      setLoading(false);
+    // НЕ передаем manufacturer и country в параметры - показываем все варианты выбранной формы
+    if (searchData.city) {
+      params.city = searchData.city;
     }
-  };
+
+    const response = await api.get("/search-advanced/", {
+      params,
+    });
+
+    setSearchData((prev) => ({
+      ...prev,
+      form, // сохраняем выбранную форму
+    }));
+
+    setResults(response.data.items || []);
+    setPagination((prev) => ({
+      ...prev,
+      page: response.data.page || 1,
+      total: response.data.total || 0,
+      totalPages: response.data.total_pages || 1,
+    }));
+    setStep(3);
+  } catch (error) {
+    console.error("Form selection error:", error);
+    setError("Ошибка при загрузке результатов.");
+
+    if (isTelegram && tg) {
+      tg.showPopup({
+        title: "Ошибка",
+        message: "Ошибка при загрузке результатов.",
+        buttons: [{ type: "ok" }],
+      });
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handlePageChange = async (newPage) => {
     setLoading(true);

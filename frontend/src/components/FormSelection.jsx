@@ -39,15 +39,10 @@ export default function FormSelection({
   const formGroups = Object.values(groupedByForm);
 
   const handleFormClick = (group) => {
-    setSelectedForm(group.form);
-    // Передаем параметры фильтрации
-    onFormSelect(
-      searchData.name, // оригинальное название из поиска
-      group.form, // выбранная форма
-      group.example?.manufacturer, // пример производителя
-      group.example?.country // пример страны
-    );
-  };
+  setSelectedForm(group.form);
+  // Передаем только необходимые параметры
+  onFormSelect(searchData.name, group.form);
+};
 
   return (
     <div className="p-4 max-w-6xl mx-auto">
