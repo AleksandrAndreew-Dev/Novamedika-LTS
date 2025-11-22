@@ -79,108 +79,97 @@ export default function Search() {
   }, [step, isTelegram, tg]);
   // Search.jsx - исправить обработку ответа API
   const handleInitialSearch = async (name, city) => {
-  setLoading(true);
-  setError(null);
-  try {
-    const response = await api.get("/search-advanced/", {
-      params: {
-        name,
-        city: city || "",
-        use_fuzzy: true,
-        page: 1,
-        size: 20,
-      },
-    });
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await api.get("/search-fts/", {
+        params: {
+          q: name, // используем q вместо name
+          city: city || "",
+          page: 1,
+          size: 20,
+        },
+      });
 
-    const responseData = response.data || {};
+      const responseData = response.data || {};
 
-    setSearchData({ name, city: city || "" });
-    setSearchContext({
-      availableCombinations: responseData.available_combinations || [],
-      totalFound: responseData.total_found || 0,
-    });
-    setStep(2);
-  } catch (error) {
-    console.error("Search error:", error);
-    setError("Ошибка при поиске. Попробуйте еще раз.");
-    // ... остальная обработка ошибок
-  } finally {
-    setLoading(false);
-  }
-};
+      setSearchData({ name, city: city || "" });
+      setSearchContext({
+        availableCombinations: responseData.available_combinations || [],
+        totalFound: responseData.total_found || 0,
+      });
+      setStep(2);
+    } catch (error) {
+      console.error("Search error:", error);
+      setError("Ошибка при поиске. Попробуйте еще раз.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Обновим функцию handleFormSelect
   // Search.jsx - исправленный handleFormSelect
   // Search.jsx - исправленная функция handleFormSelect
-// В функции handleFormSelect обновляем передачу параметров:
-const handleFormSelect = async (name, form, manufacturer, country) => {
-  setLoading(true);
-  setError(null);
-  try {
-    const params = {
-      name: name, // Используем реальное название из выбранной комбинации
-      form: form,
-      manufacturer: manufacturer,
-      country: country,
-      page: 1,
-      size: pagination.size,
-      use_fuzzy: true,
-    };
+  // В функции handleFormSelect обновляем передачу параметров:
+  const handleFormSelect = async (name, form, manufacturer, country) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = {
+        q: name, // используем q вместо name
+        page: 1,
+        size: pagination.size,
+      };
 
-    if (searchData.city) {
-      params.city = searchData.city;
+      // Добавляем опциональные параметры
+      if (form) params.form = form;
+      if (manufacturer) params.manufacturer = manufacturer;
+      if (country) params.country = country;
+      if (searchData.city) params.city = searchData.city;
+
+      const response = await api.get("/search-fts/", { params });
+
+      setSearchData((prev) => ({
+        ...prev,
+        name: name,
+        form,
+        manufacturer,
+        country,
+      }));
+
+      setResults(response.data.items || []);
+      setPagination((prev) => ({
+        ...prev,
+        page: response.data.page || 1,
+        total: response.data.total || 0,
+        totalPages: response.data.total_pages || 1,
+      }));
+      setStep(3);
+    } catch (error) {
+      console.error("Form selection error:", error);
+      setError("Ошибка при загрузке результатов.");
+    } finally {
+      setLoading(false);
     }
-
-    const response = await api.get("/search-advanced/", { params });
-
-    setSearchData((prev) => ({
-      ...prev,
-      name: name, // Сохраняем реальное название
-      form,
-      manufacturer,
-      country,
-    }));
-
-    setResults(response.data.items || []);
-    setPagination((prev) => ({
-      ...prev,
-      page: response.data.page || 1,
-      total: response.data.total || 0,
-      totalPages: response.data.total_pages || 1,
-    }));
-    setStep(3);
-  } catch (error) {
-    console.error("Form selection error:", error);
-    setError("Ошибка при загрузке результатов.");
-    // ... обработка ошибок
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const handlePageChange = async (newPage) => {
     setLoading(true);
     try {
       const params = {
+        q: searchData.name, // используем q вместо name
         page: newPage,
         size: pagination.size,
-        use_fuzzy: true, // Добавьте этот параметр
       };
 
-      // Приоритет: searchId > прямой поиск
-      if (searchContext?.searchId) {
-        params.search_id = searchContext.searchId;
-        params.form = searchData.form;
-      } else {
-        params.name = searchData.name;
-        params.city = searchData.city;
-        params.form = searchData.form;
-      }
+      // Добавляем опциональные параметры
+      if (searchData.form) params.form = searchData.form;
+      if (searchData.manufacturer)
+        params.manufacturer = searchData.manufacturer;
+      if (searchData.country) params.country = searchData.country;
+      if (searchData.city) params.city = searchData.city;
 
-      const response = await api.get("/search-advanced/", {
-        // Измените эндпоинт
-        params,
-      });
+      const response = await api.get("/search-fts/", { params });
 
       setResults(response.data.items);
       setPagination((prev) => ({
@@ -285,15 +274,15 @@ const handleFormSelect = async (name, form, manufacturer, country) => {
           )}
 
           {step === 2 && searchContext && (
-  <FormSelection
-    availableCombinations={searchContext.availableCombinations || []}
-    searchData={searchData}
-    onFormSelect={handleFormSelect}
-    onBack={() => setStep(1)}
-    loading={loading}
-    isTelegram={isTelegram}
-  />
-)}
+            <FormSelection
+              availableCombinations={searchContext.availableCombinations || []}
+              searchData={searchData}
+              onFormSelect={handleFormSelect}
+              onBack={() => setStep(1)}
+              loading={loading}
+              isTelegram={isTelegram}
+            />
+          )}
           {step === 3 && (
             <SearchResults
               results={results}

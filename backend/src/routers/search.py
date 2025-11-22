@@ -628,6 +628,7 @@ async def search_advanced(
 from sqlalchemy import select, func, or_, text, case, and_
 from sqlalchemy.dialects.postgresql import TSVECTOR
 
+
 @router.get("/search-fts/", response_model=dict)
 async def search_full_text(
     q: str = Query(..., description="Поисковый запрос"),
@@ -650,11 +651,11 @@ async def search_full_text(
     # Создаем TS_QUERY для полнотекстового поиска
     ts_query = func.plainto_tsquery('russian', search_query)
 
-    # Базовые условия
-    conditions = []
+    # Базовые условия для ОСНОВНОГО запроса
+    base_conditions = []
 
     # УСЛОВИЕ 1: Полнотекстовый поиск (основное)
-    conditions.append(Product.search_vector.op('@@')(ts_query))
+    base_conditions.append(Product.search_vector.op('@@')(ts_query))
 
     # УСЛОВИЕ 2: Точные совпадения (дополнительно)
     exact_match_conditions = []
@@ -669,21 +670,68 @@ async def search_full_text(
 
     # Комбинируем точные совпадения с полнотекстовым поиском
     if exact_match_conditions:
-        conditions.append(or_(*exact_match_conditions))
+        base_conditions.append(or_(*exact_match_conditions))
 
-    # ФИЛЬТРЫ
+    # ФИЛЬТРЫ для основного запроса
+    conditions_for_items = base_conditions.copy()
+
     if city and city != "Все города":
-        conditions.append(Pharmacy.city == city)
+        conditions_for_items.append(Pharmacy.city == city)
     if form and form != "Все формы":
-        conditions.append(Product.form == form)
+        conditions_for_items.append(Product.form == form)
     if manufacturer and manufacturer != "Все производители":
-        conditions.append(Product.manufacturer.ilike(f"%{manufacturer}%"))
+        conditions_for_items.append(Product.manufacturer.ilike(f"%{manufacturer}%"))
     if country and country != "Все страны":
-        conditions.append(Product.country.ilike(f"%{country}%"))
+        conditions_for_items.append(Product.country.ilike(f"%{country}%"))
     if min_price is not None:
-        conditions.append(Product.price >= min_price)
+        conditions_for_items.append(Product.price >= min_price)
     if max_price is not None:
-        conditions.append(Product.price <= max_price)
+        conditions_for_items.append(Product.price <= max_price)
+
+    # УСЛОВИЯ ДЛЯ КОМБИНАЦИЙ (без фильтров формы/производителя/страны)
+    conditions_for_combinations = base_conditions.copy()
+
+    if city and city != "Все города":
+        conditions_for_combinations.append(Pharmacy.city == city)
+    if min_price is not None:
+        conditions_for_combinations.append(Product.price >= min_price)
+    if max_price is not None:
+        conditions_for_combinations.append(Product.price <= max_price)
+
+    # ЗАПРОС ДЛЯ КОМБИНАЦИЙ (должен быть ПЕРЕД основным запросом)
+    combinations_query = (
+        select(
+            Product.name,
+            Product.form,
+            Product.manufacturer,
+            Product.country,
+            func.count(Product.uuid).label("count"),
+            func.min(Product.price).label("min_price"),
+            func.max(Product.price).label("max_price"),
+            func.count(Pharmacy.uuid.distinct()).label("pharmacy_count")
+        )
+        .join(Pharmacy)
+        .where(and_(*conditions_for_combinations))  # Используем условия для комбинаций
+        .group_by(Product.name, Product.form, Product.manufacturer, Product.country)
+        .order_by(Product.name.asc(), Product.form.asc())
+    )
+
+    combinations_result = await db.execute(combinations_query)
+    combinations_data = combinations_result.all()
+
+    available_combinations = []
+    for combo in combinations_data:
+        if combo.name:
+            available_combinations.append({
+                "name": combo.name,
+                "form": combo.form,
+                "manufacturer": combo.manufacturer,
+                "country": combo.country,
+                "count": combo.count,
+                "min_price": float(combo.min_price) if combo.min_price else 0.0,
+                "max_price": float(combo.max_price) if combo.max_price else 0.0,
+                "pharmacy_count": combo.pharmacy_count
+            })
 
     # ОСНОВНОЙ ЗАПРОС с релевантностью
     query = (
@@ -692,14 +740,14 @@ async def search_full_text(
             func.ts_rank(Product.search_vector, ts_query).label('relevance'),
             # Дополнительная релевантность для точных совпадений
             case(
-                (Product.name.ilike(f"%{search_query}%"), 2.0),
-                (Product.name.ilike(f"%{search_query}%"), 1.5),
+                (Product.name.ilike(f"{search_query}"), 2.0),  # Точное совпадение
+                (Product.name.ilike(f"{search_query}%"), 1.5), # Начинается с
                 else_=0.0
             ).label('exact_match_boost')
         )
         .options(joinedload(Product.pharmacy))
         .join(Pharmacy)
-        .where(and_(*conditions))
+        .where(and_(*conditions_for_items))  # Используем полные условия для items
         .order_by(
             text('relevance + exact_match_boost DESC'),
             Product.price.asc()
@@ -745,6 +793,8 @@ async def search_full_text(
         "page": page,
         "size": size,
         "total_pages": total_pages,
+        "available_combinations": available_combinations,
+        "total_found": sum(combo["count"] for combo in available_combinations),
         "query": q,
         "filters": {
             "city": city,
