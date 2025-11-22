@@ -31,7 +31,7 @@ export default function FormSelection({
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-lg font-semibold text-gray-800">
-                Выберите вариант препарата
+                Выберите форму препарата
               </h2>
               <p className="text-gray-600 text-sm mt-1">
                 Найдено вариантов по запросу "
@@ -48,8 +48,18 @@ export default function FormSelection({
                   disabled={loading}
                   className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center text-sm"
                 >
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                  <svg
+                    className="w-4 h-4 mr-2"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                    />
                   </svg>
                   Назад
                 </button>
@@ -59,8 +69,18 @@ export default function FormSelection({
                 disabled={loading}
                 className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center text-sm"
               >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                <svg
+                  className="w-4 h-4 mr-2"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                  />
                 </svg>
                 Новый поиск
               </button>
@@ -71,11 +91,8 @@ export default function FormSelection({
         <div className="p-6">
           <div className="mb-6">
             <h3 className="text-lg font-medium text-gray-800 mb-2">
-              Найдено комбинаций: {availableCombinations.length}
-            </h3>
-            <p className="text-gray-600 text-sm">
               Выберите нужное название, форму, производителя и страну
-            </p>
+            </h3>
           </div>
 
           {/* Combinations Table */}
@@ -163,8 +180,18 @@ export default function FormSelection({
           {availableCombinations.length === 0 && !loading && (
             <div className="text-center py-12">
               <div className="text-gray-400 mb-4">
-                <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <svg
+                  className="w-16 h-16 mx-auto"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1}
+                    d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
                 </svg>
               </div>
               <h3 className="text-lg font-medium text-gray-500 mb-2">

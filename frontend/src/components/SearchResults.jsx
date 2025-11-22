@@ -118,7 +118,7 @@ export default function SearchResults({
               </h2>
               <p className="text-gray-600 text-sm mt-1">
                 {searchData.name}
-                {searchData.form && ` - ${searchData.form}`}
+                {searchData.form && `  ${searchData.form}`}
                 {searchData.manufacturer && `, ${searchData.manufacturer}`}
                 {searchData.country && ` (${searchData.country})`}
                 {searchData.city && ` в городе ${searchData.city}`}
