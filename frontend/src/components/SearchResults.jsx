@@ -109,7 +109,7 @@ export default function SearchResults({
   return (
     <div className={`${isTelegram ? "p-2" : "p-4"} max-w-6xl mx-auto`}>
       <div className="bg-white rounded-2xl shadow-sm border border-telegram-border overflow-hidden">
-        {/* Header - обновленная структура как в FormSelection */}
+        {/* Header - обновленная структура с дополнительной кнопкой */}
         <div className="border-b border-telegram-border px-6 py-4">
           <div className="flex justify-between items-center">
             <div>
@@ -127,29 +127,27 @@ export default function SearchResults({
 
             {/* Кнопки для веб-версии и Telegram */}
             <div className="flex gap-2">
-              {/* Кнопка "Назад" только для веб-версии */}
-              {!isTelegram && (
-                <button
-                  onClick={onBackToForms}
-                  disabled={loading}
-                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center text-sm"
+              {/* Кнопка "Вернуться к выбору форм" для всех версий */}
+              <button
+                onClick={onBackToForms}
+                disabled={loading}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center text-sm"
+              >
+                <svg
+                  className="w-4 h-4 mr-2"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
                 >
-                  <svg
-                    className="w-4 h-4 mr-2"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                    />
-                  </svg>
-                  Назад
-                </button>
-              )}
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                  />
+                </svg>
+                К формам
+              </button>
 
               {/* Кнопка "Новый поиск" для всех */}
               <button
@@ -369,29 +367,6 @@ export default function SearchResults({
                     </button>
                   )
                 )}
-              // После пагинации добавим:
-              <div className="mt-8 text-center">
-                <button
-                  onClick={onBackToForms}
-                  disabled={loading}
-                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-3 px-6 rounded-lg transition-colors inline-flex items-center text-sm border border-gray-300"
-                >
-                  <svg
-                    className="w-4 h-4 mr-2"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                    />
-                  </svg>
-                  Вернуться к выбору форм препарата
-                </button>
-              </div>
               {/* Простой счетчик страниц для Telegram */}
               {isTelegram && (
                 <span className="text-sm text-gray-600">
@@ -420,29 +395,6 @@ export default function SearchResults({
               </button>
             </div>
           )}
-          {/* Кнопка возврата к формам - ВНЕ блока пагинации */}
-          <div className="mt-6 text-center">
-            <button
-              onClick={onBackToForms}
-              disabled={loading}
-              className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-3 px-6 rounded-lg transition-colors inline-flex items-center text-sm border border-gray-300"
-            >
-              <svg
-                className="w-4 h-4 mr-2"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                />
-              </svg>
-              Вернуться к выбору форм препарата
-            </button>
-          </div>
         </div>
       </div>
     </div>
