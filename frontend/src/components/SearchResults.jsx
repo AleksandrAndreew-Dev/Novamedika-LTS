@@ -347,7 +347,6 @@ export default function SearchResults({
                 </svg>
                 Назад
               </button>
-
               {/* Номера страниц для веб-версии */}
               {!isTelegram &&
                 generatePageNumbers().map((page, index) =>
@@ -370,14 +369,35 @@ export default function SearchResults({
                     </button>
                   )
                 )}
-
+              // После пагинации добавим:
+              <div className="mt-8 text-center">
+                <button
+                  onClick={onBackToForms}
+                  disabled={loading}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-3 px-6 rounded-lg transition-colors inline-flex items-center text-sm border border-gray-300"
+                >
+                  <svg
+                    className="w-4 h-4 mr-2"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                    />
+                  </svg>
+                  Вернуться к выбору форм препарата
+                </button>
+              </div>
               {/* Простой счетчик страниц для Telegram */}
               {isTelegram && (
                 <span className="text-sm text-gray-600">
                   Страница {pagination.page} из {pagination.totalPages}
                 </span>
               )}
-
               <button
                 onClick={() => onPageChange(pagination.page + 1)}
                 disabled={pagination.page === pagination.totalPages || loading}
