@@ -117,7 +117,7 @@ export default function SearchResults({
                 Результаты поиска
               </h2>
               <p className="text-gray-600 text-sm mt-1">
-                {searchData.name}
+                {searchData.name }
                 {searchData.form && ` - ${searchData.form}`}
                 {searchData.manufacturer && `, ${searchData.manufacturer}`}
                 {searchData.country && ` (${searchData.country})`}
@@ -183,7 +183,7 @@ export default function SearchResults({
               Найдено результатов: {pagination.total}
             </h3>
             <p className="text-gray-600 text-sm">
-              {searchData.name}
+              {searchData.name }
               {searchData.form}
               {searchData.manufacturer && ` - ${searchData.manufacturer}`}
               {searchData.country && ` (${searchData.country})`}
