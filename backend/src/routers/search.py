@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func, or_, text, case
+from sqlalchemy import select, func, or_, text, case, and_
 from sqlalchemy.orm import selectinload, joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
@@ -212,30 +212,28 @@ async def search_products(
     if search_name:
         name_conditions = []
 
-        # 1. Полное совпадение
+        # 1. Точное совпадение (высший приоритет)
+        name_conditions.append(Product.name.ilike(f"{search_name}"))
+
+        # 2. Совпадение с начала строки
+        name_conditions.append(Product.name.ilike(f"{search_name}%"))
+
+        # 3. Полное вхождение поисковой фразы
         name_conditions.append(Product.name.ilike(f"%{search_name}%"))
 
-        # 2. По словам
+        # 4. Поиск по отдельным словам (только для слов длиной > 2 символов)
         search_terms = search_name.split()
         for term in search_terms:
-            term = term.strip()
-            if term:
-                if len(term) <= 2:
-                    # Для коротких слов
-                    name_conditions.append(
-                        or_(
-                            Product.name.ilike(f"% {term} %"),
-                            Product.name.ilike(f"{term} %"),
-                            Product.name.ilike(f"% {term}"),
-                        )
-                    )
-                else:
-                    name_conditions.append(Product.name.ilike(f"%{term}%"))
+            if len(term) > 2:
+                name_conditions.append(Product.name.ilike(f"% {term} %"))
+                name_conditions.append(Product.name.ilike(f"{term} %"))
+                name_conditions.append(Product.name.ilike(f"% {term}"))
 
-        # 3. По началу слов для длинных терминов
-        for term in search_terms:
-            if len(term) >= 3:
-                name_conditions.append(Product.name.ilike(f"{term}%"))
+        # 5. Частичное совпадение для коротких слов
+        if len(search_terms) > 0:
+            first_term = search_terms[0]
+            if len(first_term) >= 3:
+                name_conditions.append(Product.name.ilike(f"{first_term[:3]}%"))
 
         if name_conditions:
             query = query.where(or_(*name_conditions))
@@ -524,12 +522,25 @@ async def search_advanced(
     search_terms = search_name.split()
 
     conditions = []
+
+    # УЛУЧШЕННЫЕ УСЛОВИЯ ПОИСКА ДЛЯ ПОВЫШЕНИЯ ТОЧНОСТИ
+    # 1. Точное совпадение (высший приоритет)
+    conditions.append(Product.name.ilike(f"{search_name}"))
+
+    # 2. Совпадение с начала строки
+    conditions.append(Product.name.ilike(f"{search_name}%"))
+
+    # 3. Полное вхождение поисковой фразы
     conditions.append(Product.name.ilike(f"%{search_name}%"))
 
+    # 4. Поиск по отдельным словам (только для слов длиной > 2 символов)
     for term in search_terms:
-        if len(term) > 1:
-            conditions.append(Product.name.ilike(f"%{term}%"))
+        if len(term) > 2:
+            conditions.append(Product.name.ilike(f"% {term} %"))
+            conditions.append(Product.name.ilike(f"{term} %"))
+            conditions.append(Product.name.ilike(f"% {term}"))
 
+    # 5. Частичное совпадение для коротких слов
     if use_fuzzy and len(search_terms) > 0:
         first_term = search_terms[0]
         if len(first_term) >= 3:
@@ -557,9 +568,11 @@ async def search_advanced(
     combinations_query = combinations_query.group_by(
         Product.name, Product.form, Product.manufacturer, Product.country
     ).order_by(
-        Product.form.asc(),  # Сортировка по названию формы (алфавитный порядок)
-        Product.name.asc(),  # Затем по названию препарата
-        Product.manufacturer.asc()  # Затем по производителю
+        # ИЗМЕНЕННАЯ СОРТИРОВКА: сначала по названию, затем по форме
+        Product.name.asc(),  # Сначала по названию препарата
+        Product.form.asc(),  # Затем по форме
+        Product.manufacturer.asc(),  # Затем по производителю
+        Product.country.asc()  # И по стране
     )
 
     combinations_result = await db.execute(combinations_query)
