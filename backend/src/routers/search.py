@@ -27,6 +27,7 @@ def _clean_old_contexts():
         del _search_context[search_id]
 
 
+# search.py - обновляем search-two-step для использования полнотекстового поиска
 @router.get("/search-two-step/", response_model=dict)
 async def search_two_step(
     name: Optional[str] = Query(None),
@@ -41,74 +42,37 @@ async def search_two_step(
     _clean_old_contexts()
 
     # Нормализуем поисковый запрос
-    search_name = name.strip().lower()
+    search_name = name.strip()
 
-    # Улучшенный поиск: учитываем разные варианты
-    name_conditions = []
+    # Полнотекстовый поиск
+    ts_query = func.plainto_tsquery('russian', search_name)
 
-    # 1. Полное совпадение (самый высокий приоритет)
-    name_conditions.append(Product.name.ilike(f"%{search_name}%"))
-
-    # 2. Разбиваем на слова и ищем каждое слово
-    search_terms = search_name.split()
-
-    for term in search_terms:
-        term = term.strip()
-        if term:
-            # Для коротких слов (2 символа) ищем точное вхождение
-            if len(term) <= 2:
-                name_conditions.append(
-                    or_(
-                        Product.name.ilike(f"% {term} %"),  # слово отдельно
-                        Product.name.ilike(f"{term} %"),  # слово в начале
-                        Product.name.ilike(f"% {term}"),  # слово в конце
-                        Product.name.ilike(f"%{term}%"),  # часть слова
-                    )
-                )
-            else:
-                # Для длинных слов ищем разные варианты
-                name_conditions.append(Product.name.ilike(f"%{term}%"))
-
-    # 3. Добавляем поиск по началу слова
-    for term in search_terms:
-        if len(term) >= 3:
-            name_conditions.append(Product.name.ilike(f"{term}%"))
-
-    # Базовый запрос
+    # Базовый запрос с полнотекстовым поиском
     base_query = (
         select(Product)
         .join(Pharmacy, Product.pharmacy_id == Pharmacy.uuid)
-        .where(or_(*name_conditions))
+        .where(Product.search_vector.op('@@')(ts_query))
     )
 
     if city and city != "Все города" and city.strip():
         base_query = base_query.where(Pharmacy.city == city)
 
-    # Улучшенный запрос для форм с релевантностью
+    # Запрос для форм с релевантностью полнотекстового поиска
     forms_query = (
         select(
             Product.form,
             func.count(Product.uuid).label("count"),
-            # Добавляем оценку релевантности
-            func.max(
-                case(
-                    (
-                        Product.name.ilike(f"%{search_name}%"),
-                        3,
-                    ),  # полное совпадение - высший приоритет
-                    else_=1,
-                )
-            ).label("relevance"),
+            func.avg(func.ts_rank(Product.search_vector, ts_query)).label("avg_relevance"),
         )
         .join(Pharmacy, Product.pharmacy_id == Pharmacy.uuid)
-        .where(or_(*name_conditions))
+        .where(Product.search_vector.op('@@')(ts_query))
     )
 
     if city and city != "Все города" and city.strip():
         forms_query = forms_query.where(Pharmacy.city == city)
 
     forms_query = forms_query.group_by(Product.form).order_by(
-        text("relevance DESC, count DESC, form")
+        text("avg_relevance DESC, count DESC, form")
     )
 
     forms_result = await db.execute(forms_query)
@@ -127,13 +91,11 @@ async def search_two_step(
     available_forms = [form for form, count, relevance in forms_data if form]
     total_found = sum(count for form, count, relevance in forms_data)
 
-    # Улучшенный превью с релевантностью
+    # Улучшенный превью с релевантностью полнотекстового поиска
     preview_query = (
         base_query.options(joinedload(Product.pharmacy))
         .order_by(
-            # Сначала товары с полным совпадением названия
-            case((Product.name.ilike(f"%{search_name}%"), 1), else_=0).desc(),
-            # Затем по цене
+            func.ts_rank(Product.search_vector, ts_query).desc(),
             Product.price.asc(),
         )
         .limit(20)
@@ -154,16 +116,17 @@ async def search_two_step(
                 "pharmacy_city": (
                     product.pharmacy.city if product.pharmacy else "Unknown"
                 ),
+                "relevance": "high" if product.name.lower().find(search_name.lower()) != -1 else "medium"
             }
         )
 
     # Сохраняем нормализованный запрос
     search_id = str(uuid.uuid4())
     _search_context[search_id] = {
-        "name": search_name,  # сохраняем нормализованное имя
+        "name": search_name,
         "city": city,
         "available_forms": available_forms,
-        "search_terms": search_terms,
+        "search_terms": search_name.split(),
         "created_at": datetime.now(),
     }
 
@@ -658,4 +621,137 @@ async def search_advanced(
         "total_pages": total_pages,
         "available_combinations": available_combinations,
         "total_found": sum(combo["count"] for combo in available_combinations),
+    }
+
+
+# search.py - добавляем новый эндпоинт
+from sqlalchemy import select, func, or_, text, case, and_
+from sqlalchemy.dialects.postgresql import TSVECTOR
+
+@router.get("/search-fts/", response_model=dict)
+async def search_full_text(
+    q: str = Query(..., description="Поисковый запрос"),
+    city: Optional[str] = Query(None),
+    form: Optional[str] = Query(None),
+    manufacturer: Optional[str] = Query(None),
+    country: Optional[str] = Query(None),
+    min_price: Optional[float] = Query(None, ge=0),
+    max_price: Optional[float] = Query(None, ge=0),
+    page: int = Query(1, ge=1),
+    size: int = Query(50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Улучшенный полнотекстовый поиск с морфологией и релевантностью
+    """
+    # Подготовка поискового запроса
+    search_query = q.strip()
+
+    # Создаем TS_QUERY для полнотекстового поиска
+    ts_query = func.plainto_tsquery('russian', search_query)
+
+    # Базовые условия
+    conditions = []
+
+    # УСЛОВИЕ 1: Полнотекстовый поиск (основное)
+    conditions.append(Product.search_vector.op('@@')(ts_query))
+
+    # УСЛОВИЕ 2: Точные совпадения (дополнительно)
+    exact_match_conditions = []
+    search_terms = search_query.lower().split()
+
+    for term in search_terms:
+        if len(term) >= 2:
+            exact_match_conditions.extend([
+                Product.name.ilike(f"%{term}%"),
+                Product.manufacturer.ilike(f"%{term}%"),
+            ])
+
+    # Комбинируем точные совпадения с полнотекстовым поиском
+    if exact_match_conditions:
+        conditions.append(or_(*exact_match_conditions))
+
+    # ФИЛЬТРЫ
+    if city and city != "Все города":
+        conditions.append(Pharmacy.city == city)
+    if form and form != "Все формы":
+        conditions.append(Product.form == form)
+    if manufacturer and manufacturer != "Все производители":
+        conditions.append(Product.manufacturer.ilike(f"%{manufacturer}%"))
+    if country and country != "Все страны":
+        conditions.append(Product.country.ilike(f"%{country}%"))
+    if min_price is not None:
+        conditions.append(Product.price >= min_price)
+    if max_price is not None:
+        conditions.append(Product.price <= max_price)
+
+    # ОСНОВНОЙ ЗАПРОС с релевантностью
+    query = (
+        select(
+            Product,
+            func.ts_rank(Product.search_vector, ts_query).label('relevance'),
+            # Дополнительная релевантность для точных совпадений
+            case(
+                (Product.name.ilike(f"%{search_query}%"), 2.0),
+                (Product.name.ilike(f"%{search_query}%"), 1.5),
+                else_=0.0
+            ).label('exact_match_boost')
+        )
+        .options(joinedload(Product.pharmacy))
+        .join(Pharmacy)
+        .where(and_(*conditions))
+        .order_by(
+            text('relevance + exact_match_boost DESC'),
+            Product.price.asc()
+        )
+    )
+
+    # ПАГИНАЦИЯ
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar()
+
+    total_pages = ceil(total / size) if total > 0 else 1
+    page = min(page, total_pages)
+
+    query = query.offset((page - 1) * size).limit(size)
+    result = await db.execute(query)
+    products_with_relevance = result.unique().all()
+
+    # ФОРМАТИРОВАНИЕ РЕЗУЛЬТАТОВ
+    items = []
+    for product, relevance, exact_boost in products_with_relevance:
+        pharmacy = product.pharmacy
+        items.append({
+            "uuid": str(product.uuid),
+            "name": product.name,
+            "form": product.form,
+            "manufacturer": product.manufacturer,
+            "country": product.country,
+            "price": float(product.price) if product.price else 0.0,
+            "quantity": float(product.quantity) if product.quantity else 0.0,
+            "relevance_score": float(relevance + exact_boost),
+            "pharmacy_name": pharmacy.name if pharmacy else "Unknown",
+            "pharmacy_city": pharmacy.city if pharmacy else "Unknown",
+            "pharmacy_address": pharmacy.address if pharmacy else "Unknown",
+            "pharmacy_phone": pharmacy.phone if pharmacy else "Unknown",
+            "pharmacy_number": pharmacy.pharmacy_number if pharmacy else "N/A",
+            "updated_at": product.updated_at.isoformat() if product.updated_at else None,
+        })
+
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "size": size,
+        "total_pages": total_pages,
+        "query": q,
+        "filters": {
+            "city": city,
+            "form": form,
+            "manufacturer": manufacturer,
+            "country": country,
+            "min_price": min_price,
+            "max_price": max_price,
+        }
     }

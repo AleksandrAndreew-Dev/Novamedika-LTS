@@ -1,10 +1,10 @@
 import uuid
-from sqlalchemy import Column, String, Date, ForeignKey, Numeric, DateTime, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, Date, ForeignKey, Numeric, DateTime, UniqueConstraint, Index
+from sqlalchemy.dialects.postgresql import UUID, TSVECTOR
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 
-from db.database import Base  # ваш declarative_base()
+from db.database import Base
 from utils.time_utils import get_utc_now_naive
 
 class Pharmacy(Base):
@@ -52,3 +52,16 @@ class Product(Base):
     updated_at = Column(DateTime, default=get_utc_now_naive, onupdate=get_utc_now_naive)
 
     pharmacy = relationship("Pharmacy", back_populates="products")
+
+    search_vector = Column(TSVECTOR, nullable=True)
+
+    pharmacy = relationship("Pharmacy", back_populates="products")
+
+    # ИНДЕКСЫ для полнотекстового поиска
+    __table_args__ = (
+        Index('idx_product_search_vector', 'search_vector', postgresql_using='gin'),
+        Index('idx_product_name_gin', 'name', postgresql_using='gin'),
+        Index('idx_product_manufacturer', 'manufacturer'),
+        Index('idx_product_form', 'form'),
+        Index('idx_product_price', 'price'),
+    )
