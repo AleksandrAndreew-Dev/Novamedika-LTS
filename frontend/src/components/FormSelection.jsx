@@ -85,6 +85,9 @@ export default function FormSelection({
                 <thead>
                   <tr className="bg-gray-100 border-b border-gray-200">
                     <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
+                      Название
+                    </th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
                       Форма
                     </th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
@@ -94,13 +97,7 @@ export default function FormSelection({
                       Страна
                     </th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
-                      Количество аптек
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
                       Диапазон цен
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
-                      Всего вариантов
                     </th>
                   </tr>
                 </thead>
@@ -117,34 +114,34 @@ export default function FormSelection({
                         }`}
                         onClick={() => handleCombinationClick(combo)}
                       >
+                        {/* Название - показываем оригинальное название поиска */}
                         <td className="py-3 px-4">
                           <div className="text-sm font-medium text-gray-800">
-                            {combo.form}
+                            {searchData.name}
                           </div>
                         </td>
+                        {/* Форма */}
+                        <td className="py-3 px-4">
+                          <div className="text-sm text-gray-600">
+                            {combo.form || "Не указана"}
+                          </div>
+                        </td>
+                        {/* Производитель */}
                         <td className="py-3 px-4">
                           <div className="text-sm text-gray-600">
                             {combo.manufacturer || "Не указан"}
                           </div>
                         </td>
+                        {/* Страна */}
                         <td className="py-3 px-4">
                           <div className="text-sm text-gray-600">
                             {combo.country || "Не указана"}
                           </div>
                         </td>
-                        <td className="py-3 px-4">
-                          <div className="text-sm text-gray-600">
-                            {combo.pharmacy_count} аптек
-                          </div>
-                        </td>
+                        {/* Диапазон цен */}
                         <td className="py-3 px-4">
                           <div className="text-sm text-gray-600">
                             {combo.min_price} - {combo.max_price} Br
-                          </div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="text-sm text-gray-600">
-                            {combo.count} вариантов
                           </div>
                           {loading && selectedCombination === comboKey && (
                             <div className="flex items-center mt-1">
