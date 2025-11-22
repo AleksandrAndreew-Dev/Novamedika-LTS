@@ -114,7 +114,7 @@ export default function SearchResults({
               <button
                 onClick={onNewSearch}
                 disabled={loading}
-                className="flex-1 sm:flex-none bg-telegram-primary text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center text-sm hover:bg-blue-600 min-h-[44px] focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:ring-offset-2"
+                className="flex-1 sm:flex-none bg-telegram-primary text-gray-900 font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center text-sm hover:bg-blue-600 hover:text-gray-900 min-h-[44px] focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:ring-offset-2"
                 aria-label="Начать новый поиск"
               >
                 <svg
@@ -196,7 +196,7 @@ export default function SearchResults({
                       </h3>
                       <p className="text-sm text-gray-800">{item.form}</p>
                     </div>
-                    <span className="bg-telegram-primary text-white text-sm font-medium py-2 px-3 rounded-full ml-2 min-h-[32px] flex items-center">
+                    <span className="bg-telegram-primary text-gray-900 text-sm font-medium py-2 px-3 rounded-full ml-2 min-h-[32px] flex items-center">
                       {item.price} Br
                     </span>
                   </div>
@@ -331,7 +331,7 @@ export default function SearchResults({
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <button
                   onClick={onBackToForms}
-                  className="bg-telegram-primary text-white font-medium py-3 px-6 rounded-lg transition-colors hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:ring-offset-2 min-h-[44px]"
+                  className="bg-telegram-primary text-gray-900 font-medium py-3 px-6 rounded-lg transition-colors hover:bg-blue-600 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:ring-offset-2 min-h-[44px]"
                 >
                   Изменить форму
                 </button>

@@ -34,7 +34,7 @@ function App() {
                 <div className="flex flex-col space-y-2">
                   <button
                     onClick={handleAcceptCookies}
-                    className="bg-telegram-primary hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm"
+                    className="bg-telegram-primary hover:bg-blue-600 text-gray-900 font-medium py-2 px-4 rounded-lg transition-colors text-sm"
                   >
                     Принять
                   </button>

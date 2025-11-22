@@ -168,7 +168,7 @@ export default function FormSelection({
               </p>
               <button
                 onClick={onBack}
-                className="bg-telegram-primary text-white font-medium py-3 px-6 rounded-lg transition-colors hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:ring-offset-2 min-h-[44px]"
+                className="bg-telegram-primary text-gray-900 font-medium py-3 px-6 rounded-lg transition-colors hover:bg-blue-600 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:ring-offset-2 min-h-[44px]"
               >
                 Вернуться к поиску
               </button>

@@ -73,10 +73,10 @@ export default function SearchBar({
               type="submit"
               disabled={loading}
               className="
-                w-full bg-telegram-primary text-white font-medium py-3 md:py-4 px-4 rounded-xl
+                w-full bg-telegram-primary text-gray-900 font-medium py-3 md:py-4 px-4 rounded-xl
                 focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:ring-offset-2
                 transition-all flex items-center justify-center text-sm md:text-base
-                hover:bg-blue-600
+                hover:bg-blue-600 hover:text-gray-900
                 disabled:opacity-50 disabled:cursor-not-allowed
                 shadow-md hover:shadow-lg
                 min-h-[44px]
