@@ -131,7 +131,9 @@ export default function SearchResults({
               <button
                 onClick={onBackToForms}
                 disabled={loading}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center text-sm"
+                className={`bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 rounded-lg transition-colors flex items-center text-sm ${
+                  isTelegram ? "px-3 whitespace-nowrap" : "px-4"
+                }`}
               >
                 <svg
                   className="w-4 h-4 mr-2"
@@ -146,14 +148,16 @@ export default function SearchResults({
                     d="M10 19l-7-7m0 0l7-7m-7 7h18"
                   />
                 </svg>
-                К формам
+                {isTelegram ? "Формы" : "К формам"}
               </button>
 
               {/* Кнопка "Новый поиск" для всех */}
               <button
                 onClick={onNewSearch}
                 disabled={loading}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center text-sm"
+                className={`bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 rounded-lg transition-colors flex items-center text-sm ${
+                  isTelegram ? "px-3 whitespace-nowrap" : "px-4"
+                }`}
               >
                 <svg
                   className="w-4 h-4 mr-2"
@@ -168,7 +172,7 @@ export default function SearchResults({
                     d="M10 19l-7-7m0 0l7-7m-7 7h18"
                   />
                 </svg>
-                Новый поиск
+                {isTelegram ? "Новый" : "Новый поиск"}
               </button>
             </div>
           </div>
