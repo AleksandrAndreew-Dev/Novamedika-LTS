@@ -18,7 +18,7 @@ export default function Search() {
   const [results, setResults] = useState([]);
   const [pagination, setPagination] = useState({
     page: 1,
-    size: 50, // Увеличил количество результатов на странице
+    size: 50,
     total: 0,
     totalPages: 1,
   });
@@ -32,12 +32,10 @@ export default function Search() {
         const response = await api.get("/cities/");
         const data = response.data;
 
-        // безопасность: привести результат к массиву
         const cities = Array.isArray(data)
           ? data
           : data?.results ?? data?.items ?? [];
         if (!Array.isArray(cities)) {
-          // если всё ещё не массив — fallback
           setCities([
             "Минск",
             "Гомель",
@@ -77,14 +75,14 @@ export default function Search() {
       tg.BackButton.offClick();
     };
   }, [step, isTelegram, tg]);
-  // Search.jsx - исправить обработку ответа API
+
   const handleInitialSearch = async (name, city) => {
     setLoading(true);
     setError(null);
     try {
       const response = await api.get("/search-fts/", {
         params: {
-          q: name, // используем q вместо name
+          q: name,
           city: city || "",
           page: 1,
           size: 20,
@@ -107,21 +105,16 @@ export default function Search() {
     }
   };
 
-  // Обновим функцию handleFormSelect
-  // Search.jsx - исправленный handleFormSelect
-  // Search.jsx - исправленная функция handleFormSelect
-  // В функции handleFormSelect обновляем передачу параметров:
   const handleFormSelect = async (name, form, manufacturer, country) => {
     setLoading(true);
     setError(null);
     try {
       const params = {
-        q: name, // используем q вместо name
+        q: name,
         page: 1,
         size: pagination.size,
       };
 
-      // Добавляем опциональные параметры
       if (form) params.form = form;
       if (manufacturer) params.manufacturer = manufacturer;
       if (country) params.country = country;
@@ -157,15 +150,13 @@ export default function Search() {
     setLoading(true);
     try {
       const params = {
-        q: searchData.name, // используем q вместо name
+        q: searchData.name,
         page: newPage,
         size: pagination.size,
       };
 
-      // Добавляем опциональные параметры
       if (searchData.form) params.form = searchData.form;
-      if (searchData.manufacturer)
-        params.manufacturer = searchData.manufacturer;
+      if (searchData.manufacturer) params.manufacturer = searchData.manufacturer;
       if (searchData.country) params.country = searchData.country;
       if (searchData.city) params.city = searchData.city;
 
@@ -196,7 +187,6 @@ export default function Search() {
       {!isTelegram && (
         <div className="bg-white shadow-sm border-b border-telegram-border">
           <div className="text-center py-4 px-4 relative">
-            {/* Кнопка назад для десктопа */}
             {step > 1 && (
               <button
                 onClick={() => {
@@ -225,14 +215,12 @@ export default function Search() {
                 Назад
               </button>
             )}
-            <div className="text-gray-600 text-sm mb-1">Сеть Аптек</div>
+            <div className="text-gray-700 text-sm mb-1">Сеть Аптек</div>
             <h1 className="text-2xl font-bold text-telegram-primary m-0">
               <span className="text-orange-500">Н</span>ова
               <span className="text-orange-500">М</span>едика
             </h1>
-            <div className="text-gray-600 text-sm mt-1">
-              Справочная служба CI CD
-            </div>
+            <div className="text-gray-700 text-sm mt-1">Справочная служба</div>
           </div>
         </div>
       )}
@@ -240,6 +228,21 @@ export default function Search() {
       {/* Content */}
       <div className={isTelegram ? "p-2" : "p-4"}>
         <div className={isTelegram ? "max-w-full" : "max-w-4xl mx-auto"}>
+          {/* Индикатор прогресса */}
+          <div className="mb-6">
+            <div className="flex justify-between text-xs text-gray-500 mb-2 px-1">
+              <span className={step >= 1 ? "text-telegram-primary font-medium" : ""}>Поиск</span>
+              <span className={step >= 2 ? "text-telegram-primary font-medium" : ""}>Выбор формы</span>
+              <span className={step >= 3 ? "text-telegram-primary font-medium" : ""}>Результаты</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className="bg-telegram-primary h-2 rounded-full transition-all duration-300"
+                style={{ width: `${(step / 3) * 100}%` }}
+              ></div>
+            </div>
+          </div>
+
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
               <div className="flex items-center">
@@ -258,6 +261,7 @@ export default function Search() {
               </div>
             </div>
           )}
+
           {step === 1 && (
             <SearchBar
               cities={cities}
@@ -267,9 +271,26 @@ export default function Search() {
               isTelegram={isTelegram}
             />
           )}
+
           {loading && (
             <div className="flex justify-center items-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-telegram-primary"></div>
+              <div className="space-y-4 w-full max-w-2xl">
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                  <div className="animate-pulse space-y-4">
+                    <div className="flex space-x-4">
+                      <div className="rounded-full bg-gray-200 h-4 w-4"></div>
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                        <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="h-4 bg-gray-200 rounded"></div>
+                      <div className="h-4 bg-gray-200 rounded w-5/6"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -283,6 +304,7 @@ export default function Search() {
               isTelegram={isTelegram}
             />
           )}
+
           {step === 3 && (
             <SearchResults
               results={results}
@@ -290,13 +312,12 @@ export default function Search() {
               pagination={pagination}
               onPageChange={handlePageChange}
               onNewSearch={() => {
-                // Полный сброс к начальному состоянию
                 setStep(1);
                 setSearchData({ name: "", city: "", form: "" });
                 setResults([]);
                 setSearchContext(null);
               }}
-              onBackToForms={() => setStep(2)} // Добавьте эту строку
+              onBackToForms={() => setStep(2)}
               loading={loading}
               isTelegram={isTelegram}
             />
@@ -347,7 +368,7 @@ export default function Search() {
                   Помощь
                 </a>
               </div>
-              <div className="text-center text-gray-600 text-sm">
+              <div className="text-center text-gray-700 text-sm">
                 &#169;2025 Novamedika.com
               </div>
             </div>
