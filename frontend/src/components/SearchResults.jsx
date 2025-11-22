@@ -148,7 +148,7 @@ export default function SearchResults({
                     d="M10 19l-7-7m0 0l7-7m-7 7h18"
                   />
                 </svg>
-                {isTelegram ? "Формы" : "К формам"}
+                {isTelegram ? "Назад" : "Назад"}
               </button>
 
               {/* Кнопка "Новый поиск" для всех */}
@@ -172,7 +172,7 @@ export default function SearchResults({
                     d="M10 19l-7-7m0 0l7-7m-7 7h18"
                   />
                 </svg>
-                {isTelegram ? "Новый" : "Новый поиск"}
+                {isTelegram ? "Новый поиск" : "Новый поиск"}
               </button>
             </div>
           </div>
