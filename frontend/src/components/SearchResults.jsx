@@ -117,15 +117,11 @@ export default function SearchResults({
                 Результаты поиска
               </h2>
               <p className="text-gray-600 text-sm mt-1">
-                для "
-                <span className="font-semibold uppercase">
-                  {searchData.name}
-                </span>
-                "{searchData.city && ` в городе ${searchData.city}`}
-                {/* ОБНОВЛЕНИЕ: Добавляем информацию о сортировке */}
-                <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-                  Сортировка: по цене (от меньшей)
-                </span>
+                {searchData.name}
+                {searchData.form && ` - ${searchData.form}`}
+                {searchData.manufacturer && `, ${searchData.manufacturer}`}
+                {searchData.country && ` (${searchData.country})`}
+                {searchData.city && ` в городе ${searchData.city}`}
               </p>
             </div>
 

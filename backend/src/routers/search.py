@@ -535,121 +535,101 @@ async def search_advanced(
         if len(first_term) >= 3:
             conditions.append(Product.name.ilike(f"{first_term[:3]}%"))
 
-    # Основной запрос с фильтрацией
-    query = (
-        select(Product)
-        .options(joinedload(Product.pharmacy))
-        .join(Pharmacy)
-        .where(or_(*conditions))
-    )
-
-    # Применяем фильтры только для основного запроса результатов
-    if form and form != "Все формы":
-        query = query.where(Product.form == form)
-    if manufacturer and manufacturer != "Все производители":
-        query = query.where(Product.manufacturer == manufacturer)
-    if country and country != "Все страны":
-        query = query.where(Product.country == country)
-    if city and city != "Все города":
-        query = query.where(Pharmacy.city == city)
-
-    # Сортировка
-    query = query.order_by(
-        case(
-            (Product.name.ilike(f"%{search_name}%"), 3),
-            (Product.name.ilike(f"{search_name}%"), 2),
-            else_=1,
-        ).desc(),
-        Product.price.asc(),
-    )
-
-    # Пагинация
-    count_query = select(func.count()).select_from(query.subquery())
-    total_result = await db.execute(count_query)
-    total = total_result.scalar()
-
-    total_pages = ceil(total / size) if total > 0 else 1
-    page = min(page, total_pages)
-
-    query = query.offset((page - 1) * size).limit(size)
-    result = await db.execute(query)
-    products = result.unique().scalars().all()
-
-    # ЗАПРОС ДЛЯ ФОРМ - БЕЗ ФИЛЬТРОВ ПО ФОРМЕ/ПРОИЗВОДИТЕЛЮ/СТРАНЕ
-    forms_query = (
+    # ОСНОВНОЙ ЗАПРОС ДЛЯ ГРУППИРОВКИ ПО КОМБИНАЦИЯМ
+    combinations_query = (
         select(
             Product.form,
+            Product.manufacturer,
+            Product.country,
             func.count(Product.uuid).label("count"),
             func.min(Product.price).label("min_price"),
-            func.max(Product.price).label("max_price")
+            func.max(Product.price).label("max_price"),
+            func.count(Pharmacy.uuid.distinct()).label("pharmacy_count")
         )
         .join(Pharmacy)
         .where(or_(*conditions))
     )
 
     if city and city != "Все города":
-        forms_query = forms_query.where(Pharmacy.city == city)
+        combinations_query = combinations_query.where(Pharmacy.city == city)
 
-    forms_query = forms_query.group_by(Product.form).order_by(text("count DESC, min_price ASC"))
-    forms_result = await db.execute(forms_query)
-    forms_data = forms_result.all()
+    combinations_query = combinations_query.group_by(
+        Product.form, Product.manufacturer, Product.country
+    ).order_by(text("count DESC, min_price ASC"))
 
-    available_forms = []
-    for form_row in forms_data:
-        if form_row.form:  # Исключаем пустые формы
-            available_forms.append({
-                "form": form_row.form,
-                "count": form_row.count,
-                "min_price": float(form_row.min_price) if form_row.min_price else 0.0,
-                "max_price": float(form_row.max_price) if form_row.max_price else 0.0
+    combinations_result = await db.execute(combinations_query)
+    combinations_data = combinations_result.all()
+
+    # Формируем список уникальных комбинаций
+    available_combinations = []
+    for combo in combinations_data:
+        if combo.form:  # Исключаем пустые формы
+            available_combinations.append({
+                "form": combo.form,
+                "manufacturer": combo.manufacturer,
+                "country": combo.country,
+                "count": combo.count,
+                "min_price": float(combo.min_price) if combo.min_price else 0.0,
+                "max_price": float(combo.max_price) if combo.max_price else 0.0,
+                "pharmacy_count": combo.pharmacy_count
             })
 
-    # ЗАПРОС ДЛЯ ПРЕВЬЮ - БЕЗ ФИЛЬТРОВ ПО ФОРМЕ/ПРОИЗВОДИТЕЛЮ/СТРАНЕ
-    preview_query = (
-        select(Product)
-        .options(joinedload(Product.pharmacy))
-        .join(Pharmacy)
-        .where(or_(*conditions))
-    )
-
-    if city and city != "Все города":
-        preview_query = preview_query.where(Pharmacy.city == city)
-
-    preview_query = preview_query.order_by(Product.price.asc()).limit(20)
-    preview_result = await db.execute(preview_query)
-    preview_products_data = preview_result.unique().scalars().all()
-
-    preview_products = []
-    for product in preview_products_data:
-        pharmacy = product.pharmacy
-        preview_products.append({
-            "name": product.name,
-            "form": product.form,
-            "manufacturer": product.manufacturer,
-            "country": product.country,
-            "price": float(product.price) if product.price else 0.0,
-            "pharmacy_city": pharmacy.city if pharmacy else "Unknown",
-        })
-
-    # Формируем основные результаты
+    # ЗАПРОС ДЛЯ ДЕТАЛЬНЫХ РЕЗУЛЬТАТОВ (при выборе комбинации)
     items = []
-    for product in products:
-        pharmacy = product.pharmacy
-        items.append({
-            "uuid": str(product.uuid),
-            "name": product.name,
-            "form": product.form,
-            "manufacturer": product.manufacturer,
-            "country": product.country,
-            "price": float(product.price) if product.price else 0.0,
-            "quantity": float(product.quantity) if product.quantity else 0.0,
-            "pharmacy_name": pharmacy.name if pharmacy else "Unknown",
-            "pharmacy_city": pharmacy.city if pharmacy else "Unknown",
-            "pharmacy_address": pharmacy.address if pharmacy else "Unknown",
-            "pharmacy_phone": pharmacy.phone if pharmacy else "Unknown",
-            "pharmacy_number": pharmacy.pharmacy_number if pharmacy else "N/A",
-            "updated_at": product.updated_at.isoformat() if product.updated_at else None,
-        })
+    total = 0
+    total_pages = 1
+
+    if form:  # Если выбрана конкретная комбинация
+        query = (
+            select(Product)
+            .options(joinedload(Product.pharmacy))
+            .join(Pharmacy)
+            .where(or_(*conditions))
+        )
+
+        # Применяем фильтры выбранной комбинации
+        if form and form != "Все формы":
+            query = query.where(Product.form == form)
+        if manufacturer and manufacturer != "Все производители":
+            query = query.where(Product.manufacturer == manufacturer)
+        if country and country != "Все страны":
+            query = query.where(Product.country == country)
+        if city and city != "Все города":
+            query = query.where(Pharmacy.city == city)
+
+        # Сортировка по цене
+        query = query.order_by(Product.price.asc())
+
+        # Пагинация
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await db.execute(count_query)
+        total = total_result.scalar()
+
+        total_pages = ceil(total / size) if total > 0 else 1
+        page = min(page, total_pages)
+
+        query = query.offset((page - 1) * size).limit(size)
+        result = await db.execute(query)
+        products = result.unique().scalars().all()
+
+        # Формируем результаты
+        for product in products:
+            pharmacy = product.pharmacy
+            items.append({
+                "uuid": str(product.uuid),
+                "name": product.name,
+                "form": product.form,
+                "manufacturer": product.manufacturer,
+                "country": product.country,
+                "price": float(product.price) if product.price else 0.0,
+                "quantity": float(product.quantity) if product.quantity else 0.0,
+                "pharmacy_name": pharmacy.name if pharmacy else "Unknown",
+                "pharmacy_city": pharmacy.city if pharmacy else "Unknown",
+                "pharmacy_address": pharmacy.address if pharmacy else "Unknown",
+                "pharmacy_phone": pharmacy.phone if pharmacy else "Unknown",
+                "pharmacy_number": pharmacy.pharmacy_number if pharmacy else "N/A",
+                "updated_at": product.updated_at.isoformat() if product.updated_at else None,
+            })
 
     return {
         "items": items,
@@ -657,7 +637,6 @@ async def search_advanced(
         "page": page,
         "size": size,
         "total_pages": total_pages,
-        "available_forms": available_forms,
-        "preview_products": preview_products,
-        "total_found": total,
+        "available_combinations": available_combinations,
+        "total_found": sum(combo["count"] for combo in available_combinations),
     }

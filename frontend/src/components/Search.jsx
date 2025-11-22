@@ -79,71 +79,64 @@ export default function Search() {
   }, [step, isTelegram, tg]);
   // Search.jsx - исправить обработку ответа API
   const handleInitialSearch = async (name, city) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await api.get("/search-advanced/", {
-        params: {
-          name,
-          city: city || "", // передаем пустую строку вместо undefined
-          use_fuzzy: true,
-          page: 1,
-          size: 20,
-        },
-      });
+  setLoading(true);
+  setError(null);
+  try {
+    const response = await api.get("/search-advanced/", {
+      params: {
+        name,
+        city: city || "",
+        use_fuzzy: true,
+        page: 1,
+        size: 20,
+      },
+    });
 
-      const responseData = response.data || {};
+    const responseData = response.data || {};
 
-      setSearchData({ name, city: city || "" }); // сбрасываем форму при новом поиске
-      setSearchContext({
-        availableForms: responseData.available_forms || [],
-        previewProducts: responseData.preview_products || [],
-        totalFound: responseData.total_found || 0,
-      });
-      setStep(2);
-    } catch (error) {
-      console.error("Search error:", error);
-      setError("Ошибка при поиске. Попробуйте еще раз.");
-
-      if (isTelegram && tg) {
-        tg.showPopup({
-          title: "Ошибка",
-          message: "Ошибка при поиске. Попробуйте еще раз.",
-          buttons: [{ type: "ok" }],
-        });
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+    setSearchData({ name, city: city || "" });
+    setSearchContext({
+      availableCombinations: responseData.available_combinations || [],
+      totalFound: responseData.total_found || 0,
+    });
+    setStep(2);
+  } catch (error) {
+    console.error("Search error:", error);
+    setError("Ошибка при поиске. Попробуйте еще раз.");
+    // ... остальная обработка ошибок
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Обновим функцию handleFormSelect
   // Search.jsx - исправленный handleFormSelect
   // Search.jsx - исправленная функция handleFormSelect
-const handleFormSelect = async (name, form) => {
+const handleFormSelect = async (name, form, manufacturer, country) => {
   setLoading(true);
   setError(null);
   try {
     const params = {
-      name: searchData.name, // используем оригинальное название из поиска
-      form: form, // передаем выбранную форму
+      name: searchData.name,
+      form: form,
+      manufacturer: manufacturer,
+      country: country,
       page: 1,
       size: pagination.size,
       use_fuzzy: true,
     };
 
-    // НЕ передаем manufacturer и country в параметры - показываем все варианты выбранной формы
     if (searchData.city) {
       params.city = searchData.city;
     }
 
-    const response = await api.get("/search-advanced/", {
-      params,
-    });
+    const response = await api.get("/search-advanced/", { params });
 
     setSearchData((prev) => ({
       ...prev,
-      form, // сохраняем выбранную форму
+      form,
+      manufacturer,
+      country,
     }));
 
     setResults(response.data.items || []);
@@ -157,14 +150,7 @@ const handleFormSelect = async (name, form) => {
   } catch (error) {
     console.error("Form selection error:", error);
     setError("Ошибка при загрузке результатов.");
-
-    if (isTelegram && tg) {
-      tg.showPopup({
-        title: "Ошибка",
-        message: "Ошибка при загрузке результатов.",
-        buttons: [{ type: "ok" }],
-      });
-    }
+    // ... обработка ошибок
   } finally {
     setLoading(false);
   }
@@ -297,17 +283,15 @@ const handleFormSelect = async (name, form) => {
           )}
 
           {step === 2 && searchContext && (
-            <FormSelection
-              availableForms={searchContext.availableForms || []}
-              previewProducts={searchContext.previewProducts || []}
-              totalFound={searchContext.totalFound || 0}
-              searchData={searchData}
-              onFormSelect={handleFormSelect}
-              onBack={() => setStep(1)}
-              loading={loading}
-              isTelegram={isTelegram}
-            />
-          )}
+  <FormSelection
+    availableCombinations={searchContext.availableCombinations || []}
+    searchData={searchData}
+    onFormSelect={handleFormSelect}
+    onBack={() => setStep(1)}
+    loading={loading}
+    isTelegram={isTelegram}
+  />
+)}
           {step === 3 && (
             <SearchResults
               results={results}
