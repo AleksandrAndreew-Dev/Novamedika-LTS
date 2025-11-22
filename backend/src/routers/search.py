@@ -535,9 +535,10 @@ async def search_advanced(
         if len(first_term) >= 3:
             conditions.append(Product.name.ilike(f"{first_term[:3]}%"))
 
-    # ОСНОВНОЙ ЗАПРОС ДЛЯ ГРУППИРОВКИ ПО КОМБИНАЦИЯМ
+    # ОСНОВНОЙ ЗАПРОС ДЛЯ ГРУППИРОВКИ ПО КОМБИНАЦИЯМ (ВКЛЮЧАЯ НАЗВАНИЕ)
     combinations_query = (
         select(
+            Product.name,  # Добавляем название в группировку
             Product.form,
             Product.manufacturer,
             Product.country,
@@ -554,7 +555,7 @@ async def search_advanced(
         combinations_query = combinations_query.where(Pharmacy.city == city)
 
     combinations_query = combinations_query.group_by(
-        Product.form, Product.manufacturer, Product.country
+        Product.name, Product.form, Product.manufacturer, Product.country  # Добавляем name в группировку
     ).order_by(text("count DESC, min_price ASC"))
 
     combinations_result = await db.execute(combinations_query)
@@ -563,8 +564,9 @@ async def search_advanced(
     # Формируем список уникальных комбинаций
     available_combinations = []
     for combo in combinations_data:
-        if combo.form:  # Исключаем пустые формы
+        if combo.form and combo.name:  # Исключаем пустые формы и названия
             available_combinations.append({
+                "name": combo.name,  # Добавляем реальное название из БД
                 "form": combo.form,
                 "manufacturer": combo.manufacturer,
                 "country": combo.country,

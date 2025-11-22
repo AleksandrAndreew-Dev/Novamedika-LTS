@@ -112,12 +112,13 @@ export default function Search() {
   // Обновим функцию handleFormSelect
   // Search.jsx - исправленный handleFormSelect
   // Search.jsx - исправленная функция handleFormSelect
+// В функции handleFormSelect обновляем передачу параметров:
 const handleFormSelect = async (name, form, manufacturer, country) => {
   setLoading(true);
   setError(null);
   try {
     const params = {
-      name: searchData.name,
+      name: name, // Используем реальное название из выбранной комбинации
       form: form,
       manufacturer: manufacturer,
       country: country,
@@ -134,6 +135,7 @@ const handleFormSelect = async (name, form, manufacturer, country) => {
 
     setSearchData((prev) => ({
       ...prev,
+      name: name, // Сохраняем реальное название
       form,
       manufacturer,
       country,

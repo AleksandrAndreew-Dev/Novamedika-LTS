@@ -11,12 +11,12 @@ export default function FormSelection({
   const [selectedCombination, setSelectedCombination] = useState("");
 
   const handleCombinationClick = (combination) => {
-    const combinationKey = `${combination.form}|${combination.manufacturer}|${combination.country}`;
+    const combinationKey = `${combination.name}|${combination.form}|${combination.manufacturer}|${combination.country}`;
     setSelectedCombination(combinationKey);
 
-    // Передаем всю комбинацию параметров
+    // Передаем всю комбинацию параметров, включая реальное название
     onFormSelect(
-      searchData.name,
+      combination.name, // Используем реальное название из БД, а не поисковый запрос
       combination.form,
       combination.manufacturer,
       combination.country
@@ -34,7 +34,7 @@ export default function FormSelection({
                 Выберите вариант препарата
               </h2>
               <p className="text-gray-600 text-sm mt-1">
-                для "
+                Найдено вариантов по запросу "
                 <span className="font-semibold uppercase">
                   {searchData.name}
                 </span>
@@ -74,7 +74,7 @@ export default function FormSelection({
               Найдено комбинаций: {availableCombinations.length}
             </h3>
             <p className="text-gray-600 text-sm">
-              Выберите нужную форму, производителя и страну
+              Выберите нужное название, форму, производителя и страну
             </p>
           </div>
 
@@ -103,7 +103,7 @@ export default function FormSelection({
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {availableCombinations.map((combo, index) => {
-                    const comboKey = `${combo.form}|${combo.manufacturer}|${combo.country}`;
+                    const comboKey = `${combo.name}|${combo.form}|${combo.manufacturer}|${combo.country}`;
                     return (
                       <tr
                         key={index}
@@ -114,10 +114,10 @@ export default function FormSelection({
                         }`}
                         onClick={() => handleCombinationClick(combo)}
                       >
-                        {/* Название - показываем оригинальное название поиска */}
+                        {/* Название - показываем реальное название из БД */}
                         <td className="py-3 px-4">
                           <div className="text-sm font-medium text-gray-800">
-                            {searchData.name}
+                            {combo.name || "Не указано"}
                           </div>
                         </td>
                         {/* Форма */}
