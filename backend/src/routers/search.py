@@ -796,6 +796,9 @@ async def search_full_text(
             elif product.name.lower().startswith(search_query.lower()):
                 relevance_score = 1.5
 
+        # search.py - обновляем эндпоинт /search-fts/ чтобы включить время работы
+# В части формирования items добавляем working_hours:
+
         items.append(
             {
                 "uuid": str(product.uuid),
@@ -811,6 +814,7 @@ async def search_full_text(
                 "pharmacy_address": pharmacy.address if pharmacy else "Unknown",
                 "pharmacy_phone": pharmacy.phone if pharmacy else "Unknown",
                 "pharmacy_number": pharmacy.pharmacy_number if pharmacy else "N/A",
+                "working_hours": pharmacy.opening_hours if pharmacy else "9:00-21:00",  # Добавляем время работы
                 "updated_at": (
                     product.updated_at.isoformat() if product.updated_at else None
                 ),

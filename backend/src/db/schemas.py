@@ -30,6 +30,7 @@ class ProductCreate(ProductBase):
 class ProductRead(ProductBase):
     uuid: uuid.UUID
     updated_at: datetime
+    working_hours: Optional[str] = "Уточняйте в аптеке"  # Добавляем поле времени работы
 
     class Config:
         from_attributes = True
@@ -82,6 +83,7 @@ class GroupedProductResponse(BaseModel):
     quantity: float
     manufacturer: str
     country: str
+    working_hours: Optional[str] = "Уточняйте в аптеке" 
     pharmacies: List[PharmacyInfo]
     updated_at: datetime
 
