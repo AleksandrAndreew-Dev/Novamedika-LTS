@@ -45,13 +45,13 @@ async def search_two_step(
     search_name = name.strip()
 
     # Полнотекстовый поиск
-    ts_query = func.plainto_tsquery('russian', search_name)
+    ts_query = func.plainto_tsquery("russian", search_name)
 
     # Базовый запрос с полнотекстовым поиском
     base_query = (
         select(Product)
         .join(Pharmacy, Product.pharmacy_id == Pharmacy.uuid)
-        .where(Product.search_vector.op('@@')(ts_query))
+        .where(Product.search_vector.op("@@")(ts_query))
     )
 
     if city and city != "Все города" and city.strip():
@@ -62,10 +62,12 @@ async def search_two_step(
         select(
             Product.form,
             func.count(Product.uuid).label("count"),
-            func.avg(func.ts_rank(Product.search_vector, ts_query)).label("avg_relevance"),
+            func.avg(func.ts_rank(Product.search_vector, ts_query)).label(
+                "avg_relevance"
+            ),
         )
         .join(Pharmacy, Product.pharmacy_id == Pharmacy.uuid)
-        .where(Product.search_vector.op('@@')(ts_query))
+        .where(Product.search_vector.op("@@")(ts_query))
     )
 
     if city and city != "Все города" and city.strip():
@@ -116,7 +118,11 @@ async def search_two_step(
                 "pharmacy_city": (
                     product.pharmacy.city if product.pharmacy else "Unknown"
                 ),
-                "relevance": "high" if product.name.lower().find(search_name.lower()) != -1 else "medium"
+                "relevance": (
+                    "high"
+                    if product.name.lower().find(search_name.lower()) != -1
+                    else "medium"
+                ),
             }
         )
 
@@ -519,7 +525,7 @@ async def search_advanced(
             func.count(Product.uuid).label("count"),
             func.min(Product.price).label("min_price"),
             func.max(Product.price).label("max_price"),
-            func.count(Pharmacy.uuid.distinct()).label("pharmacy_count")
+            func.count(Pharmacy.uuid.distinct()).label("pharmacy_count"),
         )
         .join(Pharmacy)
         .where(or_(*conditions))
@@ -535,7 +541,7 @@ async def search_advanced(
         Product.name.asc(),  # Сначала по названию препарата
         Product.form.asc(),  # Затем по форме
         Product.manufacturer.asc(),  # Затем по производителю
-        Product.country.asc()  # И по стране
+        Product.country.asc(),  # И по стране
     )
 
     combinations_result = await db.execute(combinations_query)
@@ -545,16 +551,18 @@ async def search_advanced(
     available_combinations = []
     for combo in combinations_data:
         if combo.form and combo.name:
-            available_combinations.append({
-                "name": combo.name,
-                "form": combo.form,
-                "manufacturer": combo.manufacturer,
-                "country": combo.country,
-                "count": combo.count,
-                "min_price": float(combo.min_price) if combo.min_price else 0.0,
-                "max_price": float(combo.max_price) if combo.max_price else 0.0,
-                "pharmacy_count": combo.pharmacy_count
-            })
+            available_combinations.append(
+                {
+                    "name": combo.name,
+                    "form": combo.form,
+                    "manufacturer": combo.manufacturer,
+                    "country": combo.country,
+                    "count": combo.count,
+                    "min_price": float(combo.min_price) if combo.min_price else 0.0,
+                    "max_price": float(combo.max_price) if combo.max_price else 0.0,
+                    "pharmacy_count": combo.pharmacy_count,
+                }
+            )
 
     # ЗАПРОС ДЛЯ ДЕТАЛЬНЫХ РЕЗУЛЬТАТОВ (при выборе комбинации)
     items = []
@@ -597,21 +605,25 @@ async def search_advanced(
         # Формируем результаты
         for product in products:
             pharmacy = product.pharmacy
-            items.append({
-                "uuid": str(product.uuid),
-                "name": product.name,
-                "form": product.form,
-                "manufacturer": product.manufacturer,
-                "country": product.country,
-                "price": float(product.price) if product.price else 0.0,
-                "quantity": float(product.quantity) if product.quantity else 0.0,
-                "pharmacy_name": pharmacy.name if pharmacy else "Unknown",
-                "pharmacy_city": pharmacy.city if pharmacy else "Unknown",
-                "pharmacy_address": pharmacy.address if pharmacy else "Unknown",
-                "pharmacy_phone": pharmacy.phone if pharmacy else "Unknown",
-                "pharmacy_number": pharmacy.pharmacy_number if pharmacy else "N/A",
-                "updated_at": product.updated_at.isoformat() if product.updated_at else None,
-            })
+            items.append(
+                {
+                    "uuid": str(product.uuid),
+                    "name": product.name,
+                    "form": product.form,
+                    "manufacturer": product.manufacturer,
+                    "country": product.country,
+                    "price": float(product.price) if product.price else 0.0,
+                    "quantity": float(product.quantity) if product.quantity else 0.0,
+                    "pharmacy_name": pharmacy.name if pharmacy else "Unknown",
+                    "pharmacy_city": pharmacy.city if pharmacy else "Unknown",
+                    "pharmacy_address": pharmacy.address if pharmacy else "Unknown",
+                    "pharmacy_phone": pharmacy.phone if pharmacy else "Unknown",
+                    "pharmacy_number": pharmacy.pharmacy_number if pharmacy else "N/A",
+                    "updated_at": (
+                        product.updated_at.isoformat() if product.updated_at else None
+                    ),
+                }
+            )
 
     return {
         "items": items,
@@ -649,13 +661,13 @@ async def search_full_text(
     search_query = q.strip()
 
     # Создаем TS_QUERY для полнотекстового поиска
-    ts_query = func.plainto_tsquery('russian', search_query)
+    ts_query = func.plainto_tsquery("russian", search_query)
 
     # Базовые условия для ОСНОВНОГО запроса
     base_conditions = []
 
     # УСЛОВИЕ 1: Полнотекстовый поиск (основное)
-    base_conditions.append(Product.search_vector.op('@@')(ts_query))
+    base_conditions.append(Product.search_vector.op("@@")(ts_query))
 
     # УСЛОВИЕ 2: Точные совпадения (дополнительно)
     exact_match_conditions = []
@@ -663,10 +675,12 @@ async def search_full_text(
 
     for term in search_terms:
         if len(term) >= 2:
-            exact_match_conditions.extend([
-                Product.name.ilike(f"%{term}%"),
-                Product.manufacturer.ilike(f"%{term}%"),
-            ])
+            exact_match_conditions.extend(
+                [
+                    Product.name.ilike(f"%{term}%"),
+                    Product.manufacturer.ilike(f"%{term}%"),
+                ]
+            )
 
     # Комбинируем точные совпадения с полнотекстовым поиском
     if exact_match_conditions:
@@ -698,7 +712,7 @@ async def search_full_text(
     if max_price is not None:
         conditions_for_combinations.append(Product.price <= max_price)
 
-    # ЗАПРОС ДЛЯ КОМБИНАЦИЙ (должен быть ПЕРЕД основным запросом)
+    # ЗАПРОС ДЛЯ КОМБИНАЦИЙ
     combinations_query = (
         select(
             Product.name,
@@ -708,10 +722,10 @@ async def search_full_text(
             func.count(Product.uuid).label("count"),
             func.min(Product.price).label("min_price"),
             func.max(Product.price).label("max_price"),
-            func.count(Pharmacy.uuid.distinct()).label("pharmacy_count")
+            func.count(Pharmacy.uuid.distinct()).label("pharmacy_count"),
         )
         .join(Pharmacy)
-        .where(and_(*conditions_for_combinations))  # Используем условия для комбинаций
+        .where(and_(*conditions_for_combinations))
         .group_by(Product.name, Product.form, Product.manufacturer, Product.country)
         .order_by(Product.name.asc(), Product.form.asc())
     )
@@ -722,70 +736,86 @@ async def search_full_text(
     available_combinations = []
     for combo in combinations_data:
         if combo.name:
-            available_combinations.append({
-                "name": combo.name,
-                "form": combo.form,
-                "manufacturer": combo.manufacturer,
-                "country": combo.country,
-                "count": combo.count,
-                "min_price": float(combo.min_price) if combo.min_price else 0.0,
-                "max_price": float(combo.max_price) if combo.max_price else 0.0,
-                "pharmacy_count": combo.pharmacy_count
-            })
+            available_combinations.append(
+                {
+                    "name": combo.name,
+                    "form": combo.form,
+                    "manufacturer": combo.manufacturer,
+                    "country": combo.country,
+                    "count": combo.count,
+                    "min_price": float(combo.min_price) if combo.min_price else 0.0,
+                    "max_price": float(combo.max_price) if combo.max_price else 0.0,
+                    "pharmacy_count": combo.pharmacy_count,
+                }
+            )
 
-    # ОСНОВНОЙ ЗАПРОС с релевантностью
-    query = (
-        select(
-            Product,
-            func.ts_rank(Product.search_vector, ts_query).label('relevance'),
-            # Дополнительная релевантность для точных совпадений
-            case(
-                (Product.name.ilike(f"{search_query}"), 2.0),  # Точное совпадение
-                (Product.name.ilike(f"{search_query}%"), 1.5), # Начинается с
-                else_=0.0
-            ).label('exact_match_boost')
-        )
-        .options(joinedload(Product.pharmacy))
+    # ПАГИНАЦИЯ - ИСПРАВЛЕННАЯ ВЕРСИЯ
+    count_query = (
+        select(func.count(Product.uuid))
         .join(Pharmacy)
-        .where(and_(*conditions_for_items))  # Используем полные условия для items
-        .order_by(
-            text('relevance + exact_match_boost DESC'),
-            Product.price.asc()
-        )
+        .where(and_(*conditions_for_items))
     )
 
-    # ПАГИНАЦИЯ
-    count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
     total = total_result.scalar()
 
     total_pages = ceil(total / size) if total > 0 else 1
     page = min(page, total_pages)
 
-    query = query.offset((page - 1) * size).limit(size)
+    # ОСНОВНОЙ ЗАПРОС с релевантностью
+    query = (
+        select(Product)
+        .options(joinedload(Product.pharmacy))
+        .join(Pharmacy)
+        .where(and_(*conditions_for_items))
+        .order_by(
+            # Упрощенная сортировка
+            case(
+                (Product.name.ilike(f"{search_query}"), 2),
+                (Product.name.ilike(f"{search_query}%"), 1),
+                else_=0,
+            ).desc(),
+            Product.price.asc(),
+        )
+        .offset((page - 1) * size)
+        .limit(size)
+    )
+
     result = await db.execute(query)
-    products_with_relevance = result.unique().all()
+    products = result.unique().scalars().all()
 
     # ФОРМАТИРОВАНИЕ РЕЗУЛЬТАТОВ
     items = []
-    for product, relevance, exact_boost in products_with_relevance:
+    for product in products:
         pharmacy = product.pharmacy
-        items.append({
-            "uuid": str(product.uuid),
-            "name": product.name,
-            "form": product.form,
-            "manufacturer": product.manufacturer,
-            "country": product.country,
-            "price": float(product.price) if product.price else 0.0,
-            "quantity": float(product.quantity) if product.quantity else 0.0,
-            "relevance_score": float(relevance + exact_boost),
-            "pharmacy_name": pharmacy.name if pharmacy else "Unknown",
-            "pharmacy_city": pharmacy.city if pharmacy else "Unknown",
-            "pharmacy_address": pharmacy.address if pharmacy else "Unknown",
-            "pharmacy_phone": pharmacy.phone if pharmacy else "Unknown",
-            "pharmacy_number": pharmacy.pharmacy_number if pharmacy else "N/A",
-            "updated_at": product.updated_at.isoformat() if product.updated_at else None,
-        })
+        # Вычисляем релевантность для отображения
+        relevance_score = 1.0
+        if product.name and search_query:
+            if product.name.lower() == search_query.lower():
+                relevance_score = 2.0
+            elif product.name.lower().startswith(search_query.lower()):
+                relevance_score = 1.5
+
+        items.append(
+            {
+                "uuid": str(product.uuid),
+                "name": product.name,
+                "form": product.form,
+                "manufacturer": product.manufacturer,
+                "country": product.country,
+                "price": float(product.price) if product.price else 0.0,
+                "quantity": float(product.quantity) if product.quantity else 0.0,
+                "relevance_score": relevance_score,
+                "pharmacy_name": pharmacy.name if pharmacy else "Unknown",
+                "pharmacy_city": pharmacy.city if pharmacy else "Unknown",
+                "pharmacy_address": pharmacy.address if pharmacy else "Unknown",
+                "pharmacy_phone": pharmacy.phone if pharmacy else "Unknown",
+                "pharmacy_number": pharmacy.pharmacy_number if pharmacy else "N/A",
+                "updated_at": (
+                    product.updated_at.isoformat() if product.updated_at else None
+                ),
+            }
+        )
 
     return {
         "items": items,
@@ -803,5 +833,5 @@ async def search_full_text(
             "country": country,
             "min_price": min_price,
             "max_price": max_price,
-        }
+        },
     }
