@@ -20,6 +20,8 @@ from bot.middleware.role_middleware import RoleMiddleware
 from db.database import async_session_maker
 from bot.middleware.db import DbMiddleware
 
+from routers import orders as booking_router
+
 # Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
@@ -110,7 +112,9 @@ app = FastAPI(lifespan=lifespan, title="Novamedika Q&A Bot API")
 # ДОБАВИТЬ CORS MIDDLEWARE
 origins = os.getenv("CORS_ORIGINS", "").split(",")
 if not origins or origins == [""]:
-    origins = ["http://localhost:3000", "https://spravka.novamedika.com"]
+    origins = ["http://localhost:3000", "https://spravka.novamedika.com",
+               "https://booking.novamedika.com" 
+               ]
 
 app.add_middleware(
     CORSMiddleware,
@@ -136,6 +140,7 @@ app.include_router(telegram_bot.router, tags=["bot"])
 app.include_router(search.router, tags=["search"])
 app.include_router(upload.router, tags=["upload"])
 app.include_router(pharmacies_info.router, tags=["pharmacies"])
+app.include_router(booking_router.router, tags=["booking"])
 
 @app.get("/")
 async def root():

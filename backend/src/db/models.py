@@ -19,12 +19,15 @@ class Pharmacy(Base):
     opening_hours = Column(String(255), nullable=True)
     chain = Column(String(50), nullable=False)
 
-    # Добавляем уникальное ограничение
     __table_args__ = (
         UniqueConstraint('name', 'pharmacy_number', name='uq_pharmacy_name_number'),
     )
 
     products = relationship("Product", back_populates="pharmacy")
+
+    # ДОБАВИТЬ обратные relationships:
+    booking_orders = relationship("BookingOrder", back_populates="pharmacy")
+    api_config = relationship("PharmacyAPIConfig", back_populates="pharmacy", uselist=False)
 
 
 # models.py - обновите модель Product
@@ -37,27 +40,28 @@ class Product(Base):
     manufacturer = Column(String(255), nullable=False, default="")
     country = Column(String(255), nullable=False, default="")
     serial = Column(String(255), nullable=False, default="")
-    price = Column(Numeric(12, 2), default=0.0)  # Увеличено с 10 до 12
-    quantity = Column(Numeric(12, 3), nullable=False, default=0.0)  # Увеличено с 10 до 12
-    total_price = Column(Numeric(12, 2), default=0.0)  # Увеличено с 10 до 12
+    price = Column(Numeric(12, 2), default=0.0)
+    quantity = Column(Numeric(12, 3), nullable=False, default=0.0)
+    total_price = Column(Numeric(12, 2), default=0.0)
     expiry_date = Column(Date, nullable=False)
     category = Column(String(255), nullable=False, default="")
     import_date = Column(Date, nullable=True)
     internal_code = Column(String(255), nullable=True)
-    wholesale_price = Column(Numeric(12, 2), nullable=False, default=0.0)  # Увеличено с 10 до 12
-    retail_price = Column(Numeric(12, 2), default=0.0)  # Увеличено с 10 до 12
+    wholesale_price = Column(Numeric(12, 2), nullable=False, default=0.0)
+    retail_price = Column(Numeric(12, 2), default=0.0)
     distributor = Column(String(255), nullable=False, default="")
     internal_id = Column(String(255), nullable=False, default="")
     pharmacy_id = Column(UUID(as_uuid=True), ForeignKey("pharmacies.uuid"), index=True)
     updated_at = Column(DateTime, default=get_utc_now_naive, onupdate=get_utc_now_naive)
 
-    pharmacy = relationship("Pharmacy", back_populates="products")
+    # ДОБАВИТЬ если нужно:
+    # external_id = Column(String(255), nullable=True)  # для синхронизации
 
     search_vector = Column(TSVECTOR, nullable=True)
 
+    # ОДИН relationship:
     pharmacy = relationship("Pharmacy", back_populates="products")
 
-    # ИНДЕКСЫ для полнотекстового поиска
     __table_args__ = (
         Index('idx_product_search_vector', 'search_vector', postgresql_using='gin'),
         Index('idx_product_name_gin', 'name', postgresql_using='gin'),

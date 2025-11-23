@@ -734,3 +734,32 @@ def parse_product_details(product_string: str) -> Tuple[str, str]:
         return (name_part if name_part else "-", form_part)
 
     return (product_string, "-")
+
+
+@celery.task
+def sync_pharmacy_orders_task():
+    """Периодическая задача для синхронизации заказов"""
+    sync_service = SyncService()
+
+    # Запускаем в event loop для async функций
+    import asyncio
+    loop = asyncio.get_event_loop()
+    if loop.is_closed():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    loop.run_until_complete(sync_service.sync_all_pharmacies_orders())
+
+@celery.task
+def retry_failed_orders_task():
+    """Повторная отправка неудачных заказов"""
+    # Логика для ретрая failed заказов
+    pass
+
+
+celery.conf.beat_schedule = {
+    'sync-orders-every-10-min': {
+        'task': 'tasks_increment.sync_pharmacy_orders_task',
+        'schedule': 600.0,
+    },
+}
