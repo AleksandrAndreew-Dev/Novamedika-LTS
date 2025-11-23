@@ -272,10 +272,6 @@ export default function Search() {
                   </React.Fragment>
                 ))}
               </div>
-
-              <div className="text-sm text-gray-600 font-medium">
-                Шаг {step} из 3
-              </div>
             </div>
 
             <div className="flex justify-between text-sm">
