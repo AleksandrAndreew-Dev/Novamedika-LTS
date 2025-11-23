@@ -10,7 +10,8 @@ import secrets
 from datetime import datetime
 
 from db.database import get_db, async_session_maker
-from db.booking_models import BookingOrder, PharmacyAPIConfig, Pharmacy, Product, SyncLog
+from db.models import Pharmacy, Product
+from db.booking_models import BookingOrder, PharmacyAPIConfig,  SyncLog
 from db.booking_schemas import BookingOrderCreate, BookingOrderResponse, PharmacyAPIConfigCreate
 from order_manager.manager import ExternalAPIManager
 
