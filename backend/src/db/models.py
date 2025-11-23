@@ -23,14 +23,11 @@ class Pharmacy(Base):
         UniqueConstraint('name', 'pharmacy_number', name='uq_pharmacy_name_number'),
     )
 
-    products = relationship("Product", back_populates="pharmacy")
+    # Используем строковые ссылки для избежания циклических импортов
+    products = relationship("Product", back_populates="pharmacy", lazy="select")
+    booking_orders = relationship("BookingOrder", back_populates="pharmacy", lazy="select")
+    api_config = relationship("PharmacyAPIConfig", back_populates="pharmacy", uselist=False, lazy="select")
 
-    # ДОБАВИТЬ обратные relationships:
-    booking_orders = relationship("BookingOrder", back_populates="pharmacy")
-    api_config = relationship("PharmacyAPIConfig", back_populates="pharmacy", uselist=False)
-
-
-# models.py - обновите модель Product
 class Product(Base):
     __tablename__ = "products"
 
@@ -54,13 +51,10 @@ class Product(Base):
     pharmacy_id = Column(UUID(as_uuid=True), ForeignKey("pharmacies.uuid"), index=True)
     updated_at = Column(DateTime, default=get_utc_now_naive, onupdate=get_utc_now_naive)
 
-    # ДОБАВИТЬ если нужно:
-    # external_id = Column(String(255), nullable=True)  # для синхронизации
-
     search_vector = Column(TSVECTOR, nullable=True)
 
-    # ОДИН relationship:
-    pharmacy = relationship("Pharmacy", back_populates="products")
+    # Используем строковую ссылку
+    pharmacy = relationship("Pharmacy", back_populates="products", lazy="select")
 
     __table_args__ = (
         Index('idx_product_search_vector', 'search_vector', postgresql_using='gin'),
