@@ -1,4 +1,6 @@
-/* App.css - минимальные стили */
+/* ===========================
+   Базовые стили
+=========================== */
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -6,13 +8,42 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  line-height: 1.6; /* Улучшенная типографика */
 }
 
 #root {
   min-height: 100vh;
 }
 
-/* Стили для cookie banner */
+/* ===========================
+   Типографика
+=========================== */
+h1, h2, h3, h4, h5, h6 {
+  letter-spacing: 0.5px; /* Улучшенные заголовки */
+}
+
+.search-content,
+.form-selection-content,
+.results-content {
+  line-height: 1.6;
+}
+
+.search-title,
+.section-title,
+.card-title {
+  letter-spacing: 0.5px;
+}
+
+/* ===========================
+   Цвета и контрастность
+=========================== */
+.text-gray-600 { color: #4b5563; }
+.text-gray-700 { color: #374151; }
+.text-gray-800 { color: #1f2937; }
+
+/* ===========================
+   Cookie banner
+=========================== */
 .cookie-banner {
   position: fixed;
   bottom: 0;
@@ -46,12 +77,9 @@ body {
   text-decoration: underline;
 }
 
-/* Улучшение контрастности и доступности */
-.min-h-\[44px\] {
-  min-height: 44px;
-}
-
-/* Улучшенные hover-эффекты */
+/* ===========================
+   Hover-эффекты
+=========================== */
 .hover-lift {
   transition: all 0.2s ease-in-out;
 }
@@ -61,23 +89,9 @@ body {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-/* Скелетон анимация */
-@keyframes pulse-skeleton {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-
-.animate-pulse-skeleton {
-  animation: pulse-skeleton 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-/* Добавить в App.css */
-
-/* Улучшенные focus states */
+/* ===========================
+   Focus states (доступность)
+=========================== */
 button:focus-visible,
 select:focus-visible,
 input:focus-visible,
@@ -86,43 +100,44 @@ input:focus-visible,
   outline-offset: 2px;
 }
 
-/* Улучшение контрастности */
-.text-gray-600 {
-  color: #4b5563;
+/* ===========================
+   Минимальные размеры для touch targets
+=========================== */
+.min-h-
+
+\[44px\]
+
+ { min-height: 44px; }
+.min-h-
+
+\[60px\]
+
+ { min-height: 60px; }
+
+/* ===========================
+   Loading / Skeleton states
+=========================== */
+@keyframes pulse-skeleton {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
-.text-gray-700 {
-  color: #374151;
+.animate-pulse-skeleton {
+  animation: pulse-skeleton 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-.text-gray-800 {
-  color: #1f2937;
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
-/* Минимальные размеры для touch targets */
-.min-h-\[44px\] {
-  min-height: 44px;
-}
-
-.min-h-\[60px\] {
-  min-height: 60px;
-}
-
-/* Loading states */
 .loading-pulse {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-
-/* Улучшение доступности для скринридеров */
+/* ===========================
+   Доступность для скринридеров
+=========================== */
 .sr-only {
   position: absolute;
   width: 1px;
@@ -135,7 +150,13 @@ input:focus-visible,
   border: 0;
 }
 
+/* ===========================
+   Мобильная оптимизация
+=========================== */
 @media (max-width: 768px) {
+  .breadcrumb-text { font-size: 0.75rem; }
+  .step-description { font-size: 0.7rem; }
+
   .cookie-content {
     flex-direction: column;
     gap: 12px;

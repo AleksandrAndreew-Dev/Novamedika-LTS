@@ -28,7 +28,7 @@ export default function SearchBar({
       <form onSubmit={handleSubmit} className="w-full">
         <div className="space-y-3 md:space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-800 mb-1 md:mb-2">
+           <label className="block text-sm font-medium text-gray-800 mb-2 leading-relaxed">
               Город
             </label>
             <select

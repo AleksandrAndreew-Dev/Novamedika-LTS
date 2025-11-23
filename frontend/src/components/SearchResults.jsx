@@ -86,7 +86,7 @@ export default function SearchResults({
         <div className="border-b border-telegram-border px-4 md:px-6 py-4">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
             <div className="flex-1">
-              <h2 className="text-xl font-semibold text-gray-900">
+              <h2 className="text-xl font-semibold text-gray-900 tracking-wide leading-relaxed">
                 Результаты поиска
               </h2>
               <p className="text-gray-800 mt-1 text-sm md:text-base">

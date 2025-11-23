@@ -26,6 +26,13 @@ export default function Search() {
 
   const { tg, isTelegram } = useTelegramWebApp();
 
+  // Добавляем функцию навигации по шагам
+  const handleStepNavigation = (targetStep) => {
+    if (targetStep < step) {
+      setStep(targetStep);
+    }
+  };
+
   useEffect(() => {
     const fetchCities = async () => {
       try {
@@ -156,7 +163,8 @@ export default function Search() {
       };
 
       if (searchData.form) params.form = searchData.form;
-      if (searchData.manufacturer) params.manufacturer = searchData.manufacturer;
+      if (searchData.manufacturer)
+        params.manufacturer = searchData.manufacturer;
       if (searchData.country) params.country = searchData.country;
       if (searchData.city) params.city = searchData.city;
 
@@ -225,21 +233,84 @@ export default function Search() {
         </div>
       )}
 
-      {/* Content */}
       <div className={isTelegram ? "p-2" : "p-4"}>
         <div className={isTelegram ? "max-w-full" : "max-w-4xl mx-auto"}>
-          {/* Индикатор прогресса */}
-          <div className="mb-6">
-            <div className="flex justify-between text-xs text-gray-500 mb-2 px-1">
-              <span className={step >= 1 ? "text-telegram-primary font-medium" : ""}>Поиск</span>
-              <span className={step >= 2 ? "text-telegram-primary font-medium" : ""}>Выбор формы</span>
-              <span className={step >= 3 ? "text-telegram-primary font-medium" : ""}>Результаты</span>
+          <div className="mb-6 bg-white rounded-xl p-4 border border-gray-200">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center space-x-2">
+                {[1, 2, 3].map((stepNum) => (
+                  <React.Fragment key={stepNum}>
+                    <button
+                      onClick={() =>
+                        stepNum < step && handleStepNavigation(stepNum)
+                      }
+                      disabled={stepNum > step}
+                      className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium transition-all ${
+                        stepNum === step
+                          ? "bg-telegram-primary text-white shadow-md"
+                          : stepNum < step
+                          ? "bg-telegram-primary/20 text-telegram-primary cursor-pointer hover:bg-telegram-primary/30"
+                          : "bg-gray-100 text-gray-400"
+                      }`}
+                      aria-label={`Перейти к шагу ${stepNum}: ${
+                        stepNum === 1
+                          ? "Поиск"
+                          : stepNum === 2
+                          ? "Выбор формы"
+                          : "Результаты"
+                      }`}
+                    >
+                      {stepNum}
+                    </button>
+                    {stepNum < 3 && (
+                      <div
+                        className={`w-8 h-0.5 ${
+                          stepNum < step ? "bg-telegram-primary" : "bg-gray-200"
+                        }`}
+                      />
+                    )}
+                  </React.Fragment>
+                ))}
+              </div>
+
+              <div className="text-sm text-gray-600 font-medium">
+                Шаг {step} из 3
+              </div>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
+
+            <div className="flex justify-between text-sm">
+              <button
+                onClick={() => step > 1 && handleStepNavigation(1)}
+                className={`flex flex-col items-center ${
+                  step >= 1
+                    ? "text-telegram-primary cursor-pointer hover:text-blue-700"
+                    : "text-gray-400"
+                }`}
+              >
+                <span className="font-medium">Поиск</span>
+                <span className="text-xs mt-1">Название и город</span>
+              </button>
+
+              <button
+                onClick={() => step > 2 && handleStepNavigation(2)}
+                className={`flex flex-col items-center ${
+                  step >= 2
+                    ? "text-telegram-primary cursor-pointer hover:text-blue-700"
+                    : "text-gray-400"
+                }`}
+              >
+                <span className="font-medium">Форма</span>
+                <span className="text-xs mt-1">Выбор препарата</span>
+              </button>
+
               <div
-                className="bg-telegram-primary h-2 rounded-full transition-all duration-300"
-                style={{ width: `${(step / 3) * 100}%` }}
-              ></div>
+                className={`flex flex-col items-center ${
+                  step === 3 ? "text-telegram-primary" : "text-gray-400"
+                }`}
+              >
+                <span className="font-medium">Результаты</span>
+                <span className="text-xs mt-1">Наличие в аптеках</span>
+              </div>
             </div>
           </div>
 
@@ -325,7 +396,6 @@ export default function Search() {
         </div>
       </div>
 
-      {/* Footer */}
       {!isTelegram && (
         <div className="bg-white border-t border-telegram-border mt-8">
           <div className="max-w-4xl mx-auto py-6 px-4">
