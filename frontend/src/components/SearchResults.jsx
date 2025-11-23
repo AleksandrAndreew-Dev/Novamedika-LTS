@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 
 export default function SearchResults({
   results,
@@ -10,7 +10,88 @@ export default function SearchResults({
   loading,
   isTelegram,
 }) {
-  // SearchResults.jsx - обновляем функцию getGroupedResults и добавляем время работы
+  const [bookingModal, setBookingModal] = useState({
+    isOpen: false,
+    product: null,
+    quantity: 1,
+  });
+  const [bookingForm, setBookingForm] = useState({
+    customer_name: "",
+    customer_phone: "",
+  });
+  const [bookingLoading, setBookingLoading] = useState(false);
+  const [bookingSuccess, setBookingSuccess] = useState(false);
+
+  // Функция для открытия модального окна бронирования
+  const openBookingModal = (product) => {
+    setBookingModal({
+      isOpen: true,
+      product: product,
+      quantity: 1,
+    });
+    setBookingForm({
+      customer_name: "",
+      customer_phone: "",
+    });
+    setBookingSuccess(false);
+  };
+
+  // Функция для закрытия модального окна
+  const closeBookingModal = () => {
+    setBookingModal({
+      isOpen: false,
+      product: null,
+      quantity: 1,
+    });
+    setBookingForm({
+      customer_name: "",
+      customer_phone: "",
+    });
+    setBookingSuccess(false);
+  };
+
+  // Функция для обработки бронирования
+  const handleBooking = async (e) => {
+    e.preventDefault();
+    if (!bookingModal.product) return;
+
+    setBookingLoading(true);
+    try {
+      const bookingData = {
+        product_id: bookingModal.product.uuid,
+        pharmacy_id: bookingModal.product.pharmacy_id,
+        quantity: bookingModal.quantity,
+        customer_name: bookingForm.customer_name,
+        customer_phone: bookingForm.customer_phone,
+      };
+
+      const response = await fetch("/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(bookingData),
+      });
+
+      if (response.ok) {
+        setBookingSuccess(true);
+        // Автоматически закрываем модальное окно через 2 секунды
+        setTimeout(() => {
+          closeBookingModal();
+        }, 2000);
+      } else {
+        const errorData = await response.json();
+        alert(
+          `Ошибка бронирования: ${errorData.detail || "Неизвестная ошибка"}`
+        );
+      }
+    } catch (error) {
+      alert("Ошибка сети: " + error.message);
+    } finally {
+      setBookingLoading(false);
+    }
+  };
+
   const getGroupedResults = () => {
     const grouped = {};
 
@@ -22,7 +103,8 @@ export default function SearchResults({
           ...item,
           quantity: parseFloat(item.quantity) || 0,
           working_hours:
-            item.working_hours || item.opening_hours || "9:00-21:00", // добавляем время работы
+            item.working_hours || item.opening_hours || "9:00-21:00",
+          pharmacy_id: item.pharmacy_id,
         };
       } else {
         grouped[key].quantity += parseFloat(item.quantity) || 0;
@@ -31,7 +113,6 @@ export default function SearchResults({
         const newDate = new Date(item.updated_at);
         if (newDate > currentDate) {
           grouped[key].updated_at = item.updated_at;
-          // Обновляем время работы, если есть более актуальные данные
           if (item.working_hours || item.opening_hours) {
             grouped[key].working_hours =
               item.working_hours || item.opening_hours;
@@ -75,12 +156,139 @@ export default function SearchResults({
   const handleCardKeyPress = (event) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      // Можно добавить дополнительное действие при активации карточки
     }
   };
 
   return (
     <div className={`${isTelegram ? "p-2" : "p-4"} max-w-6xl mx-auto`}>
+      {/* Модальное окно бронирования */}
+      {bookingModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+            {bookingSuccess ? (
+              <div className="text-center">
+                <div className="text-green-500 text-6xl mb-4">✓</div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                  Бронирование успешно!
+                </h3>
+                <p className="text-gray-600 mb-4">
+                  Ваш заказ принят. Ожидайте подтверждения от аптеки.
+                </p>
+                <button
+                  onClick={closeBookingModal}
+                  className="w-full bg-telegram-primary text-gray-900 font-medium py-3 px-4 rounded-lg hover:bg-blue-600 transition-colors"
+                >
+                  Закрыть
+                </button>
+              </div>
+            ) : (
+              <>
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                  Бронирование препарата
+                </h2>
+                {bookingModal.product && (
+                  <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                    <h3 className="font-semibold text-gray-900">
+                      {bookingModal.product.name}
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      {bookingModal.product.form}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {bookingModal.product.pharmacy_name} №
+                      {bookingModal.product.pharmacy_number}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Доступно: {formatQuantity(bookingModal.product.quantity)}{" "}
+                      уп.
+                    </p>
+                  </div>
+                )}
+                <form onSubmit={handleBooking} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Ваше имя *
+                    </label>
+                    <input
+                      type="text"
+                      value={bookingForm.customer_name}
+                      onChange={(e) =>
+                        setBookingForm({
+                          ...bookingForm,
+                          customer_name: e.target.value,
+                        })
+                      }
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-telegram-primary"
+                      placeholder="Введите ваше имя"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Телефон *
+                    </label>
+                    <input
+                      type="tel"
+                      value={bookingForm.customer_phone}
+                      onChange={(e) =>
+                        setBookingForm({
+                          ...bookingForm,
+                          customer_phone: e.target.value,
+                        })
+                      }
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-telegram-primary"
+                      placeholder="+375 XX XXX-XX-XX"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Количество *
+                    </label>
+                    <select
+                      value={bookingModal.quantity}
+                      onChange={(e) =>
+                        setBookingModal({
+                          ...bookingModal,
+                          quantity: parseInt(e.target.value),
+                        })
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-telegram-primary"
+                    >
+                      {[
+                        ...Array(
+                          Math.min(10, bookingModal.product?.quantity || 1)
+                        ).keys(),
+                      ].map((i) => (
+                        <option key={i + 1} value={i + 1}>
+                          {i + 1} упаковок
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="submit"
+                      disabled={bookingLoading}
+                      className="flex-1 bg-telegram-primary text-gray-900 font-medium py-3 px-4 rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {bookingLoading ? "Бронируем..." : "Забронировать"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={closeBookingModal}
+                      className="flex-1 bg-gray-100 text-gray-800 font-medium py-3 px-4 rounded-lg hover:bg-gray-200 transition-colors"
+                    >
+                      Отмена
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl shadow-sm border border-telegram-border overflow-hidden">
         {/* Header */}
         <div className="border-b border-telegram-border px-4 md:px-6 py-4">
@@ -163,7 +371,6 @@ export default function SearchResults({
 
           {loading && (
             <div className="space-y-4 mb-6" aria-live="polite">
-              {/* Скелетон-заглушки для загрузки */}
               {[1, 2, 3].map((item) => (
                 <div
                   key={item}
@@ -284,7 +491,8 @@ export default function SearchResults({
                         />
                       </svg>
                       <span>
-                        Время работы: {item.working_hours || "Уточняйте в аптеке"}
+                        Время работы:{" "}
+                        {item.working_hours || "Уточняйте в аптеке"}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
@@ -295,6 +503,18 @@ export default function SearchResults({
                         {formatDate(item.updated_at)}
                       </span>
                     </div>
+
+                    {/* Кнопка бронирования для Telegram */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openBookingModal(item);
+                      }}
+                      disabled={item.quantity <= 0}
+                      className="w-full bg-telegram-primary text-gray-900 font-medium py-3 px-4 rounded-lg mt-3 hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:ring-offset-2"
+                    >
+                      {item.quantity <= 0 ? "Нет в наличии" : "Забронировать"}
+                    </button>
                   </div>
                 </div>
               ))}
@@ -413,6 +633,17 @@ export default function SearchResults({
                         Обновлено: {formatDate(item.updated_at)}
                       </div>
                     </div>
+                  </div>
+
+                  {/* Кнопка бронирования для веб-версии */}
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      onClick={() => openBookingModal(item)}
+                      disabled={item.quantity <= 0}
+                      className="bg-telegram-primary text-gray-900 font-medium py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {item.quantity <= 0 ? "Нет в наличии" : "Забронировать"}
+                    </button>
                   </div>
                 </div>
               ))}
