@@ -10,6 +10,8 @@ from db.qa_models import Question
 from db.qa_models import Answer
 from bot.handlers.qa_states import QAStates
 from bot.keyboards.qa_keyboard import make_question_keyboard
+
+from bot.handlers.common_handlers import get_pharmacist_keyboard
 import logging
 from datetime import datetime, timedelta
 from utils.time_utils import get_utc_now_naive
@@ -95,7 +97,7 @@ async def set_online(
 
 @router.message(Command("offline"))
 async def set_offline(
-    message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: User
+    message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist
 ):
     """Установка статуса офлайн для фармацевта"""
     logger.info(
@@ -131,7 +133,7 @@ async def set_offline(
 
 @router.message(Command("status"))
 async def cmd_status(
-    message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: User
+    message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist
 ):
     """Показать статус фармацевта"""
     logger.info(
@@ -161,7 +163,7 @@ async def cmd_status(
 
 @router.message(Command("questions"))
 async def cmd_questions(
-    message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: User
+    message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist
 ):
     """Показать вопросы с пагинацией"""
     if not is_pharmacist or not pharmacist:
@@ -273,7 +275,7 @@ async def answer_question_callback(
     state: FSMContext,
     db: AsyncSession,
     is_pharmacist: bool,
-    pharmacist: User,
+    pharmacist: Pharmacist,
 ):
     """Обработка нажатия на кнопку ответа на вопрос"""
     question_uuid = callback.data.replace("answer_", "")
