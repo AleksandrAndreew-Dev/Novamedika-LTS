@@ -2,13 +2,11 @@ import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
-from db.database import init_models
-from db import models, booking_models
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware  # ДОБАВИТЬ
+from fastapi.middleware.cors import CORSMiddleware
 from aiogram import Bot, Dispatcher
-from aiogram.types import BotCommand
+from aiogram.types import BotCommand  # Добавьте этот импорт
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot.core import bot_manager
@@ -19,7 +17,7 @@ from bot.handlers import (
     qa_handlers_router,
 )
 from bot.middleware.role_middleware import RoleMiddleware
-from db.database import async_session_maker
+from db.database import init_models, async_session_maker
 from bot.middleware.db import DbMiddleware
 
 from routers import orders as booking_router
@@ -31,7 +29,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-async def set_bot_commands(bot: Bot):
+async def set_bot_commands(bot: Bot):  # Теперь Bot импортирован
     commands = [
         BotCommand(command="/start", description="Главное меню"),
         BotCommand(command="/ask", description="Задать вопрос"),
@@ -67,7 +65,6 @@ async def lifespan(app: FastAPI):
     dp.update.outer_middleware(RoleMiddleware())
 
     # Регистрация роутеров
-
     dp.include_router(registration_router)
     dp.include_router(qa_handlers_router)
     dp.include_router(user_questions_router)
