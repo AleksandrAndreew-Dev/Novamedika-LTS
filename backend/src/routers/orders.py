@@ -1,19 +1,22 @@
-# orders.py - исправленная полная версия
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
-from typing import List, Optional
+# orders.py - исправленная версия импортов
+
 import uuid
 import logging
 import asyncio
 import secrets
 from datetime import datetime
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_
 
 from db.database import get_db, async_session_maker
 from db.models import Pharmacy, Product
-from db.booking_models import BookingOrder, PharmacyAPIConfig,  SyncLog
+from db.booking_models import BookingOrder, PharmacyAPIConfig, SyncLog
 from db.booking_schemas import BookingOrderCreate, BookingOrderResponse, PharmacyAPIConfigCreate
 from order_manager.manager import ExternalAPIManager
+
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

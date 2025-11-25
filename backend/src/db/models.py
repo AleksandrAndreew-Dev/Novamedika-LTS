@@ -19,6 +19,9 @@ class Pharmacy(Base):
     opening_hours = Column(String(255), nullable=True)
     chain = Column(String(50), nullable=False)
 
+    booking_orders = relationship("BookingOrder", back_populates="pharmacy", cascade="all, delete-orphan")
+    api_config = relationship("PharmacyAPIConfig", back_populates="pharmacy", uselist=False, cascade="all, delete-orphan")
+
     __table_args__ = (
         UniqueConstraint('name', 'pharmacy_number', name='uq_pharmacy_name_number'),
     )

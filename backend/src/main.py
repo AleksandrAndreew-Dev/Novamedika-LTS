@@ -2,6 +2,8 @@ import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
+from db.database import init_models
+from db import models, booking_models
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware  # ДОБАВИТЬ
@@ -46,6 +48,7 @@ async def set_bot_commands(bot: Bot):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Инициализация бота при запуске
+    await init_models()
     bot, dp = await bot_manager.initialize()
 
     if not bot or not dp:
@@ -113,7 +116,7 @@ app = FastAPI(lifespan=lifespan, title="Novamedika Q&A Bot API")
 origins = os.getenv("CORS_ORIGINS", "").split(",")
 if not origins or origins == [""]:
     origins = ["http://localhost:3000", "https://spravka.novamedika.com",
-               "https://booking.novamedika.com" 
+               "https://booking.novamedika.com"
                ]
 
 app.add_middleware(

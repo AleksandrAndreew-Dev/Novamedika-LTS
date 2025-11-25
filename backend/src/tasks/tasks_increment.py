@@ -1,4 +1,7 @@
 # tasks_increment.py (исправленная версия)
+from db.database import init_models
+
+
 import csv
 import re
 import logging
@@ -19,6 +22,16 @@ from db.database import async_session_maker, get_async_connection
 from db.models import Pharmacy, Product
 
 logger = logging.getLogger(__name__)
+
+
+try:
+    loop = asyncio.get_event_loop()
+    if loop.is_running():
+        loop.create_task(init_models())
+    else:
+        loop.run_until_complete(init_models())
+except:
+    pass
 
 redis_password = os.getenv('REDIS_PASSWORD', '')
 

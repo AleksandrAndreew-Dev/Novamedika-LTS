@@ -1,3 +1,6 @@
+from sqlalchemy.orm import relationship
+from db.database import Base
+
 import uuid
 from datetime import datetime
 from sqlalchemy import (
@@ -5,10 +8,10 @@ from sqlalchemy import (
     UniqueConstraint, Index, Text, LargeBinary, func, CheckConstraint, Enum
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+
 from sqlalchemy.ext.declarative import declared_attr
 
-from db.database import Base
+
 
 class BookingOrder(Base):
     __tablename__ = "booking_orders"
@@ -51,7 +54,7 @@ class PharmacyAPIConfig(Base):
 
     # Используем строковую ссылку
     pharmacy = relationship("Pharmacy", back_populates="api_config", lazy="select")
-
+    
     # Методы шифрования остаются без изменений
     def set_auth_token(self, token: str):
         from cryptography.fernet import Fernet
