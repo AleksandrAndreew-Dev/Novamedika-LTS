@@ -1,3 +1,15 @@
+import sys
+import os
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Import all models first to ensure they are registered
+from db import Base, Pharmacy, Product, BookingOrder, PharmacyAPIConfig, SyncLog
+
+# Then proceed with the rest of your imports
+from db.database import init_models, async_session_maker, get_async_connection
+
+
 # tasks_increment.py (исправленная версия)
 from db.database import init_models
 

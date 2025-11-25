@@ -1,11 +1,8 @@
+# db/models.py
 import uuid
 from sqlalchemy import Column, String, Date, ForeignKey, Numeric, DateTime, UniqueConstraint, Index
 from sqlalchemy.dialects.postgresql import UUID, TSVECTOR
 from sqlalchemy.orm import relationship
-from datetime import datetime, timezone
-
-
-from utils.time_utils import get_utc_now_naive
 
 from .base import Base
 
@@ -21,17 +18,14 @@ class Pharmacy(Base):
     opening_hours = Column(String(255), nullable=True)
     chain = Column(String(50), nullable=False)
 
+    # Use string references to avoid circular imports
+    products = relationship("Product", back_populates="pharmacy", lazy="select")
     booking_orders = relationship("BookingOrder", back_populates="pharmacy", cascade="all, delete-orphan")
     api_config = relationship("PharmacyAPIConfig", back_populates="pharmacy", uselist=False, cascade="all, delete-orphan")
 
     __table_args__ = (
         UniqueConstraint('name', 'pharmacy_number', name='uq_pharmacy_name_number'),
     )
-
-    # Используем строковые ссылки для избежания циклических импортов
-    products = relationship("Product", back_populates="pharmacy", lazy="select")
-    booking_orders = relationship("BookingOrder", back_populates="pharmacy", cascade="all, delete-orphan")
-    api_config = relationship("PharmacyAPIConfig", back_populates="pharmacy", uselist=False, cascade="all, delete-orphan")
 
 class Product(Base):
     __tablename__ = "products"
@@ -54,11 +48,11 @@ class Product(Base):
     distributor = Column(String(255), nullable=False, default="")
     internal_id = Column(String(255), nullable=False, default="")
     pharmacy_id = Column(UUID(as_uuid=True), ForeignKey("pharmacies.uuid"), index=True)
-    updated_at = Column(DateTime, default=get_utc_now_naive, onupdate=get_utc_now_naive)
+    updated_at = Column(DateTime, nullable=False)
 
     search_vector = Column(TSVECTOR, nullable=True)
 
-    # Используем строковую ссылку
+    # Use string reference
     pharmacy = relationship("Pharmacy", back_populates="products", lazy="select")
 
     __table_args__ = (
