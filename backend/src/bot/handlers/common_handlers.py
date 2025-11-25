@@ -6,6 +6,7 @@ from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from db.qa_models import User
 from utils.time_utils import get_utc_now_naive
+from bot.handlers.qa_states import UserQAStates
 import logging
 
 logger = logging.getLogger(__name__)
