@@ -327,7 +327,12 @@ async def answer_question_callback(
 
 
 @router.callback_query(F.data == "view_questions")
-async def view_questions_callback(callback: CallbackQuery, is_pharmacist: bool):
+async def view_questions_callback(
+    callback: CallbackQuery,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: Pharmacist
+):
     """Быстрый просмотр вопросов через кнопку"""
     if not is_pharmacist:
         await callback.answer("❌ Эта функция доступна только фармацевтам", show_alert=True)
@@ -342,8 +347,8 @@ async def view_questions_callback(callback: CallbackQuery, is_pharmacist: bool):
         chat=callback.message.chat,
         text="/questions"
     )
-    # Вызываем обработчик команды /questions
-    await cmd_questions(fake_message, callback.bot, is_pharmacist=is_pharmacist)
+    # Вызываем обработчик команды /questions с правильными аргументами
+    await cmd_questions(fake_message, db, is_pharmacist, pharmacist)
 
 
 @router.message(QAStates.waiting_for_answer)

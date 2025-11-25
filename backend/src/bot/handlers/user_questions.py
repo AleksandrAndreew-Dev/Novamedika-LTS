@@ -10,6 +10,7 @@ from db.qa_models import Question
 from db.qa_models import Answer
 from db.qa_models import Pharmacist
 from bot.handlers.qa_states import UserQAStates
+from bot.handlers.common_handlers import get_user_keyboard
 import logging
 from datetime import datetime, timedelta
 from utils.time_utils import get_utc_now_naive
