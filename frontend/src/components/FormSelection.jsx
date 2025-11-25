@@ -23,7 +23,7 @@ export default function FormSelection({
   };
 
   const handleKeyPress = (combination, event) => {
-    if (event.key === 'Enter' || event.key === ' ') {
+    if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       handleCombinationClick(combination);
     }
@@ -84,7 +84,11 @@ export default function FormSelection({
           </div>
 
           {/* Combinations as Cards */}
-          <div className="space-y-3" role="list" aria-label="Доступные варианты препаратов">
+          <div
+            className="space-y-3"
+            role="list"
+            aria-label="Доступные варианты препаратов"
+          >
             {availableCombinations.map((combo, index) => {
               const comboKey = `${combo.name}|${combo.form}|${combo.manufacturer}|${combo.country}`;
               const isSelected = selectedCombination === comboKey;
@@ -94,19 +98,23 @@ export default function FormSelection({
                   key={index}
                   className={`border rounded-xl p-4 transition-all cursor-pointer min-h-[60px] ${
                     isSelected
-                      ? 'border-telegram-primary bg-blue-50 shadow-sm ring-2 ring-telegram-primary'
-                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      ? "border-telegram-primary bg-blue-50 shadow-sm ring-2 ring-telegram-primary"
+                      : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                   } focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:ring-offset-2`}
                   onClick={() => handleCombinationClick(combo)}
                   onKeyDown={(e) => handleKeyPress(combo, e)}
                   tabIndex={0}
                   role="button"
-                  aria-label={`Выбрать ${combo.name}, форма: ${combo.form || "не указана"}, производитель: ${combo.manufacturer || "не указан"}`}
+                  aria-label={`Выбрать ${combo.name}, форма: ${
+                    combo.form || "не указана"
+                  }, производитель: ${combo.manufacturer || "не указан"}`}
                   aria-pressed={isSelected}
                 >
                   <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
                     <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900 text-base md:text-lg">{combo.name}</h3>
+                      <h3 className="font-semibold text-gray-900 text-base md:text-lg">
+                        {combo.name}
+                      </h3>
                       <div className="flex flex-wrap gap-1 md:gap-2 mt-2">
                         <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 min-h-[24px]">
                           {combo.form || "Не указана"}
@@ -127,12 +135,17 @@ export default function FormSelection({
                         {combo.min_price} - {combo.max_price} Br
                       </div>
                       {isSelected && loading && (
-                        <div className="flex items-center justify-start sm:justify-end mt-2" aria-live="polite">
+                        <div
+                          className="flex items-center justify-start sm:justify-end mt-2"
+                          aria-live="polite"
+                        >
                           <div
                             className="animate-spin rounded-full h-5 w-5 border-b-2 border-telegram-primary"
                             aria-hidden="true"
                           ></div>
-                          <span className="text-sm text-gray-700 ml-2">Загрузка результатов...</span>
+                          <span className="text-sm text-gray-700 ml-2">
+                            Загрузка результатов...
+                          </span>
                         </div>
                       )}
                     </div>
@@ -161,16 +174,16 @@ export default function FormSelection({
                 </svg>
               </div>
               <h3 className="text-lg font-medium text-gray-900 mb-2">
-                Варианты не найдены
+                Ничего не найдено
               </h3>
               <p className="text-gray-800 text-sm mb-4">
-                Попробуйте изменить параметры поиска
+                Попробуйте изменить название препарата или город поиска
               </p>
               <button
                 onClick={onBack}
                 className="bg-telegram-primary text-gray-900 font-medium py-3 px-6 rounded-lg transition-colors hover:bg-blue-600 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:ring-offset-2 min-h-[44px]"
               >
-                Вернуться к поиску
+                Изменить поиск
               </button>
             </div>
           )}

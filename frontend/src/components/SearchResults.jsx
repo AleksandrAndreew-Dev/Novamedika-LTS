@@ -669,18 +669,17 @@ export default function SearchResults({
                 </svg>
               </div>
               <h3 className="text-lg font-medium text-gray-900 mb-2">
-                Результаты не найдены
+                В выбранной аптеке нет этого препарата
               </h3>
               <p className="text-gray-800 text-sm mb-6">
-                Попробуйте изменить параметры поиска или выбрать другую форму
-                препарата
+                Попробуйте выбрать другую форму или изменить параметры поиска
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <button
                   onClick={onBackToForms}
                   className="bg-telegram-primary text-gray-900 font-medium py-3 px-6 rounded-lg transition-colors hover:bg-blue-600 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:ring-offset-2 min-h-[44px]"
                 >
-                  Изменить форму
+                  Выбрать другую форму
                 </button>
                 <button
                   onClick={onNewSearch}
