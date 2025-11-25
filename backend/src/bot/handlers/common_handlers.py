@@ -35,7 +35,7 @@ def get_user_keyboard():
 
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool, pharmacist: object):
-    """Улучшенный старт с кнопками"""
+    """Упрощенный старт"""
     await state.clear()
 
     if is_pharmacist and pharmacist:
@@ -43,24 +43,18 @@ async def cmd_start(message: Message, state: FSMContext, db: AsyncSession, is_ph
         pharmacy_name = pharmacist.pharmacy_info.get('name', 'Не указана')
 
         await message.answer(
-            f"👨‍⚕️ <b>Добро пожаловать в панель фармацевта!</b>\n\n"
-            f"📊 <b>Ваш статус:</b> {status_text}\n"
-            f"🏥 <b>Аптека:</b> {pharmacy_name}\n\n"
-            "💡 <b>Используйте кнопки ниже или команды:</b>\n"
-            "• /online - перейти в онлайн\n"
-            "• /questions - просмотреть вопросы\n"
-            "• /help - подробная справка",
+            f"👨‍⚕️ <b>Панель фармацевта</b>\n\n"
+            f"🏥 {pharmacy_name}\n"
+            f"📊 Статус: {status_text}\n\n"
+            "Выберите действие:",
             parse_mode="HTML",
             reply_markup=get_pharmacist_keyboard()
         )
     else:
         await message.answer(
-            "👋 <b>Добро пожаловать в Novamedika Q&A Bot!</b>\n\n"
-            "Я помогу вам получить консультации от профессиональных фармацевтов.\n\n"
-            "💡 <b>Выберите действие:</b>\n"
-            "• Задать вопрос фармацевту\n"
-            "• Посмотреть свои вопросы\n"
-            "• Если вы фармацевт - зарегистрируйтесь",
+            "👋 <b>Novamedika Q&A Bot</b>\n\n"
+            "Получите консультацию профессионального фармацевта!\n\n"
+            "Выберите действие:",
             parse_mode="HTML",
             reply_markup=get_user_keyboard()
         )
@@ -177,17 +171,18 @@ async def view_questions_callback(callback: CallbackQuery, is_pharmacist: bool):
     await callback.message.answer("📋 Используйте команду /questions для просмотра списка вопросов")
 
 @router.callback_query(F.data == "ask_question")
-async def ask_question_callback(callback: CallbackQuery, is_pharmacist: bool):
-    """Быстрый вопрос через кнопку"""
+async def ask_question_callback(callback: CallbackQuery, state: FSMContext, is_pharmacist: bool):
+    """Непосредственный переход к вводу вопроса"""
     if is_pharmacist:
         await callback.answer("ℹ️ Вы фармацевт. Используйте /questions для ответов на вопросы.", show_alert=True)
         return
 
     await callback.answer()
+    await state.set_state(UserQAStates.waiting_for_question)
     await callback.message.answer(
-        "💬 Чтобы задать вопрос, используйте команду:\n"
-        "<code>/ask</code>\n\n"
-        "Или просто напишите ваш вопрос после нажатия кнопки:",
+        "💬 <b>Напишите ваш вопрос фармацевту:</b>\n\n"
+        "Опишите вашу проблему, и мы найдем решение!\n\n"
+        "<i>Для отмены используйте /cancel</i>",
         parse_mode="HTML"
     )
 
@@ -271,7 +266,7 @@ async def handle_user_message(
     pharmacist: object,
     user: User
 ):
-    """Обработка текстовых сообщений без команд - улучшенный онбоардинг"""
+    """Упрощенная обработка текстовых сообщений"""
 
     # Пропускаем команды
     if message.text.startswith('/'):
@@ -284,35 +279,21 @@ async def handle_user_message(
         logger.debug(f"Message in state {current_state} ignored by handle_user_message, user: {message.from_user.id}")
         return
 
-    logger.info(f"Handle user message from {message.from_user.id} with no state, user: {user.uuid}")
-
-    # Улучшенное приветственное сообщение
+    # Упрощенное приветственное сообщение
     if is_pharmacist and pharmacist:
         status_text = "🟢 онлайн" if pharmacist.is_online else "🔴 офлайн"
         await message.answer(
             f"👨‍⚕️ <b>Панель фармацевта</b>\n\n"
-            f"Ваш текущий статус: <b>{status_text}</b>\n\n"
-            "💡 <b>Быстрые команды:</b>\n"
-            "• /online - принимать вопросы\n"
-            "• /questions - список вопросов\n"
-            "• /status - ваш статус\n"
-            "• /help - полная справка\n\n"
-            "Чтобы начать работу, перейдите в онлайн!",
+            f"Статус: <b>{status_text}</b>\n\n"
+            "Используйте кнопки ниже для работы:",
             parse_mode="HTML",
             reply_markup=get_pharmacist_keyboard()
         )
     else:
         await message.answer(
             "👋 <b>Novamedika Q&A Bot</b>\n\n"
-            "Я помогу вам получить консультацию фармацевта.\n\n"
-            "💡 <b>Чтобы задать вопрос:</b>\n"
-            "1. Нажмите /ask\n"
-            "2. Опишите вашу проблему\n"
-            "3. Получите профессиональный ответ\n\n"
-            "📋 <b>Другие команды:</b>\n"
-            "• /my_questions - ваши вопросы\n"
-            "• /help - подробная инструкция\n\n"
-            "Фармацевты ответят вам в ближайшее время! 🕒",
+            "Задайте вопрос фармацевту и получите профессиональную консультацию!\n\n"
+            "Выберите действие:",
             parse_mode="HTML",
             reply_markup=get_user_keyboard()
         )

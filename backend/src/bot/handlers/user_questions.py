@@ -22,25 +22,18 @@ router = Router()
 
 @router.message(Command("ask"))
 async def cmd_ask(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool):
-    """Начало процесса задания вопроса"""
+    """Упрощенное начало процесса задания вопроса"""
     logger.info(f"Command /ask from user {message.from_user.id}, is_pharmacist: {is_pharmacist}")
 
     if is_pharmacist:
-        await message.answer(
-            "ℹ️ Вы фармацевт. Используйте /questions для ответов на вопросы.",
-            reply_markup=get_pharmacist_keyboard()  # Показываем клавиатуру фармацевта
-        )
+        await message.answer("ℹ️ Вы фармацевт. Используйте /questions для ответов на вопросы.")
         return
 
     await state.set_state(UserQAStates.waiting_for_question)
     await message.answer(
-        "💬 <b>Задайте ваш вопрос фармацевту</b>\n\n"
-        "Опишите подробно вашу проблему или вопрос, и фармацевт скоро ответит.\n\n"
-        "<i>Примеры хороших вопросов:</i>\n"
-        "• «Какое лекарство можно принимать от головной боли при беременности?»\n"
-        "• «Чем можно заменить препарат X, если его нет в аптеке?»\n"
-        "• «Какие есть аналоги препарата Y подешевле?»\n\n"
-        "Для отмены используйте /cancel",
+        "💬 <b>Напишите ваш вопрос фармацевту:</b>\n\n"
+        "Опишите вашу проблему, и мы найдем решение!\n\n"
+        "<i>Для отмены используйте /cancel</i>",
         parse_mode="HTML"
     )
 
@@ -313,7 +306,6 @@ async def process_clarification(
         await message.answer("❌ Ошибка при отправке уточнения.")
         await state.clear()
 
-# В bot/handlers/user_questions.py - обновить функцию process_user_question
 @router.message(UserQAStates.waiting_for_question)
 async def process_user_question(
     message: Message,
@@ -322,8 +314,8 @@ async def process_user_question(
     is_pharmacist: bool,
     user: User
 ):
-    """Обработка вопроса от пользователя - УЛУЧШЕННАЯ ВЕРСИЯ"""
-    logger.info(f"Processing question from user {message.from_user.id}, state: {await state.get_state()}")
+    """Упрощенная обработка вопроса от пользователя"""
+    logger.info(f"Processing question from user {message.from_user.id}")
 
     if is_pharmacist:
         await message.answer("ℹ️ Вы фармацевт. Используйте /questions для ответов на вопросы.")
@@ -332,9 +324,6 @@ async def process_user_question(
 
     try:
         # Создаем вопрос
-        from db.qa_models import Question
-        from utils.time_utils import get_utc_now_naive
-
         question = Question(
             text=message.text,
             user_id=user.uuid,
@@ -347,7 +336,7 @@ async def process_user_question(
         await db.refresh(question)
         logger.info(f"Question created for user {user.telegram_id}, question_id: {question.uuid}")
 
-        # УВЕДОМЛЯЕМ ВСЕХ АКТИВНЫХ ФАРМАЦЕВТОВ (не только онлайн)
+        # Уведомляем фармацевтов
         try:
             from bot.services.notification_service import notify_pharmacists_about_new_question
             await notify_pharmacists_about_new_question(question, db)
@@ -355,18 +344,22 @@ async def process_user_question(
             logger.error(f"Error in notification service: {e}")
 
         await message.answer(
-            "✅ Ваш вопрос отправлен фармацевтам!\n\n"
-            f"📊 Статус: Ожидание ответа\n"
-            f"💬 Ваш вопрос: {message.text}\n\n"
-            "Вы получите уведомление, когда фармацевт ответит на ваш вопрос.\n"
-            "Используйте /my_questions чтобы посмотреть статус ваших вопросов."
+            "✅ <b>Ваш вопрос отправлен!</b>\n\n"
+            "Фармацевты уже изучают ваш запрос. Вы получите ответ в ближайшее время.\n\n"
+            "Используйте «Мои вопросы» чтобы отслеживать статус.",
+            parse_mode="HTML",
+            reply_markup=get_user_keyboard()
         )
 
         await state.clear()
 
     except Exception as e:
         logger.error(f"Error processing question from user {message.from_user.id}: {e}", exc_info=True)
-        await message.answer("❌ Ошибка при отправке вопроса. Попробуйте позже.")
+        await message.answer(
+            "❌ <b>Не удалось отправить вопрос</b>\n\n"
+            "Попробуйте еще раз через несколько минут.",
+            parse_mode="HTML"
+        )
         await state.clear()
 
 @router.message(UserQAStates.in_dialog)
