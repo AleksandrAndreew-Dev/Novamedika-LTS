@@ -4,8 +4,10 @@ from sqlalchemy.dialects.postgresql import UUID, TSVECTOR
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 
-from db.database import Base
+
 from utils.time_utils import get_utc_now_naive
+
+from .base import Base
 
 class Pharmacy(Base):
     __tablename__ = "pharmacies"
@@ -28,8 +30,8 @@ class Pharmacy(Base):
 
     # Используем строковые ссылки для избежания циклических импортов
     products = relationship("Product", back_populates="pharmacy", lazy="select")
-    booking_orders = relationship("BookingOrder", back_populates="pharmacy", lazy="select")
-    api_config = relationship("PharmacyAPIConfig", back_populates="pharmacy", uselist=False, lazy="select")
+    booking_orders = relationship("BookingOrder", back_populates="pharmacy", cascade="all, delete-orphan")
+    api_config = relationship("PharmacyAPIConfig", back_populates="pharmacy", uselist=False, cascade="all, delete-orphan")
 
 class Product(Base):
     __tablename__ = "products"

@@ -2,14 +2,9 @@ import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
-from db.database import init_models
-from db import models, booking_models
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware  # ДОБАВИТЬ
-from aiogram import Bot, Dispatcher
-from aiogram.types import BotCommand
-from aiogram.fsm.storage.memory import MemoryStorage
+from fastapi.middleware.cors import CORSMiddleware
 
 from bot.core import bot_manager
 from bot.handlers import (
@@ -19,7 +14,7 @@ from bot.handlers import (
     qa_handlers_router,
 )
 from bot.middleware.role_middleware import RoleMiddleware
-from db.database import async_session_maker
+from db.database import init_models, async_session_maker
 from bot.middleware.db import DbMiddleware
 
 from routers import orders as booking_router
