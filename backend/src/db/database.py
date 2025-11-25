@@ -1,23 +1,36 @@
 # db/database.py
+import os
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 import asyncpg
 import logging
 
-# Import Base and all models to ensure they are registered
-from .base import Base
-from . import models, booking_models, qa_models  # This ensures all models are imported
-
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = "postgresql+asyncpg://novamedika:novamedika@postgres:5432/novamedika_prod"
+# Используем переменную из окружения или fallback
+DATABASE_URL = os.getenv('DATABASE_URL', "postgresql+asyncpg://novamedika:novamedika@postgres:5432/novamedika_prod")
+ASYNCPG_DATABASE_URL = os.getenv('ASYNCPG_DATABASE_URL', "postgresql://novamedika:novamedika@postgres:5432/novamedika_prod")
 
-# Create async engine
-engine = create_async_engine(DATABASE_URL, echo=True)
-async_session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+# Создаем engine и sessionmaker при первом вызове
+_engine = None
+_async_session_maker = None
+
+def get_engine():
+    global _engine
+    if _engine is None:
+        _engine = create_async_engine(DATABASE_URL, echo=True)
+    return _engine
+
+def get_async_sessionmaker():
+    global _async_session_maker
+    if _async_session_maker is None:
+        engine = get_engine()
+        _async_session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    return _async_session_maker
 
 async def init_models():
     """Initialize database models"""
     try:
+        engine = get_engine()
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
             logger.info("Database models initialized successfully")
@@ -26,11 +39,14 @@ async def init_models():
         raise
 
 async def get_db():
+    async_session_maker = get_async_sessionmaker()
     async with async_session_maker() as session:
         yield session
 
 async def get_async_connection():
     """Get asyncpg connection"""
-    return await asyncpg.connect(
-        "postgresql://novamedika:novamedika@postgres:5432/novamedika_prod"
-    )
+    return await asyncpg.connect(ASYNCPG_DATABASE_URL)
+
+# Глобальные переменные для обратной совместимости
+engine = get_engine()
+async_session_maker = get_async_sessionmaker()

@@ -115,18 +115,29 @@ services:
       - CORS_ORIGINS=${CORS_ORIGINS}
       - PYTHONUNBUFFERED=1
       - DATABASE_URL=${DATABASE_URL}
+      - ASYNCPG_DATABASE_URL=${ASYNCPG_DATABASE_URL}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/0
-    command: ["/app/.venv/bin/celery", "-A", "tasks.tasks_increment", "worker", "--loglevel=info", "--concurrency=2", "--pool=solo"]
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+    command:
+      - /app/.venv/bin/celery
+      - -A
+      - tasks.tasks_increment
+      - worker
+      - --loglevel=info
+      - --concurrency=1
+      - --pool=solo
+      - --without-gossip
+      - --without-mingle
+      - --without-heartbeat
     networks:
       - traefik-public
     depends_on:
       - postgres
       - redis
     healthcheck:
-      test: ["CMD-SHELL", "/app/.venv/bin/python -m celery -A tasks.tasks_increment inspect ping -d celery@$$(hostname) || exit 1"]
+      test: ["CMD-SHELL", "/app/.venv/bin/celery -A tasks.tasks_increment inspect ping -d celery@$$(hostname) || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

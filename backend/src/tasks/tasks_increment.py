@@ -98,21 +98,24 @@ def process_csv_incremental(
 ):
     """Синхронная обертка для асинхронной функции с правильным управлением event loop"""
     try:
-        # Создаем новый event loop для каждой задачи
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        try:
-            result = loop.run_until_complete(
-                process_csv_incremental_async(file_content, pharmacy_name, pharmacy_number)
-            )
-            return result
-        finally:
-            loop.close()
-
+        # Используем asyncio.run вместо ручного управления loop
+        return asyncio.run(
+            process_csv_incremental_async_wrapper(file_content, pharmacy_name, pharmacy_number)
+        )
     except Exception as e:
         logger.error(f"Error in process_csv_incremental wrapper: {str(e)}")
         raise self.retry(exc=e, countdown=60)
+
+async def process_csv_incremental_async_wrapper(
+    file_content: str, pharmacy_name: str, pharmacy_number: str
+):
+    """Обертка для правильной инициализации и выполнения асинхронного кода"""
+    # Инициализируем модели в текущем event loop
+    from db.database import init_models
+    await init_models()
+
+    # Выполняем основную логику
+    return await process_csv_incremental_async(file_content, pharmacy_name, pharmacy_number)
 
 async def process_csv_incremental_async(
     file_content: str, pharmacy_name: str, pharmacy_number: str
@@ -559,10 +562,9 @@ async def execute_incremental_changes_async(
     stats = {"added": 0, "updated": 0, "removed": 0}
 
     try:
-        # Используем отдельное соединение для массовых операций
-        conn = await asyncpg.connect(
-            "postgresql://novamedika:novamedika@postgres:5432/novamedika_prod"
-        )
+        # Используем переменную из окружения
+        database_url = os.getenv('ASYNCPG_DATABASE_URL', "postgresql://novamedika:novamedika@postgres:5432/novamedika_prod")
+        conn = await asyncpg.connect(database_url)
 
         try:
             # Удаление продуктов пакетами
