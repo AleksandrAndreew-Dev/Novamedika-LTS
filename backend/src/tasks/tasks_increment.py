@@ -95,18 +95,24 @@ def validate_numeric_value(
 def process_csv_incremental(
     self, file_content: str, pharmacy_name: str, pharmacy_number: str
 ):
-    """Синхронная обертка для асинхронной функции"""
+    """Синхронная обертка для асинхронной функции с правильным управлением event loop"""
     try:
-        loop = asyncio.get_event_loop()
-        result = loop.run_until_complete(
-            process_csv_incremental_async(file_content, pharmacy_name, pharmacy_number)
-        )
-        return result
+        # Создаем новый event loop для каждой задачи
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        try:
+            result = loop.run_until_complete(
+                process_csv_incremental_async(file_content, pharmacy_name, pharmacy_number)
+            )
+            return result
+        finally:
+            loop.close()
+
     except Exception as e:
         logger.error(f"Error in process_csv_incremental wrapper: {str(e)}")
         raise self.retry(exc=e, countdown=60)
 
-# tasks_increment.py - обновленная версия (только измененные функции)
 async def process_csv_incremental_async(
     file_content: str, pharmacy_name: str, pharmacy_number: str
 ):
@@ -116,6 +122,7 @@ async def process_csv_incremental_async(
         if not normalized_name:
             raise ValueError(f"Invalid pharmacy: {pharmacy_name}")
 
+        # Создаем новую сессию для каждой задачи
         async with async_session_maker() as session:
             # Ищем аптеку по названию и номеру
             result = await session.execute(
@@ -138,7 +145,6 @@ async def process_csv_incremental_async(
                     name=normalized_name,
                     pharmacy_number=str(pharmacy_number),
                     chain=normalized_name,
-                    # Остальные поля остаются пустыми для заполнения через отдельный API
                     city="",
                     address="",
                     phone="",
@@ -180,7 +186,7 @@ async def process_csv_incremental_async(
                 "pharmacy_id": str(pharmacy.uuid),
                 "stats": stats,
                 "processed_rows": len(csv_data),
-                "pharmacy_created": not pharmacy,  # Флаг создания новой аптеки
+                "pharmacy_created": not pharmacy,
             }
 
     except Exception as e:
@@ -543,14 +549,18 @@ async def execute_incremental_changes_async(
     to_remove: List[uuid.UUID],
     pharmacy_uuid: uuid.UUID,
 ) -> Dict:
-    """Асинхронное выполнение инкрементальных изменений с пакетной обработкой"""
+    """Асинхронное выполнение инкрементальных изменений с правильным управлением соединениями"""
     stats = {"added": 0, "updated": 0, "removed": 0}
-    conn = await get_async_connection()
+
+    # Используем отдельное соединение для массовых операций
+    conn = await asyncpg.connect(
+        "postgresql://novamedika:novamedika@postgres:5432/novamedika_prod"
+    )
 
     try:
         # Удаление продуктов пакетами
         if to_remove:
-            batch_size = 10000
+            batch_size = 1000  # Уменьшим размер батча
             for i in range(0, len(to_remove), batch_size):
                 batch = to_remove[i : i + batch_size]
                 placeholders = ",".join([f"${j+1}" for j in range(len(batch))])
@@ -566,11 +576,10 @@ async def execute_incremental_changes_async(
 
         # Обновление продуктов пакетами
         if to_update:
-            batch_size = 500
+            batch_size = 100  # Уменьшим размер батча для обновлений
             for i in range(0, len(to_update), batch_size):
                 batch = to_update[i : i + batch_size]
                 for product in batch:
-                    # Для полей даты/времени используем объекты напрямую, но преобразуем aware datetime в naive
                     updated_at = product["updated_at"]
                     if updated_at and updated_at.tzinfo is not None:
                         updated_at = updated_at.replace(tzinfo=None)
@@ -601,8 +610,8 @@ async def execute_incremental_changes_async(
                         float(product["retail_price"]),
                         product["distributor"],
                         product["internal_id"],
-                        updated_at,  # Передаем объект datetime (naive)
-                        product["existing_uuid"],
+                        updated_at,
+                        str(product["existing_uuid"]),
                         str(pharmacy_uuid),
                     )
             stats["updated"] = len(to_update)
@@ -610,7 +619,7 @@ async def execute_incremental_changes_async(
 
         # Добавление продуктов пакетами
         if to_add:
-            batch_size = 500
+            batch_size = 100  # Уменьшим размер батча для вставок
             for i in range(0, len(to_add), batch_size):
                 batch = to_add[i : i + batch_size]
                 values_placeholders = []
@@ -618,49 +627,22 @@ async def execute_incremental_changes_async(
                 param_counter = 1
 
                 for product in batch:
-
-                    # Гарантируем, что expiry_date всегда установлен
                     if product["expiry_date"] is None:
                         product["expiry_date"] = date(2099, 12, 31)
-                        logger.warning(
-                            f"Fixed missing expiry_date for product: {product['name']}"
-                        )
+
                     placeholders = []
                     for field in [
-                        "uuid",
-                        "name",
-                        "form",
-                        "manufacturer",
-                        "country",
-                        "serial",
-                        "price",
-                        "quantity",
-                        "total_price",
-                        "expiry_date",
-                        "category",
-                        "import_date",
-                        "internal_code",
-                        "wholesale_price",
-                        "retail_price",
-                        "distributor",
-                        "internal_id",
-                        "pharmacy_id",
-                        "updated_at",
+                        "uuid", "name", "form", "manufacturer", "country", "serial",
+                        "price", "quantity", "total_price", "expiry_date", "category",
+                        "import_date", "internal_code", "wholesale_price", "retail_price",
+                        "distributor", "internal_id", "pharmacy_id", "updated_at",
                     ]:
                         placeholders.append(f"${param_counter}")
-
                         value = product[field]
-                        # Для updated_at преобразуем aware datetime в naive
+
                         if field == "updated_at" and value and value.tzinfo is not None:
                             value = value.replace(tzinfo=None)
-                        # Преобразуем числовые поля
-                        elif field in [
-                            "price",
-                            "quantity",
-                            "total_price",
-                            "wholesale_price",
-                            "retail_price",
-                        ]:
+                        elif field in ["price", "quantity", "total_price", "wholesale_price", "retail_price"]:
                             value = float(value)
 
                         params.append(value)
