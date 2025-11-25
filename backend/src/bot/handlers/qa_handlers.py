@@ -326,6 +326,26 @@ async def answer_question_callback(
         await callback.answer("❌ Ошибка при обработке запроса", show_alert=True)
 
 
+@router.callback_query(F.data == "view_questions")
+async def view_questions_callback(callback: CallbackQuery, is_pharmacist: bool):
+    """Быстрый просмотр вопросов через кнопку"""
+    if not is_pharmacist:
+        await callback.answer("❌ Эта функция доступна только фармацевтам", show_alert=True)
+        return
+
+    await callback.answer()
+    # Создаем фейковое сообщение для вызова команды /questions
+    from aiogram.types import Message
+    fake_message = Message(
+        message_id=callback.message.message_id,
+        date=callback.message.date,
+        chat=callback.message.chat,
+        text="/questions"
+    )
+    # Вызываем обработчик команды /questions
+    await cmd_questions(fake_message, callback.bot, is_pharmacist=is_pharmacist)
+
+
 @router.message(QAStates.waiting_for_answer)
 async def process_answer_text(
     message: Message,

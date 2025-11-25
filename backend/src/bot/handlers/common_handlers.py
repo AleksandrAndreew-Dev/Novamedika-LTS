@@ -28,7 +28,8 @@ def get_user_keyboard():
         inline_keyboard=[
             [InlineKeyboardButton(text="💬 Задать вопрос", callback_data="ask_question")],
             [InlineKeyboardButton(text="📖 Мои вопросы", callback_data="my_questions")],
-            [InlineKeyboardButton(text="👨‍⚕️ Я фарм специалист", callback_data="i_am_pharmacist")]
+            [InlineKeyboardButton(text="👨‍⚕️ Я фарм специалист", callback_data="i_am_pharmacist")],
+            [InlineKeyboardButton(text="❓ Помощь", callback_data="user_help")]
         ]
     )
 
@@ -199,6 +200,27 @@ async def my_questions_callback(callback: CallbackQuery):
         "<code>/my_questions</code>\n\n"
         "чтобы посмотреть историю ваших вопросов и ответы на них",
         parse_mode="HTML"
+    )
+
+
+@router.callback_query(F.data == "user_help")
+async def user_help_callback(callback: CallbackQuery):
+    """Помощь для пользователей через кнопку"""
+    await callback.answer()
+    await callback.message.answer(
+        "👋 <b>Помощь для пользователей</b>\n\n"
+        "📋 <b>Основные команды:</b>\n"
+        "• /ask - задать вопрос фармацевту\n"
+        "• /my_questions - история вопросов и ответов\n"
+        "• /clarify - уточнить предыдущий вопрос\n\n"
+        "💊 <b>Процесс консультации:</b>\n"
+        "1. Нажмите «Задать вопрос»\n"
+        "2. Опишите проблему подробно\n"
+        "3. Фармацевты получат уведомление\n"
+        "4. Вы получите профессиональный ответ\n\n"
+        "👨‍⚕️ <b>Если вы фармацевт</b> - нажмите «Я фарм специалист»",
+        parse_mode="HTML",
+        reply_markup=get_user_keyboard()
     )
 
 @router.callback_query(F.data == "pharmacist_help")
