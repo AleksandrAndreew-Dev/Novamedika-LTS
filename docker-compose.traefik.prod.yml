@@ -1,7 +1,4 @@
-
-
 services:
-
   traefik:
     image: traefik:v3.6.2
     container_name: traefik-prod
@@ -111,6 +108,8 @@ services:
   celery_worker:
     image: ghcr.io/aleksandrandreew-dev/novamedika-lts/backend:latest
     container_name: celery-worker-prod
+    env_file:
+      - .env
     environment:
       - ENVIRONMENT=production
       - CORS_ORIGINS=${CORS_ORIGINS}
@@ -118,14 +117,16 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-    command: ["/app/.venv/bin/python","-m","celery","-A","tasks.tasks_increment.celery","worker","--loglevel=info"]
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/0
+    command: ["/app/.venv/bin/celery", "-A", "tasks.tasks_increment", "worker", "--loglevel=info", "--concurrency=2", "--pool=solo"]
     networks:
       - traefik-public
     depends_on:
       - postgres
       - redis
     healthcheck:
-      test: ["CMD-SHELL", "/app/.venv/bin/python -m celery -A tasks.tasks_increment.celery inspect ping -d celery@$(hostname) || exit 1"]
+      test: ["CMD-SHELL", "/app/.venv/bin/python -m celery -A tasks.tasks_increment inspect ping -d celery@$$(hostname) || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -135,21 +136,29 @@ services:
   flower:
     image: ghcr.io/aleksandrandreew-dev/novamedika-lts/backend:latest
     container_name: flower-prod
+    env_file:
+      - .env
     environment:
-    - ENVIRONMENT=production
-    - CORS_ORIGINS=${CORS_ORIGINS}
-    - PYTHONUNBUFFERED=1
-    - DATABASE_URL=${DATABASE_URL}
-    - REDIS_PASSWORD=${REDIS_PASSWORD}
-    - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-    - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
-    - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/0
-    command: ["/app/.venv/bin/python","-m","celery","-A","tasks.tasks_increment.celery","flower","--port=5555","--broker=redis://:${REDIS_PASSWORD}@redis:6379/0"]
+      - ENVIRONMENT=production
+      - CORS_ORIGINS=${CORS_ORIGINS}
+      - PYTHONUNBUFFERED=1
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/0
+    command: ["/app/.venv/bin/celery", "-A", "tasks.tasks_increment", "flower", "--port=5555", "--broker=redis://:${REDIS_PASSWORD}@redis:6379/0"]
     networks:
       - traefik-public
     depends_on:
       - redis
       - celery_worker
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.flower.rule=Host(`flower.${DOMAIN}`)"
+      - "traefik.http.routers.flower.entrypoints=websecure"
+      - "traefik.http.routers.flower.tls.certresolver=letsencrypt"
+      - "traefik.http.services.flower.loadbalancer.server.port=5555"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5555/"]
       interval: 30s

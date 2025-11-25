@@ -1,7 +1,10 @@
 # celery_app.py
 import os
 from celery import Celery
-from db.init_celery import initialize_celery_models
+import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 
 redis_password = os.getenv('REDIS_PASSWORD', '')
 
@@ -16,26 +19,30 @@ celery = Celery(
     enable_utc=True,
 )
 
-# Улучшенная инициализация моделей для Celery
+# Улучшенная инициализация моделей
 @celery.on_after_configure.connect
 def setup_models(sender, **kwargs):
-    import asyncio
+    """Инициализация моделей при запуске Celery"""
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
+        # Импортируем здесь, чтобы избежать циклических импортов
+        from db.database import init_models
+
+        # Создаем новую event loop для инициализации
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+        except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
+        # Запускаем инициализацию
         if loop.is_running():
-            asyncio.create_task(initialize_celery_models_async())
+            asyncio.create_task(init_models())
         else:
-            loop.run_until_complete(initialize_celery_models_async())
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(initialize_celery_models_async())
+            loop.run_until_complete(init_models())
 
-async def initialize_celery_models_async():
-    """Асинхронная инициализация моделей для Celery"""
-    from db.database import init_models
-    await init_models()
+        logger.info("Database models initialized successfully in Celery")
+    except Exception as e:
+        logger.error(f"Error initializing models in Celery: {e}")
