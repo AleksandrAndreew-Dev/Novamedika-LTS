@@ -72,7 +72,7 @@ export default function SearchResults({
       }
 
       // Базовая валидация телефона
-      const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/;
+      const phoneRegex = /^[+]?[1-9][\d]{0,15}$/; // Исправлено: убрано ненужное экранирование
       const cleanPhone = bookingData.customer_phone.replace(/[^\d+]/g, "");
       if (!phoneRegex.test(cleanPhone)) {
         throw new Error("Введите корректный номер телефона");
