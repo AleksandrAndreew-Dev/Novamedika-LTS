@@ -124,7 +124,9 @@ services:
       - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/0
       - CELERY_WORKER_CONCURRENCY=2
       - CELERY_WORKER_PREFETCH_MULTIPLIER=1
-      - PYTHONPATH=/app/src  # ДОБАВЬТЕ ЭТУ СТРОКУ
+      - PYTHONPATH=/app/src
+      - CELERY_WORKER_MAX_TASKS_PER_CHILD=50  # Перезапускать worker после 50 задач
+      - CELERY_TASK_ALWAYS_EAGER=False
     command:
       - /app/.venv/bin/celery
       - -A
@@ -138,6 +140,7 @@ services:
       - --without-heartbeat
       - --task-events
       - --prefetch-multiplier=1
+      - --max-tasks-per-child=50
     networks:
       - traefik-public
     depends_on:

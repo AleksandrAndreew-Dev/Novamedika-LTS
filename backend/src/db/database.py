@@ -77,16 +77,25 @@ async def execute_in_transaction(session: AsyncSession, query, **params):
 
 # database.py - ДОБАВЬТЕ ЭТИ ФУНКЦИИ
 
+# db/database.py - ДОБАВЬТЕ ЭТИ ФУНКЦИИ
+
 async def dispose_engine():
-    """Явно закрывает все соединения engine"""
+    """Явно закрывает все соединения engine с обработкой ошибок"""
     global _engine, _async_session_maker
     if _engine:
-        await _engine.dispose()
-        _engine = None
-        _async_session_maker = None
+        try:
+            await _engine.dispose()
+            logger.info("Engine disposed successfully")
+        except Exception as e:
+            logger.error(f"Error disposing engine: {e}")
+        finally:
+            _engine = None
+            _async_session_maker = None
 
 def reset_engine():
     """Сбрасывает engine (для использования после fork)"""
     global _engine, _async_session_maker
+    if _engine:
+        logger.info("Resetting engine after fork")
     _engine = None
     _async_session_maker = None
