@@ -166,7 +166,7 @@ async def cmd_status(
 async def cmd_questions(
     message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist
 ):
-    """Показать вопросы с пагинацией"""
+    """Показать вопросы с пагинацией - ВКЛЮЧАЯ УТОЧНЕНИЯ"""
     if not is_pharmacist or not pharmacist:
         await message.answer("❌ Эта команда доступна только фармацевтам")
         return
@@ -188,10 +188,27 @@ async def cmd_questions(
             return
 
         for i, question in enumerate(questions, 1):
-            question_text = (
-                f"❓ Вопрос #{i}:\n{question.text}\n\n"
-                f"🕒 Создан: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
+            # Проверяем, является ли вопрос уточнением
+            is_clarification = (
+                question.context_data and
+                question.context_data.get("is_clarification")
             )
+
+            if is_clarification:
+                original_question_id = question.context_data.get("original_question_id")
+                original_question_text = question.context_data.get("original_question_text", "")
+
+                question_text = (
+                    f"🔍 <b>УТОЧНЕНИЕ К ВОПРОСУ</b>\n\n"
+                    f"❓ Исходный вопрос: {original_question_text}\n\n"
+                    f"💬 Уточнение: {question.text}\n\n"
+                    f"🕒 Создано: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
+                )
+            else:
+                question_text = (
+                    f"❓ Вопрос #{i}:\n{question.text}\n\n"
+                    f"🕒 Создан: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
+                )
 
             # Получаем пользователя
             user_result = await db.execute(
@@ -200,14 +217,15 @@ async def cmd_questions(
             user = user_result.scalar_one_or_none()
 
             if user:
-                # ИСПРАВЛЕНИЕ: используем правильные поля
                 user_info = user.first_name or user.telegram_username or "Аноним"
                 if user.last_name:
                     user_info = f"{user.first_name} {user.last_name}"
                 question_text += f"\n👤 Пользователь: {user_info}"
 
             await message.answer(
-                question_text, reply_markup=make_question_keyboard(question.uuid)
+                question_text,
+                parse_mode="HTML",
+                reply_markup=make_question_keyboard(question.uuid)
             )
 
         if len(questions) == 5:
@@ -418,7 +436,7 @@ async def process_answer_text(
             await db.commit()
             logger.info(f"Pharmacist {message.from_user.id} auto-set to online")
 
-    
+
         state_data = await state.get_data()
         question_uuid = state_data.get("question_uuid")
 
