@@ -1,4 +1,3 @@
-
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
@@ -43,15 +42,13 @@ async def set_online(
         pharmacist.is_online = True
         pharmacist.last_seen = get_utc_now_naive()
         await db.commit()
-        logger.info(
-            f"Pharmacist {message.from_user.id} successfully set online status"
-        )
+        logger.info(f"Pharmacist {message.from_user.id} successfully set online status")
 
         # Проверяем есть ли ожидающие вопросы
         from sqlalchemy import select, func
+
         result = await db.execute(
-            select(func.count(Question.uuid))
-            .where(Question.status == "pending")
+            select(func.count(Question.uuid)).where(Question.status == "pending")
         )
         pending_count = result.scalar() or 0
 
@@ -61,7 +58,7 @@ async def set_online(
                 f"📝 <b>Ожидающих вопросов:</b> {pending_count}\n"
                 f"Используйте /questions чтобы просмотреть вопросы.",
                 parse_mode="HTML",
-                reply_markup=get_pharmacist_keyboard()  # Добавляем клавиатуру
+                reply_markup=get_pharmacist_keyboard(),  # Добавляем клавиатуру
             )
 
             # Показываем первые 3 вопроса
@@ -74,17 +71,21 @@ async def set_online(
             questions = result.scalars().all()
 
             for i, question in enumerate(questions, 1):
-                question_preview = question.text[:100] + "..." if len(question.text) > 100 else question.text
+                question_preview = (
+                    question.text[:100] + "..."
+                    if len(question.text) > 100
+                    else question.text
+                )
                 await message.answer(
                     f"❓ Вопрос #{i}:\n{question_preview}\n",
-                    reply_markup=make_question_keyboard(question.uuid)
+                    reply_markup=make_question_keyboard(question.uuid),
                 )
         else:
             await message.answer(
                 "✅ Вы теперь онлайн и готовы принимать вопросы!\n\n"
                 "На данный момент новых вопросов нет. "
                 "Вы получите уведомление, когда появится новый вопрос.",
-                reply_markup=get_pharmacist_keyboard()
+                reply_markup=get_pharmacist_keyboard(),
             )
 
     except Exception as e:
@@ -118,8 +119,8 @@ async def set_offline(
         pharmacist.last_seen = get_utc_now_naive()
         await db.commit()
         logger.info(
-        f"Pharmacist {message.from_user.id} successfully set offline status"  # вместо pharmacist.telegram_id
-    )
+            f"Pharmacist {message.from_user.id} successfully set offline status"  # вместо pharmacist.telegram_id
+        )
 
         await message.answer("✅ Вы теперь офлайн.")
 
@@ -206,23 +207,21 @@ async def cmd_questions(
                 question_text += f"\n👤 Пользователь: {user_info}"
 
             await message.answer(
-                question_text,
-                reply_markup=make_question_keyboard(question.uuid)
+                question_text, reply_markup=make_question_keyboard(question.uuid)
             )
 
         if len(questions) == 5:
-            await message.answer("💡 Показаны первые 5 вопросов. Ответьте на них чтобы увидеть следующие.")
+            await message.answer(
+                "💡 Показаны первые 5 вопросов. Ответьте на них чтобы увидеть следующие."
+            )
 
     except Exception as e:
         logger.error(f"Error in cmd_questions: {e}")
         await message.answer("❌ Ошибка при получении вопросов")
 
 
-
 @router.message(Command("debug_status"))
-async def debug_status(
-    message: Message, db: AsyncSession, is_pharmacist: bool
-):
+async def debug_status(message: Message, db: AsyncSession, is_pharmacist: bool):
     """Команда для отладки статуса системы"""
     try:
         from sqlalchemy import select, func
@@ -259,7 +258,11 @@ async def debug_status(
         if online_pharmacists:
             status_text += f"\n\n<b>Онлайн фармацевты:</b>"
             for i, pharm in enumerate(online_pharmacists, 1):
-                last_seen = pharm.last_seen.strftime('%H:%M:%S') if pharm.last_seen else "никогда"
+                last_seen = (
+                    pharm.last_seen.strftime("%H:%M:%S")
+                    if pharm.last_seen
+                    else "никогда"
+                )
                 status_text += f"\n{i}. ID: {pharm.user.telegram_id}, Последняя активность: {last_seen}"
 
         await message.answer(status_text, parse_mode="HTML")
@@ -331,24 +334,64 @@ async def view_questions_callback(
     callback: CallbackQuery,
     db: AsyncSession,
     is_pharmacist: bool,
-    pharmacist: Pharmacist
+    pharmacist: Pharmacist,
 ):
     """Быстрый просмотр вопросов через кнопку"""
     if not is_pharmacist:
-        await callback.answer("❌ Эта функция доступна только фармацевтам", show_alert=True)
+        await callback.answer(
+            "❌ Эта функция доступна только фармацевтам", show_alert=True
+        )
         return
 
     await callback.answer()
-    # Создаем фейковое сообщение для вызова команды /questions
-    from aiogram.types import Message
-    fake_message = Message(
-        message_id=callback.message.message_id,
-        date=callback.message.date,
-        chat=callback.message.chat,
-        text="/questions"
-    )
-    # Вызываем обработчик команды /questions с правильными аргументами
-    await cmd_questions(fake_message, db, is_pharmacist, pharmacist)
+
+    try:
+        # Используем прямой запрос к базе данных вместо вызова cmd_questions
+        result = await db.execute(
+            select(Question)
+            .where(Question.status == "pending")
+            .order_by(Question.created_at.asc())
+            .limit(5)
+        )
+        questions = result.scalars().all()
+
+        if not questions:
+            await callback.message.answer(
+                "📝 На данный момент нет новых вопросов.\n\n"
+                "Пользователи задают вопросы через команду /ask"
+            )
+            return
+
+        for i, question in enumerate(questions, 1):
+            question_text = (
+                f"❓ Вопрос #{i}:\n{question.text}\n\n"
+                f"🕒 Создан: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
+            )
+
+            # Получаем пользователя
+            user_result = await db.execute(
+                select(User).where(User.uuid == question.user_id)
+            )
+            user = user_result.scalar_one_or_none()
+
+            if user:
+                user_info = user.first_name or user.telegram_username or "Аноним"
+                if user.last_name:
+                    user_info = f"{user.first_name} {user.last_name}"
+                question_text += f"\n👤 Пользователь: {user_info}"
+
+            await callback.message.answer(
+                question_text, reply_markup=make_question_keyboard(question.uuid)
+            )
+
+        if len(questions) == 5:
+            await callback.message.answer(
+                "💡 Показаны первые 5 вопросов. Ответьте на них чтобы увидеть следующие."
+            )
+
+    except Exception as e:
+        logger.error(f"Error in view_questions_callback: {e}")
+        await callback.message.answer("❌ Ошибка при получении вопросов")
 
 
 @router.message(QAStates.waiting_for_answer)
@@ -427,7 +470,11 @@ async def process_answer_text(
                 if patronymic:
                     pharmacist_name_parts.append(patronymic)
 
-                pharmacist_name = " ".join(pharmacist_name_parts) if pharmacist_name_parts else "Фармацевт"
+                pharmacist_name = (
+                    " ".join(pharmacist_name_parts)
+                    if pharmacist_name_parts
+                    else "Фармацевт"
+                )
 
                 pharmacist_info = f"{pharmacist_name}"
                 if chain and number:
@@ -444,11 +491,11 @@ async def process_answer_text(
                 await message.bot.send_message(
                     chat_id=user.telegram_id,
                     text=f"💊 На ваш вопрос получен ответ!\n\n"
-                         f"❓ Ваш вопрос: {question.text}\n\n"
-                         f"💬 Ответ: {answer_preview}\n\n"
-                         f"👨‍⚕️ Ответ предоставил: {pharmacist_info}\n\n"
-                         f"💡 Если ответ неполный или у вас есть уточняющий вопрос, "
-                         "используйте команду /clarify",
+                    f"❓ Ваш вопрос: {question.text}\n\n"
+                    f"💬 Ответ: {answer_preview}\n\n"
+                    f"👨‍⚕️ Ответ предоставил: {pharmacist_info}\n\n"
+                    f"💡 Если ответ неполный или у вас есть уточняющий вопрос, "
+                    "используйте команду /clarify",
                 )
                 logger.info(
                     f"Notification sent to user {user.telegram_id} about answer"
