@@ -27,3 +27,56 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// Методы для работы с бронированиями
+export const bookingApi = {
+  // Создание заказа бронирования
+  createOrder: async (orderData) => {
+    const response = await api.post('/orders', orderData);
+    return response.data;
+  },
+
+  // Получение информации о заказе
+  getOrder: async (orderId) => {
+    const response = await api.get(`/orders/${orderId}`);
+    return response.data;
+  },
+
+  // Обновление статуса заказа
+  updateOrderStatus: async (orderId, status) => {
+    const response = await api.patch(`/orders/${orderId}`, { status });
+    return response.data;
+  },
+
+  // Отмена заказа
+  cancelOrder: async (orderId) => {
+    const response = await api.patch(`/orders/${orderId}`, { status: 'cancelled' });
+    return response.data;
+  },
+
+  // Получение списка заказов с фильтрацией
+  getOrders: async (params = {}) => {
+    const response = await api.get('/orders', { params });
+    return response.data;
+  },
+
+  // Получение заказов по телефону пользователя
+  getUserOrders: async (phone) => {
+    const response = await api.get('/orders', {
+      params: { customer_phone: phone }
+    });
+    return response.data;
+  },
+
+  // Получение заказов конкретной аптеки
+  getPharmacyOrders: async (pharmacyId, status = null) => {
+    const params = { pharmacy_id: pharmacyId };
+    if (status) params.status = status;
+
+    const response = await api.get('/orders', { params });
+    return response.data;
+  }
+};
+
+// Экспортируем по умолчанию основной API клиент
+export default api;

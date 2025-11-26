@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { bookingApi } from "../api/client";
 
 export default function SearchResults({
   results,
@@ -10,6 +11,179 @@ export default function SearchResults({
   loading,
   isTelegram,
 }) {
+  // В начале файла добавляем импорт
+  import { bookingApi } from "../api/client";
+
+  // В компоненте SearchResults обновляем состояние бронирования
+  const [bookingState, setBookingState] = useState({
+    modal: {
+      isOpen: false,
+      product: null,
+      quantity: 1,
+    },
+    form: {
+      customer_name: "",
+      customer_phone: "",
+    },
+    loading: false,
+    success: false,
+    error: null,
+    orderInfo: null,
+  });
+
+  // Улучшенная функция открытия модального окна
+  const openBookingModal = (product) => {
+    setBookingState({
+      modal: {
+        isOpen: true,
+        product: product,
+        quantity: 1,
+      },
+      form: {
+        customer_name: "",
+        customer_phone: "",
+      },
+      loading: false,
+      success: false,
+      error: null,
+      orderInfo: null,
+    });
+  };
+
+  // Улучшенная функция обработки бронирования
+  const handleBooking = async (e) => {
+    e.preventDefault();
+    if (!bookingState.modal.product) return;
+
+    setBookingState((prev) => ({ ...prev, loading: true, error: null }));
+
+    try {
+      const bookingData = {
+        product_id: bookingState.modal.product.uuid,
+        pharmacy_id: bookingState.modal.product.pharmacy_id,
+        quantity: bookingState.modal.quantity,
+        customer_name: bookingState.form.customer_name.trim(),
+        customer_phone: bookingState.form.customer_phone.trim(),
+      };
+
+      // Валидация данных
+      if (!bookingData.customer_name) {
+        throw new Error("Введите ваше имя");
+      }
+
+      if (!bookingData.customer_phone) {
+        throw new Error("Введите номер телефона");
+      }
+
+      // Базовая валидация телефона
+      const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/;
+      const cleanPhone = bookingData.customer_phone.replace(/[^\d+]/g, "");
+      if (!phoneRegex.test(cleanPhone)) {
+        throw new Error("Введите корректный номер телефона");
+      }
+
+      // Проверка количества
+      if (bookingState.modal.quantity > bookingState.modal.product.quantity) {
+        throw new Error(
+          `Недостаточно товара. Доступно: ${formatQuantity(
+            bookingState.modal.product.quantity
+          )} уп.`
+        );
+      }
+
+      // Используем новый API метод
+      const order = await bookingApi.createOrder(bookingData);
+
+      setBookingState((prev) => ({
+        ...prev,
+        loading: false,
+        success: true,
+        orderInfo: order,
+      }));
+
+      // Автоматическое закрытие через 3 секунды
+      setTimeout(() => {
+        closeBookingModal();
+      }, 3000);
+    } catch (error) {
+      console.error("Booking error:", error);
+
+      // Обработка различных типов ошибок
+      let errorMessage = "Ошибка при бронировании";
+
+      if (error.response) {
+        // Ошибка от сервера
+        const serverError = error.response.data;
+        if (serverError.detail) {
+          errorMessage = serverError.detail;
+        } else if (typeof serverError === "string") {
+          errorMessage = serverError;
+        } else if (serverError.message) {
+          errorMessage = serverError.message;
+        }
+      } else if (error.request) {
+        // Ошибка сети
+        errorMessage = "Ошибка сети. Проверьте подключение к интернету.";
+      } else {
+        // Другие ошибки
+        errorMessage = error.message;
+      }
+
+      setBookingState((prev) => ({
+        ...prev,
+        loading: false,
+        error: errorMessage,
+      }));
+    }
+  };
+
+  // Функция обновления формы
+  const updateBookingForm = (field, value) => {
+    setBookingState((prev) => ({
+      ...prev,
+      form: {
+        ...prev.form,
+        [field]: value,
+      },
+    }));
+  };
+
+  // Функция обновления количества
+  const updateBookingQuantity = (quantity) => {
+    setBookingState((prev) => ({
+      ...prev,
+      modal: {
+        ...prev.modal,
+        quantity: quantity,
+      },
+    }));
+  };
+
+  // Функция закрытия модального окна
+  const closeBookingModal = () => {
+    setBookingState({
+      modal: {
+        isOpen: false,
+        product: null,
+        quantity: 1,
+      },
+      form: {
+        customer_name: "",
+        customer_phone: "",
+      },
+      loading: false,
+      success: false,
+      error: null,
+      orderInfo: null,
+    });
+  };
+
+  // Функция для правильного склонения слова "упаковка"
+  const getPackagingText = (quantity) => {
+    if (quantity === 1) return "упаковка";
+    if (quantity >= 2 && quantity <= 4) return "упаковки";
+    return "упаковок";
+  };
   const [bookingModal, setBookingModal] = useState({
     isOpen: false,
     product: null,
@@ -162,129 +336,212 @@ export default function SearchResults({
   return (
     <div className={`${isTelegram ? "p-2" : "p-4"} max-w-6xl mx-auto`}>
       {/* Модальное окно бронирования */}
-      {bookingModal.isOpen && (
+      {/* Модальное окно бронирования */}
+      {bookingState.modal.isOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
-            {bookingSuccess ? (
-              <div className="text-center">
-                <div className="text-green-500 text-6xl mb-4">✓</div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  Бронирование успешно!
-                </h3>
-                <p className="text-gray-600 mb-4">
-                  Ваш заказ принят. Ожидайте подтверждения от аптеки.
-                </p>
-                <button
-                  onClick={closeBookingModal}
-                  className="w-full bg-telegram-primary text-gray-900 font-medium py-3 px-4 rounded-lg hover:bg-blue-600 transition-colors"
-                >
-                  Закрыть
-                </button>
-              </div>
-            ) : (
-              <>
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                  Бронирование препарата
-                </h2>
-                {bookingModal.product && (
-                  <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                    <h3 className="font-semibold text-gray-900">
-                      {bookingModal.product.name}
-                    </h3>
-                    <p className="text-sm text-gray-600">
-                      {bookingModal.product.form}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      {bookingModal.product.pharmacy_name} №
-                      {bookingModal.product.pharmacy_number}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      Доступно: {formatQuantity(bookingModal.product.quantity)}{" "}
-                      уп.
-                    </p>
-                  </div>
-                )}
-                <form onSubmit={handleBooking} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Ваше имя *
-                    </label>
-                    <input
-                      type="text"
-                      value={bookingForm.customer_name}
-                      onChange={(e) =>
-                        setBookingForm({
-                          ...bookingForm,
-                          customer_name: e.target.value,
-                        })
-                      }
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-telegram-primary"
-                      placeholder="Введите ваше имя"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Телефон *
-                    </label>
-                    <input
-                      type="tel"
-                      value={bookingForm.customer_phone}
-                      onChange={(e) =>
-                        setBookingForm({
-                          ...bookingForm,
-                          customer_phone: e.target.value,
-                        })
-                      }
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-telegram-primary"
-                      placeholder="+375 XX XXX-XX-XX"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Количество *
-                    </label>
-                    <select
-                      value={bookingModal.quantity}
-                      onChange={(e) =>
-                        setBookingModal({
-                          ...bookingModal,
-                          quantity: parseInt(e.target.value),
-                        })
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-telegram-primary"
-                    >
-                      {[
-                        ...Array(
-                          Math.min(10, bookingModal.product?.quantity || 1)
-                        ).keys(),
-                      ].map((i) => (
-                        <option key={i + 1} value={i + 1}>
-                          {i + 1} упаковок
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex gap-3 pt-2">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              {bookingState.success ? (
+                <div className="text-center">
+                  <div className="text-green-500 text-6xl mb-4">✓</div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                    Бронирование успешно!
+                  </h3>
+                  <p className="text-gray-600 mb-2">
+                    Номер заказа:{" "}
+                    <strong>
+                      {bookingState.orderInfo?.uuid?.substring(0, 8)}...
+                    </strong>
+                  </p>
+                  <p className="text-gray-600 mb-4 text-sm">
+                    Ожидайте звонка из аптеки для подтверждения.
+                  </p>
+                  <button
+                    onClick={closeBookingModal}
+                    className="w-full bg-telegram-primary text-gray-900 font-medium py-3 px-4 rounded-lg hover:bg-blue-600 transition-colors"
+                  >
+                    Закрыть
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-semibold text-gray-900">
+                      Бронирование препарата
+                    </h2>
                     <button
-                      type="submit"
-                      disabled={bookingLoading}
-                      className="flex-1 bg-telegram-primary text-gray-900 font-medium py-3 px-4 rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {bookingLoading ? "Бронируем..." : "Забронировать"}
-                    </button>
-                    <button
-                      type="button"
                       onClick={closeBookingModal}
-                      className="flex-1 bg-gray-100 text-gray-800 font-medium py-3 px-4 rounded-lg hover:bg-gray-200 transition-colors"
+                      disabled={bookingState.loading}
+                      className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
                     >
-                      Отмена
+                      <svg
+                        className="w-6 h-6"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M6 18L18 6M6 6l12 12"
+                        />
+                      </svg>
                     </button>
                   </div>
-                </form>
-              </>
-            )}
+
+                  {bookingState.modal.product && (
+                    <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                      <h3 className="font-semibold text-gray-900 text-lg">
+                        {bookingState.modal.product.name}
+                      </h3>
+                      <p className="text-sm text-gray-600">
+                        {bookingState.modal.product.form}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {bookingState.modal.product.pharmacy_name} №
+                        {bookingState.modal.product.pharmacy_number}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        Адрес: {bookingState.modal.product.pharmacy_address}
+                      </p>
+                      <p className="text-sm font-medium text-gray-700 mt-2">
+                        Доступно:{" "}
+                        {formatQuantity(bookingState.modal.product.quantity)}{" "}
+                        уп. • Цена: {bookingState.modal.product.price} Br
+                      </p>
+                    </div>
+                  )}
+
+                  {bookingState.error && (
+                    <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <div className="flex items-center">
+                        <svg
+                          className="w-5 h-5 text-red-500 mr-2"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                        <span className="text-red-800 text-sm">
+                          {bookingState.error}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <form onSubmit={handleBooking} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Ваше имя *
+                      </label>
+                      <input
+                        type="text"
+                        value={bookingState.form.customer_name}
+                        onChange={(e) =>
+                          updateBookingForm("customer_name", e.target.value)
+                        }
+                        required
+                        disabled={bookingState.loading}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:border-transparent disabled:opacity-50"
+                        placeholder="Иван Иванов"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Телефон *
+                      </label>
+                      <input
+                        type="tel"
+                        value={bookingState.form.customer_phone}
+                        onChange={(e) =>
+                          updateBookingForm("customer_phone", e.target.value)
+                        }
+                        required
+                        disabled={bookingState.loading}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:border-transparent disabled:opacity-50"
+                        placeholder="+375 XX XXX-XX-XX"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Формат: +375XXXXXXXXX или 80XXXXXXXXX
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Количество упаковок *
+                      </label>
+                      <select
+                        value={bookingState.modal.quantity}
+                        onChange={(e) =>
+                          updateBookingQuantity(parseInt(e.target.value))
+                        }
+                        disabled={bookingState.loading}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:border-transparent disabled:opacity-50"
+                      >
+                        {[
+                          ...Array(
+                            Math.min(
+                              10,
+                              bookingState.modal.product?.quantity || 1
+                            )
+                          ).keys(),
+                        ].map((i) => (
+                          <option key={i + 1} value={i + 1}>
+                            {i + 1} {getPackagingText(i + 1)}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Итоговая сумма:{" "}
+                        <strong>
+                          {bookingState.modal.product
+                            ? bookingState.modal.product.price *
+                              bookingState.modal.quantity
+                            : 0}{" "}
+                          Br
+                        </strong>
+                      </p>
+                    </div>
+
+                    <div className="flex gap-3 pt-2">
+                      <button
+                        type="submit"
+                        disabled={bookingState.loading}
+                        className="flex-1 bg-telegram-primary text-gray-900 font-medium py-3 px-4 rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                      >
+                        {bookingState.loading ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                            Бронируем...
+                          </>
+                        ) : (
+                          `Забронировать за ${
+                            bookingState.modal.product
+                              ? bookingState.modal.product.price *
+                                bookingState.modal.quantity
+                              : 0
+                          } Br`
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={closeBookingModal}
+                        disabled={bookingState.loading}
+                        className="flex-1 bg-gray-100 text-gray-800 font-medium py-3 px-4 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Отмена
+                      </button>
+                    </div>
+                  </form>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
