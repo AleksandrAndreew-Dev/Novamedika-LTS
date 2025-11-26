@@ -1,4 +1,4 @@
-import celery_worker_init
+import tasks.celery_worker_init
 # celery_app.py
 import os
 from celery import Celery
