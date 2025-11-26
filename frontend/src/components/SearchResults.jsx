@@ -11,8 +11,6 @@ export default function SearchResults({
   loading,
   isTelegram,
 }) {
-
-
   const [bookingState, setBookingState] = useState({
     modal: {
       isOpen: false,
@@ -29,7 +27,7 @@ export default function SearchResults({
     orderInfo: null,
   });
 
-  // Улучшенная функция открытия модального окна
+  // Функция открытия модального окна
   const openBookingModal = (product) => {
     setBookingState({
       modal: {
@@ -48,7 +46,7 @@ export default function SearchResults({
     });
   };
 
-  // Улучшенная функция обработки бронирования
+  // Функция обработки бронирования
   const handleBooking = async (e) => {
     e.preventDefault();
     if (!bookingState.modal.product) return;
@@ -182,87 +180,6 @@ export default function SearchResults({
     if (quantity >= 2 && quantity <= 4) return "упаковки";
     return "упаковок";
   };
-  const [bookingModal, setBookingModal] = useState({
-    isOpen: false,
-    product: null,
-    quantity: 1,
-  });
-  const [bookingForm, setBookingForm] = useState({
-    customer_name: "",
-    customer_phone: "",
-  });
-  const [bookingLoading, setBookingLoading] = useState(false);
-  const [bookingSuccess, setBookingSuccess] = useState(false);
-
-  // Функция для открытия модального окна бронирования
-  const openBookingModal = (product) => {
-    setBookingModal({
-      isOpen: true,
-      product: product,
-      quantity: 1,
-    });
-    setBookingForm({
-      customer_name: "",
-      customer_phone: "",
-    });
-    setBookingSuccess(false);
-  };
-
-  // Функция для закрытия модального окна
-  const closeBookingModal = () => {
-    setBookingModal({
-      isOpen: false,
-      product: null,
-      quantity: 1,
-    });
-    setBookingForm({
-      customer_name: "",
-      customer_phone: "",
-    });
-    setBookingSuccess(false);
-  };
-
-  // Функция для обработки бронирования
-  const handleBooking = async (e) => {
-    e.preventDefault();
-    if (!bookingModal.product) return;
-
-    setBookingLoading(true);
-    try {
-      const bookingData = {
-        product_id: bookingModal.product.uuid,
-        pharmacy_id: bookingModal.product.pharmacy_id,
-        quantity: bookingModal.quantity,
-        customer_name: bookingForm.customer_name,
-        customer_phone: bookingForm.customer_phone,
-      };
-
-      const response = await fetch("/orders", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(bookingData),
-      });
-
-      if (response.ok) {
-        setBookingSuccess(true);
-        // Автоматически закрываем модальное окно через 2 секунды
-        setTimeout(() => {
-          closeBookingModal();
-        }, 2000);
-      } else {
-        const errorData = await response.json();
-        alert(
-          `Ошибка бронирования: ${errorData.detail || "Неизвестная ошибка"}`
-        );
-      }
-    } catch (error) {
-      alert("Ошибка сети: " + error.message);
-    } finally {
-      setBookingLoading(false);
-    }
-  };
 
   const getGroupedResults = () => {
     const grouped = {};
@@ -274,8 +191,7 @@ export default function SearchResults({
         grouped[key] = {
           ...item,
           quantity: parseFloat(item.quantity) || 0,
-          working_hours:
-            item.working_hours || item.opening_hours || "9:00-21:00",
+          working_hours: item.working_hours || item.opening_hours || "9:00-21:00",
           pharmacy_id: item.pharmacy_id,
         };
       } else {
@@ -286,8 +202,7 @@ export default function SearchResults({
         if (newDate > currentDate) {
           grouped[key].updated_at = item.updated_at;
           if (item.working_hours || item.opening_hours) {
-            grouped[key].working_hours =
-              item.working_hours || item.opening_hours;
+            grouped[key].working_hours = item.working_hours || item.opening_hours;
           }
         }
       }
@@ -333,7 +248,6 @@ export default function SearchResults({
 
   return (
     <div className={`${isTelegram ? "p-2" : "p-4"} max-w-6xl mx-auto`}>
-      {/* Модальное окно бронирования */}
       {/* Модальное окно бронирования */}
       {bookingState.modal.isOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
