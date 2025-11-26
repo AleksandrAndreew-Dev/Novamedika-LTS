@@ -176,7 +176,7 @@ async def cmd_questions(
             select(Question)
             .where(Question.status == "pending")
             .order_by(Question.created_at.asc())  # Сначала старые вопросы
-            .limit(5)  # Ограничиваем количество
+
         )
         questions = result.scalars().all()
 
@@ -377,7 +377,7 @@ async def view_questions_callback(
             select(Question)
             .where(Question.status == "pending")
             .order_by(Question.created_at.asc())
-            .limit(5)
+            
         )
         questions = result.scalars().all()
 
@@ -410,7 +410,7 @@ async def view_questions_callback(
                 question_text, reply_markup=make_question_keyboard(question.uuid)
             )
 
-        
+
 
     except Exception as e:
         logger.error(f"Error in view_questions_callback: {e}")

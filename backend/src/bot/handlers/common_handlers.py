@@ -1,6 +1,11 @@
 # bot/handlers/common_handlers.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
 from aiogram import Router, F
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.types import (
+    Message,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    CallbackQuery,
+)
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,35 +18,64 @@ logger = logging.getLogger(__name__)
 
 router = Router()
 
+
 def get_pharmacist_keyboard():
     """Клавиатура для фармацевтов"""
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🟢 Перейти в онлайн", callback_data="go_online")],
-            [InlineKeyboardButton(text="📋 Смотреть вопросы", callback_data="view_questions")],
-            [InlineKeyboardButton(text="❓ Помощь фармацевта", callback_data="pharmacist_help")]
+            [
+                InlineKeyboardButton(
+                    text="🟢 Перейти в онлайн", callback_data="go_online"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📋 Смотреть вопросы", callback_data="view_questions"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="❓ Помощь фармацевта", callback_data="pharmacist_help"
+                )
+            ],
         ]
     )
+
 
 def get_user_keyboard():
     """Клавиатура для пользователей"""
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="💬 Задать вопрос", callback_data="ask_question")],
+            [
+                InlineKeyboardButton(
+                    text="💬 Задать вопрос", callback_data="ask_question"
+                )
+            ],
             [InlineKeyboardButton(text="📖 Мои вопросы", callback_data="my_questions")],
-            [InlineKeyboardButton(text="👨‍⚕️ Я фарм специалист", callback_data="i_am_pharmacist")],
-            [InlineKeyboardButton(text="❓ Помощь", callback_data="user_help")]
+            [
+                InlineKeyboardButton(
+                    text="👨‍⚕️ Я фарм специалист", callback_data="i_am_pharmacist"
+                )
+            ],
+            [InlineKeyboardButton(text="❓ Помощь", callback_data="user_help")],
         ]
     )
 
+
 @router.message(Command("start"))
-async def cmd_start(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool, pharmacist: object):
+async def cmd_start(
+    message: Message,
+    state: FSMContext,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: object,
+):
     """Упрощенный старт"""
     await state.clear()
 
     if is_pharmacist and pharmacist:
         status_text = "🟢 Онлайн" if pharmacist.is_online else "🔴 Офлайн"
-        pharmacy_name = pharmacist.pharmacy_info.get('name', 'Не указана')
+        pharmacy_name = pharmacist.pharmacy_info.get("name", "Не указана")
 
         await message.answer(
             f"👨‍⚕️ <b>Панель фармацевта</b>\n\n"
@@ -49,7 +83,7 @@ async def cmd_start(message: Message, state: FSMContext, db: AsyncSession, is_ph
             f"📊 Статус: {status_text}\n\n"
             "Выберите действие:",
             parse_mode="HTML",
-            reply_markup=get_pharmacist_keyboard()
+            reply_markup=get_pharmacist_keyboard(),
         )
     else:
         await message.answer(
@@ -57,8 +91,9 @@ async def cmd_start(message: Message, state: FSMContext, db: AsyncSession, is_ph
             "Получите консультацию профессионального фармацевта!\n\n"
             "Выберите действие:",
             parse_mode="HTML",
-            reply_markup=get_user_keyboard()
+            reply_markup=get_user_keyboard(),
         )
+
 
 @router.message(Command("help"))
 async def cmd_help(message: Message, is_pharmacist: bool):
@@ -79,7 +114,7 @@ async def cmd_help(message: Message, is_pharmacist: bool):
             "4. Нажимайте «Ответить» под вопросом\n"
             "5. Пользователь получит ответ с вашими данными",
             parse_mode="HTML",
-            reply_markup=get_pharmacist_keyboard()
+            reply_markup=get_pharmacist_keyboard(),
         )
     else:
         await message.answer(
@@ -95,8 +130,9 @@ async def cmd_help(message: Message, is_pharmacist: bool):
             "4. Вы получите профессиональный ответ\n\n"
             "👨‍⚕️ <b>Если вы фармацевт</b> - нажмите «Я фарм специалист»",
             parse_mode="HTML",
-            reply_markup=get_user_keyboard()
+            reply_markup=get_user_keyboard(),
         )
+
 
 @router.callback_query(F.data == "i_am_pharmacist")
 async def i_am_pharmacist_callback(callback: CallbackQuery, is_pharmacist: bool):
@@ -106,7 +142,7 @@ async def i_am_pharmacist_callback(callback: CallbackQuery, is_pharmacist: bool)
         await callback.message.answer(
             "👨‍⚕️ Вы уже зарегистрированы как фармацевт!\n\n"
             "Используйте кнопки ниже для работы:",
-            reply_markup=get_pharmacist_keyboard()
+            reply_markup=get_pharmacist_keyboard(),
         )
     else:
         await callback.answer()
@@ -124,19 +160,19 @@ async def i_am_pharmacist_callback(callback: CallbackQuery, is_pharmacist: bool)
             "• Отвечать на вопросы пользователей\n"
             "• Получать уведомления о новых вопросах\n"
             "• Управлять своим онлайн-статусом",
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
+
 
 @router.callback_query(F.data == "go_online")
 async def go_online_callback(
-    callback: CallbackQuery,
-    db: AsyncSession,
-    is_pharmacist: bool,
-    pharmacist: object
+    callback: CallbackQuery, db: AsyncSession, is_pharmacist: bool, pharmacist: object
 ):
     """Быстрый переход в онлайн через кнопку"""
     if not is_pharmacist or not pharmacist:
-        await callback.answer("❌ Эта функция доступна только фармацевтам", show_alert=True)
+        await callback.answer(
+            "❌ Эта функция доступна только фармацевтам", show_alert=True
+        )
         return
 
     try:
@@ -151,22 +187,22 @@ async def go_online_callback(
             "просматривать ожидающие вопросы.\n\n"
             "Используйте кнопку ниже чтобы посмотреть вопросы:",
             parse_mode="HTML",
-            reply_markup=get_pharmacist_keyboard()
+            reply_markup=get_pharmacist_keyboard(),
         )
     except Exception as e:
         logger.error(f"Error in go_online_callback: {e}")
         await callback.answer("❌ Ошибка при переходе в онлайн", show_alert=True)
 
+
 @router.callback_query(F.data == "view_questions")
 async def view_questions_callback(
-    callback: CallbackQuery,
-    db: AsyncSession,
-    is_pharmacist: bool,
-    pharmacist: object
+    callback: CallbackQuery, db: AsyncSession, is_pharmacist: bool, pharmacist: object
 ):
     """Быстрый просмотр вопросов через кнопку - ОБНОВЛЕННАЯ ВЕРСИЯ С ПРАВИЛЬНЫМИ КНОПКАМИ ДЛЯ УТОЧНЕНИЙ"""
     if not is_pharmacist:
-        await callback.answer("❌ Эта функция доступна только фармацевтам", show_alert=True)
+        await callback.answer(
+            "❌ Эта функция доступна только фармацевтам", show_alert=True
+        )
         return
 
     await callback.answer()
@@ -180,7 +216,6 @@ async def view_questions_callback(
             select(Question)
             .where(Question.status == "pending")
             .order_by(Question.created_at.asc())
-            .limit(5)
         )
         questions = result.scalars().all()
 
@@ -193,14 +228,15 @@ async def view_questions_callback(
 
         for i, question in enumerate(questions, 1):
             # Проверяем, является ли вопрос уточнением
-            is_clarification = (
-                question.context_data and
-                question.context_data.get("is_clarification")
+            is_clarification = question.context_data and question.context_data.get(
+                "is_clarification"
             )
 
             if is_clarification:
                 original_question_id = question.context_data.get("original_question_id")
-                original_question_text = question.context_data.get("original_question_text", "")
+                original_question_text = question.context_data.get(
+                    "original_question_text", ""
+                )
 
                 question_text = (
                     f"🔍 <b>УТОЧНЕНИЕ К ВОПРОСУ</b>\n\n"
@@ -211,6 +247,7 @@ async def view_questions_callback(
 
                 # Для уточнений используем специальную клавиатуру
                 from bot.keyboards.qa_keyboard import make_clarification_keyboard
+
                 reply_markup = make_clarification_keyboard(question.uuid)
             else:
                 question_text = (
@@ -220,6 +257,7 @@ async def view_questions_callback(
 
                 # Для обычных вопросов используем обычную клавиатуру
                 from bot.keyboards.qa_keyboard import make_question_keyboard
+
                 reply_markup = make_question_keyboard(question.uuid)
 
             # Получаем пользователя
@@ -235,25 +273,24 @@ async def view_questions_callback(
                 question_text += f"\n👤 Пользователь: {user_info}"
 
             await callback.message.answer(
-                question_text,
-                parse_mode="HTML",
-                reply_markup=reply_markup
-            )
-
-        if len(questions) == 5:
-            await callback.message.answer(
-                "💡 Показаны первые 5 вопросов. Ответьте на них чтобы увидеть следующие."
+                question_text, parse_mode="HTML", reply_markup=reply_markup
             )
 
     except Exception as e:
         logger.error(f"Error in view_questions_callback: {e}")
         await callback.message.answer("❌ Ошибка при получении вопросов")
 
+
 @router.callback_query(F.data == "ask_question")
-async def ask_question_callback(callback: CallbackQuery, state: FSMContext, is_pharmacist: bool):
+async def ask_question_callback(
+    callback: CallbackQuery, state: FSMContext, is_pharmacist: bool
+):
     """Непосредственный переход к вводу вопроса"""
     if is_pharmacist:
-        await callback.answer("ℹ️ Вы фармацевт. Используйте /questions для ответов на вопросы.", show_alert=True)
+        await callback.answer(
+            "ℹ️ Вы фармацевт. Используйте /questions для ответов на вопросы.",
+            show_alert=True,
+        )
         return
 
     await callback.answer()
@@ -262,27 +299,33 @@ async def ask_question_callback(callback: CallbackQuery, state: FSMContext, is_p
         "💬 <b>Напишите ваш вопрос фармацевту:</b>\n\n"
         "Опишите вашу проблему, и мы найдем решение!\n\n"
         "<i>Для отмены используйте /cancel</i>",
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
 
+
 @router.callback_query(F.data == "my_questions")
-async def my_questions_callback(callback: CallbackQuery, db: AsyncSession, user: User, is_pharmacist: bool):
+async def my_questions_callback(
+    callback: CallbackQuery, db: AsyncSession, user: User, is_pharmacist: bool
+):
     """Быстрый просмотр своих вопросов через кнопку"""
     await callback.answer()
 
     # Создаем сообщение с командой для обработки реальным обработчиком
     from aiogram.types import Message
+
     fake_message = Message(
         message_id=callback.message.message_id,
         date=callback.message.date,
         chat=callback.message.chat,
         from_user=callback.from_user,
-        text="/my_questions"
+        text="/my_questions",
     )
 
     # Импортируем и вызываем реальный обработчик
     from bot.handlers.user_questions import cmd_my_questions
+
     await cmd_my_questions(fake_message, db, user, is_pharmacist)
+
 
 @router.callback_query(F.data == "user_help")
 async def user_help_callback(callback: CallbackQuery):
@@ -301,8 +344,9 @@ async def user_help_callback(callback: CallbackQuery):
         "4. Вы получите профессиональный ответ\n\n"
         "👨‍⚕️ <b>Если вы фармацевт</b> - нажмите «Я фарм специалист»",
         parse_mode="HTML",
-        reply_markup=get_user_keyboard()
+        reply_markup=get_user_keyboard(),
     )
+
 
 @router.callback_query(F.data == "pharmacist_help")
 async def pharmacist_help_callback(callback: CallbackQuery):
@@ -317,8 +361,9 @@ async def pharmacist_help_callback(callback: CallbackQuery):
         "• /my_questions - ваши ответы\n"
         "• /status - ваш статус\n\n"
         "Для подробной справки используйте /help",
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
+
 
 @router.message(Command("cancel"))
 async def universal_cancel(message: Message, state: FSMContext):
@@ -333,6 +378,7 @@ async def universal_cancel(message: Message, state: FSMContext):
     await state.clear()
     await message.answer("✅ Текущее действие отменено.")
 
+
 @router.message(F.command)
 async def unknown_command(message: Message):
     """Обработка неизвестных команд - ДОЛЖЕН БЫТЬ ПОСЛЕДНИМ"""
@@ -342,6 +388,7 @@ async def unknown_command(message: Message):
         "Используйте /help для просмотра доступных команд."
     )
 
+
 @router.message(F.text)
 async def handle_user_message(
     message: Message,
@@ -349,19 +396,21 @@ async def handle_user_message(
     db: AsyncSession,
     is_pharmacist: bool,
     pharmacist: object,
-    user: User
+    user: User,
 ):
     """Упрощенная обработка текстовых сообщений"""
 
     # Пропускаем команды
-    if message.text.startswith('/'):
+    if message.text.startswith("/"):
         return
 
     current_state = await state.get_state()
 
     # Если есть состояние - не обрабатываем здесь
     if current_state is not None:
-        logger.debug(f"Message in state {current_state} ignored by handle_user_message, user: {message.from_user.id}")
+        logger.debug(
+            f"Message in state {current_state} ignored by handle_user_message, user: {message.from_user.id}"
+        )
         return
 
     # Упрощенное приветственное сообщение
@@ -372,7 +421,7 @@ async def handle_user_message(
             f"Статус: <b>{status_text}</b>\n\n"
             "Используйте кнопки ниже для работы:",
             parse_mode="HTML",
-            reply_markup=get_pharmacist_keyboard()
+            reply_markup=get_pharmacist_keyboard(),
         )
     else:
         await message.answer(
@@ -380,5 +429,5 @@ async def handle_user_message(
             "Задайте вопрос фармацевту и получите профессиональную консультацию!\n\n"
             "Выберите действие:",
             parse_mode="HTML",
-            reply_markup=get_user_keyboard()
+            reply_markup=get_user_keyboard(),
         )
