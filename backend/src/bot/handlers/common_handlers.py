@@ -164,7 +164,7 @@ async def view_questions_callback(
     is_pharmacist: bool,
     pharmacist: object
 ):
-    """Быстрый просмотр вопросов через кнопку - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+    """Быстрый просмотр вопросов через кнопку - ОБНОВЛЕННАЯ ВЕРСИЯ С ПРАВИЛЬНЫМИ КНОПКАМИ ДЛЯ УТОЧНЕНИЙ"""
     if not is_pharmacist:
         await callback.answer("❌ Эта функция доступна только фармацевтам", show_alert=True)
         return
@@ -208,11 +208,19 @@ async def view_questions_callback(
                     f"💬 Уточнение: {question.text}\n\n"
                     f"🕒 Создано: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
                 )
+
+                # Для уточнений используем специальную клавиатуру
+                from bot.keyboards.qa_keyboard import make_clarification_keyboard
+                reply_markup = make_clarification_keyboard(question.uuid)
             else:
                 question_text = (
                     f"❓ Вопрос #{i}:\n{question.text}\n\n"
                     f"🕒 Создан: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
                 )
+
+                # Для обычных вопросов используем обычную клавиатуру
+                from bot.keyboards.qa_keyboard import make_question_keyboard
+                reply_markup = make_question_keyboard(question.uuid)
 
             # Получаем пользователя
             user_result = await db.execute(
@@ -226,11 +234,10 @@ async def view_questions_callback(
                     user_info = f"{user.first_name} {user.last_name}"
                 question_text += f"\n👤 Пользователь: {user_info}"
 
-            from bot.keyboards.qa_keyboard import make_question_keyboard
             await callback.message.answer(
                 question_text,
                 parse_mode="HTML",
-                reply_markup=make_question_keyboard(question.uuid)
+                reply_markup=reply_markup
             )
 
         if len(questions) == 5:

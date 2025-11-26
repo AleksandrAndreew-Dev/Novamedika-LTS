@@ -166,7 +166,7 @@ async def cmd_status(
 async def cmd_questions(
     message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist
 ):
-    """Показать вопросы с пагинацией - ВКЛЮЧАЯ УТОЧНЕНИЯ"""
+    """Показать вопросы с пагинацией - ОБНОВЛЕННАЯ ВЕРСИЯ С ПРАВИЛЬНЫМИ КНОПКАМИ ДЛЯ УТОЧНЕНИЙ"""
     if not is_pharmacist or not pharmacist:
         await message.answer("❌ Эта команда доступна только фармацевтам")
         return
@@ -204,11 +204,19 @@ async def cmd_questions(
                     f"💬 Уточнение: {question.text}\n\n"
                     f"🕒 Создано: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
                 )
+
+                # Для уточнений используем специальную клавиатуру
+                from bot.keyboards.qa_keyboard import make_clarification_keyboard
+                reply_markup = make_clarification_keyboard(question.uuid)
             else:
                 question_text = (
                     f"❓ Вопрос #{i}:\n{question.text}\n\n"
                     f"🕒 Создан: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
                 )
+
+                # Для обычных вопросов используем обычную клавиатуру
+                from bot.keyboards.qa_keyboard import make_question_keyboard
+                reply_markup = make_question_keyboard(question.uuid)
 
             # Получаем пользователя
             user_result = await db.execute(
@@ -225,7 +233,7 @@ async def cmd_questions(
             await message.answer(
                 question_text,
                 parse_mode="HTML",
-                reply_markup=make_question_keyboard(question.uuid)
+                reply_markup=reply_markup
             )
 
         if len(questions) == 5:
@@ -420,7 +428,7 @@ async def process_answer_text(
     is_pharmacist: bool,
     pharmacist: Pharmacist,
 ):
-    """Обработка текста ответа на вопрос - с авто-онлайном"""
+    """Обработка текста ответа на вопрос - с поддержкой уточнений"""
     logger.info(f"Processing answer from pharmacist {message.from_user.id}")
 
     if not is_pharmacist or not pharmacist:
@@ -429,16 +437,9 @@ async def process_answer_text(
         return
 
     try:
-        # Автоматически переводим фармацевта в онлайн при активности
-        if not pharmacist.is_online:
-            pharmacist.is_online = True
-            pharmacist.last_seen = get_utc_now_naive()
-            await db.commit()
-            logger.info(f"Pharmacist {message.from_user.id} auto-set to online")
-
-
         state_data = await state.get_data()
         question_uuid = state_data.get("question_uuid")
+        is_clarification = state_data.get("is_clarification", False)
 
         if not question_uuid:
             await message.answer("❌ Не удалось найти вопрос для ответа")
@@ -455,6 +456,13 @@ async def process_answer_text(
             await state.clear()
             return
 
+        # Автоматически переводим фармацевта в онлайн при активности
+        if not pharmacist.is_online:
+            pharmacist.is_online = True
+            pharmacist.last_seen = get_utc_now_naive()
+            await db.commit()
+            logger.info(f"Pharmacist {message.from_user.id} auto-set to online")
+
         # Создаем ответ
         answer = Answer(
             text=message.text,
@@ -464,11 +472,19 @@ async def process_answer_text(
         )
 
         db.add(answer)
-        question.status = "answered"
-        question.answered_at = get_utc_now_naive()
+
+        if is_clarification:
+            # Для уточнения помечаем его как отвеченный
+            question.status = "answered"
+            question.answered_at = get_utc_now_naive()
+        else:
+            # Для обычного вопроса обновляем статус
+            question.status = "answered"
+            question.answered_at = get_utc_now_naive()
+
         await db.commit()
 
-        # Уведомляем пользователя с информацией о фармацевте (ВКЛЮЧАЯ ФИО)
+        # Уведомляем пользователя
         user_result = await db.execute(
             select(User).where(User.uuid == question.user_id)
         )
@@ -508,32 +524,44 @@ async def process_answer_text(
                 if role and role != "Фармацевт":
                     pharmacist_info += f" ({role})"
 
-                answer_preview = (
-                    message.text[:100] + "..."
-                    if len(message.text) > 100
-                    else message.text
-                )
+                if is_clarification:
+                    # Сообщение для уточнения
+                    original_question_id = question.context_data.get("original_question_id")
+                    original_question_text = question.context_data.get("original_question_text", "")
+
+                    message_text = (
+                        f"💊 На ваше уточнение получен ответ!\n\n"
+                        f"❓ Исходный вопрос: {original_question_text}\n\n"
+                        f"💬 Ваше уточнение: {question.text.replace('Уточнение: ', '')}\n\n"
+                        f"💬 Ответ: {message.text}\n\n"
+                        f"👨‍⚕️ Ответ предоставил: {pharmacist_info}"
+                    )
+                else:
+                    # Сообщение для обычного вопроса
+                    message_text = (
+                        f"💊 На ваш вопрос получен ответ!\n\n"
+                        f"❓ Ваш вопрос: {question.text}\n\n"
+                        f"💬 Ответ: {message.text}\n\n"
+                        f"👨‍⚕️ Ответ предоставил: {pharmacist_info}\n\n"
+                        f"💡 Если ответ неполный или у вас есть уточняющий вопрос, "
+                        "используйте команду /clarify"
+                    )
 
                 await message.bot.send_message(
                     chat_id=user.telegram_id,
-                    text=f"💊 На ваш вопрос получен ответ!\n\n"
-                    f"❓ Ваш вопрос: {question.text}\n\n"
-                    f"💬 Ответ: {answer_preview}\n\n"
-                    f"👨‍⚕️ Ответ предоставил: {pharmacist_info}\n\n"
-                    f"💡 Если ответ неполный или у вас есть уточняющий вопрос, "
-                    "используйте команду /clarify",
+                    text=message_text,
                 )
-                logger.info(
-                    f"Notification sent to user {user.telegram_id} about answer"
-                )
+                logger.info(f"Notification sent to user {user.telegram_id} about answer")
 
             except Exception as e:
-                logger.error(
-                    f"Failed to send notification to user {user.telegram_id}: {e}"
-                )
+                logger.error(f"Failed to send notification to user {user.telegram_id}: {e}")
+
+        success_message = "✅ Ответ успешно отправлен пользователю!"
+        if is_clarification:
+            success_message = "✅ Ответ на уточнение успешно отправлен пользователю!"
 
         await message.answer(
-            "✅ Ответ успешно отправлен пользователю!\n\n"
+            f"{success_message}\n\n"
             "Используйте /questions для просмотра других вопросов."
         )
 
@@ -546,3 +574,64 @@ async def process_answer_text(
         )
         await message.answer("❌ Ошибка при отправке ответа")
         await state.clear()
+
+
+# Добавьте этот метод в конец файла qa_handlers.py
+
+@router.callback_query(F.data.startswith("clarification_answer_"))
+async def answer_clarification_callback(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: Pharmacist,
+):
+    """Обработка нажатия на кнопку ответа на уточнение"""
+    question_uuid = callback.data.replace("clarification_answer_", "")
+
+    logger.info(f"Clarification answer callback for question {question_uuid} from user {callback.from_user.id}")
+
+    if not is_pharmacist or not pharmacist:
+        await callback.answer("❌ Эта функция доступна только фармацевтам", show_alert=True)
+        return
+
+    try:
+        # Получаем вопрос уточнения
+        result = await db.execute(
+            select(Question).where(Question.uuid == question_uuid)
+        )
+        clarification_question = result.scalar_one_or_none()
+
+        if not clarification_question:
+            await callback.answer("❌ Вопрос не найден", show_alert=True)
+            return
+
+        # Проверяем, что это действительно уточнение
+        if not clarification_question.context_data or not clarification_question.context_data.get("is_clarification"):
+            await callback.answer("❌ Это не уточнение", show_alert=True)
+            return
+
+        # Сохраняем ID вопроса уточнения в состоянии
+        await state.update_data(
+            question_uuid=question_uuid,
+            is_clarification=True,
+            original_question_id=clarification_question.context_data.get("original_question_id")
+        )
+        await state.set_state(QAStates.waiting_for_answer)
+
+        original_question_text = clarification_question.context_data.get("original_question_text", "")
+
+        await callback.message.answer(
+            f"🔍 Вы отвечаете на <b>УТОЧНЕНИЕ</b>:\n\n"
+            f"❓ <b>Исходный вопрос:</b>\n{original_question_text}\n\n"
+            f"💬 <b>Уточнение от пользователя:</b>\n{clarification_question.text}\n\n"
+            f"✍️ <b>Напишите ваш ответ ниже:</b>\n"
+            f"(или /cancel для отмены)",
+            parse_mode="HTML"
+        )
+
+        await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Error in answer_clarification_callback for user {callback.from_user.id}: {e}", exc_info=True)
+        await callback.answer("❌ Ошибка при обработке запроса", show_alert=True)

@@ -14,6 +14,7 @@ from bot.handlers.common_handlers import get_user_keyboard
 import logging
 from datetime import datetime, timedelta
 from utils.time_utils import get_utc_now_naive
+from bot.keyboards.qa_keyboard import make_clarification_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -266,58 +267,46 @@ async def process_clarification(
         # Уведомляем ВСЕХ активных фармацевтов (не только онлайн)
         from sqlalchemy.orm import selectinload
 
-        result = await db.execute(
-            select(Pharmacist)
-            .options(selectinload(Pharmacist.user))
-            .where(Pharmacist.is_active == True)  # Все активные фармацевты
-        )
-        all_active_pharmacists = result.scalars().all()
+result = await db.execute(
+    select(Pharmacist)
+    .options(selectinload(Pharmacist.user))
+    .where(Pharmacist.is_active == True)  # Все активные фармацевты
+)
+all_active_pharmacists = result.scalars().all()
 
-        notified_count = 0
-        for pharmacist in all_active_pharmacists:
-            if pharmacist.user and pharmacist.user.telegram_id:
-                try:
-                    # Разные сообщения для онлайн и офлайн фармацевтов
-                    if pharmacist.is_online:
-                        message_text = (
-                            f"🔔 УТОЧНЕНИЕ К ВОПРОСУ!\n\n"
-                            f"❓ Исходный вопрос: {original_question.text}\n\n"
-                            f"💬 Уточнение: {message.text}\n\n"
-                            f"💡 Статус: Вы в онлайн - можете ответить сразу!\n"
-                            f"Используйте /questions чтобы ответить"
-                        )
-                    else:
-                        message_text = (
-                            f"📥 Уточнение к вопросу ожидает ответа\n\n"
-                            f"❓ Исходный вопрос: {original_question.text}\n\n"
-                            f"💬 Уточнение: {message.text}\n\n"
-                            f"💡 Статус: Вы в офлайн - перейдите в онлайн чтобы ответить\n"
-                            f"Используйте /online чтобы начать принимать вопросы"
-                        )
+notified_count = 0
+for pharmacist in all_active_pharmacists:
+    if pharmacist.user and pharmacist.user.telegram_id:
+        try:
+            # Разные сообщения для онлайн и офлайн фармацевтов
+            if pharmacist.is_online:
+                message_text = (
+                    f"🔔 УТОЧНЕНИЕ К ВОПРОСУ!\n\n"
+                    f"❓ Исходный вопрос: {original_question.text}\n\n"
+                    f"💬 Уточнение: {message.text}\n\n"
+                    f"💡 Статус: Вы в онлайн - можете ответить сразу!"
+                )
+                # Для онлайн фармацевтов отправляем с кнопкой ответа
+                reply_markup = make_clarification_keyboard(clarification_question.uuid)
+            else:
+                message_text = (
+                    f"📥 Уточнение к вопросу ожидает ответа\n\n"
+                    f"❓ Исходный вопрос: {original_question.text}\n\n"
+                    f"💬 Уточнение: {message.text}\n\n"
+                    f"💡 Статус: Вы в офлайн - перейдите в онлайн чтобы ответить\n"
+                    f"Используйте /online чтобы начать принимать вопросы"
+                )
+                reply_markup = None
 
-                    await message.bot.send_message(
-                        chat_id=pharmacist.user.telegram_id,
-                        text=message_text
-                    )
-                    notified_count += 1
-                    logger.info(f"Clarification notification sent to pharmacist {pharmacist.user.telegram_id}")
-                except Exception as e:
-                    logger.error(f"Failed to notify pharmacist {pharmacist.user.telegram_id}: {e}")
-
-        logger.info(f"Notified {notified_count} pharmacists about clarification for question {original_question.uuid}")
-
-        await message.answer(
-            "✅ Ваше уточнение отправлено фармацевтам!\n\n"
-            f"👨‍⚕️ Уведомлено фармацевтов: {notified_count}\n\n"
-            "Фармацевт скоро ответит на ваше уточнение."
-        )
-
-        await state.clear()
-
-    except Exception as e:
-        logger.error(f"Error processing clarification: {e}")
-        await message.answer("❌ Ошибка при отправке уточнения.")
-        await state.clear()
+            await message.bot.send_message(
+                chat_id=pharmacist.user.telegram_id,
+                text=message_text,
+                reply_markup=reply_markup
+            )
+            notified_count += 1
+            logger.info(f"Clarification notification sent to pharmacist {pharmacist.user.telegram_id}")
+        except Exception as e:
+            logger.error(f"Failed to notify pharmacist {pharmacist.user.telegram_id}: {e}")
 
 @router.message(UserQAStates.waiting_for_question)
 async def process_user_question(

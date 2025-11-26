@@ -55,3 +55,14 @@ def make_pharmacist_info_keyboard(pharmacist) -> InlineKeyboardMarkup:
     except Exception as e:
         logger.error(f"Error creating pharmacist info keyboard: {e}")
         return InlineKeyboardMarkup(inline_keyboard=[])
+
+
+# Добавьте эту функцию в bot/keyboards/qa_keyboard.py
+
+def make_clarification_keyboard(question_uuid: str) -> InlineKeyboardMarkup:
+    """Клавиатура для ответа на уточнение"""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="💬 Ответить на уточнение", callback_data=f"clarification_answer_{question_uuid}")]
+        ]
+    )
