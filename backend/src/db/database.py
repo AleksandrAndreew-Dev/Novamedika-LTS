@@ -74,3 +74,19 @@ async def execute_in_transaction(session: AsyncSession, query, **params):
             await session.rollback()
             logger.error(f"Transaction failed: {e}")
             raise
+
+# database.py - ДОБАВЬТЕ ЭТИ ФУНКЦИИ
+
+async def dispose_engine():
+    """Явно закрывает все соединения engine"""
+    global _engine, _async_session_maker
+    if _engine:
+        await _engine.dispose()
+        _engine = None
+        _async_session_maker = None
+
+def reset_engine():
+    """Сбрасывает engine (для использования после fork)"""
+    global _engine, _async_session_maker
+    _engine = None
+    _async_session_maker = None

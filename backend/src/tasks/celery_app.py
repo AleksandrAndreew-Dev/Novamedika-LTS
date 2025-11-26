@@ -1,3 +1,4 @@
+import celery_worker_init
 # celery_app.py
 import os
 from celery import Celery
@@ -21,6 +22,7 @@ celery = Celery(
 )
 
 # Важные настройки для решения проблем
+# celery_app.py - ДОБАВЬТЕ ЭТИ НАСТРОЙКИ
 celery.conf.update(
     worker_send_task_events=True,
     task_send_sent_event=True,
@@ -29,4 +31,13 @@ celery.conf.update(
     task_acks_late=True,
     broker_connection_retry_on_startup=True,
     worker_cancel_long_running_tasks_on_connection_loss=True,
+
+    # КРИТИЧЕСКИ ВАЖНЫЕ НАСТРОЙКИ ДЛЯ ASYNCPG
+    worker_max_tasks_per_child=1,  # Перезапуск worker после каждой задачи
+    worker_disable_rate_limits=True,
+    task_always_eager=False,
+
+    # Настройки для избежания конфликтов с БД
+    broker_pool_limit=None,
+    result_backend_always_retry=True,
 )

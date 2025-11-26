@@ -37,15 +37,16 @@ from tasks.celery_app import celery
 
 # tasks_increment.py - УЛУЧШЕННАЯ ИНИЦИАЛИЗАЦИЯ
 
+# tasks_increment.py - ЗАМЕНИТЕ initialize_task_models
+
 async def initialize_task_models():
-    """Потокобезопасная инициализация моделей с улучшенной обработкой ошибок"""
+    """Потокобезопасная инициализация с очисткой connection pool"""
     global _models_initialized
 
     if _models_initialized:
         return
 
     init_lock = asyncio.Lock()
-
     async with init_lock:
         if _models_initialized:
             return
@@ -54,12 +55,21 @@ async def initialize_task_models():
         for attempt in range(max_retries):
             try:
                 logger.info(f"Initializing database models (attempt {attempt + 1}/{max_retries})")
+
+                # Явно закрываем старые соединения перед инициализацией
+                from db.database import engine, _engine
+                if _engine:
+                    try:
+                        await _engine.dispose()
+                    except:
+                        pass
+
                 await init_models()
 
-                # Тестовое соединение с новой сессией
+                # Тестовое соединение с полным закрытием
                 async with async_session_maker() as session:
                     await session.execute(select(1))
-                    await session.close()  # Явно закрываем тестовую сессию
+                    await session.close()
 
                 _models_initialized = True
                 logger.info("Database models initialized successfully for Celery")
