@@ -291,8 +291,11 @@ async def process_clarification(
                              f"Используйте /questions чтобы ответить"
                     )
                     notified_count += 1
+                    logger.info(f"Clarification notification sent to pharmacist {pharmacist.user.telegram_id}")  # ДОБАВИТЬ ЭТУ СТРОЧКУ
                 except Exception as e:
                     logger.error(f"Failed to notify pharmacist {pharmacist.user.telegram_id}: {e}")
+
+        logger.info(f"Notified {notified_count} pharmacists about clarification for question {original_question.uuid}")  # ДОБАВИТЬ ЭТУ СТРОЧКУ
 
         await message.answer(
             "✅ Ваше уточнение отправлено фармацевтам!\n\n"
