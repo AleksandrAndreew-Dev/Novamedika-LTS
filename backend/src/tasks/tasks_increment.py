@@ -33,6 +33,9 @@ logger = logging.getLogger(__name__)
 # Глобальная переменная для отслеживания инициализации
 _models_initialized = False
 
+# Импортируем общий celery app
+from celery_app import celery
+
 async def initialize_task_models():
     """Потокобезопасная инициализация моделей с улучшенной обработкой ошибок"""
     global _models_initialized
@@ -835,11 +838,11 @@ def retry_failed_orders_task():
 
 celery.conf.beat_schedule = {
     'sync-orders-every-10-min': {
-        'task': 'tasks_increment.sync_pharmacy_orders_task',
+        'task': 'celery_app.sync_pharmacy_orders_task',
         'schedule': 600.0,
     },
     'retry-failed-orders-every-5-min': {
-        'task': 'tasks_increment.retry_failed_orders_task',
+        'task': 'celery_app.retry_failed_orders_task',
         'schedule': 300.0,
     },
 }

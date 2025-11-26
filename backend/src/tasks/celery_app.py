@@ -5,14 +5,14 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-rabbitmq_user = os.getenv('RABBITMQ_USER', 'novamedika')
-rabbitmq_password = os.getenv('RABBITMQ_PASSWORD', 'novamedika')
-rabbitmq_host = os.getenv('RABBITMQ_HOST', 'rabbitmq')
+# Используем Redis как брокер и бэкенд (убираем RabbitMQ)
+redis_password = os.getenv('REDIS_PASSWORD', '')
+redis_host = os.getenv('REDIS_HOST', 'redis')
 
 celery = Celery(
     'tasks',
-    broker=f'amqp://{rabbitmq_user}:{rabbitmq_password}@{rabbitmq_host}:5672//',
-    backend=f'redis://:{os.getenv("REDIS_PASSWORD")}@redis:6379/0',
+    broker=f'redis://:{redis_password}@{redis_host}:6379/0',
+    backend=f'redis://:{redis_password}@{redis_host}:6379/0',
     task_serializer='json',
     accept_content=['json'],
     result_serializer='json',
