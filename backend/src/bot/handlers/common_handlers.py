@@ -98,7 +98,6 @@ async def cmd_help(message: Message, is_pharmacist: bool):
             reply_markup=get_user_keyboard()
         )
 
-# Добавить обработчики callback-кнопок
 @router.callback_query(F.data == "i_am_pharmacist")
 async def i_am_pharmacist_callback(callback: CallbackQuery, is_pharmacist: bool):
     """Обработка нажатия 'Я фарм специалист'"""
@@ -129,7 +128,12 @@ async def i_am_pharmacist_callback(callback: CallbackQuery, is_pharmacist: bool)
         )
 
 @router.callback_query(F.data == "go_online")
-async def go_online_callback(callback: CallbackQuery, db: AsyncSession, is_pharmacist: bool, pharmacist: object):
+async def go_online_callback(
+    callback: CallbackQuery,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: object
+):
     """Быстрый переход в онлайн через кнопку"""
     if not is_pharmacist or not pharmacist:
         await callback.answer("❌ Эта функция доступна только фармацевтам", show_alert=True)
@@ -144,32 +148,99 @@ async def go_online_callback(callback: CallbackQuery, db: AsyncSession, is_pharm
         await callback.message.answer(
             "🟢 <b>Вы перешли в онлайн статус!</b>\n\n"
             "Теперь вы будете получать уведомления о новых вопросах и можете "
-            "просматривать ожидающие вопросы.",
+            "просматривать ожидающие вопросы.\n\n"
+            "Используйте кнопку ниже чтобы посмотреть вопросы:",
             parse_mode="HTML",
             reply_markup=get_pharmacist_keyboard()
         )
     except Exception as e:
+        logger.error(f"Error in go_online_callback: {e}")
         await callback.answer("❌ Ошибка при переходе в онлайн", show_alert=True)
 
 @router.callback_query(F.data == "view_questions")
-async def view_questions_callback(callback: CallbackQuery, is_pharmacist: bool):
-    """Быстрый просмотр вопросов через кнопку"""
+async def view_questions_callback(
+    callback: CallbackQuery,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: object
+):
+    """Быстрый просмотр вопросов через кнопку - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
     if not is_pharmacist:
         await callback.answer("❌ Эта функция доступна только фармацевтам", show_alert=True)
         return
 
     await callback.answer()
-    # Имитируем команду /questions
-    from aiogram.types import Message
-    fake_message = Message(
-        message_id=callback.message.message_id,
-        date=callback.message.date,
-        chat=callback.message.chat,
-        text="/questions"
-    )
-    # Здесь нужно вызвать обработчик команды /questions
-    # Для простоты просто отправляем сообщение
-    await callback.message.answer("📋 Используйте команду /questions для просмотра списка вопросов")
+
+    try:
+        # Используем реальный запрос к базе данных
+        from sqlalchemy import select
+        from db.qa_models import Question, User
+
+        result = await db.execute(
+            select(Question)
+            .where(Question.status == "pending")
+            .order_by(Question.created_at.asc())
+            .limit(5)
+        )
+        questions = result.scalars().all()
+
+        if not questions:
+            await callback.message.answer(
+                "📝 На данный момент нет новых вопросов.\n\n"
+                "Пользователи задают вопросы через команду /ask"
+            )
+            return
+
+        for i, question in enumerate(questions, 1):
+            # Проверяем, является ли вопрос уточнением
+            is_clarification = (
+                question.context_data and
+                question.context_data.get("is_clarification")
+            )
+
+            if is_clarification:
+                original_question_id = question.context_data.get("original_question_id")
+                original_question_text = question.context_data.get("original_question_text", "")
+
+                question_text = (
+                    f"🔍 <b>УТОЧНЕНИЕ К ВОПРОСУ</b>\n\n"
+                    f"❓ Исходный вопрос: {original_question_text}\n\n"
+                    f"💬 Уточнение: {question.text}\n\n"
+                    f"🕒 Создано: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
+                )
+            else:
+                question_text = (
+                    f"❓ Вопрос #{i}:\n{question.text}\n\n"
+                    f"🕒 Создан: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
+                )
+
+            # Получаем пользователя
+            user_result = await db.execute(
+                select(User).where(User.uuid == question.user_id)
+            )
+            user = user_result.scalar_one_or_none()
+
+            if user:
+                user_info = user.first_name or user.telegram_username or "Аноним"
+                if user.last_name:
+                    user_info = f"{user.first_name} {user.last_name}"
+                question_text += f"\n👤 Пользователь: {user_info}"
+
+            from bot.keyboards.qa_keyboard import make_question_keyboard
+            await callback.message.answer(
+                question_text,
+                parse_mode="HTML",
+                reply_markup=make_question_keyboard(question.uuid)
+            )
+
+        if len(questions) == 5:
+            await callback.message.answer(
+                "💡 Показаны первые 5 вопросов. Ответьте на них чтобы увидеть следующие."
+            )
+
+    except Exception as e:
+        logger.error(f"Error in view_questions_callback: {e}")
+        await callback.message.answer("❌ Ошибка при получении вопросов")
 
 @router.callback_query(F.data == "ask_question")
 async def ask_question_callback(callback: CallbackQuery, state: FSMContext, is_pharmacist: bool):
@@ -188,16 +259,23 @@ async def ask_question_callback(callback: CallbackQuery, state: FSMContext, is_p
     )
 
 @router.callback_query(F.data == "my_questions")
-async def my_questions_callback(callback: CallbackQuery):
+async def my_questions_callback(callback: CallbackQuery, db: AsyncSession, user: User, is_pharmacist: bool):
     """Быстрый просмотр своих вопросов через кнопку"""
     await callback.answer()
-    await callback.message.answer(
-        "📖 Используйте команду:\n"
-        "<code>/my_questions</code>\n\n"
-        "чтобы посмотреть историю ваших вопросов и ответы на них",
-        parse_mode="HTML"
+
+    # Создаем сообщение с командой для обработки реальным обработчиком
+    from aiogram.types import Message
+    fake_message = Message(
+        message_id=callback.message.message_id,
+        date=callback.message.date,
+        chat=callback.message.chat,
+        from_user=callback.from_user,
+        text="/my_questions"
     )
 
+    # Импортируем и вызываем реальный обработчик
+    from bot.handlers.user_questions import cmd_my_questions
+    await cmd_my_questions(fake_message, db, user, is_pharmacist)
 
 @router.callback_query(F.data == "user_help")
 async def user_help_callback(callback: CallbackQuery):
@@ -248,7 +326,6 @@ async def universal_cancel(message: Message, state: FSMContext):
     await state.clear()
     await message.answer("✅ Текущее действие отменено.")
 
-# ПЕРЕМЕСТИТЬ ЭТОТ ОБРАБОТЧИК В САМЫЙ КОНЕЦ
 @router.message(F.command)
 async def unknown_command(message: Message):
     """Обработка неизвестных команд - ДОЛЖЕН БЫТЬ ПОСЛЕДНИМ"""
