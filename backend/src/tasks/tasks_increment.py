@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 _models_initialized = False
 
 # Импортируем общий celery app
-from celery_app import celery
+from tasks.celery_app import celery
 
 async def initialize_task_models():
     """Потокобезопасная инициализация моделей с улучшенной обработкой ошибок"""
