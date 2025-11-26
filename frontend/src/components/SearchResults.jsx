@@ -11,10 +11,8 @@ export default function SearchResults({
   loading,
   isTelegram,
 }) {
-  // В начале файла добавляем импорт
-  import { bookingApi } from "../api/client";
 
-  // В компоненте SearchResults обновляем состояние бронирования
+
   const [bookingState, setBookingState] = useState({
     modal: {
       isOpen: false,
