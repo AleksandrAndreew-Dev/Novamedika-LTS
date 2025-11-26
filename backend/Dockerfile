@@ -18,6 +18,7 @@ COPY pyproject.toml uv.lock ./
 RUN pip install --upgrade pip && pip install uv
 RUN uv sync --frozen --no-cache
 
+
 # Copy source code
 COPY src/ ./src/
 

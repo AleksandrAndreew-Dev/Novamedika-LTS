@@ -6,7 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
 from db.database import async_session_maker
-from db.booking_models import PharmacyAPIConfig, BookingOrder, SyncLog, Product
+from db.booking_models import PharmacyAPIConfig, BookingOrder, SyncLog
+from db.models import Product
 from order_manager.manager import ExternalAPIManager
 
 logger = logging.getLogger(__name__)

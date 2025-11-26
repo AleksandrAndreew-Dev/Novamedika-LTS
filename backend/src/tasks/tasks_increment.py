@@ -34,13 +34,14 @@ logger = logging.getLogger(__name__)
 _models_initialized = False
 
 async def initialize_task_models():
-    """Потокобезопасная инициализация моделей"""
+    """Потокобезопасная инициализация моделей с улучшенной обработкой ошибок"""
     global _models_initialized
 
     if _models_initialized:
         return
 
-    # Создаем локальную блокировку для этой функции
+    # Используем блокировку на уровне модуля
+    import asyncio
     init_lock = asyncio.Lock()
 
     async with init_lock:
@@ -48,13 +49,26 @@ async def initialize_task_models():
         if _models_initialized:
             return
 
-        try:
-            await init_models()
-            _models_initialized = True
-            logger.info("Database models initialized successfully for Celery")
-        except Exception as e:
-            logger.error(f"Error initializing models in Celery: {e}")
-            raise
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"Initializing database models (attempt {attempt + 1}/{max_retries})")
+                await init_models()
+
+                # Тестовое соединение с базой
+                async with async_session_maker() as session:
+                    await session.execute(select(1))
+
+                _models_initialized = True
+                logger.info("Database models initialized successfully for Celery")
+                return
+
+            except Exception as e:
+                logger.error(f"Error initializing models (attempt {attempt + 1}): {e}")
+                if attempt == max_retries - 1:
+                    logger.error("All attempts to initialize models failed")
+                    raise
+                await asyncio.sleep(2 ** attempt)  # Exponential backoff
 
 redis_password = os.getenv('REDIS_PASSWORD', '')
 
