@@ -125,7 +125,7 @@ services:
     command:
       - /app/.venv/bin/celery
       - -A
-      - celery_app
+      - tasks.celery_app  # ИЗМЕНИТЕ ЗДЕСЬ
       - worker
       - --loglevel=info
       - --concurrency=2
@@ -140,7 +140,7 @@ services:
       - postgres
       - redis
     healthcheck:
-      test: ["CMD-SHELL", "/app/.venv/bin/celery -A celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      test: ["CMD-SHELL", "/app/.venv/bin/celery -A tasks.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]  # ИЗМЕНИТЕ ЗДЕСЬ
       interval: 30s
       timeout: 10s
       retries: 3
@@ -166,7 +166,7 @@ services:
     command:
       - /app/.venv/bin/celery
       - -A
-      - celery_app
+      - tasks.celery_app  # ИЗМЕНИТЕ ЗДЕСЬ
       - flower
       - --port=5555
       - --broker=redis://:${REDIS_PASSWORD}@redis:6379/0

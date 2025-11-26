@@ -13,7 +13,6 @@ from datetime import datetime, date, timezone
 from io import StringIO
 from typing import List, Tuple, Dict, Set, Optional
 
-from celery import Celery
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -807,7 +806,7 @@ def parse_product_details(product_string: str) -> Tuple[str, str]:
 def sync_pharmacy_orders_task():
     """Периодическая задача для синхронизации заказов"""
     # Импортируем здесь чтобы избежать циклических импортов
-    from services.sync_service import SyncService
+    from backend.src.tasks.sync_service import SyncService
 
     sync_service = SyncService()
 
@@ -823,7 +822,7 @@ def sync_pharmacy_orders_task():
 def retry_failed_orders_task():
     """Повторная отправка неудачных заказов"""
     # Импортируем здесь чтобы избежать циклических импортов
-    from services.sync_service import SyncService
+    from backend.src.tasks.sync_service import SyncService
 
     sync_service = SyncService()
 
