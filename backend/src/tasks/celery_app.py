@@ -22,7 +22,6 @@ celery = Celery(
 )
 
 # Важные настройки для решения проблем
-# celery_app.py - ДОБАВЬТЕ ЭТИ НАСТРОЙКИ
 celery.conf.update(
     worker_send_task_events=True,
     task_send_sent_event=True,
@@ -41,3 +40,6 @@ celery.conf.update(
     broker_pool_limit=None,
     result_backend_always_retry=True,
 )
+
+# КРИТИЧЕСКИ ВАЖНО: Импортируем все задачи для регистрации
+from tasks import tasks_increment

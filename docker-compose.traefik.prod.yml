@@ -122,21 +122,22 @@ services:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/0
-      - CELERY_WORKER_CONCURRENCY=2  # Уменьшите concurrency
+      - CELERY_WORKER_CONCURRENCY=2
       - CELERY_WORKER_PREFETCH_MULTIPLIER=1
+      - PYTHONPATH=/app/src  # ДОБАВЬТЕ ЭТУ СТРОКУ
     command:
       - /app/.venv/bin/celery
       - -A
       - tasks.celery_app
       - worker
       - --loglevel=info
-      - --concurrency=2  # Уменьшите количество параллельных воркеров
+      - --concurrency=2
       - --pool=prefork
       - --without-gossip
       - --without-mingle
       - --without-heartbeat
       - --task-events
-      - --prefetch-multiplier=1  # Важно для предотвращения конфликтов
+      - --prefetch-multiplier=1
     networks:
       - traefik-public
     depends_on:

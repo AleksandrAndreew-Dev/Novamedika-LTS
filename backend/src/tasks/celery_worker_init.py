@@ -14,8 +14,8 @@ def on_worker_init(**kwargs):
     from db.database import reset_engine
     reset_engine()
 
-    # Инициализируем модели в этом процессе
-    from tasks_increment import initialize_task_models
+    # Инициализируем модели в этом процессе - ИСПРАВЛЕННЫЙ ИМПОРТ
+    from tasks.tasks_increment import initialize_task_models  # ДОБАВЛЕН ПРЕФИКС tasks.
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
