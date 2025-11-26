@@ -51,3 +51,26 @@ async def get_async_connection():
 # Глобальные переменные для обратной совместимости
 engine = get_engine()
 async_session_maker = get_async_sessionmaker()
+
+
+# db/database.py - ДОБАВЬТЕ ЭТИ ФУНКЦИИ
+
+async def get_async_session() -> AsyncSession:
+    """Создает новую асинхронную сессию для использования в задачах"""
+    session_maker = get_async_sessionmaker()
+    session = session_maker()
+    try:
+        yield session
+    finally:
+        await session.close()
+
+async def execute_in_transaction(session: AsyncSession, query, **params):
+    """Выполняет запрос в транзакции с обработкой ошибок"""
+    async with session.begin():
+        try:
+            result = await session.execute(query, params)
+            return result
+        except Exception as e:
+            await session.rollback()
+            logger.error(f"Transaction failed: {e}")
+            raise

@@ -35,6 +35,8 @@ _models_initialized = False
 # Импортируем общий celery app
 from tasks.celery_app import celery
 
+# tasks_increment.py - УЛУЧШЕННАЯ ИНИЦИАЛИЗАЦИЯ
+
 async def initialize_task_models():
     """Потокобезопасная инициализация моделей с улучшенной обработкой ошибок"""
     global _models_initialized
@@ -42,12 +44,9 @@ async def initialize_task_models():
     if _models_initialized:
         return
 
-    # Используем блокировку на уровне модуля
-    import asyncio
     init_lock = asyncio.Lock()
 
     async with init_lock:
-        # Double-check pattern
         if _models_initialized:
             return
 
@@ -57,9 +56,10 @@ async def initialize_task_models():
                 logger.info(f"Initializing database models (attempt {attempt + 1}/{max_retries})")
                 await init_models()
 
-                # Тестовое соединение с базой
+                # Тестовое соединение с новой сессией
                 async with async_session_maker() as session:
                     await session.execute(select(1))
+                    await session.close()  # Явно закрываем тестовую сессию
 
                 _models_initialized = True
                 logger.info("Database models initialized successfully for Celery")
@@ -70,11 +70,19 @@ async def initialize_task_models():
                 if attempt == max_retries - 1:
                     logger.error("All attempts to initialize models failed")
                     raise
-                await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                await asyncio.sleep(2 ** attempt)
 
+# tasks_increment.py - ДОБАВЬТЕ ЭТУ ФУНКЦИЮ
 
+async def get_asyncpg_connection():
+    """Создает новое соединение asyncpg для каждой операции"""
+    database_url = os.getenv('ASYNCPG_DATABASE_URL', "postgresql://novamedika:novamedika@postgres:5432/novamedika_prod")
 
+    # Парсим URL для asyncpg
+    if database_url.startswith("postgresql://"):
+        database_url = database_url.replace("postgresql://", "postgres://", 1)
 
+    return await asyncpg.connect(database_url)
 
 def generate_product_hash(product_data: dict) -> str:
     # Преобразуем дату в строку безопасным способом
@@ -143,6 +151,8 @@ async def process_csv_incremental_async_wrapper(
     # Выполняем основную логику
     return await process_csv_incremental_async(file_content, pharmacy_name, pharmacy_number)
 
+# tasks_increment.py - КРИТИЧЕСКИЕ ИСПРАВЛЕНИЯ
+
 async def process_csv_incremental_async(
     file_content: str, pharmacy_name: str, pharmacy_number: str
 ):
@@ -152,7 +162,10 @@ async def process_csv_incremental_async(
         if not normalized_name:
             raise ValueError(f"Invalid pharmacy: {pharmacy_name}")
 
-        # Создаем новую сессию для каждой задачи
+        # ИНИЦИАЛИЗИРУЕМ МОДЕЛИ ПЕРЕД РАБОТОЙ
+        await initialize_task_models()
+
+        # СОЗДАЕМ ОТДЕЛЬНУЮ СЕССИЮ ДЛЯ КАЖДОЙ ОПЕРАЦИИ
         async with async_session_maker() as session:
             # Ищем аптеку по названию и номеру
             result = await session.execute(
@@ -165,7 +178,6 @@ async def process_csv_incremental_async(
             )
             pharmacy = result.scalar_one_or_none()
 
-            # ЕСЛИ АПТЕКА НЕ НАЙДЕНА - СОЗДАЕМ НОВУЮ
             if not pharmacy:
                 logger.info(
                     f"Creating new pharmacy: {normalized_name}, number: {pharmacy_number}"
@@ -187,8 +199,8 @@ async def process_csv_incremental_async(
 
             logger.info(f"Using pharmacy: {pharmacy.uuid}")
 
-            # ЗАКРЫВАЕМ СЕССИЮ перед массовыми операциями
-            await session.close()
+        # ЗАКРЫВАЕМ СЕССИЮ перед массовыми операциями
+        # Сессия автоматически закроется благодаря context manager
 
         # Обрабатываем CSV для найденной/созданной аптеки
         csv_data, csv_hashes = process_csv_data_with_hashes(
@@ -200,6 +212,7 @@ async def process_csv_incremental_async(
             existing_hashes = await get_existing_products_with_hashes(
                 session, pharmacy.uuid
             )
+            # Явно закрываем сессию после использования
             await session.close()
 
         # Определяем изменения
@@ -578,6 +591,8 @@ def compare_products(
     return to_add, to_update, to_remove
 
 
+# tasks_increment.py - ИСПРАВЛЕННАЯ ФУНКЦИЯ
+
 async def execute_incremental_changes_async(
     to_add: List[dict],
     to_update: List[dict],
@@ -587,127 +602,122 @@ async def execute_incremental_changes_async(
     """Асинхронное выполнение инкрементальных изменений с правильным управлением соединениями"""
     stats = {"added": 0, "updated": 0, "removed": 0}
 
+    # СОЗДАЕМ ОТДЕЛЬНОЕ СОЕДИНЕНИЕ ДЛЯ КАЖДОЙ ОПЕРАЦИИ
+    conn = await get_asyncpg_connection()
+
     try:
-        # Используем переменную из окружения
-        database_url = os.getenv('ASYNCPG_DATABASE_URL', "postgresql://novamedika:novamedika@postgres:5432/novamedika_prod")
-        conn = await asyncpg.connect(database_url)
+        await conn.execute("BEGIN")  # Явно начинаем транзакцию
 
-        try:
-            # Удаление продуктов пакетами
-            if to_remove:
-                batch_size = 500  # Уменьшим размер батча еще больше
-                for i in range(0, len(to_remove), batch_size):
-                    batch = to_remove[i : i + batch_size]
-                    placeholders = ",".join([f"${j+1}" for j in range(len(batch))])
-                    query = f"""
-                        DELETE FROM products
-                        WHERE uuid IN ({placeholders}) AND pharmacy_id = ${len(batch)+1}
+        # Удаление продуктов пакетами
+        if to_remove:
+            batch_size = 100  # Уменьшим размер батча
+            for i in range(0, len(to_remove), batch_size):
+                batch = to_remove[i : i + batch_size]
+                placeholders = ",".join([f"${j+1}" for j in range(len(batch))])
+                query = f"""
+                    DELETE FROM products
+                    WHERE uuid IN ({placeholders}) AND pharmacy_id = ${len(batch)+1}
+                """
+                await conn.execute(
+                    query, *[str(uuid) for uuid in batch], str(pharmacy_uuid)
+                )
+            stats["removed"] = len(to_remove)
+            logger.info(f"Removed {len(to_remove)} products")
+
+        # Обновление продуктов пакетами
+        if to_update:
+            batch_size = 25  # Уменьшим размер батча для обновлений
+            for product in to_update:
+                updated_at = product["updated_at"]
+                if updated_at and updated_at.tzinfo is not None:
+                    updated_at = updated_at.replace(tzinfo=None)
+
+                await conn.execute(
                     """
-                    await conn.execute(
-                        query, *[str(uuid) for uuid in batch], str(pharmacy_uuid)
-                    )
-                stats["removed"] = len(to_remove)
-                logger.info(f"Removed {len(to_remove)} products")
+                    UPDATE products SET
+                        name = $1, form = $2, manufacturer = $3, country = $4,
+                        serial = $5, price = $6, quantity = $7, total_price = $8,
+                        expiry_date = $9, category = $10, import_date = $11,
+                        internal_code = $12, wholesale_price = $13, retail_price = $14,
+                        distributor = $15, internal_id = $16, updated_at = $17
+                    WHERE uuid = $18 AND pharmacy_id = $19
+                    """,
+                    product["name"],
+                    product["form"],
+                    product["manufacturer"],
+                    product["country"],
+                    product["serial"],
+                    float(product["price"]),
+                    float(product["quantity"]),
+                    float(product["total_price"]),
+                    product["expiry_date"],
+                    product["category"],
+                    product["import_date"],
+                    product["internal_code"],
+                    float(product["wholesale_price"]),
+                    float(product["retail_price"]),
+                    product["distributor"],
+                    product["internal_id"],
+                    updated_at,
+                    str(product["existing_uuid"]),
+                    str(pharmacy_uuid),
+                )
+            stats["updated"] = len(to_update)
+            logger.info(f"Updated {len(to_update)} products")
 
-            # Обновление продуктов пакетами
-            if to_update:
-                batch_size = 50  # Уменьшим размер батча для обновлений
-                for i in range(0, len(to_update), batch_size):
-                    batch = to_update[i : i + batch_size]
-                    for product in batch:
-                        updated_at = product["updated_at"]
-                        if updated_at and updated_at.tzinfo is not None:
-                            updated_at = updated_at.replace(tzinfo=None)
+        # Добавление продуктов пакетами
+        if to_add:
+            batch_size = 25  # Уменьшим размер батча для вставок
+            for i in range(0, len(to_add), batch_size):
+                batch = to_add[i : i + batch_size]
+                values_placeholders = []
+                params = []
+                param_counter = 1
 
-                        await conn.execute(
-                            """
-                            UPDATE products SET
-                                name = $1, form = $2, manufacturer = $3, country = $4,
-                                serial = $5, price = $6, quantity = $7, total_price = $8,
-                                expiry_date = $9, category = $10, import_date = $11,
-                                internal_code = $12, wholesale_price = $13, retail_price = $14,
-                                distributor = $15, internal_id = $16, updated_at = $17
-                            WHERE uuid = $18 AND pharmacy_id = $19
-                            """,
-                            product["name"],
-                            product["form"],
-                            product["manufacturer"],
-                            product["country"],
-                            product["serial"],
-                            float(product["price"]),
-                            float(product["quantity"]),
-                            float(product["total_price"]),
-                            product["expiry_date"],
-                            product["category"],
-                            product["import_date"],
-                            product["internal_code"],
-                            float(product["wholesale_price"]),
-                            float(product["retail_price"]),
-                            product["distributor"],
-                            product["internal_id"],
-                            updated_at,
-                            str(product["existing_uuid"]),
-                            str(pharmacy_uuid),
-                        )
-                stats["updated"] = len(to_update)
-                logger.info(f"Updated {len(to_update)} products")
+                for product in batch:
+                    if product["expiry_date"] is None:
+                        product["expiry_date"] = date(2099, 12, 31)
 
-            # Добавление продуктов пакетами
-            if to_add:
-                batch_size = 50  # Уменьшим размер батча для вставок
-                for i in range(0, len(to_add), batch_size):
-                    batch = to_add[i : i + batch_size]
-                    values_placeholders = []
-                    params = []
-                    param_counter = 1
+                    placeholders = []
+                    for field in [
+                        "uuid", "name", "form", "manufacturer", "country", "serial",
+                        "price", "quantity", "total_price", "expiry_date", "category",
+                        "import_date", "internal_code", "wholesale_price", "retail_price",
+                        "distributor", "internal_id", "pharmacy_id", "updated_at",
+                    ]:
+                        placeholders.append(f"${param_counter}")
+                        value = product[field]
 
-                    for product in batch:
-                        if product["expiry_date"] is None:
-                            product["expiry_date"] = date(2099, 12, 31)
+                        if field == "updated_at" and value and value.tzinfo is not None:
+                            value = value.replace(tzinfo=None)
+                        elif field in ["price", "quantity", "total_price", "wholesale_price", "retail_price"]:
+                            value = float(value)
 
-                        placeholders = []
-                        for field in [
-                            "uuid", "name", "form", "manufacturer", "country", "serial",
-                            "price", "quantity", "total_price", "expiry_date", "category",
-                            "import_date", "internal_code", "wholesale_price", "retail_price",
-                            "distributor", "internal_id", "pharmacy_id", "updated_at",
-                        ]:
-                            placeholders.append(f"${param_counter}")
-                            value = product[field]
+                        params.append(value)
+                        param_counter += 1
 
-                            if field == "updated_at" and value and value.tzinfo is not None:
-                                value = value.replace(tzinfo=None)
-                            elif field in ["price", "quantity", "total_price", "wholesale_price", "retail_price"]:
-                                value = float(value)
+                    values_placeholders.append(f"({', '.join(placeholders)})")
 
-                            params.append(value)
-                            param_counter += 1
+                query = f"""
+                    INSERT INTO products (
+                        uuid, name, form, manufacturer, country, serial, price, quantity,
+                        total_price, expiry_date, category, import_date, internal_code,
+                        wholesale_price, retail_price, distributor, internal_id, pharmacy_id, updated_at
+                    ) VALUES {', '.join(values_placeholders)}
+                """
+                await conn.execute(query, *params)
+            stats["added"] = len(to_add)
+            logger.info(f"Added {len(to_add)} products")
 
-                        values_placeholders.append(f"({', '.join(placeholders)})")
-
-                    query = f"""
-                        INSERT INTO products (
-                            uuid, name, form, manufacturer, country, serial, price, quantity,
-                            total_price, expiry_date, category, import_date, internal_code,
-                            wholesale_price, retail_price, distributor, internal_id, pharmacy_id, updated_at
-                        ) VALUES {', '.join(values_placeholders)}
-                    """
-                    await conn.execute(query, *params)
-                stats["added"] = len(to_add)
-                logger.info(f"Added {len(to_add)} products")
-
-            return stats
-
-        except Exception as e:
-            await conn.close()
-            logger.error(f"Error executing incremental changes: {str(e)}")
-            raise
-        finally:
-            await conn.close()
+        await conn.execute("COMMIT")  # Явно коммитим транзакцию
+        return stats
 
     except Exception as e:
-        logger.error(f"Error connecting to database: {str(e)}")
+        await conn.execute("ROLLBACK")  # Откатываем при ошибке
+        logger.error(f"Error executing incremental changes: {str(e)}")
         raise
+    finally:
+        await conn.close()  # Всегда закрываем соединение
 
 
 # Вспомогательные функции
