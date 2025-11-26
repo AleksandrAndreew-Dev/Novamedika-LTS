@@ -21,30 +21,40 @@ from sqlalchemy.ext.asyncio import AsyncSession
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Импортируем все модели, чтобы они были зарегистрированы
-from db import Base, Pharmacy, Product, BookingOrder, PharmacyAPIConfig, SyncLog
-
-# Импорты из проекта
-from db.database import init_models, async_session_maker, get_async_connection
+from db import Base
 from db.models import Pharmacy, Product
 from db.booking_models import BookingOrder, PharmacyAPIConfig, SyncLog
 
+# Импорты из проекта
+from db.database import init_models, async_session_maker, get_async_connection
+
 logger = logging.getLogger(__name__)
 
+# Глобальная переменная для отслеживания инициализации
+_models_initialized = False
 
 async def initialize_task_models():
-    from db.database import init_models
-    await init_models()
+    """Потокобезопасная инициализация моделей"""
+    global _models_initialized
 
-# Запускаем инициализацию при импорте модуля
-try:
-    loop = asyncio.get_event_loop()
-    if loop.is_running():
-        asyncio.create_task(initialize_task_models())
-    else:
-        loop.run_until_complete(initialize_task_models())
-except:
-    # Если loop не доступен, инициализация произойдет при выполнении задачи
-    pass
+    if _models_initialized:
+        return
+
+    # Создаем локальную блокировку для этой функции
+    init_lock = asyncio.Lock()
+
+    async with init_lock:
+        # Double-check pattern
+        if _models_initialized:
+            return
+
+        try:
+            await init_models()
+            _models_initialized = True
+            logger.info("Database models initialized successfully for Celery")
+        except Exception as e:
+            logger.error(f"Error initializing models in Celery: {e}")
+            raise
 
 redis_password = os.getenv('REDIS_PASSWORD', '')
 
@@ -54,6 +64,20 @@ celery = Celery(
     backend=f'redis://:{redis_password}@redis:6379/0'
 )
 
+# Важные настройки Celery для стабильности
+celery.conf.update(
+    task_serializer='json',
+    accept_content=['json'],
+    result_serializer='json',
+    timezone='UTC',
+    enable_utc=True,
+    worker_send_task_events=True,
+    task_send_sent_event=True,
+    task_ignore_result=False,
+    worker_prefetch_multiplier=1,
+    task_acks_late=True,
+    broker_connection_retry_on_startup=True,
+)
 
 def generate_product_hash(product_data: dict) -> str:
     # Преобразуем дату в строку безопасным способом
@@ -96,23 +120,28 @@ def validate_numeric_value(
 def process_csv_incremental(
     self, file_content: str, pharmacy_name: str, pharmacy_number: str
 ):
-    """Синхронная обертка для асинхронной функции с правильным управлением event loop"""
+    """Синхронная обертка для асинхронной функции с изолированным event loop"""
     try:
-        # Используем asyncio.run вместо ручного управления loop
-        return asyncio.run(
-            process_csv_incremental_async_wrapper(file_content, pharmacy_name, pharmacy_number)
-        )
+        # Создаем новый event loop для каждой задачи
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(
+                process_csv_incremental_async_wrapper(file_content, pharmacy_name, pharmacy_number)
+            )
+            return result
+        finally:
+            loop.close()
     except Exception as e:
-        logger.error(f"Error in process_csv_incremental wrapper: {str(e)}")
+        logger.error(f"Error in process_csv_incremental: {str(e)}")
         raise self.retry(exc=e, countdown=60)
 
 async def process_csv_incremental_async_wrapper(
     file_content: str, pharmacy_name: str, pharmacy_number: str
 ):
     """Обертка для правильной инициализации и выполнения асинхронного кода"""
-    # Инициализируем модели в текущем event loop
-    from db.database import init_models
-    await init_models()
+    # Используем нашу безопасную инициализацию
+    await initialize_task_models()
 
     # Выполняем основную логику
     return await process_csv_incremental_async(file_content, pharmacy_name, pharmacy_number)
@@ -164,39 +193,39 @@ async def process_csv_incremental_async(
             # ЗАКРЫВАЕМ СЕССИЮ перед массовыми операциями
             await session.close()
 
-            # Обрабатываем CSV для найденной/созданной аптеки
-            csv_data, csv_hashes = process_csv_data_with_hashes(
-                file_content, pharmacy.uuid
+        # Обрабатываем CSV для найденной/созданной аптеки
+        csv_data, csv_hashes = process_csv_data_with_hashes(
+            file_content, pharmacy.uuid
+        )
+
+        # Получаем существующие продукты с НОВОЙ сессией
+        async with async_session_maker() as session:
+            existing_hashes = await get_existing_products_with_hashes(
+                session, pharmacy.uuid
             )
+            await session.close()
 
-            # Получаем существующие продукты с НОВОЙ сессией
-            async with async_session_maker() as session:
-                existing_hashes = await get_existing_products_with_hashes(
-                    session, pharmacy.uuid
-                )
-                await session.close()
+        # Определяем изменения
+        to_add, to_update, to_remove = compare_products(
+            csv_hashes, existing_hashes, csv_data
+        )
 
-            # Определяем изменения
-            to_add, to_update, to_remove = compare_products(
-                csv_hashes, existing_hashes, csv_data
-            )
+        logger.info(
+            f"Changes: {len(to_add)} to add, {len(to_update)} to update, {len(to_remove)} to remove"
+        )
 
-            logger.info(
-                f"Changes: {len(to_add)} to add, {len(to_update)} to update, {len(to_remove)} to remove"
-            )
+        # Выполняем изменения ТОЛЬКО для продуктов
+        stats = await execute_incremental_changes_async(
+            to_add, to_update, to_remove, pharmacy.uuid
+        )
 
-            # Выполняем изменения ТОЛЬКО для продуктов
-            stats = await execute_incremental_changes_async(
-                to_add, to_update, to_remove, pharmacy.uuid
-            )
-
-            return {
-                "status": "success",
-                "pharmacy_id": str(pharmacy.uuid),
-                "stats": stats,
-                "processed_rows": len(csv_data),
-                "pharmacy_created": not pharmacy,
-            }
+        return {
+            "status": "success",
+            "pharmacy_id": str(pharmacy.uuid),
+            "stats": stats,
+            "processed_rows": len(csv_data),
+            "pharmacy_created": not pharmacy,
+        }
 
     except Exception as e:
         logger.error(f"Error in process_csv_incremental_async: {str(e)}")
@@ -760,10 +789,12 @@ def parse_product_details(product_string: str) -> Tuple[str, str]:
 @celery.task
 def sync_pharmacy_orders_task():
     """Периодическая задача для синхронизации заказов"""
+    # Импортируем здесь чтобы избежать циклических импортов
+    from services.sync_service import SyncService
+
     sync_service = SyncService()
 
     # Запускаем в event loop для async функций
-    import asyncio
     loop = asyncio.get_event_loop()
     if loop.is_closed():
         loop = asyncio.new_event_loop()
@@ -774,13 +805,27 @@ def sync_pharmacy_orders_task():
 @celery.task
 def retry_failed_orders_task():
     """Повторная отправка неудачных заказов"""
-    # Логика для ретрая failed заказов
-    pass
+    # Импортируем здесь чтобы избежать циклических импортов
+    from services.sync_service import SyncService
+
+    sync_service = SyncService()
+
+    # Запускаем в event loop для async функций
+    loop = asyncio.get_event_loop()
+    if loop.is_closed():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    loop.run_until_complete(sync_service.retry_failed_orders())
 
 
 celery.conf.beat_schedule = {
     'sync-orders-every-10-min': {
         'task': 'tasks_increment.sync_pharmacy_orders_task',
         'schedule': 600.0,
+    },
+    'retry-failed-orders-every-5-min': {
+        'task': 'tasks_increment.retry_failed_orders_task',
+        'schedule': 300.0,
     },
 }

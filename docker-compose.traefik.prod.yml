@@ -118,30 +118,32 @@ services:
       - ASYNCPG_DATABASE_URL=${ASYNCPG_DATABASE_URL}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
-      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+      - CELERY_BROKER_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/0
     command:
       - /app/.venv/bin/celery
       - -A
       - tasks.tasks_increment
       - worker
       - --loglevel=info
-      - --concurrency=1
-      - --pool=solo
+      - --concurrency=2
+      - --pool=prefork
       - --without-gossip
       - --without-mingle
       - --without-heartbeat
+      - --task-events
     networks:
       - traefik-public
     depends_on:
       - postgres
       - redis
+      - rabbitmq
     healthcheck:
-      test: ["CMD-SHELL", "/app/.venv/bin/celery -A tasks.tasks_increment inspect ping -d celery@$$(hostname) || exit 1"]
+      test: ["CMD-SHELL", "/app/.venv/bin/celery -A tasks.tasks_increment inspect ping -d celery@$$HOSTNAME || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 60s
     restart: unless-stopped
 
   flower:
@@ -178,6 +180,24 @@ services:
       start_period: 40s
     restart: unless-stopped
 
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: rabbitmq-prod
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-novamedika}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-novamedika}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rabbitmq.rule=Host(`rabbitmq.${DOMAIN}`)"
+      - "traefik.http.routers.rabbitmq.entrypoints=websecure"
+      - "traefik.http.routers.rabbitmq.tls.certresolver=letsencrypt"
+      - "traefik.http.services.rabbitmq.loadbalancer.server.port=15672"
+    restart: unless-stopped
+
 networks:
   traefik-public:
     driver: bridge
@@ -185,3 +205,4 @@ networks:
 volumes:
   postgres_data:
   redis_data:
+  rabbitmq_data:
