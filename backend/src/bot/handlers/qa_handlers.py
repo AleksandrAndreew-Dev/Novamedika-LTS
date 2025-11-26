@@ -410,10 +410,7 @@ async def view_questions_callback(
                 question_text, reply_markup=make_question_keyboard(question.uuid)
             )
 
-        if len(questions) == 5:
-            await callback.message.answer(
-                "💡 Показаны первые 5 вопросов. Ответьте на них чтобы увидеть следующие."
-            )
+        
 
     except Exception as e:
         logger.error(f"Error in view_questions_callback: {e}")
