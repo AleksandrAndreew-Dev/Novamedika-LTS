@@ -402,7 +402,7 @@ async def process_answer_text(
     is_pharmacist: bool,
     pharmacist: Pharmacist,
 ):
-    """Обработка текста ответа на вопрос - ОБНОВЛЕННАЯ ВЕРСИЯ С ФИО"""
+    """Обработка текста ответа на вопрос - с авто-онлайном"""
     logger.info(f"Processing answer from pharmacist {message.from_user.id}")
 
     if not is_pharmacist or not pharmacist:
@@ -411,6 +411,14 @@ async def process_answer_text(
         return
 
     try:
+        # Автоматически переводим фармацевта в онлайн при активности
+        if not pharmacist.is_online:
+            pharmacist.is_online = True
+            pharmacist.last_seen = get_utc_now_naive()
+            await db.commit()
+            logger.info(f"Pharmacist {message.from_user.id} auto-set to online")
+
+    
         state_data = await state.get_data()
         question_uuid = state_data.get("question_uuid")
 
