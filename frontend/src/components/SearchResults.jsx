@@ -176,12 +176,7 @@ export default function SearchResults({
     return total.toFixed(2);
   };
 
-  // Функция для правильного склонения слова "упаковка"
-  const getPackagingText = (quantity) => {
-    if (quantity === 1) return "упаковка";
-    if (quantity >= 2 && quantity <= 4) return "упаковки";
-    return "упаковок";
-  };
+  // УДАЛЕНО: функция getPackagingText больше не используется
 
   const getGroupedResults = () => {
     const grouped = {};
