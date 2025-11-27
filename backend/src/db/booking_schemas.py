@@ -90,3 +90,25 @@ class SyncLogResponse(BaseModel):
     finished_at: Optional[datetime]
 
     model_config = {"from_attributes": True}
+
+
+class PharmacyCreate(BaseModel):
+    name: str
+    pharmacy_number: str
+    chain: str
+    city: str
+    address: str
+    phone: str
+    opening_hours: str
+
+class PharmacyResponse(BaseModel):
+    uuid: uuid.UUID
+    name: str
+    pharmacy_number: str
+    chain: str
+    city: str
+    address: str
+    phone: str
+    opening_hours: str
+
+    model_config = {"from_attributes": True}

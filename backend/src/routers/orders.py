@@ -14,7 +14,11 @@ from sqlalchemy import select, and_
 from db.database import get_db, async_session_maker
 from db.models import Pharmacy, Product
 from db.booking_models import BookingOrder, PharmacyAPIConfig, SyncLog
-from db.booking_schemas import BookingOrderCreate, BookingOrderResponse, PharmacyAPIConfigCreate
+from db.booking_schemas import (
+    BookingOrderCreate,
+    BookingOrderResponse,
+    PharmacyAPIConfigCreate,
+)
 from order_manager.manager import ExternalAPIManager
 
 
@@ -47,17 +51,6 @@ async def create_booking_order(
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
 
-        # Проверяем, что продукт принадлежит указанной аптеке
-        if str(product.pharmacy_id) != str(order_data.pharmacy_id):
-            raise HTTPException(status_code=400, detail="Product does not belong to the specified pharmacy")
-
-        # Проверяем доступное количество
-        if product.quantity < order_data.quantity:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Not enough quantity available. Available: {product.quantity}, requested: {order_data.quantity}"
-            )
-
         # Создаем заказ в нашей системе
         order = BookingOrder(
             uuid=uuid.uuid4(),
@@ -67,20 +60,12 @@ async def create_booking_order(
             customer_name=order_data.customer_name,
             customer_phone=order_data.customer_phone,
             scheduled_pickup=order_data.scheduled_pickup,
-            status="pending",
+            status="pending",  # Заказ создается в статусе pending
         )
 
         db.add(order)
         await db.commit()
         await db.refresh(order)
-
-        # Фоновая задача: отправить заказ во внешнюю систему
-        background_tasks.add_task(
-            submit_order_to_external_api_with_retry,
-            str(order.uuid),
-            str(order.pharmacy_id),
-            max_retries=3
-        )
 
         return order
 
@@ -92,21 +77,29 @@ async def create_booking_order(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-async def submit_order_to_external_api_with_retry(order_id: str, pharmacy_id: str, max_retries: int = 3):
+async def submit_order_to_external_api_with_retry(
+    order_id: str, pharmacy_id: str, max_retries: int = 3
+):
     """Фоновая задача для отправки заказа во внешнюю API с повторными попытками"""
     for attempt in range(max_retries):
         try:
             success = await submit_order_to_external_api(order_id, pharmacy_id)
             if success:
-                logger.info(f"Successfully submitted order {order_id} to external API (attempt {attempt + 1})")
+                logger.info(
+                    f"Successfully submitted order {order_id} to external API (attempt {attempt + 1})"
+                )
                 return
             else:
-                logger.warning(f"Failed to submit order {order_id} (attempt {attempt + 1})")
+                logger.warning(
+                    f"Failed to submit order {order_id} (attempt {attempt + 1})"
+                )
         except Exception as e:
-            logger.error(f"Error submitting order {order_id} (attempt {attempt + 1}): {str(e)}")
+            logger.error(
+                f"Error submitting order {order_id} (attempt {attempt + 1}): {str(e)}"
+            )
 
         if attempt < max_retries - 1:
-            wait_time = 2 ** attempt  # Exponential backoff
+            wait_time = 2**attempt  # Exponential backoff
             logger.info(f"Retrying order {order_id} in {wait_time} seconds...")
             await asyncio.sleep(wait_time)
 
@@ -136,7 +129,9 @@ async def submit_order_to_external_api(order_id: str, pharmacy_id: str) -> bool:
                 return False
 
             if not api_config or not api_config.is_active:
-                logger.warning(f"API config not found or inactive for pharmacy {pharmacy_id}")
+                logger.warning(
+                    f"API config not found or inactive for pharmacy {pharmacy_id}"
+                )
                 # Если API не настроен, считаем заказ успешным (локальное бронирование)
                 order.status = "confirmed"
                 await session.commit()
@@ -149,7 +144,9 @@ async def submit_order_to_external_api(order_id: str, pharmacy_id: str) -> bool:
             product = product_result.scalar_one_or_none()
 
             if not product:
-                logger.warning(f"Product {order.product_id} not found for order {order_id}")
+                logger.warning(
+                    f"Product {order.product_id} not found for order {order_id}"
+                )
                 return False
 
             # Подготавливаем данные для внешнего API
@@ -203,7 +200,9 @@ async def mark_order_as_failed(order_id: str):
             if order:
                 order.status = "failed"
                 await session.commit()
-                logger.info(f"Order {order_id} marked as failed after all retry attempts")
+                logger.info(
+                    f"Order {order_id} marked as failed after all retry attempts"
+                )
         except Exception as e:
             logger.error(f"Failed to mark order {order_id} as failed: {str(e)}")
 
@@ -274,7 +273,7 @@ async def external_order_callback(request: Request, db: AsyncSession = Depends(g
     if new_status not in valid_statuses:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+            detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}",
         )
 
     # Поиск заказа
@@ -318,18 +317,22 @@ async def external_order_callback(request: Request, db: AsyncSession = Depends(g
 
         await db.commit()
 
-        logger.info(f"Order {order.uuid} status updated from {old_status} to {new_status} via callback")
+        logger.info(
+            f"Order {order.uuid} status updated from {old_status} to {new_status} via callback"
+        )
 
         return {
             "status": "success",
             "order_id": str(order.uuid),
             "previous_status": old_status,
-            "new_status": new_status
+            "new_status": new_status,
         }
 
     except Exception as e:
         await db.rollback()
-        logger.exception(f"Failed to update order status from external callback: {str(e)}")
+        logger.exception(
+            f"Failed to update order status from external callback: {str(e)}"
+        )
         raise HTTPException(status_code=500, detail="Failed to update order")
 
 
@@ -387,9 +390,7 @@ async def get_order_by_id(
 
 @router.patch("/orders/{order_id}")
 async def update_order_status(
-    order_id: uuid.UUID,
-    status: str,
-    db: AsyncSession = Depends(get_db)
+    order_id: uuid.UUID, status: str, db: AsyncSession = Depends(get_db)
 ):
     """Обновление статуса заказа"""
     try:
@@ -398,7 +399,7 @@ async def update_order_status(
         if status not in valid_statuses:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+                detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}",
             )
 
         result = await db.execute(
@@ -415,13 +416,15 @@ async def update_order_status(
 
         await db.commit()
 
-        logger.info(f"Order {order_id} status manually updated from {old_status} to {status}")
+        logger.info(
+            f"Order {order_id} status manually updated from {old_status} to {status}"
+        )
 
         return {
             "status": "updated",
             "order_id": str(order_id),
             "previous_status": old_status,
-            "new_status": status
+            "new_status": status,
         }
 
     except HTTPException:
@@ -434,8 +437,7 @@ async def update_order_status(
 
 @router.post("/pharmacies/register")
 async def register_pharmacy(
-    config_data: PharmacyAPIConfigCreate,
-    db: AsyncSession = Depends(get_db)
+    config_data: PharmacyAPIConfigCreate, db: AsyncSession = Depends(get_db)
 ):
     """Регистрация новой аптеки в системе бронирования"""
     try:
@@ -455,7 +457,10 @@ async def register_pharmacy(
             )
         )
         if existing_result.scalar_one_or_none():
-            raise HTTPException(status_code=400, detail="API configuration already exists for this pharmacy")
+            raise HTTPException(
+                status_code=400,
+                detail="API configuration already exists for this pharmacy",
+            )
 
         # Генерируем безопасный токен
         auth_token = secrets.token_urlsafe(32)
@@ -495,7 +500,9 @@ async def pharmacy_login(request: Request, db: AsyncSession = Depends(get_db)):
     """Вход для аптеки - получение информации по токену"""
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        raise HTTPException(
+            status_code=401, detail="Missing or invalid authorization header"
+        )
 
     token = auth_header[7:]  # Remove "Bearer "
 
@@ -597,7 +604,9 @@ async def update_pharmacy_config(request: Request, db: AsyncSession = Depends(ge
     return {"status": "updated"}
 
 
-@router.get("/pharmacies/{pharmacy_id}/orders", response_model=List[BookingOrderResponse])
+@router.get(
+    "/pharmacies/{pharmacy_id}/orders", response_model=List[BookingOrderResponse]
+)
 async def get_pharmacy_orders(
     pharmacy_id: uuid.UUID,
     status: Optional[str] = None,
@@ -649,7 +658,9 @@ async def cancel_order(
             raise HTTPException(status_code=404, detail="Order not found")
 
         if order.status in ["cancelled", "failed"]:
-            raise HTTPException(status_code=400, detail=f"Order is already {order.status}")
+            raise HTTPException(
+                status_code=400, detail=f"Order is already {order.status}"
+            )
 
         # Если заказ уже подтвержден, может потребоваться дополнительная логика
         if order.status == "confirmed":
@@ -664,7 +675,7 @@ async def cancel_order(
         return {
             "status": "cancelled",
             "order_id": str(order_id),
-            "message": "Order successfully cancelled"
+            "message": "Order successfully cancelled",
         }
 
     except HTTPException:
