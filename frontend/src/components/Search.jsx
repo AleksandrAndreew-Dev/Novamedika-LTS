@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import SearchBar from "./SearchBar";
 import FormSelection from "./FormSelection";
-import SearchResults from "./results/SearchResults";
+import SearchResults from "./SearchResults";
 import { useTelegramWebApp } from "../telegram/TelegramWebApp";
 import { api } from "../api/client";
 
