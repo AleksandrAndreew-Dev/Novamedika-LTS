@@ -301,14 +301,25 @@ export default function SearchResults({
                       <p className="text-sm text-gray-600 mb-1">
                         {bookingState.modal.product.form}
                       </p>
-                      <p className="text-sm text-gray-600 mb-1">
-                        {bookingState.modal.product.pharmacy_name} №
-                        {bookingState.modal.product.pharmacy_number}
-                      </p>
-                      <p className="text-sm text-gray-600 mb-3">
-                        Адрес: {bookingState.modal.product.pharmacy_address}
-                      </p>
-                      <div className="flex justify-between items-center">
+
+                      {/* Информация об аптеке */}
+                      <div className="mt-4 pt-3 border-t border-gray-200">
+                        <h4 className="font-semibold text-gray-900 mb-2">Аптека:</h4>
+                        <p className="text-sm text-gray-600 mb-1">
+                          {bookingState.modal.product.pharmacy_name} №{bookingState.modal.product.pharmacy_number}
+                        </p>
+                        <p className="text-sm text-gray-600 mb-1">
+                          Адрес: {bookingState.modal.product.pharmacy_address}
+                        </p>
+                        <p className="text-sm text-gray-600 mb-1">
+                          Телефон: {bookingState.modal.product.pharmacy_phone}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          Время работы: {bookingState.modal.product.working_hours || "Уточняйте в аптеке"}
+                        </p>
+                      </div>
+
+                      <div className="flex justify-between items-center mt-3">
                         <p className="text-sm font-semibold text-gray-700">
                           Доступно: {formatQuantity(bookingState.modal.product.quantity)} уп.
                         </p>
@@ -365,9 +376,7 @@ export default function SearchResults({
                         className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 transition-all duration-200"
                         placeholder="+375 XX XXX-XX-XX"
                       />
-                      <p className="text-xs text-gray-500 mt-2">
-                        Формат: +375XXXXXXXXX или 80XXXXXXXXX
-                      </p>
+                      {/* Убрана строка с форматом телефона */}
                     </div>
 
                     <div>
