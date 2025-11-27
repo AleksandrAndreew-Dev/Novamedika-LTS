@@ -122,6 +122,7 @@ function BookingForm({
         onBooking={onBooking}
         onFormUpdate={onFormUpdate}
         onQuantityUpdate={onQuantityUpdate}
+        onClose={onClose}
         getPackagingText={getPackagingText}
       />
     </>
@@ -169,6 +170,7 @@ function BookingFormFields({
   onBooking,
   onFormUpdate,
   onQuantityUpdate,
+  onClose,
   getPackagingText,
 }) {
   return (
