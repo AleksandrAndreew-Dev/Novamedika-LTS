@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { bookingApi } from "../api/client";
+import { bookingApi } from "../../api/client";
 import SearchResultsHeader from "./SearchResultsHeader";
 import BookingModal from "./BookingModal";
 import ProductCard from "./ProductCard";
