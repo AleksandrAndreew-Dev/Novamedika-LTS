@@ -31,6 +31,25 @@ export default function SearchResults({
   // Получаем данные пользователя Telegram
   const telegramUser = useTelegramUser();
 
+  const openBookingModal = (product) => {
+    setBookingState((prev) => ({
+      ...prev,
+      modal: {
+        isOpen: true,
+        product: product,
+        quantity: 1,
+      },
+      form: {
+        // Если есть данные пользователя Telegram, подставляем их
+        customer_name: telegramUser?.first_name || telegramUser?.username || "",
+        customer_phone: telegramUser?.phone_number || "",
+      },
+      success: false,
+      error: null,
+      orderInfo: null,
+    }));
+  };
+
   // Функция обработки бронирования
   const handleBooking = async (e) => {
     e.preventDefault();
