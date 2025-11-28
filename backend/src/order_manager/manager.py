@@ -79,21 +79,16 @@ class JSONAPIProvider(BaseAPIProvider):
                 return response.status == 200
 
 
-# В manager.py - нужно реализовать
+
+
+
 class ExternalAPIManager:
+    """Заглушка - в pull-модели менеджер не используется для исходящих соединений"""
+
     async def submit_order_to_pharmacy(self, api_config, payload):
-        # TODO: реализовать отправку заказа в аптеку
-        # В зависимости от api_config.api_type используйте соответствующий провайдер
-        if api_config.api_type == "json":
-            provider = JSONAPIProvider(
-                api_config.endpoint_url,
-                api_config.get_auth_token(),
-                api_config.auth_type
-            )
-            return await provider.submit_order(payload)
-        # Добавьте обработку других типов API
-        pass
+        logger.warning("ExternalAPIManager should not be used in pull mode")
+        return None
 
     async def sync_orders_from_pharmacy(self, api_config, since):
-        # TODO: реализовать получение заказов из аптеки
+        logger.warning("ExternalAPIManager should not be used in pull mode")
         return []

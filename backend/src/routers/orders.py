@@ -2,12 +2,12 @@
 
 import uuid
 import logging
-import asyncio
+
 import secrets
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
@@ -19,23 +19,21 @@ from db.booking_schemas import (
     BookingOrderResponse,
     PharmacyAPIConfigCreate,
 )
-from order_manager.manager import ExternalAPIManager
+
 from db.qa_models import User
 from sqlalchemy import func
 
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-api_manager = ExternalAPIManager()
 
 
 @router.post("/orders", response_model=BookingOrderResponse)
 async def create_booking_order(
     order_data: BookingOrderCreate,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    """Создание заказа бронирования"""
+    """Создание заказа бронирования - только локальное сохранение"""
     try:
         # Проверяем существование аптеки и продукта
         pharmacy_result = await db.execute(
@@ -53,7 +51,7 @@ async def create_booking_order(
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
 
-        # Создаем заказ в нашей системе с Telegram ID
+        # Создаем заказ в нашей системе
         order = BookingOrder(
             uuid=uuid.uuid4(),
             pharmacy_id=order_data.pharmacy_id,
@@ -62,21 +60,15 @@ async def create_booking_order(
             customer_name=order_data.customer_name,
             customer_phone=order_data.customer_phone,
             scheduled_pickup=order_data.scheduled_pickup,
-            status="pending",
-            telegram_id=order_data.telegram_id,  # Используем переданный Telegram ID
+            status="pending",  # Аптека сама обновит статус через callback
+            telegram_id=order_data.telegram_id,
         )
 
         db.add(order)
         await db.commit()
         await db.refresh(order)
 
-        # Запускаем фоновую задачу для отправки во внешнюю систему
-        background_tasks.add_task(
-            submit_order_to_external_api_with_retry,
-            str(order.uuid),
-            str(order_data.pharmacy_id)
-        )
-
+        logger.info(f"Created booking order {order.uuid} for pharmacy {pharmacy.name}")
         return order
 
     except HTTPException:
@@ -87,147 +79,16 @@ async def create_booking_order(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-async def submit_order_to_external_api_with_retry(
-    order_id: str, pharmacy_id: str, max_retries: int = 3
-):
-    """Фоновая задача для отправки заказа во внешнюю API с повторными попытками"""
-    for attempt in range(max_retries):
-        try:
-            success = await submit_order_to_external_api(order_id, pharmacy_id)
-            if success:
-                logger.info(
-                    f"Successfully submitted order {order_id} to external API (attempt {attempt + 1})"
-                )
-                return
-            else:
-                logger.warning(
-                    f"Failed to submit order {order_id} (attempt {attempt + 1})"
-                )
-        except Exception as e:
-            logger.error(
-                f"Error submitting order {order_id} (attempt {attempt + 1}): {str(e)}"
-            )
-
-        if attempt < max_retries - 1:
-            wait_time = 2**attempt  # Exponential backoff
-            logger.info(f"Retrying order {order_id} in {wait_time} seconds...")
-            await asyncio.sleep(wait_time)
-
-    # Если все попытки неудачны, помечаем заказ как failed
-    await mark_order_as_failed(order_id)
-
-
-async def submit_order_to_external_api(order_id: str, pharmacy_id: str) -> bool:
-    """Отправка заказа во внешнюю API"""
-    async with async_session_maker() as session:
-        try:
-            # Получаем заказ и конфиг API аптеки
-            order_result = await session.execute(
-                select(BookingOrder).where(BookingOrder.uuid == uuid.UUID(order_id))
-            )
-            order = order_result.scalar_one_or_none()
-
-            config_result = await session.execute(
-                select(PharmacyAPIConfig).where(
-                    PharmacyAPIConfig.pharmacy_id == uuid.UUID(pharmacy_id)
-                )
-            )
-            api_config = config_result.scalar_one_or_none()
-
-            if not order:
-                logger.warning(f"Order {order_id} not found")
-                return False
-
-            if not api_config or not api_config.is_active:
-                logger.warning(
-                    f"API config not found or inactive for pharmacy {pharmacy_id}"
-                )
-                # Если API не настроен, считаем заказ успешным (локальное бронирование)
-                order.status = "confirmed"
-                await session.commit()
-                return True
-
-            # Получаем информацию о продукте
-            product_result = await session.execute(
-                select(Product).where(Product.uuid == order.product_id)
-            )
-            product = product_result.scalar_one_or_none()
-
-            if not product:
-                logger.warning(
-                    f"Product {order.product_id} not found for order {order_id}"
-                )
-                return False
-
-            # Подготавливаем данные для внешнего API
-            payload = {
-                "product_id": str(order.product_id),
-                "product_name": product.name,
-                "quantity": order.quantity,
-                "customer_name": order.customer_name,
-                "customer_phone": order.customer_phone,
-                "scheduled_pickup": (
-                    order.scheduled_pickup.isoformat()
-                    if order.scheduled_pickup
-                    else None
-                ),
-                "local_order_id": str(order.uuid),
-            }
-
-            # Отправляем во внешнюю систему через менеджер
-            result = await api_manager.submit_order_to_pharmacy(api_config, payload)
-
-            # Обрабатываем результат
-            if result and isinstance(result, dict):
-                external_id = result.get("order_id") or result.get("external_order_id")
-                if external_id:
-                    order.external_order_id = str(external_id)
-                    order.status = "submitted"
-                else:
-                    # Если внешняя система не вернула ID, но запрос успешен
-                    order.status = "submitted"
-            else:
-                order.status = "submitted"  # Статус по умолчанию при успешной отправке
-
-            await session.commit()
-            return True
-
-        except Exception as e:
-            logger.exception(f"Failed to submit order {order_id} to external API")
-            await session.rollback()
-            return False
-
-
-async def mark_order_as_failed(order_id: str):
-    """Пометить заказ как неудачный после всех попыток"""
-    async with async_session_maker() as session:
-        try:
-            order_result = await session.execute(
-                select(BookingOrder).where(BookingOrder.uuid == uuid.UUID(order_id))
-            )
-            order = order_result.scalar_one_or_none()
-
-            if order:
-                order.status = "failed"
-                await session.commit()
-                logger.info(
-                    f"Order {order_id} marked as failed after all retry attempts"
-                )
-        except Exception as e:
-            logger.error(f"Failed to mark order {order_id} as failed: {str(e)}")
-
-
 @router.post("/api/external/orders/callback")
 async def external_order_callback(request: Request, db: AsyncSession = Depends(get_db)):
     """
-    Callback endpoint для аптеки.
-    Header: Authorization: Bearer <token>  OR X-API-KEY: <token>
+    Callback endpoint для аптек - они отправляют сюда статусы заказов
+    Header: Authorization: Bearer <token> OR X-API-KEY: <token>
     Body JSON:
-      - external_order_id (optional если pharmacy возвращает local_order_id)
+      - external_order_id (optional)
       - local_order_id (optional)
-      - status: submitted|confirmed|cancelled|failed
+      - status: pending|confirmed|cancelled|failed
       - reason (optional)
-      - timestamp (optional)
     """
     # Аутентификация по токену
     auth = request.headers.get("Authorization")
@@ -266,8 +127,7 @@ async def external_order_callback(request: Request, db: AsyncSession = Depends(g
     external_order_id = payload.get("external_order_id")
     local_order_id = payload.get("local_order_id")
     new_status = payload.get("status")
-    reason = payload.get("reason")
-    timestamp = payload.get("timestamp")
+    reason = payload.get("reason", "")
 
     if not new_status:
         raise HTTPException(status_code=400, detail="status field is required")
@@ -279,7 +139,7 @@ async def external_order_callback(request: Request, db: AsyncSession = Depends(g
         )
 
     # Валидация статуса
-    valid_statuses = ["submitted", "confirmed", "cancelled", "failed"]
+    valid_statuses = ["pending", "confirmed", "cancelled", "failed"]
     if new_status not in valid_statuses:
         raise HTTPException(
             status_code=400,
@@ -318,19 +178,20 @@ async def external_order_callback(request: Request, db: AsyncSession = Depends(g
         old_status = order.status
         order.status = new_status
 
-        # При необходимости сохраняем external_order_id если его ранее не было
+        # Сохраняем external_order_id если его ранее не было
         if external_order_id and not order.external_order_id:
             order.external_order_id = external_order_id
 
-        # Обновляем время обновления
         order.updated_at = datetime.utcnow()
 
         await db.commit()
-        if old_status != new_status and new_status in ["confirmed", "cancelled", "failed"]:
+
+        # Отправляем уведомление в Telegram при изменении статуса
+        if old_status != new_status:
             await send_order_status_notification(order, old_status, new_status, db)
 
         logger.info(
-            f"Order {order.uuid} status updated from {old_status} to {new_status} via callback"
+            f"Order {order.uuid} status updated from {old_status} to {new_status} via pharmacy callback"
         )
 
         return {
@@ -343,7 +204,7 @@ async def external_order_callback(request: Request, db: AsyncSession = Depends(g
     except Exception as e:
         await db.rollback()
         logger.exception(
-            f"Failed to update order status from external callback: {str(e)}"
+            f"Failed to update order status from pharmacy callback: {str(e)}"
         )
         raise HTTPException(status_code=500, detail="Failed to update order")
 
@@ -454,7 +315,7 @@ async def update_order_status(
 async def register_pharmacy(
     config_data: PharmacyAPIConfigCreate, db: AsyncSession = Depends(get_db)
 ):
-    """Регистрация новой аптеки в системе бронирования"""
+    """Регистрация новой аптеки - только токен для pull-модели"""
     try:
         # Проверяем существование аптеки
         pharmacy_result = await db.execute(
@@ -465,7 +326,7 @@ async def register_pharmacy(
         if not pharmacy:
             raise HTTPException(status_code=404, detail="Pharmacy not found")
 
-        # Проверяем, нет ли уже конфигурации для этой аптеки
+        # Проверяем, нет ли уже конфигурации
         existing_result = await db.execute(
             select(PharmacyAPIConfig).where(
                 PharmacyAPIConfig.pharmacy_id == config_data.pharmacy_id
@@ -480,13 +341,13 @@ async def register_pharmacy(
         # Генерируем безопасный токен
         auth_token = secrets.token_urlsafe(32)
 
-        # Создаем конфигурацию API
+        # Создаем конфигурацию - endpoint_url не обязателен в pull-модели
         api_config = PharmacyAPIConfig(
             uuid=uuid.uuid4(),
             pharmacy_id=config_data.pharmacy_id,
-            api_type=config_data.api_type,
-            endpoint_url=config_data.endpoint_url,
-            auth_type=config_data.auth_type,
+            api_type="pull",  # Указываем что аптека сама опрашивает
+            endpoint_url=config_data.endpoint_url,  # Может быть null
+            auth_type="bearer",
             sync_from_date=config_data.sync_from_date,
             is_active=config_data.is_active,
         )
@@ -498,8 +359,13 @@ async def register_pharmacy(
         return {
             "status": "success",
             "pharmacy_id": str(config_data.pharmacy_id),
-            "auth_token": auth_token,  # Возвращаем только один раз!
-            "message": "Keep this token secure - it won't be shown again",
+            "auth_token": auth_token,  # Токен для аутентификации аптеки
+            "mode": "pull",  # Режим работы - аптека опрашивает сервер
+            "endpoints": {
+                "get_orders": f"/pharmacies/{config_data.pharmacy_id}/orders?status=pending",
+                "update_status": "/api/external/orders/callback",
+            },
+            "message": "Use this token to authenticate pharmacy requests",
         }
 
     except HTTPException:
@@ -701,8 +567,9 @@ async def cancel_order(
         raise HTTPException(status_code=500, detail="Error cancelling order")
 
 
-
-async def get_user_telegram_id_by_order(order: BookingOrder, db: AsyncSession) -> Optional[int]:
+async def get_user_telegram_id_by_order(
+    order: BookingOrder, db: AsyncSession
+) -> Optional[int]:
     """Получить telegram_id пользователя по заказу - УЛУЧШЕННАЯ ВЕРСИЯ"""
     try:
         # 1. Пробуем получить telegram_id напрямую из заказа
@@ -718,20 +585,22 @@ async def get_user_telegram_id_by_order(order: BookingOrder, db: AsyncSession) -
             if user and user.telegram_id:
                 return user.telegram_id
 
-        logger.warning(f"No telegram_id found for order {order.uuid}, phone: {order.customer_phone}")
+        logger.warning(
+            f"No telegram_id found for order {order.uuid}, phone: {order.customer_phone}"
+        )
         return None
 
     except Exception as e:
         logger.error(f"Error getting telegram_id for order {order.uuid}: {e}")
         return None
 
+
 async def get_pharmacy_name(pharmacy_id: uuid.UUID, db: AsyncSession) -> str:
     """Получить название аптеки - как в user_questions.py"""
-    result = await db.execute(
-        select(Pharmacy.name).where(Pharmacy.uuid == pharmacy_id)
-    )
+    result = await db.execute(select(Pharmacy.name).where(Pharmacy.uuid == pharmacy_id))
     pharmacy = result.scalar_one_or_none()
     return pharmacy.name if pharmacy else "Неизвестная аптека"
+
 
 async def get_pharmacy_phone(pharmacy_id: uuid.UUID, db: AsyncSession) -> str:
     """Получить телефон аптеки"""
@@ -741,6 +610,7 @@ async def get_pharmacy_phone(pharmacy_id: uuid.UUID, db: AsyncSession) -> str:
     phone = result.scalar_one_or_none()
     return phone if phone else "Не указан"
 
+
 async def get_pharmacy_address(pharmacy_id: uuid.UUID, db: AsyncSession) -> str:
     """Получить адрес аптеки"""
     result = await db.execute(
@@ -749,7 +619,10 @@ async def get_pharmacy_address(pharmacy_id: uuid.UUID, db: AsyncSession) -> str:
     address = result.scalar_one_or_none()
     return address if address else "Адрес не указан"
 
-async def send_order_status_notification(order: BookingOrder, old_status: str, new_status: str, db: AsyncSession):
+
+async def send_order_status_notification(
+    order: BookingOrder, old_status: str, new_status: str, db: AsyncSession
+):
     """Отправка уведомления о статусе заказа в Telegram - УЛУЧШЕННАЯ ВЕРСИЯ"""
     try:
         # Получаем telegram_id пользователя
@@ -761,6 +634,7 @@ async def send_order_status_notification(order: BookingOrder, old_status: str, n
 
         # Инициализируем бота
         from bot.core import bot_manager
+
         bot, _ = await bot_manager.initialize()
 
         if not bot:
@@ -803,11 +677,13 @@ async def send_order_status_notification(order: BookingOrder, old_status: str, n
 
         # Отправляем сообщение
         await bot.send_message(
-            chat_id=telegram_id,
-            text=message_text,
-            parse_mode="Markdown"
+            chat_id=telegram_id, text=message_text, parse_mode="Markdown"
         )
-        logger.info(f"Order status notification sent to user {telegram_id} for order {order.uuid}")
+        logger.info(
+            f"Order status notification sent to user {telegram_id} for order {order.uuid}"
+        )
 
     except Exception as e:
-        logger.error(f"Failed to send order status notification for order {order.uuid}: {e}")
+        logger.error(
+            f"Failed to send order status notification for order {order.uuid}: {e}"
+        )
