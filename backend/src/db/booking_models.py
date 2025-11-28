@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import (
-    Column, String, Integer, Boolean, Date, ForeignKey, Numeric, DateTime,
+    Column, String, Integer, BigInteger,  Boolean, Date, ForeignKey, Numeric, DateTime,
     UniqueConstraint, Index, Text, LargeBinary, func, CheckConstraint, Enum
 )
 from sqlalchemy.dialects.postgresql import UUID
