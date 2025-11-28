@@ -703,13 +703,22 @@ async def cancel_order(
 
 
 async def get_user_telegram_id_by_order(order: BookingOrder, db: AsyncSession) -> Optional[int]:
-    """Получить telegram_id пользователя по заказу - УПРОЩЕННАЯ ВЕРСИЯ"""
+    """Получить telegram_id пользователя по заказу - УЛУЧШЕННАЯ ВЕРСИЯ"""
     try:
-        # Теперь telegram_id хранится прямо в заказе
+        # 1. Пробуем получить telegram_id напрямую из заказа
         if order.telegram_id:
             return order.telegram_id
 
-        logger.warning(f"No telegram_id found for order {order.uuid}")
+        # 2. Если в заказе нет, ищем по телефону в таблице пользователей
+        if order.customer_phone:
+            result = await db.execute(
+                select(User).where(User.phone == order.customer_phone)
+            )
+            user = result.scalar_one_or_none()
+            if user and user.telegram_id:
+                return user.telegram_id
+
+        logger.warning(f"No telegram_id found for order {order.uuid}, phone: {order.customer_phone}")
         return None
 
     except Exception as e:
@@ -741,9 +750,16 @@ async def get_pharmacy_address(pharmacy_id: uuid.UUID, db: AsyncSession) -> str:
     return address if address else "Адрес не указан"
 
 async def send_order_status_notification(order: BookingOrder, old_status: str, new_status: str, db: AsyncSession):
-    """Отправка уведомления о статусе заказа в Telegram"""
+    """Отправка уведомления о статусе заказа в Telegram - УЛУЧШЕННАЯ ВЕРСИЯ"""
     try:
-        # Получаем бота как в user_questions.py
+        # Получаем telegram_id пользователя
+        telegram_id = await get_user_telegram_id_by_order(order, db)
+
+        if not telegram_id:
+            logger.info(f"No telegram_id for order {order.uuid}, skipping notification")
+            return
+
+        # Инициализируем бота
         from bot.core import bot_manager
         bot, _ = await bot_manager.initialize()
 
@@ -751,50 +767,47 @@ async def send_order_status_notification(order: BookingOrder, old_status: str, n
             logger.error("Bot not initialized for sending order notification")
             return
 
-        # TODO: Получить telegram_id пользователя
-        telegram_id = await get_user_telegram_id_by_order(order, db)
-
-        if not telegram_id:
-            logger.warning(f"No telegram_id found for order {order.uuid}")
-            return
-
         # Получаем информацию об аптеке
         pharmacy_name = await get_pharmacy_name(order.pharmacy_id, db)
         pharmacy_phone = await get_pharmacy_phone(order.pharmacy_id, db)
+        pharmacy_address = await get_pharmacy_address(order.pharmacy_id, db)
 
-        # Форматируем сообщение как в user_questions.py
+        # Форматируем сообщение в зависимости от статуса
         if new_status == "confirmed":
             message_text = (
                 "✅ **Ваш заказ подтвержден!**\n\n"
                 f"📦 Номер заказа: `{order.uuid}`\n"
                 f"🏪 Аптека: {pharmacy_name}\n"
-                f"📍 Адрес: {await get_pharmacy_address(order.pharmacy_id, db)}\n"
-                f"📞 Телефон: {pharmacy_phone}\n"
-                f"Можете забирать ваш заказ! 🎉"  # Добавить эту строку
+                f"📍 Адрес: {pharmacy_address}\n"
+                f"📞 Телефон: {pharmacy_phone}\n\n"
+                "Можете забирать ваш заказ! 🎉"
             )
         elif new_status == "cancelled":
             message_text = (
                 "❌ **Ваш заказ отменен**\n\n"
                 f"📦 Номер заказа: `{order.uuid}`\n"
-                f"🏪 Аптека: {pharmacy_name}\n\n"
+                f"🏪 Аптека: {pharmacy_name}\n"
+                f"📞 Телефон: {pharmacy_phone}\n\n"
                 "Если это ошибка, свяжитесь с аптекой по телефону выше."
             )
         elif new_status == "failed":
             message_text = (
                 "⚠️ **Проблема с вашим заказом**\n\n"
                 f"📦 Номер заказа: `{order.uuid}`\n"
-                f"🏪 Аптека: {pharmacy_name}\n\n"
-                "Техническая ошибка. Мы уже работаем над решением."
+                f"🏪 Аптека: {pharmacy_name}\n"
+                f"📞 Телефон: {pharmacy_phone}\n\n"
+                "Техническая ошибка при обработке заказа. Мы уже работаем над решением."
             )
         else:
             return  # Не отправляем уведомление для других статусов
 
+        # Отправляем сообщение
         await bot.send_message(
             chat_id=telegram_id,
             text=message_text,
             parse_mode="Markdown"
         )
-        logger.info(f"Order status notification sent to user {telegram_id}")
+        logger.info(f"Order status notification sent to user {telegram_id} for order {order.uuid}")
 
     except Exception as e:
-        logger.error(f"Failed to send order status notification: {e}")
+        logger.error(f"Failed to send order status notification for order {order.uuid}: {e}")
