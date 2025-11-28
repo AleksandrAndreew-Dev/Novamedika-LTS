@@ -21,6 +21,7 @@ from db.booking_schemas import (
 )
 from order_manager.manager import ExternalAPIManager
 from db.qa_models import User
+from sqlalchemy import func
 
 
 logger = logging.getLogger(__name__)
@@ -52,7 +53,7 @@ async def create_booking_order(
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
 
-        # Создаем заказ в нашей системе
+        # Создаем заказ в нашей системе с Telegram ID
         order = BookingOrder(
             uuid=uuid.uuid4(),
             pharmacy_id=order_data.pharmacy_id,
@@ -61,12 +62,20 @@ async def create_booking_order(
             customer_name=order_data.customer_name,
             customer_phone=order_data.customer_phone,
             scheduled_pickup=order_data.scheduled_pickup,
-            status="pending",  # Заказ создается в статусе pending
+            status="pending",
+            telegram_id=order_data.telegram_id,  # Используем переданный Telegram ID
         )
 
         db.add(order)
         await db.commit()
         await db.refresh(order)
+
+        # Запускаем фоновую задачу для отправки во внешнюю систему
+        background_tasks.add_task(
+            submit_order_to_external_api_with_retry,
+            str(order.uuid),
+            str(order_data.pharmacy_id)
+        )
 
         return order
 
@@ -694,35 +703,13 @@ async def cancel_order(
 
 
 async def get_user_telegram_id_by_order(order: BookingOrder, db: AsyncSession) -> Optional[int]:
-    """Получить telegram_id пользователя по заказу - УЛУЧШЕННАЯ ВЕРСИЯ"""
+    """Получить telegram_id пользователя по заказу - УПРОЩЕННАЯ ВЕРСИЯ"""
     try:
-        # Нормализуем номер телефона (убираем пробелы, скобки, дефисы)
-        def normalize_phone(phone: str) -> str:
-            return ''.join(c for c in phone if c.isdigit())
+        # Теперь telegram_id хранится прямо в заказе
+        if order.telegram_id:
+            return order.telegram_id
 
-        if order.customer_phone:
-            normalized_phone = normalize_phone(order.customer_phone)
-
-            # Ищем пользователя по нормализованному номеру
-            result = await db.execute(
-                select(User).where(
-                    User.phone.isnot(None),
-                    func.replace(func.replace(User.phone, ' ', ''), '-', '').contains(normalized_phone[-10:])  # Последние 10 цифр
-                )
-            )
-            user = result.scalar_one_or_none()
-
-            if user and user.telegram_id:
-                logger.info(f"Found user {user.telegram_id} by phone {order.customer_phone}")
-                return user.telegram_id
-
-        # Если не нашли по телефону, проверяем context_data заказа
-        if hasattr(order, 'context_data') and order.context_data:
-            telegram_id = order.context_data.get('telegram_id')
-            if telegram_id:
-                return telegram_id
-
-        logger.warning(f"No telegram_id found for order {order.uuid}, phone: {order.customer_phone}")
+        logger.warning(f"No telegram_id found for order {order.uuid}")
         return None
 
     except Exception as e:

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { bookingApi } from "../api/client";
+import { useTelegramUser } from "../telegram/TelegramWebApp"; // Добавляем хук
 
 export default function SearchResults({
   results,
@@ -27,24 +28,8 @@ export default function SearchResults({
     orderInfo: null,
   });
 
-  // Функция открытия модального окна
-  const openBookingModal = (product) => {
-    setBookingState({
-      modal: {
-        isOpen: true,
-        product: product,
-        quantity: 1,
-      },
-      form: {
-        customer_name: "",
-        customer_phone: "",
-      },
-      loading: false,
-      success: false,
-      error: null,
-      orderInfo: null,
-    });
-  };
+  // Получаем данные пользователя Telegram
+  const telegramUser = useTelegramUser();
 
   // Функция обработки бронирования
   const handleBooking = async (e) => {
@@ -60,6 +45,7 @@ export default function SearchResults({
         quantity: bookingState.modal.quantity,
         customer_name: bookingState.form.customer_name.trim(),
         customer_phone: bookingState.form.customer_phone.trim(),
+        telegram_id: telegramUser?.id || null, // Добавляем Telegram ID
       };
 
       // Валидация данных
@@ -78,9 +64,7 @@ export default function SearchResults({
         throw new Error("Введите корректный номер телефона");
       }
 
-      // Убрана проверка количества - теперь пользователь может вводить любое количество
-
-      // Используем новый API метод
+      // Используем API метод для создания заказа
       const order = await bookingApi.createOrder(bookingData);
 
       setBookingState((prev) => ({
@@ -97,11 +81,9 @@ export default function SearchResults({
     } catch (error) {
       console.error("Booking error:", error);
 
-      // Обработка различных типов ошибок
       let errorMessage = "Ошибка при бронировании";
 
       if (error.response) {
-        // Ошибка от сервера
         const serverError = error.response.data;
         if (serverError.detail) {
           errorMessage = serverError.detail;
@@ -111,10 +93,8 @@ export default function SearchResults({
           errorMessage = serverError.message;
         }
       } else if (error.request) {
-        // Ошибка сети
         errorMessage = "Ошибка сети. Проверьте подключение к интернету.";
       } else {
-        // Другие ошибки
         errorMessage = error.message;
       }
 
@@ -172,7 +152,8 @@ export default function SearchResults({
   // Функция для расчета итоговой суммы с округлением
   const calculateTotalPrice = () => {
     if (!bookingState.modal.product) return "0.00";
-    const total = bookingState.modal.product.price * bookingState.modal.quantity;
+    const total =
+      bookingState.modal.product.price * bookingState.modal.quantity;
     return total.toFixed(2);
   };
 
@@ -188,7 +169,8 @@ export default function SearchResults({
         grouped[key] = {
           ...item,
           quantity: parseFloat(item.quantity) || 0,
-          working_hours: item.working_hours || item.opening_hours || "9:00-21:00",
+          working_hours:
+            item.working_hours || item.opening_hours || "9:00-21:00",
           pharmacy_id: item.pharmacy_id,
         };
       } else {
@@ -199,7 +181,8 @@ export default function SearchResults({
         if (newDate > currentDate) {
           grouped[key].updated_at = item.updated_at;
           if (item.working_hours || item.opening_hours) {
-            grouped[key].working_hours = item.working_hours || item.opening_hours;
+            grouped[key].working_hours =
+              item.working_hours || item.opening_hours;
           }
         }
       }
@@ -253,8 +236,18 @@ export default function SearchResults({
               {bookingState.success ? (
                 <div className="text-center">
                   <div className="w-16 h-16 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
-                    <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    <svg
+                      className="w-8 h-8 text-white"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 13l4 4L19 7"
+                      />
                     </svg>
                   </div>
                   <h3 className="text-xl font-bold text-gray-900 mb-2">
@@ -287,8 +280,18 @@ export default function SearchResults({
                       disabled={bookingState.loading}
                       className="text-gray-400 hover:text-gray-600 disabled:opacity-50 transition-colors p-1 rounded-lg hover:bg-gray-100"
                     >
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      <svg
+                        className="w-6 h-6"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M6 18L18 6M6 6l12 12"
+                        />
                       </svg>
                     </button>
                   </div>
@@ -304,9 +307,12 @@ export default function SearchResults({
 
                       {/* Информация об аптеке */}
                       <div className="mt-4 pt-3 border-t border-gray-200">
-                        <h4 className="font-semibold text-gray-900 mb-2">Аптека:</h4>
+                        <h4 className="font-semibold text-gray-900 mb-2">
+                          Аптека:
+                        </h4>
                         <p className="text-sm text-gray-600 mb-1">
-                          {bookingState.modal.product.pharmacy_name} №{bookingState.modal.product.pharmacy_number}
+                          {bookingState.modal.product.pharmacy_name} №
+                          {bookingState.modal.product.pharmacy_number}
                         </p>
                         <p className="text-sm text-gray-600 mb-1">
                           Адрес: {bookingState.modal.product.pharmacy_address}
@@ -315,13 +321,17 @@ export default function SearchResults({
                           Телефон: {bookingState.modal.product.pharmacy_phone}
                         </p>
                         <p className="text-sm text-gray-600">
-                          Время работы: {bookingState.modal.product.working_hours || "Уточняйте в аптеке"}
+                          Время работы:{" "}
+                          {bookingState.modal.product.working_hours ||
+                            "Уточняйте в аптеке"}
                         </p>
                       </div>
 
                       <div className="flex justify-between items-center mt-3">
                         <p className="text-sm font-semibold text-gray-700">
-                          Доступно: {formatQuantity(bookingState.modal.product.quantity)} уп.
+                          Доступно:{" "}
+                          {formatQuantity(bookingState.modal.product.quantity)}{" "}
+                          уп.
                         </p>
                         <p className="text-lg font-bold text-blue-600">
                           {bookingState.modal.product.price} Br
@@ -333,8 +343,16 @@ export default function SearchResults({
                   {bookingState.error && (
                     <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl">
                       <div className="flex items-center">
-                        <svg className="w-5 h-5 text-red-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        <svg
+                          className="w-5 h-5 text-red-500 mr-2"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                            clipRule="evenodd"
+                          />
                         </svg>
                         <span className="text-red-800 text-sm font-medium">
                           {bookingState.error}
@@ -387,9 +405,7 @@ export default function SearchResults({
                         type="number"
                         min="1"
                         value={bookingState.modal.quantity}
-                        onChange={(e) =>
-                          updateBookingQuantity(e.target.value)
-                        }
+                        onChange={(e) => updateBookingQuantity(e.target.value)}
                         disabled={bookingState.loading}
                         className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 transition-all duration-200"
                         placeholder="Введите количество"

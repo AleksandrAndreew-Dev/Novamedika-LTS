@@ -10,9 +10,8 @@ class BookingOrderBase(BaseModel):
     quantity: int
     customer_name: str
     customer_phone: str
-    
-
     scheduled_pickup: Optional[datetime] = None
+    telegram_id: Optional[int] = None  # Добавляем поле для Telegram ID
 
     model_config = {"from_attributes": True}
 
