@@ -10,6 +10,7 @@ class BookingOrderBase(BaseModel):
     quantity: int
     customer_name: str
     customer_phone: str
+    
 
     scheduled_pickup: Optional[datetime] = None
 

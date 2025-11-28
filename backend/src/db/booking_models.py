@@ -29,6 +29,8 @@ class BookingOrder(Base):
     # Используем строковые ссылки
     pharmacy = relationship("Pharmacy", back_populates="booking_orders", lazy="select")
     product = relationship("Product", lazy="select")
+    # В booking_models.py добавить:
+    telegram_id = Column(BigInteger, nullable=True, index=True)  # Прямое хранение telegram_id
 
     __table_args__ = (
         Index('idx_booking_status', 'status'),
