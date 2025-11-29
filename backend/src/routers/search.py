@@ -655,36 +655,17 @@ async def search_full_text(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Улучшенный полнотекстовый поиск с морфологией и релевантностью
+    Умный поиск: сначала точный FTS, при отсутствии результатов - поиск с опечатками
     """
-    # Подготовка поискового запроса
     search_query = q.strip()
+    use_fuzzy = False  # Флаг для отслеживания использования нечеткого поиска
 
     # Создаем TS_QUERY для полнотекстового поиска
     ts_query = func.plainto_tsquery("russian", search_query)
 
-    # Базовые условия для ОСНОВНОГО запроса
+    # БАЗОВЫЕ УСЛОВИЯ ПОИСКА
     base_conditions = []
-
-    # УСЛОВИЕ 1: Полнотекстовый поиск (основное)
     base_conditions.append(Product.search_vector.op("@@")(ts_query))
-
-    # УСЛОВИЕ 2: Точные совпадения (дополнительно)
-    exact_match_conditions = []
-    search_terms = search_query.lower().split()
-
-    for term in search_terms:
-        if len(term) >= 2:
-            exact_match_conditions.extend(
-                [
-                    Product.name.ilike(f"%{term}%")
-
-                ]
-            )
-
-    # Комбинируем точные совпадения с полнотекстовым поиском
-    if exact_match_conditions:
-        base_conditions.append(or_(*exact_match_conditions))
 
     # ФИЛЬТРЫ для основного запроса
     conditions_for_items = base_conditions.copy()
@@ -712,7 +693,7 @@ async def search_full_text(
     if max_price is not None:
         conditions_for_combinations.append(Product.price <= max_price)
 
-    # ЗАПРОС ДЛЯ КОМБИНАЦИЙ
+    # ЗАПРОС ДЛЯ КОМБИНАЦИЙ (первоначальный - точный поиск)
     combinations_query = (
         select(
             Product.name,
@@ -733,23 +714,87 @@ async def search_full_text(
     combinations_result = await db.execute(combinations_query)
     combinations_data = combinations_result.all()
 
+    # Если точный поиск не дал результатов, пробуем нечеткий поиск
+    if not combinations_data:
+        use_fuzzy = True
+
+        # Условия для нечеткого поиска (триграммы)
+        fuzzy_conditions = [
+            func.similarity(Product.name, search_query) > 0.3,  # Порог для 1-2 опечаток
+        ]
+
+        # Заменяем условия для комбинаций на нечеткие
+        conditions_for_combinations = fuzzy_conditions.copy()
+
+        if city and city != "Все города":
+            conditions_for_combinations.append(Pharmacy.city == city)
+        if min_price is not None:
+            conditions_for_combinations.append(Product.price >= min_price)
+        if max_price is not None:
+            conditions_for_combinations.append(Product.price <= max_price)
+
+        # Пересчитываем комбинации с нечетким поиском
+        combinations_query = (
+            select(
+                Product.name,
+                Product.form,
+                Product.manufacturer,
+                Product.country,
+                func.count(Product.uuid).label("count"),
+                func.min(Product.price).label("min_price"),
+                func.max(Product.price).label("max_price"),
+                func.count(Pharmacy.uuid.distinct()).label("pharmacy_count"),
+                func.avg(func.similarity(Product.name, search_query)).label(
+                    "avg_similarity"
+                ),
+            )
+            .join(Pharmacy)
+            .where(and_(*conditions_for_combinations))
+            .group_by(Product.name, Product.form, Product.manufacturer, Product.country)
+            .order_by(text("avg_similarity DESC, count DESC"))
+        )
+
+        combinations_result = await db.execute(combinations_query)
+        combinations_data = combinations_result.all()
+
+        # Также заменяем условия для items на нечеткие
+        conditions_for_items = fuzzy_conditions.copy()
+
+        if city and city != "Все города":
+            conditions_for_items.append(Pharmacy.city == city)
+        if form and form != "Все формы":
+            conditions_for_items.append(Product.form == form)
+        if manufacturer and manufacturer != "Все производители":
+            conditions_for_items.append(Product.manufacturer.ilike(f"%{manufacturer}%"))
+        if country and country != "Все страны":
+            conditions_for_items.append(Product.country.ilike(f"%{country}%"))
+        if min_price is not None:
+            conditions_for_items.append(Product.price >= min_price)
+        if max_price is not None:
+            conditions_for_items.append(Product.price <= max_price)
+
+    # Формируем available_combinations
     available_combinations = []
     for combo in combinations_data:
         if combo.name:
-            available_combinations.append(
-                {
-                    "name": combo.name,
-                    "form": combo.form,
-                    "manufacturer": combo.manufacturer,
-                    "country": combo.country,
-                    "count": combo.count,
-                    "min_price": float(combo.min_price) if combo.min_price else 0.0,
-                    "max_price": float(combo.max_price) if combo.max_price else 0.0,
-                    "pharmacy_count": combo.pharmacy_count,
-                }
-            )
+            combo_dict = {
+                "name": combo.name,
+                "form": combo.form,
+                "manufacturer": combo.manufacturer,
+                "country": combo.country,
+                "count": combo.count,
+                "min_price": float(combo.min_price) if combo.min_price else 0.0,
+                "max_price": float(combo.max_price) if combo.max_price else 0.0,
+                "pharmacy_count": combo.pharmacy_count,
+            }
+            # Добавляем информацию о схожести для нечеткого поиска
+            if use_fuzzy and hasattr(combo, "avg_similarity"):
+                combo_dict["similarity_score"] = (
+                    float(combo.avg_similarity) if combo.avg_similarity else 0.0
+                )
+            available_combinations.append(combo_dict)
 
-    # ПАГИНАЦИЯ - ИСПРАВЛЕННАЯ ВЕРСИЯ
+    # ПАГИНАЦИЯ
     count_query = (
         select(func.count(Product.uuid))
         .join(Pharmacy)
@@ -762,44 +807,66 @@ async def search_full_text(
     total_pages = ceil(total / size) if total > 0 else 1
     page = min(page, total_pages)
 
-    # ОСНОВНОЙ ЗАПРОС с релевантностью
-    query = (
-        select(Product)
-        .options(joinedload(Product.pharmacy))
-        .join(Pharmacy)
-        .where(and_(*conditions_for_items))
-        .order_by(
-            # Упрощенная сортировка
-            case(
-                (Product.name.ilike(f"{search_query}"), 2),
-                (Product.name.ilike(f"{search_query}%"), 1),
-                else_=0,
-            ).desc(),
-            Product.price.asc(),
+    # ОСНОВНОЙ ЗАПРОС с учетом типа поиска
+    if use_fuzzy:
+        # Нечеткий поиск - сортируем по схожести
+        query = (
+            select(
+                Product,
+                func.similarity(Product.name, search_query).label("similarity_score"),
+            )
+            .options(joinedload(Product.pharmacy))
+            .join(Pharmacy)
+            .where(and_(*conditions_for_items))
+            .order_by(text("similarity_score DESC"), Product.price.asc())
+            .offset((page - 1) * size)
+            .limit(size)
         )
-        .offset((page - 1) * size)
-        .limit(size)
-    )
+    else:
+        # Точный поиск - стандартная сортировка
+        query = (
+            select(Product)
+            .options(joinedload(Product.pharmacy))
+            .join(Pharmacy)
+            .where(and_(*conditions_for_items))
+            .order_by(
+                case(
+                    (Product.name.ilike(f"{search_query}"), 2),
+                    (Product.name.ilike(f"{search_query}%"), 1),
+                    else_=0,
+                ).desc(),
+                Product.price.asc(),
+            )
+            .offset((page - 1) * size)
+            .limit(size)
+        )
 
     result = await db.execute(query)
-    products = result.unique().scalars().all()
+
+    if use_fuzzy:
+        products_data = result.unique().all()
+    else:
+        products_data = result.unique().scalars().all()
 
     # ФОРМАТИРОВАНИЕ РЕЗУЛЬТАТОВ
     items = []
-    for product in products:
+    for row in products_data:
+        if use_fuzzy:
+            product = row[0]
+            similarity_score = row[1]
+        else:
+            product = row
+            similarity_score = 1.0  # Для точного поиска
+
         pharmacy = product.pharmacy
-        # Вычисляем релевантность для отображения
-        relevance_score = 1.0
-        if product.name and search_query:
-            if product.name.lower() == search_query.lower():
-                relevance_score = 2.0
-            elif product.name.lower().startswith(search_query.lower()):
-                relevance_score = 1.5
 
-        # search.py - обновляем эндпоинт /search-fts/ чтобы включить время работы
-        # В части формирования items добавляем working_hours:
+        # Определяем уровень релевантности
+        relevance_level = (
+            "high"
+            if similarity_score > 0.7
+            else "medium" if similarity_score > 0.4 else "low"
+        )
 
-        # В части формирования items добавьте pharmacy_id:
         items.append(
             {
                 "uuid": str(product.uuid),
@@ -809,15 +876,15 @@ async def search_full_text(
                 "country": product.country,
                 "price": float(product.price) if product.price else 0.0,
                 "quantity": float(product.quantity) if product.quantity else 0.0,
-                "relevance_score": relevance_score,
+                "relevance_score": float(similarity_score) if use_fuzzy else 1.0,
+                "relevance_level": relevance_level,
+                "search_type": "fuzzy" if use_fuzzy else "exact",
                 "pharmacy_name": pharmacy.name if pharmacy else "Unknown",
                 "pharmacy_city": pharmacy.city if pharmacy else "Unknown",
                 "pharmacy_address": pharmacy.address if pharmacy else "Unknown",
                 "pharmacy_phone": pharmacy.phone if pharmacy else "Unknown",
                 "pharmacy_number": pharmacy.pharmacy_number if pharmacy else "N/A",
-                "pharmacy_id": (
-                    str(pharmacy.uuid) if pharmacy else None
-                ),  # Добавляем pharmacy_id для бронирования
+                "pharmacy_id": str(pharmacy.uuid) if pharmacy else None,
                 "working_hours": (
                     pharmacy.opening_hours if pharmacy else "Уточняйте в аптеке"
                 ),
@@ -836,6 +903,13 @@ async def search_full_text(
         "available_combinations": available_combinations,
         "total_found": sum(combo["count"] for combo in available_combinations),
         "query": q,
+        "search_metadata": {
+            "used_fuzzy": use_fuzzy,
+            "search_type": "fuzzy" if use_fuzzy else "exact",
+            "message": (
+                "Использован поиск с учетом опечаток" if use_fuzzy else "Точный поиск"
+            ),
+        },
         "filters": {
             "city": city,
             "form": form,
