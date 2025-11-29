@@ -54,8 +54,13 @@ class BookingOrderResponse(BookingOrderBase):
     created_at: datetime
     updated_at: datetime
 
-    model_config = {"from_attributes": True}
+    # Добавляем информацию о продукте
+    product_name: Optional[str] = None
+    product_form: Optional[str] = None
+    product_manufacturer: Optional[str] = None
+    product_country: Optional[str] = None
 
+    model_config = {"from_attributes": True}
 
 class PharmacyAPIConfigBase(BaseModel):
     api_type: str

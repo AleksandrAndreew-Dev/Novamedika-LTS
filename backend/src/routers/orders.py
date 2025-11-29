@@ -215,22 +215,36 @@ async def get_orders(
     status: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
-    """Получение списка заказов с фильтрацией"""
+    """Получение списка заказов с фильтрацией и информацией о продукте"""
     try:
-        query = select(BookingOrder)
+        query = (
+            select(BookingOrder, Product.name, Product.form, Product.manufacturer, Product.country)
+            .join(Product, BookingOrder.product_id == Product.uuid)
+        )
 
         if pharmacy_id:
             query = query.where(BookingOrder.pharmacy_id == pharmacy_id)
         if status:
             query = query.where(BookingOrder.status == status)
 
-        # Сортируем по дате создания (новые сначала)
         query = query.order_by(BookingOrder.created_at.desc())
 
         result = await db.execute(query)
-        orders = result.scalars().all()
+        results = result.all()
 
-        return orders
+        # Формируем ответ с информацией о продукте
+        orders_with_products = []
+        for order, product_name, product_form, product_manufacturer, product_country in results:
+            order_dict = {
+                **order.__dict__,
+                "product_name": product_name,
+                "product_form": product_form,
+                "product_manufacturer": product_manufacturer,
+                "product_country": product_country
+            }
+            orders_with_products.append(BookingOrderResponse(**order_dict))
+
+        return orders_with_products
 
     except Exception as e:
         logger.exception("Error fetching orders")
@@ -242,17 +256,29 @@ async def get_order_by_id(
     order_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    """Получение заказа по ID"""
+    """Получение заказа по ID с информацией о продукте"""
     try:
         result = await db.execute(
-            select(BookingOrder).where(BookingOrder.uuid == order_id)
+            select(BookingOrder, Product.name, Product.form, Product.manufacturer, Product.country)
+            .join(Product, BookingOrder.product_id == Product.uuid)
+            .where(BookingOrder.uuid == order_id)
         )
-        order = result.scalar_one_or_none()
+        result_data = result.first()
 
-        if not order:
+        if not result_data:
             raise HTTPException(status_code=404, detail="Order not found")
 
-        return order
+        order, product_name, product_form, product_manufacturer, product_country = result_data
+
+        order_dict = {
+            **order.__dict__,
+            "product_name": product_name,
+            "product_form": product_form,
+            "product_manufacturer": product_manufacturer,
+            "product_country": product_country
+        }
+
+        return BookingOrderResponse(**order_dict)
 
     except HTTPException:
         raise
@@ -537,7 +563,11 @@ async def get_pharmacy_orders(
             raise HTTPException(status_code=404, detail="Pharmacy not found")
 
         # Получаем заказы
-        query = select(BookingOrder).where(BookingOrder.pharmacy_id == pharmacy_id)
+        query = (
+            select(BookingOrder, Product.name, Product.form, Product.manufacturer, Product.country)
+            .join(Product, BookingOrder.product_id == Product.uuid)
+            .where(BookingOrder.pharmacy_id == pharmacy_id)
+        )
 
         if status:
             query = query.where(BookingOrder.status == status)
@@ -545,9 +575,21 @@ async def get_pharmacy_orders(
         query = query.order_by(BookingOrder.created_at.desc())
 
         result = await db.execute(query)
-        orders = result.scalars().all()
+        results = result.all()
 
-        return orders
+        # Формируем ответ с информацией о продукте
+        orders_with_products = []
+        for order, product_name, product_form, product_manufacturer, product_country in results:
+            order_dict = {
+                **order.__dict__,
+                "product_name": product_name,
+                "product_form": product_form,
+                "product_manufacturer": product_manufacturer,
+                "product_country": product_country
+            }
+            orders_with_products.append(BookingOrderResponse(**order_dict))
+
+        return orders_with_products
 
     except HTTPException:
         raise
