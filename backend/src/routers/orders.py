@@ -186,12 +186,12 @@ async def external_order_callback(request: Request, db: AsyncSession = Depends(g
 
         await db.commit()
 
-        # Отправляем уведомление в Telegram при изменении статуса
+        # Отправляем уведомление в Telegram с комментарием от аптеки
         if old_status != new_status:
-            await send_order_status_notification(order, old_status, new_status, db)
+            await send_order_status_notification(order, old_status, new_status, db, reason)
 
         logger.info(
-            f"Order {order.uuid} status updated from {old_status} to {new_status} via pharmacy callback"
+            f"Order {order.uuid} status updated from {old_status} to {new_status} via pharmacy callback. Comment: {reason}"
         )
 
         return {
@@ -289,8 +289,9 @@ async def update_order_status(
 
         await db.commit()
 
+        # Отправляем уведомление без комментария (пустая строка)
         if old_status != status and status in ["confirmed", "cancelled", "failed"]:
-            await send_order_status_notification(order, old_status, status, db)
+            await send_order_status_notification(order, old_status, status, db, "")
 
         logger.info(
             f"Order {order_id} status manually updated from {old_status} to {status}"
@@ -678,9 +679,9 @@ async def get_pharmacy_number(pharmacy_id: uuid.UUID, db: AsyncSession) -> str:
         return ""
 
 async def send_order_status_notification(
-    order: BookingOrder, old_status: str, new_status: str, db: AsyncSession
+    order: BookingOrder, old_status: str, new_status: str, db: AsyncSession, comment: str = ""
 ):
-    """Отправка уведомления о статусе заказа в Telegram - ОБНОВЛЕННАЯ ВЕРСИЯ С НОМЕРОМ АПТЕКИ"""
+    """Отправка уведомления о статусе заказа в Telegram с комментарием от аптеки"""
     try:
         # Получаем telegram_id пользователя
         telegram_id = await get_user_telegram_id_by_order(order, db)
@@ -719,9 +720,17 @@ async def send_order_status_notification(
                 f"📊 Количество: {order.quantity}\n"
                 f"🏪 Аптека: {pharmacy_full_name}\n"
                 f"📍 Адрес: {pharmacy_address}\n"
-                f"📞 Телефон: {pharmacy_phone}\n\n"
-                "Можете забирать ваш заказ! 🎉"
+                f"📞 Телефон: {pharmacy_phone}\n"
             )
+
+            # Добавляем комментарий от аптеки, если есть
+            if comment:
+                message_text += f"📝 **Комментарий от аптеки:** {comment}\n\n"
+            else:
+                message_text += "\n"
+
+            message_text += "Можете забирать ваш заказ! 🎉"
+
         elif new_status == "cancelled":
             message_text = (
                 "❌ **Ваш заказ отменен**\n\n"
@@ -729,9 +738,17 @@ async def send_order_status_notification(
                 f"🛍️ Товар: {product_name}\n"
                 f"📊 Количество: {order.quantity}\n"
                 f"🏪 Аптека: {pharmacy_full_name}\n"
-                f"📞 Телефон: {pharmacy_phone}\n\n"
-                "Если это ошибка, свяжитесь с аптекой по телефону выше."
+                f"📞 Телефон: {pharmacy_phone}\n"
             )
+
+            # Добавляем комментарий от аптеки, если есть
+            if comment:
+                message_text += f"📝 **Причина отмены:** {comment}\n\n"
+            else:
+                message_text += "\n"
+
+            message_text += "Если это ошибка, свяжитесь с аптекой по телефону выше."
+
         elif new_status == "failed":
             message_text = (
                 "⚠️ **Проблема с вашим заказом**\n\n"
@@ -739,9 +756,16 @@ async def send_order_status_notification(
                 f"🛍️ Товар: {product_name}\n"
                 f"📊 Количество: {order.quantity}\n"
                 f"🏪 Аптека: {pharmacy_full_name}\n"
-                f"📞 Телефон: {pharmacy_phone}\n\n"
-                "Техническая ошибка при обработке заказа. Мы уже работаем над решением."
+                f"📞 Телефон: {pharmacy_phone}\n"
             )
+
+            # Добавляем комментарий от аптеки, если есть
+            if comment:
+                message_text += f"📝 **Причина проблемы:** {comment}\n\n"
+            else:
+                message_text += "\n"
+
+            message_text += "Техническая ошибка при обработке заказа. Мы уже работаем над решением."
         else:
             return  # Не отправляем уведомление для других статусов
 
@@ -752,7 +776,7 @@ async def send_order_status_notification(
             parse_mode="Markdown"
         )
         logger.info(
-            f"Order status notification sent to user {telegram_id} for order {order.uuid}"
+            f"Order status notification sent to user {telegram_id} for order {order.uuid} with comment: {comment}"
         )
 
     except Exception as e:
