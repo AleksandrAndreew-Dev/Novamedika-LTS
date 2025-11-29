@@ -39,6 +39,7 @@ from tasks.celery_app import celery
 
 # tasks_increment.py - ЗАМЕНИТЕ initialize_task_models
 
+
 async def initialize_task_models():
     """Потокобезопасная инициализация с очисткой connection pool"""
     global _models_initialized
@@ -54,10 +55,13 @@ async def initialize_task_models():
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                logger.info(f"Initializing database models (attempt {attempt + 1}/{max_retries})")
+                logger.info(
+                    f"Initializing database models (attempt {attempt + 1}/{max_retries})"
+                )
 
                 # Явно закрываем старые соединения перед инициализацией
                 from db.database import engine, _engine
+
                 if _engine:
                     try:
                         await _engine.dispose()
@@ -80,19 +84,25 @@ async def initialize_task_models():
                 if attempt == max_retries - 1:
                     logger.error("All attempts to initialize models failed")
                     raise
-                await asyncio.sleep(2 ** attempt)
+                await asyncio.sleep(2**attempt)
+
 
 # tasks_increment.py - ДОБАВЬТЕ ЭТУ ФУНКЦИЮ
 
+
 async def get_asyncpg_connection():
     """Создает новое соединение asyncpg для каждой операции"""
-    database_url = os.getenv('ASYNCPG_DATABASE_URL', "postgresql://novamedika:novamedika@postgres:5432/novamedika_prod")
+    database_url = os.getenv(
+        "ASYNCPG_DATABASE_URL",
+        "postgresql://novamedika:novamedika@postgres:5432/novamedika_prod",
+    )
 
     # Парсим URL для asyncpg
     if database_url.startswith("postgresql://"):
         database_url = database_url.replace("postgresql://", "postgres://", 1)
 
     return await asyncpg.connect(database_url)
+
 
 def generate_product_hash(product_data: dict) -> str:
     # Преобразуем дату в строку безопасным способом
@@ -150,19 +160,24 @@ def process_csv_incremental(
         if loop.is_running():
             # Если loop уже запущен (редкий случай в Celery), используем create_task
             async def run_async():
-                return await process_csv_incremental_async(file_content, pharmacy_name, pharmacy_number)
+                return await process_csv_incremental_async(
+                    file_content, pharmacy_name, pharmacy_number
+                )
 
             future = asyncio.run_coroutine_threadsafe(run_async(), loop)
             return future.result(timeout=3600)
         else:
             # Стандартный случай - запускаем в существующем loop
             return loop.run_until_complete(
-                process_csv_incremental_async(file_content, pharmacy_name, pharmacy_number)
+                process_csv_incremental_async(
+                    file_content, pharmacy_name, pharmacy_number
+                )
             )
 
     except Exception as e:
         logger.error(f"Error in process_csv_incremental: {str(e)}")
         raise self.retry(exc=e, countdown=60)
+
 
 async def process_csv_incremental_async_wrapper(
     file_content: str, pharmacy_name: str, pharmacy_number: str
@@ -172,9 +187,13 @@ async def process_csv_incremental_async_wrapper(
     await initialize_task_models()
 
     # Выполняем основную логику
-    return await process_csv_incremental_async(file_content, pharmacy_name, pharmacy_number)
+    return await process_csv_incremental_async(
+        file_content, pharmacy_name, pharmacy_number
+    )
+
 
 # tasks_increment.py - КРИТИЧЕСКИЕ ИСПРАВЛЕНИЯ
+
 
 async def process_csv_incremental_async(
     file_content: str, pharmacy_name: str, pharmacy_number: str
@@ -216,7 +235,7 @@ async def process_csv_incremental_async(
                     city="",
                     address="",
                     phone="",
-                    opening_hours=""
+                    opening_hours="",
                 )
                 session.add(pharmacy)
                 await session.commit()
@@ -226,9 +245,7 @@ async def process_csv_incremental_async(
             logger.info(f"Using pharmacy: {pharmacy.uuid}")
 
         # Обрабатываем CSV для найденной/созданной аптеки
-        csv_data, csv_hashes = process_csv_data_with_hashes(
-            file_content, pharmacy.uuid
-        )
+        csv_data, csv_hashes = process_csv_data_with_hashes(file_content, pharmacy.uuid)
 
         # Получаем существующие продукты с НОВОЙ сессией
         async with async_session_maker() as session:
@@ -614,40 +631,73 @@ def compare_products(
 
 # tasks_increment.py - ИСПРАВЛЕННАЯ ФУНКЦИЯ
 
+
 async def execute_incremental_changes_async(
     to_add: List[dict],
     to_update: List[dict],
     to_remove: List[uuid.UUID],
     pharmacy_uuid: uuid.UUID,
 ) -> Dict:
-    """Асинхронное выполнение инкрементальных изменений с правильным управлением соединениями"""
+    """Асинхронное выполнение инкрементальных изменений с сохранением заказов"""
     stats = {"added": 0, "updated": 0, "removed": 0}
 
-    # СОЗДАЕМ ОТДЕЛЬНОЕ СОЕДИНЕНИЕ ДЛЯ КАЖДОЙ ОПЕРАЦИИ
     conn = await get_asyncpg_connection()
 
     try:
-        await conn.execute("BEGIN")  # Явно начинаем транзакцию
+        await conn.execute("BEGIN")
 
-        # Удаление продуктов пакетами
+        # ШАГ 1: ОТСОЕДИНЯЕМ ЗАКАЗЫ ОТ УДАЛЯЕМЫХ ПРОДУКТОВ
         if to_remove:
-            batch_size = 100  # Уменьшим размер батча
+            # Создаем временную таблицу для продуктов на удаление
+            await conn.execute(
+                """
+                CREATE TEMP TABLE products_to_remove (product_uuid UUID PRIMARY KEY)
+            """
+            )
+
+            # Заполняем временную таблицу
+            batch_size = 100
             for i in range(0, len(to_remove), batch_size):
                 batch = to_remove[i : i + batch_size]
-                placeholders = ",".join([f"${j+1}" for j in range(len(batch))])
-                query = f"""
-                    DELETE FROM products
-                    WHERE uuid IN ({placeholders}) AND pharmacy_id = ${len(batch)+1}
-                """
+                values = ",".join([f"('{str(uuid)}')" for uuid in batch])
                 await conn.execute(
-                    query, *[str(uuid) for uuid in batch], str(pharmacy_uuid)
+                    f"""
+                    INSERT INTO products_to_remove (product_uuid)
+                    VALUES {values}
+                    ON CONFLICT (product_uuid) DO NOTHING
+                """
                 )
-            stats["removed"] = len(to_remove)
-            logger.info(f"Removed {len(to_remove)} products")
 
-        # Обновление продуктов пакетами
+            # ОБНОВЛЯЕМ заказы: устанавливаем product_id = NULL для удаляемых продуктов
+            updated_orders_count = await conn.fetchval(
+                """
+                UPDATE booking_orders
+                SET product_id = NULL
+                WHERE product_id IN (SELECT product_uuid FROM products_to_remove)
+                AND product_id IS NOT NULL
+            """
+            )
+
+            logger.info(
+                f"Detached {updated_orders_count} orders from products to be removed"
+            )
+
+            # ТЕПЕРЬ БЕЗОПАСНО УДАЛЯЕМ продукты
+            result = await conn.execute(
+                """
+                DELETE FROM products
+                WHERE uuid IN (SELECT product_uuid FROM products_to_remove)
+                AND pharmacy_id = $1
+            """,
+                str(pharmacy_uuid),
+            )
+
+            stats["removed"] = int(result.split()[-1])
+            await conn.execute("DROP TABLE products_to_remove")
+            logger.info(f"Removed {stats['removed']} products after detaching orders")
+
+        # ШАГ 2: ОБНОВЛЯЕМ существующие продукты
         if to_update:
-            batch_size = 25  # Уменьшим размер батча для обновлений
             for product in to_update:
                 updated_at = product["updated_at"]
                 if updated_at and updated_at.tzinfo is not None:
@@ -686,9 +736,9 @@ async def execute_incremental_changes_async(
             stats["updated"] = len(to_update)
             logger.info(f"Updated {len(to_update)} products")
 
-        # Добавление продуктов пакетами
+        # ШАГ 3: ДОБАВЛЯЕМ новые продукты
         if to_add:
-            batch_size = 25  # Уменьшим размер батча для вставок
+            batch_size = 25
             for i in range(0, len(to_add), batch_size):
                 batch = to_add[i : i + batch_size]
                 values_placeholders = []
@@ -701,17 +751,38 @@ async def execute_incremental_changes_async(
 
                     placeholders = []
                     for field in [
-                        "uuid", "name", "form", "manufacturer", "country", "serial",
-                        "price", "quantity", "total_price", "expiry_date", "category",
-                        "import_date", "internal_code", "wholesale_price", "retail_price",
-                        "distributor", "internal_id", "pharmacy_id", "updated_at",
+                        "uuid",
+                        "name",
+                        "form",
+                        "manufacturer",
+                        "country",
+                        "serial",
+                        "price",
+                        "quantity",
+                        "total_price",
+                        "expiry_date",
+                        "category",
+                        "import_date",
+                        "internal_code",
+                        "wholesale_price",
+                        "retail_price",
+                        "distributor",
+                        "internal_id",
+                        "pharmacy_id",
+                        "updated_at",
                     ]:
                         placeholders.append(f"${param_counter}")
                         value = product[field]
 
                         if field == "updated_at" and value and value.tzinfo is not None:
                             value = value.replace(tzinfo=None)
-                        elif field in ["price", "quantity", "total_price", "wholesale_price", "retail_price"]:
+                        elif field in [
+                            "price",
+                            "quantity",
+                            "total_price",
+                            "wholesale_price",
+                            "retail_price",
+                        ]:
                             value = float(value)
 
                         params.append(value)
@@ -730,15 +801,15 @@ async def execute_incremental_changes_async(
             stats["added"] = len(to_add)
             logger.info(f"Added {len(to_add)} products")
 
-        await conn.execute("COMMIT")  # Явно коммитим транзакцию
+        await conn.execute("COMMIT")
         return stats
 
     except Exception as e:
-        await conn.execute("ROLLBACK")  # Откатываем при ошибке
+        await conn.execute("ROLLBACK")
         logger.error(f"Error executing incremental changes: {str(e)}")
         raise
     finally:
-        await conn.close()  # Всегда закрываем соединение
+        await conn.close()
 
 
 # Вспомогательные функции
@@ -830,6 +901,7 @@ def sync_pharmacy_orders_task():
 
     loop.run_until_complete(sync_service.sync_all_pharmacies_orders())
 
+
 @celery.task
 def retry_failed_orders_task():
     """Повторная отправка неудачных заказов"""
@@ -848,12 +920,12 @@ def retry_failed_orders_task():
 
 
 celery.conf.beat_schedule = {
-    'sync-orders-every-10-min': {
-        'task': 'celery_app.sync_pharmacy_orders_task',
-        'schedule': 600.0,
+    "sync-orders-every-10-min": {
+        "task": "celery_app.sync_pharmacy_orders_task",
+        "schedule": 600.0,
     },
-    'retry-failed-orders-every-5-min': {
-        'task': 'celery_app.retry_failed_orders_task',
-        'schedule': 300.0,
+    "retry-failed-orders-every-5-min": {
+        "task": "celery_app.retry_failed_orders_task",
+        "schedule": 300.0,
     },
 }
