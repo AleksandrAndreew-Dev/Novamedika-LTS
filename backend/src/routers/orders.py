@@ -485,16 +485,47 @@ async def update_pharmacy_config(request: Request, db: AsyncSession = Depends(ge
     return {"status": "updated"}
 
 
-@router.get(
-    "/pharmacies/{pharmacy_id}/orders", response_model=List[BookingOrderResponse]
-)
+@router.get("/pharmacies/{pharmacy_id}/orders", response_model=List[BookingOrderResponse])
 async def get_pharmacy_orders(
     pharmacy_id: uuid.UUID,
     status: Optional[str] = None,
+    request: Request = None,  # Добавляем для аутентификации
     db: AsyncSession = Depends(get_db),
 ):
-    """Получение заказов конкретной аптеки"""
+    """Получение заказов конкретной аптеки с аутентификацией"""
     try:
+        # Аутентификация по токену
+        auth_header = request.headers.get("Authorization") if request else None
+        token = None
+        if auth_header and auth_header.lower().startswith("bearer "):
+            token = auth_header.split(" ", 1)[1].strip()
+        if not token:
+            token = request.headers.get("X-API-KEY") if request else None
+
+        if not token:
+            raise HTTPException(status_code=401, detail="Missing auth token")
+
+        # Проверяем токен и принадлежность к аптеке
+        config_result = await db.execute(
+            select(PharmacyAPIConfig).where(
+                PharmacyAPIConfig.is_active == True
+            )
+        )
+        configs = config_result.scalars().all()
+
+        api_config = None
+        for config in configs:
+            try:
+                if config.get_auth_token() == token and config.pharmacy_id == pharmacy_id:
+                    api_config = config
+                    break
+            except Exception as e:
+                logger.warning(f"Error decrypting token for config {config.uuid}: {e}")
+                continue
+
+        if not api_config:
+            raise HTTPException(status_code=403, detail="Invalid token or pharmacy access denied")
+
         # Проверяем существование аптеки
         pharmacy_result = await db.execute(
             select(Pharmacy).where(Pharmacy.uuid == pharmacy_id)
@@ -504,6 +535,7 @@ async def get_pharmacy_orders(
         if not pharmacy:
             raise HTTPException(status_code=404, detail="Pharmacy not found")
 
+        # Получаем заказы
         query = select(BookingOrder).where(BookingOrder.pharmacy_id == pharmacy_id)
 
         if status:
@@ -596,34 +628,49 @@ async def get_user_telegram_id_by_order(
 
 
 async def get_pharmacy_name(pharmacy_id: uuid.UUID, db: AsyncSession) -> str:
-    """Получить название аптеки - как в user_questions.py"""
-    result = await db.execute(select(Pharmacy.name).where(Pharmacy.uuid == pharmacy_id))
-    pharmacy = result.scalar_one_or_none()
-    return pharmacy.name if pharmacy else "Неизвестная аптека"
-
+    """Получить название аптеки - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+    try:
+        result = await db.execute(select(Pharmacy.name).where(Pharmacy.uuid == pharmacy_id))
+        pharmacy_name = result.scalar_one_or_none()
+        return pharmacy_name if pharmacy_name else "Неизвестная аптека"
+    except Exception as e:
+        logger.error(f"Error getting pharmacy name for {pharmacy_id}: {e}")
+        return "Неизвестная аптека"
 
 async def get_pharmacy_phone(pharmacy_id: uuid.UUID, db: AsyncSession) -> str:
-    """Получить телефон аптеки"""
-    result = await db.execute(
-        select(Pharmacy.phone).where(Pharmacy.uuid == pharmacy_id)
-    )
-    phone = result.scalar_one_or_none()
-    return phone if phone else "Не указан"
-
+    """Получить телефон аптеки - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+    try:
+        result = await db.execute(select(Pharmacy.phone).where(Pharmacy.uuid == pharmacy_id))
+        phone = result.scalar_one_or_none()
+        return phone if phone else "Не указан"
+    except Exception as e:
+        logger.error(f"Error getting pharmacy phone for {pharmacy_id}: {e}")
+        return "Не указан"
 
 async def get_pharmacy_address(pharmacy_id: uuid.UUID, db: AsyncSession) -> str:
-    """Получить адрес аптеки"""
-    result = await db.execute(
-        select(Pharmacy.address).where(Pharmacy.uuid == pharmacy_id)
-    )
-    address = result.scalar_one_or_none()
-    return address if address else "Адрес не указан"
+    """Получить адрес аптеки - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+    try:
+        result = await db.execute(select(Pharmacy.address).where(Pharmacy.uuid == pharmacy_id))
+        address = result.scalar_one_or_none()
+        return address if address else "Адрес не указан"
+    except Exception as e:
+        logger.error(f"Error getting pharmacy address for {pharmacy_id}: {e}")
+        return "Адрес не указан"
 
+async def get_product_name(product_id: uuid.UUID, db: AsyncSession) -> str:
+    """Получить название товара"""
+    try:
+        result = await db.execute(select(Product.name).where(Product.uuid == product_id))
+        product_name = result.scalar_one_or_none()
+        return product_name if product_name else "Неизвестный товар"
+    except Exception as e:
+        logger.error(f"Error getting product name for {product_id}: {e}")
+        return "Неизвестный товар"
 
 async def send_order_status_notification(
     order: BookingOrder, old_status: str, new_status: str, db: AsyncSession
 ):
-    """Отправка уведомления о статусе заказа в Telegram - УЛУЧШЕННАЯ ВЕРСИЯ"""
+    """Отправка уведомления о статусе заказа в Telegram - ПОЛНОСТЬЮ ПЕРЕРАБОТАННАЯ ВЕРСИЯ"""
     try:
         # Получаем telegram_id пользователя
         telegram_id = await get_user_telegram_id_by_order(order, db)
@@ -641,16 +688,19 @@ async def send_order_status_notification(
             logger.error("Bot not initialized for sending order notification")
             return
 
-        # Получаем информацию об аптеке
+        # Получаем информацию об аптеке и товаре
         pharmacy_name = await get_pharmacy_name(order.pharmacy_id, db)
         pharmacy_phone = await get_pharmacy_phone(order.pharmacy_id, db)
         pharmacy_address = await get_pharmacy_address(order.pharmacy_id, db)
+        product_name = await get_product_name(order.product_id, db)
 
         # Форматируем сообщение в зависимости от статуса
         if new_status == "confirmed":
             message_text = (
                 "✅ **Ваш заказ подтвержден!**\n\n"
                 f"📦 Номер заказа: `{order.uuid}`\n"
+                f"🛍️ Товар: {product_name}\n"
+                f"📊 Количество: {order.quantity}\n"
                 f"🏪 Аптека: {pharmacy_name}\n"
                 f"📍 Адрес: {pharmacy_address}\n"
                 f"📞 Телефон: {pharmacy_phone}\n\n"
@@ -660,6 +710,8 @@ async def send_order_status_notification(
             message_text = (
                 "❌ **Ваш заказ отменен**\n\n"
                 f"📦 Номер заказа: `{order.uuid}`\n"
+                f"🛍️ Товар: {product_name}\n"
+                f"📊 Количество: {order.quantity}\n"
                 f"🏪 Аптека: {pharmacy_name}\n"
                 f"📞 Телефон: {pharmacy_phone}\n\n"
                 "Если это ошибка, свяжитесь с аптекой по телефону выше."
@@ -668,6 +720,8 @@ async def send_order_status_notification(
             message_text = (
                 "⚠️ **Проблема с вашим заказом**\n\n"
                 f"📦 Номер заказа: `{order.uuid}`\n"
+                f"🛍️ Товар: {product_name}\n"
+                f"📊 Количество: {order.quantity}\n"
                 f"🏪 Аптека: {pharmacy_name}\n"
                 f"📞 Телефон: {pharmacy_phone}\n\n"
                 "Техническая ошибка при обработке заказа. Мы уже работаем над решением."
@@ -677,7 +731,9 @@ async def send_order_status_notification(
 
         # Отправляем сообщение
         await bot.send_message(
-            chat_id=telegram_id, text=message_text, parse_mode="Markdown"
+            chat_id=telegram_id, 
+            text=message_text,
+            parse_mode="Markdown"
         )
         logger.info(
             f"Order status notification sent to user {telegram_id} for order {order.uuid}"
