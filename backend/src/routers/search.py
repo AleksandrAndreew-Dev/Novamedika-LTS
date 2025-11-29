@@ -677,8 +677,8 @@ async def search_full_text(
         if len(term) >= 2:
             exact_match_conditions.extend(
                 [
-                    Product.name.ilike(f"%{term}%"),
-                    Product.manufacturer.ilike(f"%{term}%"),
+                    Product.name.ilike(f"%{term}%")
+
                 ]
             )
 
