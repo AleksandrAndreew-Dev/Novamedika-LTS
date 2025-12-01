@@ -219,14 +219,14 @@ async def get_orders(
     try:
         query = (
             select(
-    BookingOrder,
-    BookingOrder.product_name,
-    BookingOrder.product_form,
-    BookingOrder.product_manufacturer,
-    BookingOrder.product_country,
-    BookingOrder.product_price,  # ← ДОБАВИТЬ
-    BookingOrder.product_serial   # ← ДОБАВИТЬ
-)
+                BookingOrder,
+                BookingOrder.product_name,
+                BookingOrder.product_form,
+                BookingOrder.product_manufacturer,
+                BookingOrder.product_country,
+                BookingOrder.product_price,
+                BookingOrder.product_serial
+            )
             .join(Product, BookingOrder.product_id == Product.uuid)
         )
 
@@ -242,16 +242,16 @@ async def get_orders(
 
         # Формируем ответ с информацией о продукте
         orders_with_products = []
-        for order, product_name, product_form, product_manufacturer, product_country in results:
+        for order, product_name, product_form, product_manufacturer, product_country, product_price, product_serial in results:
             order_dict = {
-    **order.__dict__,
-    "product_name": product_name,
-    "product_form": product_form,
-    "product_manufacturer": product_manufacturer,
-    "product_country": product_country,
-    "product_price": product_price,  # ← ДОБАВИТЬ
-    "product_serial": product_serial  # ← ДОБАВИТЬ
-}
+                **order.__dict__,
+                "product_name": product_name,
+                "product_form": product_form,
+                "product_manufacturer": product_manufacturer,
+                "product_country": product_country,
+                "product_price": product_price,
+                "product_serial": product_serial
+            }
             orders_with_products.append(BookingOrderResponse(**order_dict))
 
         return orders_with_products
@@ -270,14 +270,14 @@ async def get_order_by_id(
     try:
         result = await db.execute(
             select(
-    BookingOrder,
-    BookingOrder.product_name,
-    BookingOrder.product_form,
-    BookingOrder.product_manufacturer,
-    BookingOrder.product_country,
-    BookingOrder.product_price,  # ← ДОБАВИТЬ
-    BookingOrder.product_serial   # ← ДОБАВИТЬ
-)
+                BookingOrder,
+                BookingOrder.product_name,
+                BookingOrder.product_form,
+                BookingOrder.product_manufacturer,
+                BookingOrder.product_country,
+                BookingOrder.product_price,
+                BookingOrder.product_serial
+            )
             .join(Product, BookingOrder.product_id == Product.uuid)
             .where(BookingOrder.uuid == order_id)
         )
@@ -286,17 +286,17 @@ async def get_order_by_id(
         if not result_data:
             raise HTTPException(status_code=404, detail="Order not found")
 
-        order, product_name, product_form, product_manufacturer, product_country = result_data
+        order, product_name, product_form, product_manufacturer, product_country, product_price, product_serial = result_data
 
         order_dict = {
-        **order.__dict__,
-        "product_name": product_name,
-        "product_form": product_form,
-        "product_manufacturer": product_manufacturer,
-        "product_country": product_country,
-        "product_price": product_price,  # ← ДОБАВИТЬ
-        "product_serial": product_serial  # ← ДОБАВИТЬ
-    }
+            **order.__dict__,
+            "product_name": product_name,
+            "product_form": product_form,
+            "product_manufacturer": product_manufacturer,
+            "product_country": product_country,
+            "product_price": product_price,
+            "product_serial": product_serial
+        }
 
         return BookingOrderResponse(**order_dict)
 
@@ -536,7 +536,7 @@ async def update_pharmacy_config(request: Request, db: AsyncSession = Depends(ge
 async def get_pharmacy_orders(
     pharmacy_id: uuid.UUID,
     status: Optional[str] = None,
-    request: Request = None,  # Добавляем для аутентификации
+    request: Request = None,
     db: AsyncSession = Depends(get_db),
 ):
     """Получение заказов конкретной аптеки с аутентификацией"""
@@ -585,14 +585,14 @@ async def get_pharmacy_orders(
         # Получаем заказы
         query = (
             select(
-    BookingOrder,
-    BookingOrder.product_name,
-    BookingOrder.product_form,
-    BookingOrder.product_manufacturer,
-    BookingOrder.product_country,
-    BookingOrder.product_price,  # ← ДОБАВИТЬ
-    BookingOrder.product_serial   # ← ДОБАВИТЬ
-)
+                BookingOrder,
+                BookingOrder.product_name,
+                BookingOrder.product_form,
+                BookingOrder.product_manufacturer,
+                BookingOrder.product_country,
+                BookingOrder.product_price,
+                BookingOrder.product_serial
+            )
             .join(Product, BookingOrder.product_id == Product.uuid)
             .where(BookingOrder.pharmacy_id == pharmacy_id)
         )
@@ -607,16 +607,16 @@ async def get_pharmacy_orders(
 
         # Формируем ответ с информацией о продукте
         orders_with_products = []
-        for order, product_name, product_form, product_manufacturer, product_country in results:
+        for order, product_name, product_form, product_manufacturer, product_country, product_price, product_serial in results:
             order_dict = {
-    **order.__dict__,
-    "product_name": product_name,
-    "product_form": product_form,
-    "product_manufacturer": product_manufacturer,
-    "product_country": product_country,
-    "product_price": product_price,  # ← ДОБАВИТЬ
-    "product_serial": product_serial  # ← ДОБАВИТЬ
-}
+                **order.__dict__,
+                "product_name": product_name,
+                "product_form": product_form,
+                "product_manufacturer": product_manufacturer,
+                "product_country": product_country,
+                "product_price": product_price,
+                "product_serial": product_serial
+            }
             orders_with_products.append(BookingOrderResponse(**order_dict))
 
         return orders_with_products
