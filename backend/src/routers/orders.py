@@ -28,6 +28,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+# orders.py (функция create_booking_order)
+
 @router.post("/orders", response_model=BookingOrderResponse)
 async def create_booking_order(
     order_data: BookingOrderCreate,
@@ -51,16 +53,25 @@ async def create_booking_order(
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
 
-        # Создаем заказ в нашей системе
+        # Создаем заказ в нашей системе с КЭШИРОВАННЫМИ ДАННЫМИ ПРОДУКТА
         order = BookingOrder(
             uuid=uuid.uuid4(),
             pharmacy_id=order_data.pharmacy_id,
             product_id=order_data.product_id,
+
+            # КЭШИРОВАННЫЕ ДАННЫЕ ПРОДУКТА (ЗАПОЛНЯЕМ ВСЕ ПОЛЯ!)
+            product_name=product.name,
+            product_form=product.form,  # ВАЖНО: форма продукта
+            product_manufacturer=product.manufacturer,
+            product_country=product.country,
+            product_price=product.price,  # ВАЖНО: цена продукта
+            product_serial=product.serial,
+
             quantity=order_data.quantity,
             customer_name=order_data.customer_name,
             customer_phone=order_data.customer_phone,
             scheduled_pickup=order_data.scheduled_pickup,
-            status="pending",  # Аптека сама обновит статус через callback
+            status="pending",
             telegram_id=order_data.telegram_id,
         )
 
@@ -217,18 +228,8 @@ async def get_orders(
 ):
     """Получение списка заказов с фильтрацией и информацией о продукте"""
     try:
-        query = (
-            select(
-                BookingOrder,
-                BookingOrder.product_name,
-                BookingOrder.product_form,
-                BookingOrder.product_manufacturer,
-                BookingOrder.product_country,
-                BookingOrder.product_price,
-                BookingOrder.product_serial
-            )
-            .join(Product, BookingOrder.product_id == Product.uuid)
-        )
+        # ПРОСТОЙ ЗАПРОС - данные уже кэшированы в booking_orders
+        query = select(BookingOrder)
 
         if pharmacy_id:
             query = query.where(BookingOrder.pharmacy_id == pharmacy_id)
@@ -238,28 +239,16 @@ async def get_orders(
         query = query.order_by(BookingOrder.created_at.desc())
 
         result = await db.execute(query)
-        results = result.all()
+        orders = result.scalars().all()
 
-        # Формируем ответ с информацией о продукте
-        orders_with_products = []
-        for order, product_name, product_form, product_manufacturer, product_country, product_price, product_serial in results:
-            order_dict = {
-                **order.__dict__,
-                "product_name": product_name,
-                "product_form": product_form,
-                "product_manufacturer": product_manufacturer,
-                "product_country": product_country,
-                "product_price": product_price,
-                "product_serial": product_serial
-            }
-            orders_with_products.append(BookingOrderResponse(**order_dict))
-
-        return orders_with_products
+        return orders  # BookingOrderResponse автоматически сериализует кэшированные поля
 
     except Exception as e:
         logger.exception("Error fetching orders")
         raise HTTPException(status_code=500, detail="Error fetching orders")
 
+
+# orders.py (функция get_order_by_id)
 
 @router.get("/orders/{order_id}", response_model=BookingOrderResponse)
 async def get_order_by_id(
@@ -269,36 +258,14 @@ async def get_order_by_id(
     """Получение заказа по ID с информацией о продукте"""
     try:
         result = await db.execute(
-            select(
-                BookingOrder,
-                BookingOrder.product_name,
-                BookingOrder.product_form,
-                BookingOrder.product_manufacturer,
-                BookingOrder.product_country,
-                BookingOrder.product_price,
-                BookingOrder.product_serial
-            )
-            .join(Product, BookingOrder.product_id == Product.uuid)
-            .where(BookingOrder.uuid == order_id)
+            select(BookingOrder).where(BookingOrder.uuid == order_id)
         )
-        result_data = result.first()
+        order = result.scalar_one_or_none()
 
-        if not result_data:
+        if not order:
             raise HTTPException(status_code=404, detail="Order not found")
 
-        order, product_name, product_form, product_manufacturer, product_country, product_price, product_serial = result_data
-
-        order_dict = {
-            **order.__dict__,
-            "product_name": product_name,
-            "product_form": product_form,
-            "product_manufacturer": product_manufacturer,
-            "product_country": product_country,
-            "product_price": product_price,
-            "product_serial": product_serial
-        }
-
-        return BookingOrderResponse(**order_dict)
+        return order  # Все данные уже в order
 
     except HTTPException:
         raise
@@ -582,20 +549,8 @@ async def get_pharmacy_orders(
         if not pharmacy:
             raise HTTPException(status_code=404, detail="Pharmacy not found")
 
-        # Получаем заказы
-        query = (
-            select(
-                BookingOrder,
-                BookingOrder.product_name,
-                BookingOrder.product_form,
-                BookingOrder.product_manufacturer,
-                BookingOrder.product_country,
-                BookingOrder.product_price,
-                BookingOrder.product_serial
-            )
-            .join(Product, BookingOrder.product_id == Product.uuid)
-            .where(BookingOrder.pharmacy_id == pharmacy_id)
-        )
+        # Получаем заказы - данные уже кэшированы
+        query = select(BookingOrder).where(BookingOrder.pharmacy_id == pharmacy_id)
 
         if status:
             query = query.where(BookingOrder.status == status)
@@ -603,23 +558,9 @@ async def get_pharmacy_orders(
         query = query.order_by(BookingOrder.created_at.desc())
 
         result = await db.execute(query)
-        results = result.all()
+        orders = result.scalars().all()
 
-        # Формируем ответ с информацией о продукте
-        orders_with_products = []
-        for order, product_name, product_form, product_manufacturer, product_country, product_price, product_serial in results:
-            order_dict = {
-                **order.__dict__,
-                "product_name": product_name,
-                "product_form": product_form,
-                "product_manufacturer": product_manufacturer,
-                "product_country": product_country,
-                "product_price": product_price,
-                "product_serial": product_serial
-            }
-            orders_with_products.append(BookingOrderResponse(**order_dict))
-
-        return orders_with_products
+        return orders  # Все кэшированные данные уже в модели
 
     except HTTPException:
         raise
