@@ -50,6 +50,8 @@ services:
       - "traefik.http.routers.backend.entrypoints=websecure"
       - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
       - "traefik.http.services.backend.loadbalancer.server.port=8000"
+    volumes:
+      - ./uploaded_csv:/app/uploaded_csv:rw
     networks:
       - traefik-public
     depends_on:

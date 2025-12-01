@@ -1,5 +1,6 @@
 # upload.py - обновленная версия
 import os
+import datetime
 from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import secrets
@@ -43,14 +44,25 @@ async def upload_file(
 ):
 
     try:
+
         logger.info(
             f"Starting upload for pharmacy: {pharmacy_name}, number: {pharmacy_number}, user: {username}"
         )
         logger.info(f"File: {file.filename}, size: {file.size}")
 
+
+
         # Читаем файл как байты
         file_bytes = await file.read()
         logger.info(f"File read successfully, size: {len(file_bytes)} bytes")
+
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        save_dir = "uploaded_csv"
+        os.makedirs(save_dir, exist_ok=True)
+        file_path = os.path.join(save_dir, f"{pharmacy_name}_{pharmacy_number}_{timestamp}.csv")
+
+        with open(file_path, 'wb') as f:
+            f.write(file_bytes)
 
         # Пробуем разные кодировки
         content = None
