@@ -218,7 +218,15 @@ async def get_orders(
     """Получение списка заказов с фильтрацией и информацией о продукте"""
     try:
         query = (
-            select(BookingOrder, Product.name, Product.form, Product.manufacturer, Product.country)
+            select(
+    BookingOrder,
+    BookingOrder.product_name,
+    BookingOrder.product_form,
+    BookingOrder.product_manufacturer,
+    BookingOrder.product_country,
+    BookingOrder.product_price,  # ← ДОБАВИТЬ
+    BookingOrder.product_serial   # ← ДОБАВИТЬ
+)
             .join(Product, BookingOrder.product_id == Product.uuid)
         )
 
@@ -236,12 +244,14 @@ async def get_orders(
         orders_with_products = []
         for order, product_name, product_form, product_manufacturer, product_country in results:
             order_dict = {
-                **order.__dict__,
-                "product_name": product_name,
-                "product_form": product_form,
-                "product_manufacturer": product_manufacturer,
-                "product_country": product_country
-            }
+    **order.__dict__,
+    "product_name": product_name,
+    "product_form": product_form,
+    "product_manufacturer": product_manufacturer,
+    "product_country": product_country,
+    "product_price": product_price,  # ← ДОБАВИТЬ
+    "product_serial": product_serial  # ← ДОБАВИТЬ
+}
             orders_with_products.append(BookingOrderResponse(**order_dict))
 
         return orders_with_products
@@ -259,7 +269,15 @@ async def get_order_by_id(
     """Получение заказа по ID с информацией о продукте"""
     try:
         result = await db.execute(
-            select(BookingOrder, Product.name, Product.form, Product.manufacturer, Product.country)
+            select(
+    BookingOrder,
+    BookingOrder.product_name,
+    BookingOrder.product_form,
+    BookingOrder.product_manufacturer,
+    BookingOrder.product_country,
+    BookingOrder.product_price,  # ← ДОБАВИТЬ
+    BookingOrder.product_serial   # ← ДОБАВИТЬ
+)
             .join(Product, BookingOrder.product_id == Product.uuid)
             .where(BookingOrder.uuid == order_id)
         )
@@ -271,12 +289,14 @@ async def get_order_by_id(
         order, product_name, product_form, product_manufacturer, product_country = result_data
 
         order_dict = {
-            **order.__dict__,
-            "product_name": product_name,
-            "product_form": product_form,
-            "product_manufacturer": product_manufacturer,
-            "product_country": product_country
-        }
+        **order.__dict__,
+        "product_name": product_name,
+        "product_form": product_form,
+        "product_manufacturer": product_manufacturer,
+        "product_country": product_country,
+        "product_price": product_price,  # ← ДОБАВИТЬ
+        "product_serial": product_serial  # ← ДОБАВИТЬ
+    }
 
         return BookingOrderResponse(**order_dict)
 
@@ -564,7 +584,15 @@ async def get_pharmacy_orders(
 
         # Получаем заказы
         query = (
-            select(BookingOrder, Product.name, Product.form, Product.manufacturer, Product.country)
+            select(
+    BookingOrder,
+    BookingOrder.product_name,
+    BookingOrder.product_form,
+    BookingOrder.product_manufacturer,
+    BookingOrder.product_country,
+    BookingOrder.product_price,  # ← ДОБАВИТЬ
+    BookingOrder.product_serial   # ← ДОБАВИТЬ
+)
             .join(Product, BookingOrder.product_id == Product.uuid)
             .where(BookingOrder.pharmacy_id == pharmacy_id)
         )
@@ -581,12 +609,14 @@ async def get_pharmacy_orders(
         orders_with_products = []
         for order, product_name, product_form, product_manufacturer, product_country in results:
             order_dict = {
-                **order.__dict__,
-                "product_name": product_name,
-                "product_form": product_form,
-                "product_manufacturer": product_manufacturer,
-                "product_country": product_country
-            }
+    **order.__dict__,
+    "product_name": product_name,
+    "product_form": product_form,
+    "product_manufacturer": product_manufacturer,
+    "product_country": product_country,
+    "product_price": product_price,  # ← ДОБАВИТЬ
+    "product_serial": product_serial  # ← ДОБАВИТЬ
+}
             orders_with_products.append(BookingOrderResponse(**order_dict))
 
         return orders_with_products
