@@ -11,31 +11,46 @@ from sqlalchemy.orm import relationship
 # Импортируем Base из base.py
 from .base import Base
 
+# booking_models.py
 class BookingOrder(Base):
     __tablename__ = "booking_orders"
 
     uuid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     external_order_id = Column(String(255), nullable=True, index=True)
     pharmacy_id = Column(UUID(as_uuid=True), ForeignKey("pharmacies.uuid"), nullable=False)
-    product_id = Column(UUID(as_uuid=True), ForeignKey("products.uuid"), nullable=False)
+
+    # Изменить на nullable
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.uuid"), nullable=True)
+
+    # Добавить кэшированные данные о продукте
+    product_name = Column(String(255), nullable=True)
+    product_form = Column(String(255), nullable=True)
+    product_manufacturer = Column(String(255), nullable=True)
+    product_country = Column(String(255), nullable=True)
+    product_price = Column(Numeric(12, 2), nullable=True)
+    product_serial = Column(String(255), nullable=True)
+
     quantity = Column(Integer, nullable=False)
     customer_name = Column(String(100), nullable=False)
     customer_phone = Column(String(20), nullable=False)
     status = Column(String(50), default="pending", nullable=False)
     scheduled_pickup = Column(DateTime(timezone=True), nullable=True)
+    telegram_id = Column(BigInteger, nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    # Используем строковые ссылки
+    # Добавить поля для отмены заказа
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
+    cancellation_reason = Column(String(255), nullable=True)
+
     pharmacy = relationship("Pharmacy", back_populates="booking_orders", lazy="select")
     product = relationship("Product", lazy="select")
-    # В booking_models.py добавить:
-    telegram_id = Column(BigInteger, nullable=True, index=True)  # Прямое хранение telegram_id
 
     __table_args__ = (
         Index('idx_booking_status', 'status'),
         Index('idx_booking_pharmacy', 'pharmacy_id'),
         Index('idx_booking_created', 'created_at'),
+        Index('idx_booking_product_id', 'product_id'),
         CheckConstraint('quantity > 0', name='ck_booking_quantity_positive'),
     )
 

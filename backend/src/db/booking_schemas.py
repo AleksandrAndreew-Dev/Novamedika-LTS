@@ -46,6 +46,7 @@ class BookingOrderCreate(BookingOrderBase):
     pharmacy_id: uuid.UUID
 
 
+# booking_schemas.py
 class BookingOrderResponse(BookingOrderBase):
     uuid: uuid.UUID
     pharmacy_id: uuid.UUID
@@ -53,12 +54,16 @@ class BookingOrderResponse(BookingOrderBase):
     external_order_id: Optional[str]
     created_at: datetime
     updated_at: datetime
+    cancelled_at: Optional[datetime] = None  # Добавить
+    cancellation_reason: Optional[str] = None  # Добавить
 
-    # Добавляем информацию о продукте
+    # Кэшированные данные продукта
     product_name: Optional[str] = None
     product_form: Optional[str] = None
     product_manufacturer: Optional[str] = None
     product_country: Optional[str] = None
+    product_price: Optional[float] = None
+    product_serial: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

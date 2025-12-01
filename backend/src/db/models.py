@@ -27,6 +27,7 @@ class Pharmacy(Base):
         UniqueConstraint('name', 'pharmacy_number', name='uq_pharmacy_name_number'),
     )
 
+# db/models.py
 class Product(Base):
     __tablename__ = "products"
 
@@ -50,9 +51,12 @@ class Product(Base):
     pharmacy_id = Column(UUID(as_uuid=True), ForeignKey("pharmacies.uuid"), index=True)
     updated_at = Column(DateTime, nullable=False)
 
+    # Добавить для мягкого удаления
+    is_removed = Column(Boolean, default=False, nullable=False)
+    removed_at = Column(DateTime, nullable=True)
+
     search_vector = Column(TSVECTOR, nullable=True)
 
-    # Use string reference
     pharmacy = relationship("Pharmacy", back_populates="products", lazy="select")
 
     __table_args__ = (
@@ -61,4 +65,5 @@ class Product(Base):
         Index('idx_product_manufacturer', 'manufacturer'),
         Index('idx_product_form', 'form'),
         Index('idx_product_price', 'price'),
+        Index('idx_product_is_removed', 'is_removed'),  # Добавить индекс
     )

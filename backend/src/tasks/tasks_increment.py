@@ -575,10 +575,15 @@ def process_csv_data_with_hashes(
 
 async def get_existing_products_with_hashes(
     session: AsyncSession, pharmacy_uuid: uuid.UUID
-) -> Dict[str, uuid.UUID]:
-    """Асинхронное получение существующих продуктов"""
+) -> Dict[str, dict]:
+    """Асинхронное получение существующих продуктов (включая удаленные)"""
+    from sqlalchemy import or_
+
+    # Получаем ВСЕ продукты, включая удаленные
     result = await session.execute(
-        select(Product).where(Product.pharmacy_id == pharmacy_uuid)
+        select(Product).where(
+            Product.pharmacy_id == pharmacy_uuid
+        )
     )
     existing_products = result.scalars().all()
 
@@ -593,14 +598,17 @@ async def get_existing_products_with_hashes(
             "country": product.country,
         }
         product_hash = generate_product_hash(product_data)
-        existing_hashes[product_hash] = product.uuid
+        existing_hashes[product_hash] = {
+            "uuid": product.uuid,
+            "is_removed": product.is_removed  # Добавляем флаг удаления
+        }
 
     return existing_hashes
 
 
 def compare_products(
     csv_hashes: Dict[str, dict],
-    existing_hashes: Dict[str, uuid.UUID],
+    existing_hashes: Dict[str, dict],  # Теперь содержит is_removed
     csv_data: List[dict],
 ) -> Tuple[List[dict], List[dict], List[uuid.UUID]]:
     """Сравнивает CSV данные с существующими и определяет изменения"""
@@ -613,17 +621,22 @@ def compare_products(
         if product_hash not in existing_hashes:
             to_add.append(product_data)
 
-    # Находим продукты для удаления (есть в базе, но нет в CSV)
-    for product_hash, product_uuid in existing_hashes.items():
+    # Находим продукты для удаления (есть в базе, но нет в CSV, и НЕ удалены)
+    for product_hash, product_info in existing_hashes.items():
         if product_hash not in csv_hashes:
-            to_remove.append(product_uuid)
+            # Удаляем только если продукт еще не помечен как удаленный
+            if not product_info.get("is_removed", False):
+                to_remove.append(product_info["uuid"])
 
-    # Находим продукты для обновления (совпадают по хешу, но разные данные)
+    # Находим продукты для обновления (совпадают по хешу)
     for product_hash, product_data in csv_hashes.items():
         if product_hash in existing_hashes:
-            existing_uuid = existing_hashes[product_hash]
+            existing_info = existing_hashes[product_hash]
+            existing_uuid = existing_info["uuid"]
             # Добавляем UUID существующего продукта для обновления
             product_data["existing_uuid"] = existing_uuid
+            # Добавляем флаг is_removed для информации
+            product_data["is_removed"] = existing_info.get("is_removed", False)
             to_update.append(product_data)
 
     return to_add, to_update, to_remove
@@ -638,21 +651,21 @@ async def execute_incremental_changes_async(
     to_remove: List[uuid.UUID],
     pharmacy_uuid: uuid.UUID,
 ) -> Dict:
-    """Асинхронное выполнение инкрементальных изменений с сохранением заказов"""
-    stats = {"added": 0, "updated": 0, "removed": 0}
+    """Асинхронное выполнение инкрементальных изменений с мягким удалением"""
+    stats = {"added": 0, "updated": 0, "removed": 0, "cancelled_orders": 0}
 
     conn = await get_asyncpg_connection()
 
     try:
         await conn.execute("BEGIN")
 
-        # ШАГ 1: ОТСОЕДИНЯЕМ ЗАКАЗЫ ОТ УДАЛЯЕМЫХ ПРОДУКТОВ
+        # ШАГ 1: ОБРАБОТКА УДАЛЯЕМЫХ ПРОДУКТОВ (мягкое удаление)
         if to_remove:
-            # Создаем временную таблицу для продуктов на удаление
+            # Создаем временную таблицу
             await conn.execute(
                 """
                 CREATE TEMP TABLE products_to_remove (product_uuid UUID PRIMARY KEY)
-            """
+                """
             )
 
             # Заполняем временную таблицу
@@ -665,44 +678,75 @@ async def execute_incremental_changes_async(
                     INSERT INTO products_to_remove (product_uuid)
                     VALUES {values}
                     ON CONFLICT (product_uuid) DO NOTHING
-                """
+                    """
                 )
 
-            # ОБНОВЛЯЕМ заказы: устанавливаем product_id = NULL для удаляемых продуктов
-            updated_orders_count = await conn.fetchval(
+            # 1. Сохраняем данные продукта в заказах перед отвязкой
+            await conn.execute(
+                """
+                UPDATE booking_orders bo
+                SET
+                    product_name = p.name,
+                    product_form = p.form,
+                    product_manufacturer = p.manufacturer,
+                    product_country = p.country,
+                    product_price = p.price,
+                    product_serial = p.serial,
+                    product_id = NULL
+                FROM products p
+                WHERE bo.product_id = p.uuid
+                AND p.uuid IN (SELECT product_uuid FROM products_to_remove)
+                """
+            )
+
+            # 2. Отменяем активные заказы на удаляемые продукты
+            cancelled_orders = await conn.fetchval(
                 """
                 UPDATE booking_orders
-                SET product_id = NULL
+                SET
+                    status = 'cancelled',
+                    cancelled_at = NOW(),
+                    cancellation_reason = 'Товар снят с продажи'
                 WHERE product_id IN (SELECT product_uuid FROM products_to_remove)
-                AND product_id IS NOT NULL
-            """
+                AND status IN ('pending', 'confirmed')
+                RETURNING COUNT(*)
+                """
             )
+            stats["cancelled_orders"] = cancelled_orders or 0
+            logger.info(f"Cancelled {cancelled_orders} active orders")
 
-            logger.info(
-                f"Detached {updated_orders_count} orders from products to be removed"
-            )
-
-            # ТЕПЕРЬ БЕЗОПАСНО УДАЛЯЕМ продукты
+            # 3. Мягкое удаление продуктов
             result = await conn.execute(
                 """
-                DELETE FROM products
+                UPDATE products
+                SET
+                    is_removed = TRUE,
+                    removed_at = NOW(),
+                    quantity = 0,
+                    updated_at = NOW()
                 WHERE uuid IN (SELECT product_uuid FROM products_to_remove)
                 AND pharmacy_id = $1
-            """,
+                AND is_removed = FALSE
+                RETURNING COUNT(*)
+                """,
                 str(pharmacy_uuid),
             )
 
-            stats["removed"] = int(result.split()[-1])
-            await conn.execute("DROP TABLE products_to_remove")
-            logger.info(f"Removed {stats['removed']} products after detaching orders")
+            # Получаем количество удаленных продуктов
+            removed_count = await conn.fetchval("SELECT COUNT(*) FROM products_to_remove")
+            stats["removed"] = removed_count or 0
 
-        # ШАГ 2: ОБНОВЛЯЕМ существующие продукты
+            await conn.execute("DROP TABLE products_to_remove")
+            logger.info(f"Soft removed {stats['removed']} products")
+
+        # ШАГ 2: ВОССТАНОВЛЕНИЕ И ОБНОВЛЕНИЕ ПРОДУКТОВ
         if to_update:
             for product in to_update:
                 updated_at = product["updated_at"]
                 if updated_at and updated_at.tzinfo is not None:
                     updated_at = updated_at.replace(tzinfo=None)
 
+                # Восстанавливаем удаленные продукты
                 await conn.execute(
                     """
                     UPDATE products SET
@@ -710,7 +754,8 @@ async def execute_incremental_changes_async(
                         serial = $5, price = $6, quantity = $7, total_price = $8,
                         expiry_date = $9, category = $10, import_date = $11,
                         internal_code = $12, wholesale_price = $13, retail_price = $14,
-                        distributor = $15, internal_id = $16, updated_at = $17
+                        distributor = $15, internal_id = $16, updated_at = $17,
+                        is_removed = FALSE, removed_at = NULL  -- Восстанавливаем
                     WHERE uuid = $18 AND pharmacy_id = $19
                     """,
                     product["name"],
@@ -736,7 +781,7 @@ async def execute_incremental_changes_async(
             stats["updated"] = len(to_update)
             logger.info(f"Updated {len(to_update)} products")
 
-        # ШАГ 3: ДОБАВЛЯЕМ новые продукты
+        # ШАГ 3: ДОБАВЛЕНИЕ НОВЫХ ПРОДУКТОВ
         if to_add:
             batch_size = 25
             for i in range(0, len(to_add), batch_size):
@@ -751,39 +796,26 @@ async def execute_incremental_changes_async(
 
                     placeholders = []
                     for field in [
-                        "uuid",
-                        "name",
-                        "form",
-                        "manufacturer",
-                        "country",
-                        "serial",
-                        "price",
-                        "quantity",
-                        "total_price",
-                        "expiry_date",
-                        "category",
-                        "import_date",
-                        "internal_code",
-                        "wholesale_price",
-                        "retail_price",
-                        "distributor",
-                        "internal_id",
-                        "pharmacy_id",
-                        "updated_at",
+                        "uuid", "name", "form", "manufacturer", "country", "serial",
+                        "price", "quantity", "total_price", "expiry_date", "category",
+                        "import_date", "internal_code", "wholesale_price", "retail_price",
+                        "distributor", "internal_id", "pharmacy_id", "updated_at",
+                        "is_removed", "removed_at"  # Добавляем новые поля
                     ]:
                         placeholders.append(f"${param_counter}")
-                        value = product[field]
 
-                        if field == "updated_at" and value and value.tzinfo is not None:
-                            value = value.replace(tzinfo=None)
-                        elif field in [
-                            "price",
-                            "quantity",
-                            "total_price",
-                            "wholesale_price",
-                            "retail_price",
-                        ]:
-                            value = float(value)
+                        if field == "updated_at":
+                            value = product.get(field)
+                            if value and value.tzinfo is not None:
+                                value = value.replace(tzinfo=None)
+                        elif field in ["price", "quantity", "total_price", "wholesale_price", "retail_price"]:
+                            value = float(product.get(field, 0))
+                        elif field == "is_removed":
+                            value = False  # Новые продукты не удалены
+                        elif field == "removed_at":
+                            value = None  # Новые продукты не удалены
+                        else:
+                            value = product.get(field)
 
                         params.append(value)
                         param_counter += 1
@@ -794,14 +826,16 @@ async def execute_incremental_changes_async(
                     INSERT INTO products (
                         uuid, name, form, manufacturer, country, serial, price, quantity,
                         total_price, expiry_date, category, import_date, internal_code,
-                        wholesale_price, retail_price, distributor, internal_id, pharmacy_id, updated_at
+                        wholesale_price, retail_price, distributor, internal_id,
+                        pharmacy_id, updated_at, is_removed, removed_at
                     ) VALUES {', '.join(values_placeholders)}
                 """
                 await conn.execute(query, *params)
             stats["added"] = len(to_add)
-            logger.info(f"Added {len(to_add)} products")
+            logger.info(f"Added {len(to_add)} new products")
 
         await conn.execute("COMMIT")
+        logger.info(f"Changes completed: {stats}")
         return stats
 
     except Exception as e:
