@@ -778,6 +778,17 @@ async def send_order_status_notification(
         pharmacy_address = await get_pharmacy_address(order.pharmacy_id, db)
         product_name = await get_product_name(order.product_id, db)
 
+        # Получаем форму и цену товара из заказа
+        product_form = order.product_form or "Не указана"
+        product_price = order.product_price or 0.0
+
+        # Форматируем цену
+        price_formatted = f"{product_price:.2f}" if product_price else "0.00"
+
+        # Рассчитываем общую стоимость
+        total_price = product_price * order.quantity if product_price else 0.0
+        total_formatted = f"{total_price:.2f}" if total_price else "0.00"
+
         # Формируем полное название аптеки с номером
         pharmacy_full_name = pharmacy_name
         if pharmacy_number:
@@ -789,7 +800,10 @@ async def send_order_status_notification(
                 "✅ **Ваш заказ подтвержден!**\n\n"
                 f"📦 Номер заказа: `{order.uuid}`\n"
                 f"🛍️ Товар: {product_name}\n"
+                f"💊 Форма: {product_form}\n"
+                f"💰 Цена за единицу: {price_formatted} руб.\n"
                 f"📊 Количество: {order.quantity}\n"
+                f"💵 Общая стоимость: {total_formatted} руб.\n"
                 f"🏪 Аптека: {pharmacy_full_name}\n"
                 f"📍 Адрес: {pharmacy_address}\n"
                 f"📞 Телефон: {pharmacy_phone}\n"
@@ -808,7 +822,10 @@ async def send_order_status_notification(
                 "❌ **Ваш заказ отменен**\n\n"
                 f"📦 Номер заказа: `{order.uuid}`\n"
                 f"🛍️ Товар: {product_name}\n"
+                f"💊 Форма: {product_form}\n"
+                f"💰 Цена за единицу: {price_formatted} руб.\n"
                 f"📊 Количество: {order.quantity}\n"
+                f"💵 Общая стоимость: {total_formatted} руб.\n"
                 f"🏪 Аптека: {pharmacy_full_name}\n"
                 f"📞 Телефон: {pharmacy_phone}\n"
             )
@@ -826,7 +843,10 @@ async def send_order_status_notification(
                 "⚠️ **Проблема с вашим заказом**\n\n"
                 f"📦 Номер заказа: `{order.uuid}`\n"
                 f"🛍️ Товар: {product_name}\n"
+                f"💊 Форма: {product_form}\n"
+                f"💰 Цена за единицу: {price_formatted} руб.\n"
                 f"📊 Количество: {order.quantity}\n"
+                f"💵 Общая стоимость: {total_formatted} руб.\n"
                 f"🏪 Аптека: {pharmacy_full_name}\n"
                 f"📞 Телефон: {pharmacy_phone}\n"
             )
