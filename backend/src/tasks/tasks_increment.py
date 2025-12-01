@@ -581,9 +581,7 @@ async def get_existing_products_with_hashes(
 
     # Получаем ВСЕ продукты, включая удаленные
     result = await session.execute(
-        select(Product).where(
-            Product.pharmacy_id == pharmacy_uuid
-        )
+        select(Product).where(Product.pharmacy_id == pharmacy_uuid)
     )
     existing_products = result.scalars().all()
 
@@ -600,7 +598,7 @@ async def get_existing_products_with_hashes(
         product_hash = generate_product_hash(product_data)
         existing_hashes[product_hash] = {
             "uuid": product.uuid,
-            "is_removed": product.is_removed  # Добавляем флаг удаления
+            "is_removed": product.is_removed,  # Добавляем флаг удаления
         }
 
     return existing_hashes
@@ -700,7 +698,8 @@ async def execute_incremental_changes_async(
             )
 
             # 2. Отменяем активные заказы на удаляемые продукты
-            cancelled_orders = await conn.fetchval(
+            # Исправлено: убрано RETURNING COUNT(*), используем отдельный запрос
+            await conn.execute(
                 """
                 UPDATE booking_orders
                 SET
@@ -709,14 +708,25 @@ async def execute_incremental_changes_async(
                     cancellation_reason = 'Товар снят с продажи'
                 WHERE product_id IN (SELECT product_uuid FROM products_to_remove)
                 AND status IN ('pending', 'confirmed')
-                RETURNING COUNT(*)
+                """
+            )
+
+            # Получаем количество отмененных заказов отдельным запросом
+            cancelled_orders = await conn.fetchval(
+                """
+                SELECT COUNT(*)
+                FROM booking_orders
+                WHERE product_id IN (SELECT product_uuid FROM products_to_remove)
+                AND status = 'cancelled'
+                AND cancelled_at >= NOW() - INTERVAL '1 minute'
                 """
             )
             stats["cancelled_orders"] = cancelled_orders or 0
             logger.info(f"Cancelled {cancelled_orders} active orders")
 
             # 3. Мягкое удаление продуктов
-            result = await conn.execute(
+            # Исправлено: убрано RETURNING COUNT(*), используем отдельный запрос
+            await conn.execute(
                 """
                 UPDATE products
                 SET
@@ -727,13 +737,21 @@ async def execute_incremental_changes_async(
                 WHERE uuid IN (SELECT product_uuid FROM products_to_remove)
                 AND pharmacy_id = $1
                 AND is_removed = FALSE
-                RETURNING COUNT(*)
                 """,
                 str(pharmacy_uuid),
             )
 
-            # Получаем количество удаленных продуктов
-            removed_count = await conn.fetchval("SELECT COUNT(*) FROM products_to_remove")
+            # Получаем количество удаленных продуктов отдельным запросом
+            removed_count = await conn.fetchval(
+                """
+                SELECT COUNT(*)
+                FROM products
+                WHERE uuid IN (SELECT product_uuid FROM products_to_remove)
+                AND pharmacy_id = $1
+                AND is_removed = TRUE
+                """,
+                str(pharmacy_uuid),
+            )
             stats["removed"] = removed_count or 0
 
             await conn.execute("DROP TABLE products_to_remove")
@@ -796,11 +814,27 @@ async def execute_incremental_changes_async(
 
                     placeholders = []
                     for field in [
-                        "uuid", "name", "form", "manufacturer", "country", "serial",
-                        "price", "quantity", "total_price", "expiry_date", "category",
-                        "import_date", "internal_code", "wholesale_price", "retail_price",
-                        "distributor", "internal_id", "pharmacy_id", "updated_at",
-                        "is_removed", "removed_at"  # Добавляем новые поля
+                        "uuid",
+                        "name",
+                        "form",
+                        "manufacturer",
+                        "country",
+                        "serial",
+                        "price",
+                        "quantity",
+                        "total_price",
+                        "expiry_date",
+                        "category",
+                        "import_date",
+                        "internal_code",
+                        "wholesale_price",
+                        "retail_price",
+                        "distributor",
+                        "internal_id",
+                        "pharmacy_id",
+                        "updated_at",
+                        "is_removed",
+                        "removed_at",
                     ]:
                         placeholders.append(f"${param_counter}")
 
@@ -808,12 +842,18 @@ async def execute_incremental_changes_async(
                             value = product.get(field)
                             if value and value.tzinfo is not None:
                                 value = value.replace(tzinfo=None)
-                        elif field in ["price", "quantity", "total_price", "wholesale_price", "retail_price"]:
+                        elif field in [
+                            "price",
+                            "quantity",
+                            "total_price",
+                            "wholesale_price",
+                            "retail_price",
+                        ]:
                             value = float(product.get(field, 0))
                         elif field == "is_removed":
-                            value = False  # Новые продукты не удалены
+                            value = False
                         elif field == "removed_at":
-                            value = None  # Новые продукты не удалены
+                            value = None
                         else:
                             value = product.get(field)
 
