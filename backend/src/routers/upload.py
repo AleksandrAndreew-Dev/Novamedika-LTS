@@ -54,13 +54,13 @@ async def upload_file(
 
         # Читаем файл как байты
         file_bytes = await file.read()
-        logger.info(f"File read successfully, size: {len(file_bytes)} bytes")
 
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Сохраняем с фиксированным именем (будет перезаписываться)
         save_dir = "uploaded_csv"
         os.makedirs(save_dir, exist_ok=True)
-        file_path = os.path.join(save_dir, f"{pharmacy_name}_{pharmacy_number}_{timestamp}.csv")
+        file_path = os.path.join(save_dir, f"{pharmacy_name}_{pharmacy_number}.csv")
 
+        # Просто перезаписываем файл
         with open(file_path, 'wb') as f:
             f.write(file_bytes)
 
