@@ -457,21 +457,37 @@ def process_csv_data_with_hashes(
     # Обработка BOM и невидимых символов
     normalized_content = normalized_content.lstrip("\ufeff").lstrip("\ufffe")
 
-    reader = csv.DictReader(
-        StringIO(normalized_content), fieldnames=fieldnames, delimiter=";"
-    )
+    # Разделяем на строки и обрабатываем каждую вручную для лучшего контроля
+    lines = normalized_content.strip().split('\n')
     processed_data = []
     hashes = {}
     processed_products = set()
 
-    for row_num, row in enumerate(reader, 1):
+    for row_num, line in enumerate(lines, 1):
         try:
-            # Пропускаем пустые строки и заголовки
-            if not any(row.values()) or (
-                row_num == 1
-                and any("name" in str(value).lower() for value in row.values())
-            ):
+            # Пропускаем пустые строки
+            if not line.strip():
                 continue
+
+            # Разделяем строку по точкам с запятой
+            fields = line.split(';')
+
+            # Должно быть 15 полей (без pharmacy_number)
+            if len(fields) < 15:
+                logger.warning(f"Row {row_num} has only {len(fields)} fields, expected 15")
+                continue
+
+            # Пропускаем заголовок
+            if row_num == 1 and any("name" in str(value).lower() for value in fields):
+                continue
+
+            # Создаем словарь с полями
+            row = {}
+            for i, field_name in enumerate(fieldnames[:15]):  # Берем только первые 15 полей из CSV
+                if i < len(fields):
+                    row[field_name] = fields[i].strip()
+                else:
+                    row[field_name] = ""
 
             # Нормализация данных с учетом кодировки
             product_name = normalize_field_value(row["name"])
@@ -482,11 +498,14 @@ def process_csv_data_with_hashes(
             if row.get("category") == "Лексредства":
                 product_name, product_form = parse_product_details(product_name)
 
-            serial = (
-                re.sub(r"[\s\-_]+", "", normalize_field_value(row["serial"])).upper()
-                if row.get("serial")
-                else ""
-            )
+            # Обработка серийного номера - объединяем поля если их больше одного
+            serial_raw = normalize_field_value(row.get("serial", ""))
+            if "Поступление" in serial_raw or "РОЦ" in serial_raw:
+                # Если в поле serial есть дополнительная информация, извлекаем только числовую часть
+                # Ищем паттерны типа "Поступление 16.10.25; РОЦ 0"
+                # Мы оставляем это поле как есть, но важно правильно парсить последующие поля
+                pass
+            serial = re.sub(r"[\s\-_]+", "", serial_raw).upper() if serial_raw else ""
 
             # Нормализуем остальные текстовые поля
             manufacturer = normalize_field_value(row.get("manufacturer", ""))
@@ -512,6 +531,47 @@ def process_csv_data_with_hashes(
                 import_date_str = normalize_field_value(row["import_date"])
                 import_date = convert_date_format(import_date_str)
 
+            # Ключевое исправление: правильное определение полей цены и количества
+            # В вашем CSV формат: ...;price;quantity;total_price;...
+            # Нужно убедиться, что мы берем правильные индексы
+
+            # Получаем значения полей, проверяя их корректность
+            price_raw = row.get("price", "0").strip()
+            quantity_raw = row.get("quantity", "0").strip()
+            total_price_raw = row.get("total_price", "0").strip()
+
+            # Отладочная информация
+            logger.debug(f"Row {row_num}: price_raw='{price_raw}', quantity_raw='{quantity_raw}', total_price_raw='{total_price_raw}'")
+
+            # Если price содержит "РОЦ 0" или другие проблемы, пытаемся исправить
+            if "РОЦ" in price_raw or "Поступление" in price_raw:
+                # Если price содержит нечисловые данные, ищем числовое значение в следующих полях
+                # Это может быть ошибка смещения полей
+                for i in range(4, min(8, len(fields))):
+                    field_val = fields[i].strip() if i < len(fields) else ""
+                    if re.match(r'^\d+\.?\d*$', field_val) and float(field_val) > 0:
+                        price_raw = field_val
+                        # Корректируем остальные поля
+                        if i + 1 < len(fields):
+                            quantity_raw = fields[i + 1].strip()
+                        if i + 2 < len(fields):
+                            total_price_raw = fields[i + 2].strip()
+                        break
+
+            price = validate_numeric_value(safe_float(price_raw), "price")
+            quantity = validate_numeric_value(
+                safe_float(quantity_raw), "quantity", 9999999.999
+            )
+            total_price = validate_numeric_value(
+                safe_float(total_price_raw), "total_price"
+            )
+            wholesale_price = validate_numeric_value(
+                safe_float(row.get("wholesale_price", "0")), "wholesale_price"
+            )
+            retail_price = validate_numeric_value(
+                safe_float(row.get("retail_price", "0")), "retail_price"
+            )
+
             # Пропускаем дубликаты в CSV
             product_key = (
                 product_name,
@@ -521,20 +581,6 @@ def process_csv_data_with_hashes(
             if product_key in processed_products:
                 continue
             processed_products.add(product_key)
-
-            price = validate_numeric_value(safe_float(row.get("price")), "price")
-            quantity = validate_numeric_value(
-                safe_float(row.get("quantity")), "quantity", 9999999.999
-            )
-            total_price = validate_numeric_value(
-                safe_float(row.get("total_price")), "total_price"
-            )
-            wholesale_price = validate_numeric_value(
-                safe_float(row.get("wholesale_price")), "wholesale_price"
-            )
-            retail_price = validate_numeric_value(
-                safe_float(row.get("retail_price")), "retail_price"
-            )
 
             # Создаем объект продукта
             product_data = {
@@ -565,8 +611,10 @@ def process_csv_data_with_hashes(
 
             processed_data.append(product_data)
 
+            logger.debug(f"Processed product: {product_name}, price={price}, quantity={quantity}")
+
         except Exception as e:
-            logger.error(f"Error processing row {row_num}: {e}")
+            logger.error(f"Error processing row {row_num}: {e}", exc_info=True)
             continue
 
     logger.info(f"Processed {len(processed_data)} valid rows from CSV")
