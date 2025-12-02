@@ -6,6 +6,7 @@ from utils.time_utils import get_utc_now_naive
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from db.qa_models import Pharmacist, User
+from bot.keyboards.qa_keyboard import make_question_keyboard, make_clarification_keyboard
 from sqlalchemy.orm import selectinload
 
 logger = logging.getLogger(__name__)

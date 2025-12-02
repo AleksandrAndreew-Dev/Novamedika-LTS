@@ -9,6 +9,11 @@ from db.qa_models import Question
 from db.qa_models import Answer
 from bot.handlers.qa_states import QAStates
 from bot.keyboards.qa_keyboard import make_question_keyboard
+# Добавьте в начало qa_handlers.py после существующих импортов:
+from bot.keyboards.qa_keyboard import (
+    make_question_keyboard,
+    make_clarification_keyboard
+)
 
 from bot.handlers.common_handlers import get_pharmacist_keyboard
 import logging
@@ -206,7 +211,7 @@ async def cmd_questions(
                 )
 
                 # Для уточнений используем специальную клавиатуру
-                from bot.keyboards.qa_keyboard import make_clarification_keyboard
+
                 reply_markup = make_clarification_keyboard(question.uuid)
             else:
                 question_text = (
@@ -215,7 +220,6 @@ async def cmd_questions(
                 )
 
                 # Для обычных вопросов используем обычную клавиатуру
-                from bot.keyboards.qa_keyboard import make_question_keyboard
                 reply_markup = make_question_keyboard(question.uuid)
 
             # Получаем пользователя
@@ -355,66 +359,6 @@ async def answer_question_callback(
         await callback.answer("❌ Ошибка при обработке запроса", show_alert=True)
 
 
-@router.callback_query(F.data == "view_questions")
-async def view_questions_callback(
-    callback: CallbackQuery,
-    db: AsyncSession,
-    is_pharmacist: bool,
-    pharmacist: Pharmacist,
-):
-    """Быстрый просмотр вопросов через кнопку"""
-    if not is_pharmacist:
-        await callback.answer(
-            "❌ Эта функция доступна только фармацевтам", show_alert=True
-        )
-        return
-
-    await callback.answer()
-
-    try:
-        # Используем прямой запрос к базе данных вместо вызова cmd_questions
-        result = await db.execute(
-            select(Question)
-            .where(Question.status == "pending")
-            .order_by(Question.created_at.asc())
-            
-        )
-        questions = result.scalars().all()
-
-        if not questions:
-            await callback.message.answer(
-                "📝 На данный момент нет новых вопросов.\n\n"
-                "Пользователи задают вопросы через команду /ask"
-            )
-            return
-
-        for i, question in enumerate(questions, 1):
-            question_text = (
-                f"❓ Вопрос #{i}:\n{question.text}\n\n"
-                f"🕒 Создан: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
-            )
-
-            # Получаем пользователя
-            user_result = await db.execute(
-                select(User).where(User.uuid == question.user_id)
-            )
-            user = user_result.scalar_one_or_none()
-
-            if user:
-                user_info = user.first_name or user.telegram_username or "Аноним"
-                if user.last_name:
-                    user_info = f"{user.first_name} {user.last_name}"
-                question_text += f"\n👤 Пользователь: {user_info}"
-
-            await callback.message.answer(
-                question_text, reply_markup=make_question_keyboard(question.uuid)
-            )
-
-
-
-    except Exception as e:
-        logger.error(f"Error in view_questions_callback: {e}")
-        await callback.message.answer("❌ Ошибка при получении вопросов")
 
 
 @router.message(QAStates.waiting_for_answer)

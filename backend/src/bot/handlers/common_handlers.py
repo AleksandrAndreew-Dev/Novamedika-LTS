@@ -26,6 +26,9 @@ def get_pharmacist_keyboard():
             [
                 InlineKeyboardButton(
                     text="🟢 Перейти в онлайн", callback_data="go_online"
+                ),
+                InlineKeyboardButton(
+                    text="🔴 Перейти в офлайн", callback_data="go_offline"
                 )
             ],
             [
@@ -35,12 +38,14 @@ def get_pharmacist_keyboard():
             ],
             [
                 InlineKeyboardButton(
-                    text="❓ Помощь фармацевта", callback_data="pharmacist_help"
+                    text="📊 Статус системы", callback_data="system_status"
+                ),
+                InlineKeyboardButton(
+                    text="❓ Помощь", callback_data="pharmacist_help"
                 )
             ],
         ]
     )
-
 
 def get_user_keyboard():
     """Клавиатура для пользователей"""
@@ -49,18 +54,26 @@ def get_user_keyboard():
             [
                 InlineKeyboardButton(
                     text="💬 Задать вопрос", callback_data="ask_question"
+                ),
+                InlineKeyboardButton(
+                    text="🔍 Уточнить вопрос", callback_data="clarify_question"
                 )
             ],
-            [InlineKeyboardButton(text="📖 Мои вопросы", callback_data="my_questions")],
             [
                 InlineKeyboardButton(
-                    text="👨‍⚕️ Я фарм специалист", callback_data="i_am_pharmacist"
+                    text="📖 Мои вопросы", callback_data="my_questions"
                 )
             ],
-            [InlineKeyboardButton(text="❓ Помощь", callback_data="user_help")],
+            [
+                InlineKeyboardButton(
+                    text="👨‍⚕️ Я фармацевт", callback_data="i_am_pharmacist"
+                ),
+                InlineKeyboardButton(
+                    text="❓ Помощь", callback_data="user_help"
+                )
+            ],
         ]
     )
-
 
 @router.message(Command("start"))
 async def cmd_start(
@@ -192,6 +205,38 @@ async def go_online_callback(
     except Exception as e:
         logger.error(f"Error in go_online_callback: {e}")
         await callback.answer("❌ Ошибка при переходе в онлайн", show_alert=True)
+
+
+@router.callback_query(F.data == "go_offline")
+async def go_offline_callback(
+    callback: CallbackQuery,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: object
+):
+    """Быстрый переход в офлайн через кнопку"""
+    if not is_pharmacist or not pharmacist:
+        await callback.answer(
+            "❌ Эта функция доступна только фармацевтам", show_alert=True
+        )
+        return
+
+    try:
+        pharmacist.is_online = False
+        pharmacist.last_seen = get_utc_now_naive()
+        await db.commit()
+
+        await callback.answer("✅ Вы теперь офлайн!")
+        await callback.message.answer(
+            "🔴 <b>Вы перешли в офлайн статус!</b>\n\n"
+            "Вы больше не будете получать уведомления о новых вопросах.\n\n"
+            "Чтобы вернуться к работе, нажмите «Перейти в онлайн».",
+            parse_mode="HTML",
+            reply_markup=get_pharmacist_keyboard(),
+        )
+    except Exception as e:
+        logger.error(f"Error in go_offline_callback: {e}")
+        await callback.answer("❌ Ошибка при переходе в офлайн", show_alert=True)
 
 
 @router.callback_query(F.data == "view_questions")
@@ -363,6 +408,54 @@ async def pharmacist_help_callback(callback: CallbackQuery):
         "Для подробной справки используйте /help",
         parse_mode="HTML",
     )
+
+@router.callback_query(F.data == "system_status")
+async def system_status_callback(
+    callback: CallbackQuery,
+    db: AsyncSession,
+    is_pharmacist: bool
+):
+    """Статус системы через кнопку"""
+    await callback.answer()
+
+    # Создаем сообщение с командой для обработки реальным обработчиком
+    from aiogram.types import Message
+    fake_message = Message(
+        message_id=callback.message.message_id,
+        date=callback.message.date,
+        chat=callback.message.chat,
+        from_user=callback.from_user,
+        text="/debug_status",
+    )
+
+    # Импортируем и вызываем реальный обработчик
+    from bot.handlers.qa_handlers import debug_status
+    await debug_status(fake_message, db, is_pharmacist)
+
+
+@router.callback_query(F.data == "clarify_question")
+async def clarify_question_callback(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db: AsyncSession,
+    user: User
+):
+    """Уточнение вопроса через кнопку"""
+    await callback.answer()
+
+    # Создаем сообщение с командой
+    from aiogram.types import Message
+    fake_message = Message(
+        message_id=callback.message.message_id,
+        date=callback.message.date,
+        chat=callback.message.chat,
+        from_user=callback.from_user,
+        text="/clarify",
+    )
+
+    # Импортируем и вызываем реальный обработчик
+    from bot.handlers.user_questions import cmd_clarify
+    await cmd_clarify(fake_message, state, db, user)
 
 
 @router.message(Command("cancel"))
