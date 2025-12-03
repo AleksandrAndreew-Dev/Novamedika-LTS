@@ -1,6 +1,6 @@
 from aiogram.types import Message as AiogramMessage
 from typing import Optional
-
+from aiogram.types import WebAppInfo
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram import Router, F
 from aiogram.types import (
@@ -17,15 +17,34 @@ from utils.time_utils import get_utc_now_naive
 from bot.handlers.qa_states import UserQAStates
 from bot.services.notification_service import (
     notify_pharmacists_about_new_question,
-    notify_about_clarification
+    notify_about_clarification,
 )
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-
 router = Router()
+
+def get_reply_keyboard_with_webapp():
+    """Создает reply-клавиатуру с Web App кнопкой"""
+    web_app = WebAppInfo(
+        url="https://spravka.novamedika.com/"
+    )
+
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(
+                    text="🔍 Поиск лекарств",
+                    web_app=web_app
+                )
+            ]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=False,  # Не скрывать после нажатия
+        input_field_placeholder="Нажмите для поиска лекарств"  # Подсказка в поле ввода
+    )
 
 
 def get_pharmacist_keyboard():
@@ -58,10 +77,17 @@ def get_pharmacist_keyboard():
 # bot/handlers/common_handlers.py - ОБНОВИТЬ get_user_keyboard
 # Обновите функцию get_user_keyboard():
 
+
 def get_user_keyboard():
     """Клавиатура для пользователей"""
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🔍 Поиск лекарств",
+                    callback_data="search_drugs"
+                )
+            ],
             [
                 InlineKeyboardButton(
                     text="📖 Мои вопросы",
@@ -85,7 +111,16 @@ def get_user_keyboard():
         ]
     )
 
+@router.message(Command("hide_keyboard"))
+async def hide_keyboard(message: Message):
+    """Скрыть reply-клавиатуру"""
+    from aiogram.types import ReplyKeyboardRemove
 
+    await message.answer(
+        "⌨️ Клавиатура скрыта. Используйте /search чтобы вернуть.",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    
 @router.message(Command("start"))
 async def cmd_start(
     message: Message,
@@ -98,6 +133,7 @@ async def cmd_start(
     await state.clear()
 
     if is_pharmacist and pharmacist:
+        # Существующий код для фармацевтов...
         status_text = "🟢 Онлайн" if pharmacist.is_online else "🔴 Офлайн"
         pharmacy_name = pharmacist.pharmacy_info.get("name", "Не указана")
 
@@ -110,19 +146,57 @@ async def cmd_start(
             reply_markup=get_pharmacist_keyboard(),
         )
     else:
+        # ДЛЯ ПОЛЬЗОВАТЕЛЕЙ: показываем Web App кнопку
+        reply_kb = get_reply_keyboard_with_webapp()
+
         await message.answer(
             "👋 <b>Novamedika Q&A Bot</b>\n\n"
             "💊 <b>Консультация профессионального фармацевта</b>\n\n"
             "📝 <b>Просто напишите ваш вопрос в чат!</b>\n\n"
-            "Например:\n"
-            "• «Что лучше от температуры?»\n"
-            "• «Можно ли детям парацетамол?»\n"
-            "• «Какие аналоги у препарата...»\n\n"
             "Или используйте кнопки ниже:",
             parse_mode="HTML",
-            reply_markup=get_user_keyboard(),
+            reply_markup=reply_kb
         )
 
+        # Дополнительно показываем inline-кнопки для других действий
+        await message.answer(
+            "Другие действия:",
+            reply_markup=get_user_keyboard()
+        )
+
+@router.message(Command("search"))
+@router.callback_query(F.data == "search_drugs")
+async def show_search_webapp(
+    update: Message | CallbackQuery,
+    state: FSMContext,
+    is_pharmacist: bool
+):
+    """Показать Web App для поиска лекарств"""
+    # Очищаем состояние
+    await state.clear()
+
+    # Создаем клавиатуру с Web App
+    reply_kb = get_reply_keyboard_with_webapp()
+
+    message_text = (
+        "🔍 <b>Поиск лекарств</b>\n\n"
+        "Нажмите на кнопку ниже, чтобы открыть справочник лекарств.\n"
+        "Там вы сможете найти информацию о препаратах, их аналоги и цены."
+    )
+
+    if isinstance(update, CallbackQuery):
+        await update.message.answer(
+            message_text,
+            parse_mode="HTML",
+            reply_markup=reply_kb
+        )
+        await update.answer()
+    else:
+        await update.answer(
+            message_text,
+            parse_mode="HTML",
+            reply_markup=reply_kb
+        )
 
 @router.message(Command("help"))
 async def cmd_help(message: Message, is_pharmacist: bool):
@@ -399,6 +473,7 @@ async def my_questions_callback(
     message.text = "/my_questions"
 
     from bot.handlers.user_questions import cmd_my_questions
+
     await cmd_my_questions(message, db, user, is_pharmacist)
 
 
@@ -471,6 +546,7 @@ async def clarify_question_callback(
     message.text = "/clarify"
 
     from bot.handlers.user_questions import cmd_clarify
+
     await cmd_clarify(message, state, db, user)
 
 
@@ -517,6 +593,7 @@ async def start_registration_callback(
     message.text = "/register"
 
     from bot.handlers.registration import cmd_register
+
     await cmd_register(message, state, db, is_pharmacist)
 
 
