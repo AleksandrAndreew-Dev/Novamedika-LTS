@@ -1,21 +1,18 @@
-
 from aiogram import Router, F
-from aiogram.types import Message
-from aiogram.filters import Command
-from aiogram.filters import CommandObject
+from aiogram.types import Message, CallbackQuery 
+from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from db.qa_models import User
-from db.qa_models import Question
-from db.qa_models import Answer
-from db.qa_models import Pharmacist
+
+from db.qa_models import User, Question, Answer, Pharmacist
 from bot.handlers.qa_states import UserQAStates
 from bot.handlers.common_handlers import get_user_keyboard
+from bot.keyboards.qa_keyboard import make_clarification_keyboard
+
 import logging
 from datetime import datetime, timedelta
 from utils.time_utils import get_utc_now_naive
-from bot.keyboards.qa_keyboard import make_clarification_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +34,7 @@ async def direct_question_from_text(
     # Пропускаем если пользователь фармацевт
     if is_pharmacist:
         return
-    
+
     if message.text.startswith('/'):
         return
 
@@ -255,9 +252,10 @@ async def cmd_done(message: Message, state: FSMContext, db: AsyncSession, is_pha
         await message.answer("ℹ️ В данный момент у вас нет активного диалога.")
 
 
+# bot/handlers/user_questions.py - ИСПРАВЛЕННАЯ ВЕРСИЯ cmd_clarify
 @router.message(Command("clarify"))
 async def cmd_clarify(message: Message, state: FSMContext, db: AsyncSession, user: User):
-    """Уточнение к предыдущему вопросу"""
+    """Уточнение к предыдущему вопросу - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
     try:
         # Получаем последний отвеченный вопрос пользователя
         result = await db.execute(
@@ -270,21 +268,39 @@ async def cmd_clarify(message: Message, state: FSMContext, db: AsyncSession, use
         last_question = result.scalar_one_or_none()
 
         if not last_question:
-            await message.answer("❌ У вас нет отвеченных вопросов для уточнения.")
+            await message.answer(
+                "❌ У вас нет отвеченных вопросов для уточнения.\n\n"
+                "Сначала задайте вопрос через /ask и дождитесь ответа."
+            )
             return
 
+        # Сохраняем ID вопроса в состоянии
         await state.update_data(clarify_question_id=str(last_question.uuid))
         await state.set_state(UserQAStates.waiting_for_clarification)
 
-        await message.answer(
-            f"💬 Уточнение к вопросу:\n\n"
-            f"❓ {last_question.text}\n\n"
-            f"Напишите ваше уточнение ниже:\n"
-            f"(или /cancel для отмены)"
+        # Показываем оригинальный вопрос и ответ
+        # Получаем последний ответ на этот вопрос
+        answer_result = await db.execute(
+            select(Answer)
+            .where(Answer.question_id == last_question.uuid)
+            .order_by(Answer.created_at.desc())
+            .limit(1)
         )
+        last_answer = answer_result.scalar_one_or_none()
+
+        message_text = f"💬 <b>Уточнение к вопросу:</b>\n\n"
+        message_text += f"❓ <b>Ваш вопрос:</b>\n{last_question.text}\n\n"
+
+        if last_answer:
+            message_text += f"💬 <b>Полученный ответ:</b>\n{last_answer.text}\n\n"
+
+        message_text += "✍️ <b>Напишите ваше уточнение ниже:</b>\n"
+        message_text += "(или /cancel для отмены)"
+
+        await message.answer(message_text, parse_mode="HTML")
 
     except Exception as e:
-        logger.error(f"Error in cmd_clarify: {e}")
+        logger.error(f"Error in cmd_clarify: {e}", exc_info=True)
         await message.answer("❌ Ошибка при создании уточнения.")
 
 @router.message(UserQAStates.waiting_for_clarification)
@@ -464,3 +480,69 @@ async def process_dialog_message(
         "💬 Сообщение отправлено фармацевту.\n\n"
         "Используйте /done чтобы завершить диалог."
     )
+
+# bot/handlers/user_questions.py - ДОБАВИТЬ НОВЫЙ ОБРАБОТЧИК
+@router.callback_query(F.data.startswith("quick_clarify_"))
+async def quick_clarify_callback(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db: AsyncSession,
+    user: User,
+    is_pharmacist: bool
+):
+    """Быстрое уточнение через кнопку в сообщении с ответом"""
+    if is_pharmacist:
+        await callback.answer("❌ Эта функция доступна только пользователям", show_alert=True)
+        return
+
+    try:
+        question_uuid = callback.data.replace("quick_clarify_", "")
+
+        # Получаем вопрос
+        result = await db.execute(
+            select(Question).where(Question.uuid == question_uuid)
+        )
+        question = result.scalar_one_or_none()
+
+        if not question:
+            await callback.answer("❌ Вопрос не найден", show_alert=True)
+            return
+
+        # Проверяем, что вопрос принадлежит пользователю
+        if question.user_id != user.uuid:
+            await callback.answer("❌ Этот вопрос не принадлежит вам", show_alert=True)
+            return
+
+        # Проверяем, что вопрос отвечен
+        if question.status != "answered":
+            await callback.answer("❌ Этот вопрос еще не получил ответ", show_alert=True)
+            return
+
+        # Получаем последний ответ на вопрос
+        answer_result = await db.execute(
+            select(Answer)
+            .where(Answer.question_id == question.uuid)
+            .order_by(Answer.created_at.desc())
+            .limit(1)
+        )
+        last_answer = answer_result.scalar_one_or_none()
+
+        # Сохраняем ID вопроса в состоянии
+        await state.update_data(clarify_question_id=question_uuid)
+        await state.set_state(UserQAStates.waiting_for_clarification)
+
+        message_text = f"💬 <b>Уточнение к вопросу:</b>\n\n"
+        message_text += f"❓ <b>Ваш вопрос:</b>\n{question.text}\n\n"
+
+        if last_answer:
+            message_text += f"💬 <b>Полученный ответ:</b>\n{last_answer.text}\n\n"
+
+        message_text += "✍️ <b>Напишите ваше уточнение ниже:</b>\n"
+        message_text += "(или /cancel для отмены)"
+
+        await callback.message.answer(message_text, parse_mode="HTML")
+        await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Error in quick_clarify_callback: {e}", exc_info=True)
+        await callback.answer("❌ Ошибка при создании уточнения", show_alert=True)

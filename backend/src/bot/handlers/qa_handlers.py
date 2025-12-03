@@ -479,19 +479,36 @@ async def process_answer_text(
                     )
                 else:
                     # Сообщение для обычного вопроса
-                    message_text = (
-                        f"💊 На ваш вопрос получен ответ!\n\n"
-                        f"❓ Ваш вопрос: {question.text}\n\n"
-                        f"💬 Ответ: {message.text}\n\n"
-                        f"👨‍⚕️ Ответ предоставил: {pharmacist_info}\n\n"
-                        f"💡 Если ответ неполный или у вас есть уточняющий вопрос, "
-                        "используйте команду /clarify"
+                    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+                    # Создаем клавиатуру с кнопкой уточнения
+                    clarify_keyboard = InlineKeyboardMarkup(
+                        inline_keyboard=[
+                            [
+                                InlineKeyboardButton(
+                                    text="✍️ Уточнить вопрос",
+                                    callback_data=f"quick_clarify_{question.uuid}"
+                                )
+                            ]
+                        ]
                     )
 
-                await message.bot.send_message(
-                    chat_id=user.telegram_id,
-                    text=message_text,
-                )
+                    message_text = (
+                        f"💊 <b>На ваш вопрос получен ответ!</b>\n\n"
+                        f"❓ <b>Ваш вопрос:</b>\n{question.text}\n\n"
+                        f"💬 <b>Ответ:</b>\n{message.text}\n\n"
+                        f"👨‍⚕️ <b>Ответ предоставил:</b> {pharmacist_info}\n\n"
+                        f"<i>Если ответ неполный или у вас есть уточняющий вопрос, "
+                        f"нажмите кнопку ниже ↓</i>"
+                    )
+
+                    await message.bot.send_message(
+                        chat_id=user.telegram_id,
+                        text=message_text,
+                        parse_mode="HTML",
+                        reply_markup=clarify_keyboard
+                    )
+
                 logger.info(f"Notification sent to user {user.telegram_id} about answer")
 
             except Exception as e:

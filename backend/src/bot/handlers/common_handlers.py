@@ -29,7 +29,7 @@ def get_pharmacist_keyboard():
                 ),
                 InlineKeyboardButton(
                     text="🔴 Перейти в офлайн", callback_data="go_offline"
-                )
+                ),
             ],
             [
                 InlineKeyboardButton(
@@ -40,15 +40,15 @@ def get_pharmacist_keyboard():
                 InlineKeyboardButton(
                     text="📊 Статус системы", callback_data="system_status"
                 ),
-                InlineKeyboardButton(
-                    text="❓ Помощь", callback_data="pharmacist_help"
-                )
+                InlineKeyboardButton(text="❓ Помощь", callback_data="pharmacist_help"),
             ],
         ]
     )
 
+
+# bot/handlers/common_handlers.py - ОБНОВИТЬ get_user_keyboard
 def get_user_keyboard():
-    """Клавиатура для пользователей"""
+    """Клавиатура для пользователей С КНОПКОЙ РЕГИСТРАЦИИ ФАРМАЦЕВТА"""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -57,23 +57,19 @@ def get_user_keyboard():
                 ),
                 InlineKeyboardButton(
                     text="🔍 Уточнить вопрос", callback_data="clarify_question"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="📖 Мои вопросы", callback_data="my_questions"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="👨‍⚕️ Я фармацевт", callback_data="i_am_pharmacist"
                 ),
+            ],
+            [InlineKeyboardButton(text="📖 Мои вопросы", callback_data="my_questions")],
+            [
                 InlineKeyboardButton(
-                    text="❓ Помощь", callback_data="user_help"
-                )
+                    text="👨‍⚕️ Я фармацевт / Регистрация",
+                    callback_data="i_am_pharmacist",
+                ),
+                InlineKeyboardButton(text="❓ Помощь", callback_data="user_help"),
             ],
         ]
     )
+
 
 @router.message(Command("start"))
 async def cmd_start(
@@ -147,9 +143,12 @@ async def cmd_help(message: Message, is_pharmacist: bool):
         )
 
 
+# bot/handlers/common_handlers.py - ИСПРАВЛЕННЫЙ i_am_pharmacist_callback
 @router.callback_query(F.data == "i_am_pharmacist")
-async def i_am_pharmacist_callback(callback: CallbackQuery, is_pharmacist: bool):
-    """Обработка нажатия 'Я фарм специалист'"""
+async def i_am_pharmacist_callback(
+    callback: CallbackQuery, is_pharmacist: bool, state: FSMContext
+):
+    """Обработка нажатия 'Я фарм специалист' С КНОПКОЙ РЕГИСТРАЦИИ"""
     if is_pharmacist:
         await callback.answer("Вы уже зарегистрированы как фармацевт!", show_alert=True)
         await callback.message.answer(
@@ -159,21 +158,39 @@ async def i_am_pharmacist_callback(callback: CallbackQuery, is_pharmacist: bool)
         )
     else:
         await callback.answer()
+
+        # Создаем клавиатуру с кнопкой регистрации
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+        register_keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="👨‍⚕️ Зарегистрироваться как фармацевт",
+                        callback_data="start_registration",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="❓ Как проходит регистрация?",
+                        callback_data="registration_info",
+                    )
+                ],
+            ]
+        )
+
         await callback.message.answer(
             "👨‍⚕️ <b>Регистрация фармацевта</b>\n\n"
-            "Для регистрации в качестве фармацевта используйте команду:\n"
-            "<code>/register</code>\n\n"
-            "В процессе регистрации вам нужно будет:\n"
+            "Для регистрации в качестве фармацевта нажмите кнопку ниже:\n\n"
+            "📋 <b>В процессе регистрации вам нужно будет:</b>\n"
             "• Выбрать сеть аптек\n"
             "• Указать номер аптеки\n"
             "• Выбрать вашу роль\n"
             "• Ввести ФИО\n"
             "• Ввести секретное слово\n\n"
-            "После регистрации вы сможете:\n"
-            "• Отвечать на вопросы пользователей\n"
-            "• Получать уведомления о новых вопросах\n"
-            "• Управлять своим онлайн-статусом",
+            "⏱️ <b>Регистрация займет 2-3 минуты</b>",
             parse_mode="HTML",
+            reply_markup=register_keyboard,
         )
 
 
@@ -209,10 +226,7 @@ async def go_online_callback(
 
 @router.callback_query(F.data == "go_offline")
 async def go_offline_callback(
-    callback: CallbackQuery,
-    db: AsyncSession,
-    is_pharmacist: bool,
-    pharmacist: object
+    callback: CallbackQuery, db: AsyncSession, is_pharmacist: bool, pharmacist: object
 ):
     """Быстрый переход в офлайн через кнопку"""
     if not is_pharmacist or not pharmacist:
@@ -330,7 +344,7 @@ async def view_questions_callback(
 async def ask_question_callback(
     callback: CallbackQuery, state: FSMContext, is_pharmacist: bool
 ):
-    """Непосредственный переход к вводу вопроса"""
+    """Непосредственный переход к вводу вопроса С ПОДСКАЗКОЙ"""
     if is_pharmacist:
         await callback.answer(
             "ℹ️ Вы фармацевт. Используйте /questions для ответов на вопросы.",
@@ -340,9 +354,20 @@ async def ask_question_callback(
 
     await callback.answer()
     await state.set_state(UserQAStates.waiting_for_question)
+
+    # Примеры вопросов
+    examples = [
+        "• Что лучше принять от головной боли?",
+        "• Можно ли детям парацетамол?",
+        "• Какие есть аналоги препарата...",
+        "• Взаимодействие двух лекарств",
+        "• Побочные эффекты от...",
+    ]
+
     await callback.message.answer(
         "💬 <b>Напишите ваш вопрос фармацевту:</b>\n\n"
-        "Опишите вашу проблему, и мы найдем решение!\n\n"
+        "<b>Примеры вопросов:</b>\n" + "\n".join(examples) + "\n\n"
+        "<i>Просто напишите ваш вопрос в чат ↓</i>\n"
         "<i>Для отмены используйте /cancel</i>",
         parse_mode="HTML",
     )
@@ -409,17 +434,17 @@ async def pharmacist_help_callback(callback: CallbackQuery):
         parse_mode="HTML",
     )
 
+
 @router.callback_query(F.data == "system_status")
 async def system_status_callback(
-    callback: CallbackQuery,
-    db: AsyncSession,
-    is_pharmacist: bool
+    callback: CallbackQuery, db: AsyncSession, is_pharmacist: bool
 ):
     """Статус системы через кнопку"""
     await callback.answer()
 
     # Создаем сообщение с командой для обработки реальным обработчиком
     from aiogram.types import Message
+
     fake_message = Message(
         message_id=callback.message.message_id,
         date=callback.message.date,
@@ -430,21 +455,20 @@ async def system_status_callback(
 
     # Импортируем и вызываем реальный обработчик
     from bot.handlers.qa_handlers import debug_status
+
     await debug_status(fake_message, db, is_pharmacist)
 
 
 @router.callback_query(F.data == "clarify_question")
 async def clarify_question_callback(
-    callback: CallbackQuery,
-    state: FSMContext,
-    db: AsyncSession,
-    user: User
+    callback: CallbackQuery, state: FSMContext, db: AsyncSession, user: User
 ):
     """Уточнение вопроса через кнопку"""
     await callback.answer()
 
     # Создаем сообщение с командой
     from aiogram.types import Message
+
     fake_message = Message(
         message_id=callback.message.message_id,
         date=callback.message.date,
@@ -455,6 +479,7 @@ async def clarify_question_callback(
 
     # Импортируем и вызываем реальный обработчик
     from bot.handlers.user_questions import cmd_clarify
+
     await cmd_clarify(fake_message, state, db, user)
 
 
@@ -482,3 +507,55 @@ async def unknown_command(message: Message):
     )
 
 
+# bot/handlers/common_handlers.py - ДОБАВИТЬ НОВЫЕ ОБРАБОТЧИКИ
+@router.callback_query(F.data == "start_registration")
+async def start_registration_callback(
+    callback: CallbackQuery, state: FSMContext, db: AsyncSession, is_pharmacist: bool
+):
+    """Запуск регистрации через кнопку"""
+    if is_pharmacist:
+        await callback.answer(
+            "❌ Вы уже зарегистрированы как фармацевт!", show_alert=True
+        )
+        return
+
+    await callback.answer()
+
+    # Импортируем обработчик регистрации
+    from bot.handlers.registration import cmd_register
+
+    # Создаем fake message для запуска регистрации
+    from aiogram.types import Message
+
+    fake_message = Message(
+        message_id=callback.message.message_id,
+        date=callback.message.date,
+        chat=callback.message.chat,
+        from_user=callback.from_user,
+        text="/register",
+    )
+
+    await cmd_register(fake_message, state, db, is_pharmacist)
+
+
+@router.callback_query(F.data == "registration_info")
+async def registration_info_callback(callback: CallbackQuery):
+    """Информация о процессе регистрации"""
+    await callback.answer()
+
+    await callback.message.answer(
+        "📋 <b>Процесс регистрации фармацевта:</b>\n\n"
+        "1. <b>Выбор сети аптек</b> - Новамедика или Эклиния\n"
+        "2. <b>Номер аптеки</b> - только цифры\n"
+        "3. <b>Ваша роль</b> - Фармацевт или Провизор\n"
+        "4. <b>ФИО</b> - имя и фамилия (обязательно), отчество (по желанию)\n"
+        "5. <b>Секретное слово</b> - для подтверждения прав доступа\n\n"
+        "⏱️ <b>Весь процесс занимает 2-3 минуты</b>\n\n"
+        "✅ <b>После регистрации вы сможете:</b>\n"
+        "• Отвечать на вопросы пользователей\n"
+        "• Получать уведомления о новых вопросах\n"
+        "• Управлять своим онлайн-статусом\n"
+        "• Просматривать историю своих ответов\n\n"
+        "👉 <b>Чтобы начать, нажмите «Зарегистрироваться как фармацевт»</b>",
+        parse_mode="HTML",
+    )
