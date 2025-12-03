@@ -1,18 +1,19 @@
-# bot/handlers/direct_questions.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
+from db.qa_models import User, Question
+from utils.time_utils import get_utc_now_naive
+
+
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
-from db.qa_models import User, Question
-from utils.time_utils import get_utc_now_naive
+
 from bot.services.notification_service import notify_pharmacists_about_new_question
+
 
 logger = logging.getLogger(__name__)
 router = Router()
-
-
 
 
 def should_create_question(text: str) -> bool:
@@ -20,25 +21,30 @@ def should_create_question(text: str) -> bool:
     text_lower = text.lower().strip()
 
     # 0. Проверяем, является ли это командой (начинается с /)
-    if text.startswith('/'):
+    if text.startswith("/"):
         return False
-
-
-
 
     # 2. Проверяем длину (минимально 5 символов)
     if len(text_lower) < 5:
         return False
 
     # 3. Проверяем, что это не просто набор символов или цифр
-    if text_lower.replace('?', '').replace('!', '').replace('.', '').replace(',', '').strip().isdigit():
+    if (
+        text_lower.replace("?", "")
+        .replace("!", "")
+        .replace(".", "")
+        .replace(",", "")
+        .strip()
+        .isdigit()
+    ):
         return False
 
     # 4. Проверяем на явные команды (даже без /)
-    if text_lower.startswith(('список', 'помощь', 'команды', 'меню', 'старт')):
+    if text_lower.startswith(("список", "помощь", "команды", "меню", "старт")):
         return False
 
     return True
+
 
 @router.message(F.text & ~F.command)
 async def handle_direct_text(
@@ -46,11 +52,9 @@ async def handle_direct_text(
     db: AsyncSession,
     user: User,
     is_pharmacist: bool,
-    state: FSMContext
+    state: FSMContext,
 ):
     """Обработка прямых текстовых сообщений как вопросов"""
-
-    
 
     # Пропускаем фармацевтов
     if is_pharmacist:
@@ -71,7 +75,7 @@ async def handle_direct_text(
             text=message.text,
             user_id=user.uuid,
             status="pending",
-            created_at=get_utc_now_naive()
+            created_at=get_utc_now_naive(),
         )
 
         db.add(question)
@@ -88,7 +92,7 @@ async def handle_direct_text(
             "✅ <b>Вопрос отправлен!</b>\n\n"
             "Фармацевты уже получили уведомление.\n"
             "<i>Используйте /clarify если нужно уточнить</i>",
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
 
     except Exception as e:

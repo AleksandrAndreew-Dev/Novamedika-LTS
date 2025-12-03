@@ -69,7 +69,7 @@ async def lifespan(app: FastAPI):
     dp.include_router(common_router)
     dp.include_router(registration_router)
     dp.include_router(qa_handlers_router)
-    dp.include_router(user_questions_router)
+    dp.include_router(user_questions_router) 
     dp.include_router(direct_questions_router)
 
 
