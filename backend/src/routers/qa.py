@@ -9,56 +9,13 @@ from db.qa_models import User, Question, Answer, Pharmacist
 from db.qa_schemas import QuestionCreate, QuestionResponse, AnswerBase, AnswerResponse
 from auth.auth import get_current_pharmacist
 import logging
-
+from sqlalchemy.orm import selectinload  # ДОБАВИТЬ
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# В routers/qa.py добавить:
-async def answer_question_internal(
-    question_id: str,
-    answer: AnswerBase,
-    pharmacist: Pharmacist,
-    db: AsyncSession
-) -> AnswerResponse:
-    """Внутренняя функция для ответа на вопрос (используется ботом)"""
-    try:
-        result = await db.execute(
-            select(Question)
-            .options(selectinload(Question.user))
-            .where(Question.uuid == uuid.UUID(question_id))
-        )
-        question = result.scalar_one_or_none()
 
-        if not question:
-            raise HTTPException(status_code=404, detail="Question not found")
-
-        new_answer = Answer(
-            uuid=uuid.uuid4(),
-            question_id=question.uuid,
-            pharmacist_id=pharmacist.uuid,
-            text=answer.text
-        )
-
-        question.status = 'answered'
-        question.answered_by = pharmacist.uuid
-
-        db.add(new_answer)
-        await db.commit()
-        await db.refresh(new_answer)
-
-        # 🔴 ВАЖНО: ОТПРАВКА ОТВЕТА ПОЛЬЗОВАТЕЛЮ
-        await send_answer_to_user(question, answer.text, db)
-
-        return AnswerResponse.model_validate(new_answer)
-
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при создании ответа: {str(e)}"
-        )
 
 async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncSession):
     """Отправка ответа пользователю в Telegram"""

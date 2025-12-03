@@ -9,8 +9,7 @@ from db.qa_models import Pharmacist, User
 from bot.keyboards.qa_keyboard import make_question_keyboard, make_clarification_keyboard
 from sqlalchemy.orm import selectinload
 from bot.services.assignment_service import QuestionAssignmentService
-from sqlalchemy.orm import selectinload
-from bot.services.notification_service import notify_about_clarification
+
 
 logger = logging.getLogger(__name__)
 

@@ -11,17 +11,12 @@ from db.qa_models import User, Pharmacist
 from db.qa_models import Question
 from db.qa_models import Answer
 from bot.handlers.qa_states import QAStates
-from bot.keyboards.qa_keyboard import make_question_keyboard
-# Добавьте в начало qa_handlers.py после существующих импортов:
+# ИСПРАВИТЬ импорт (убрать дублирование):
 from bot.keyboards.qa_keyboard import (
     make_question_keyboard,
     make_clarification_keyboard
 )
-from bot.keyboards.qa_keyboard import (
-    make_question_keyboard,
-    make_clarification_keyboard
-)
-from services.assignment_service import QuestionAssignmentService
+from bot.services.assignment_service import QuestionAssignmentService 
 
 from bot.handlers.common_handlers import get_pharmacist_keyboard
 import logging
