@@ -37,6 +37,9 @@ async def direct_question_from_text(
     # Пропускаем если пользователь фармацевт
     if is_pharmacist:
         return
+    
+    if message.text.startswith('/'):
+        return
 
     # Проверяем текущее состояние пользователя
     current_state = await state.get_state()

@@ -1,4 +1,4 @@
-# bot/handlers/direct_questions.py
+# bot/handlers/direct_questions.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
@@ -12,22 +12,19 @@ from bot.services.notification_service import notify_pharmacists_about_new_quest
 logger = logging.getLogger(__name__)
 router = Router()
 
-# Список общих фраз, которые НЕ должны создавать вопросы
-IGNORE_PHRASES = {
-    'привет', 'здравствуйте', 'здравствуй', 'добрый день', 'добрый вечер',
-    'доброе утро', 'hi', 'hello', 'start', 'начать', 'спасибо', 'благодарю',
-    'ок', 'хорошо', 'понятно', 'ясно', 'ага', 'угу', 'да', 'нет', 'может быть',
-    'возможно', 'наверное', 'ладно', 'хм', 'а', 'э', 'ого', 'вау', 'круто',
-    'супер', 'отлично', 'класс', 'прекрасно', 'замечательно', 'отлично'
-}
+
+
 
 def should_create_question(text: str) -> bool:
     """Определяет, стоит ли создавать вопрос из текста"""
     text_lower = text.lower().strip()
 
-    # 1. Проверяем на игнорируемые фразы
-    if text_lower in IGNORE_PHRASES:
+    # 0. Проверяем, является ли это командой (начинается с /)
+    if text.startswith('/'):
         return False
+
+
+
 
     # 2. Проверяем длину (минимально 5 символов)
     if len(text_lower) < 5:
@@ -43,7 +40,7 @@ def should_create_question(text: str) -> bool:
 
     return True
 
-@router.message(F.text & ~F.command)
+@router.message(F.text)
 async def handle_direct_text(
     message: Message,
     db: AsyncSession,
@@ -53,11 +50,15 @@ async def handle_direct_text(
 ):
     """Обработка прямых текстовых сообщений как вопросов"""
 
+    # Пропускаем если сообщение начинается с команды
+    if message.text.startswith('/'):
+        return
+
     # Пропускаем фармацевтов
     if is_pharmacist:
         return
 
-    # Проверяем состояние
+    # Проверяем текущее состояние пользователя
     current_state = await state.get_state()
     if current_state is not None:
         return
@@ -94,5 +95,3 @@ async def handle_direct_text(
 
     except Exception as e:
         logger.error(f"Error in direct question: {e}")
-
-
