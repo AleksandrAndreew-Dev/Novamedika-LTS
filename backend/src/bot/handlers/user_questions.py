@@ -2,6 +2,7 @@
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.filters import Command
+from aiogram.filters import CommandObject
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
@@ -21,21 +22,84 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
-
-@router.message(Command("ask"))
-async def cmd_ask(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool):
-    """Упрощенное начало процесса задания вопроса"""
-    logger.info(f"Command /ask from user {message.from_user.id}, is_pharmacist: {is_pharmacist}")
-
+@router.message(F.text & ~F.command)
+async def direct_question_from_text(
+    message: Message,
+    db: AsyncSession,
+    user: User,
+    is_pharmacist: bool,
+    state: FSMContext
+):
+    """
+    Обработка прямых текстовых сообщений как вопросов
+    Работает ТОЛЬКО если пользователь не фармацевт и не находится в другом состоянии
+    """
+    # Пропускаем если пользователь фармацевт
     if is_pharmacist:
-        await message.answer("ℹ️ Вы фармацевт. Используйте /questions для ответов на вопросы.")
         return
 
-    await state.set_state(UserQAStates.waiting_for_question)
+    # Проверяем текущее состояние пользователя
+    current_state = await state.get_state()
+
+    # Если пользователь находится в каком-либо состоянии (регистрация, уточнение и т.д.)
+    # - не обрабатываем текст как вопрос
+    if current_state is not None:
+        return
+
+    # Проверяем, что сообщение не слишком короткое (например, приветствие)
+    if len(message.text.strip()) < 5:
+        return
+
+    # Проверяем, что это не просто приветствие или одно слово
+    common_greetings = ['привет', 'здравствуйте', 'здравствуй', 'здравствуйтe', 'hi', 'hello', 'start', '/start']
+    if message.text.lower().strip() in common_greetings:
+        return
+
+    try:
+        # Создаем вопрос сразу
+        question = Question(
+            text=message.text,
+            user_id=user.uuid,
+            status="pending",
+            created_at=get_utc_now_naive()
+        )
+
+        db.add(question)
+        await db.commit()
+        await db.refresh(question)
+        logger.info(f"Direct question created for user {user.telegram_id}, question_id: {question.uuid}")
+
+        # Уведомляем фармацевтов
+        try:
+            from bot.services.notification_service import notify_pharmacists_about_new_question
+            await notify_pharmacists_about_new_question(question, db)
+        except Exception as e:
+            logger.error(f"Error in notification service: {e}")
+
+        # Отправляем подтверждение пользователю
+        await message.answer(
+            "✅ <b>Ваш вопрос отправлен фармацевтам!</b>\n\n"
+            "Фармацевты уже получили уведомление. Вы получите ответ в ближайшее время.\n\n"
+            "<i>Для уточнения используйте /clarify</i>",
+            parse_mode="HTML"
+        )
+
+    except Exception as e:
+        logger.error(f"Error creating direct question from text: {e}")
+        # Не отправляем сообщение об ошибке, чтобы не спамить пользователя
+
+
+# В user_questions.py обновляем cmd_ask:
+@router.message(Command("ask"))
+async def cmd_ask(message: Message):
+    """Быстрая команда для вопроса с подсказкой"""
     await message.answer(
-        "💬 <b>Напишите ваш вопрос фармацевту:</b>\n\n"
-        "Опишите вашу проблему, и мы найдем решение!\n\n"
-        "<i>Для отмены используйте /cancel</i>",
+        "💬 <b>Просто напишите ваш вопрос в чат!</b>\n\n"
+        "Например:\n"
+        "• 'Что лучше от температуры?'\n"
+        "• 'Можно ли детям принимать ибупрофен?'\n"
+        "• 'Какие аналоги у препарата...'\n\n"
+        "<i>Пишите прямо здесь ↓</i>",
         parse_mode="HTML"
     )
 
