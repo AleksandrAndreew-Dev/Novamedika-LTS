@@ -40,7 +40,7 @@ def should_create_question(text: str) -> bool:
 
     return True
 
-@router.message(F.text)
+@router.message(F.text & ~F.command)
 async def handle_direct_text(
     message: Message,
     db: AsyncSession,
@@ -50,9 +50,7 @@ async def handle_direct_text(
 ):
     """Обработка прямых текстовых сообщений как вопросов"""
 
-    # Пропускаем если сообщение начинается с команды
-    if message.text.startswith('/'):
-        return
+    
 
     # Пропускаем фармацевтов
     if is_pharmacist:
