@@ -1,4 +1,4 @@
-# bot/handlers/common_handlers.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram import Router, F
 from aiogram.types import (
     Message,
@@ -380,21 +380,21 @@ async def my_questions_callback(
     """Быстрый просмотр своих вопросов через кнопку"""
     await callback.answer()
 
-    # Создаем сообщение с командой для обработки реальным обработчиком
-    from aiogram.types import Message
-
-    fake_message = Message(
-        message_id=callback.message.message_id,
-        date=callback.message.date,
-        chat=callback.message.chat,
-        from_user=callback.from_user,
-        text="/my_questions",
-    )
-
-    # Импортируем и вызываем реальный обработчик
+    # Вместо создания fake_message, импортируем и вызываем обработчик напрямую
     from bot.handlers.user_questions import cmd_my_questions
 
-    await cmd_my_questions(fake_message, db, user, is_pharmacist)
+    # Создаем сообщение с помощью callback
+    class MockMessage:
+        def __init__(self, callback):
+            self.message_id = callback.message.message_id
+            self.date = callback.message.date
+            self.chat = callback.message.chat
+            self.from_user = callback.from_user
+            self.text = "/my_questions"
+            self.bot = callback.bot  # Добавляем бота
+
+    mock_message = MockMessage(callback)
+    await cmd_my_questions(mock_message, db, user, is_pharmacist)
 
 
 @router.callback_query(F.data == "user_help")
@@ -442,21 +442,20 @@ async def system_status_callback(
     """Статус системы через кнопку"""
     await callback.answer()
 
-    # Создаем сообщение с командой для обработки реальным обработчиком
-    from aiogram.types import Message
-
-    fake_message = Message(
-        message_id=callback.message.message_id,
-        date=callback.message.date,
-        chat=callback.message.chat,
-        from_user=callback.from_user,
-        text="/debug_status",
-    )
-
-    # Импортируем и вызываем реальный обработчик
+    # Вместо создания fake_message, импортируем и вызываем обработчик напрямую
     from bot.handlers.qa_handlers import debug_status
 
-    await debug_status(fake_message, db, is_pharmacist)
+    class MockMessage:
+        def __init__(self, callback):
+            self.message_id = callback.message.message_id
+            self.date = callback.message.date
+            self.chat = callback.message.chat
+            self.from_user = callback.from_user
+            self.text = "/debug_status"
+            self.bot = callback.bot  # Добавляем бота
+
+    mock_message = MockMessage(callback)
+    await debug_status(mock_message, db, is_pharmacist)
 
 
 @router.callback_query(F.data == "clarify_question")
@@ -466,21 +465,20 @@ async def clarify_question_callback(
     """Уточнение вопроса через кнопку"""
     await callback.answer()
 
-    # Создаем сообщение с командой
-    from aiogram.types import Message
-
-    fake_message = Message(
-        message_id=callback.message.message_id,
-        date=callback.message.date,
-        chat=callback.message.chat,
-        from_user=callback.from_user,
-        text="/clarify",
-    )
-
-    # Импортируем и вызываем реальный обработчик
+    # Вместо создания fake_message, импортируем и вызываем обработчик напрямую
     from bot.handlers.user_questions import cmd_clarify
 
-    await cmd_clarify(fake_message, state, db, user)
+    class MockMessage:
+        def __init__(self, callback):
+            self.message_id = callback.message.message_id
+            self.date = callback.message.date
+            self.chat = callback.message.chat
+            self.from_user = callback.from_user
+            self.text = "/clarify"
+            self.bot = callback.bot  # Добавляем бота
+
+    mock_message = MockMessage(callback)
+    await cmd_clarify(mock_message, state, db, user)
 
 
 @router.message(Command("cancel"))
@@ -507,7 +505,6 @@ async def unknown_command(message: Message):
     )
 
 
-# bot/handlers/common_handlers.py - ДОБАВИТЬ НОВЫЕ ОБРАБОТЧИКИ
 @router.callback_query(F.data == "start_registration")
 async def start_registration_callback(
     callback: CallbackQuery, state: FSMContext, db: AsyncSession, is_pharmacist: bool
@@ -521,21 +518,24 @@ async def start_registration_callback(
 
     await callback.answer()
 
-    # Импортируем обработчик регистрации
-    from bot.handlers.registration import cmd_register
+    # Вместо создания fake_message, используем прямой вызов логики
+    from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+    from bot.handlers.registration import RegistrationStates
 
-    # Создаем fake message для запуска регистрации
-    from aiogram.types import Message
-
-    fake_message = Message(
-        message_id=callback.message.message_id,
-        date=callback.message.date,
-        chat=callback.message.chat,
-        from_user=callback.from_user,
-        text="/register",
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Новамедика"), KeyboardButton(text="Эклиния")],
+            [KeyboardButton(text="❌ Отмена регистрации")]
+        ],
+        resize_keyboard=True
     )
 
-    await cmd_register(fake_message, state, db, is_pharmacist)
+    await callback.message.answer(
+        "👨‍⚕️ Регистрация фармацевта\n\n"
+        "Выберите сеть аптек:",
+        reply_markup=keyboard
+    )
+    await state.set_state(RegistrationStates.waiting_pharmacy_chain)
 
 
 @router.callback_query(F.data == "registration_info")
