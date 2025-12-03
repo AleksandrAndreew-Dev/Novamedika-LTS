@@ -1,5 +1,8 @@
-from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
+from typing import Union
+
+from aiogram import Router, F
+
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -251,8 +254,21 @@ async def cmd_questions(
 
 
 @router.message(Command("debug_status"))
-async def debug_status(message: Message, db: AsyncSession, is_pharmacist: bool):
+@router.callback_query(F.data == "debug_status")  # Добавляем поддержку callback
+async def debug_status(
+    message_or_callback: Union[Message, CallbackQuery],
+    db: AsyncSession,
+    is_pharmacist: bool
+):
     """Команда для отладки статуса системы"""
+    # Определяем, что пришло: Message или CallbackQuery
+    if isinstance(message_or_callback, CallbackQuery):
+        message = message_or_callback.message
+        from_user = message_or_callback.from_user
+    else:
+        message = message_or_callback
+        from_user = message.from_user
+
     try:
         from sqlalchemy import select, func
         from bot.services.notification_service import get_online_pharmacists

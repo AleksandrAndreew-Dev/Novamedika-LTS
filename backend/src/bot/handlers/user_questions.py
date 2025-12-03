@@ -1,3 +1,6 @@
+from aiogram.types import Message as AiogramMessage
+from typing import Union
+
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command, CommandObject
@@ -37,12 +40,23 @@ async def cmd_ask(message: Message):
     )
 
 @router.message(Command("my_questions"))
+@router.callback_query(F.data == "my_questions_callback")  # Альтернативный вариант
 async def cmd_my_questions(
-    message: Message,
+    message_or_callback: Union[AiogramMessage, CallbackQuery],
     db: AsyncSession,
     user: User,
     is_pharmacist: bool
 ):
+    """Показать вопросы пользователя или ответы фармацевта"""
+    # Определяем тип входящего объекта
+    if isinstance(message_or_callback, CallbackQuery):
+        message = message_or_callback.message
+        from_user = message_or_callback.from_user
+        is_callback = True
+    else:
+        message = message_or_callback
+        from_user = message.from_user
+        is_callback = False
     """Показать вопросы пользователя или ответы фармацевта - ОБНОВЛЕННАЯ ВЕРСИЯ С ФИО"""
     logger.info(f"Command /my_questions from user {message.from_user.id}, is_pharmacist: {is_pharmacist}")
 
@@ -163,10 +177,12 @@ async def cmd_my_questions(
 
             await message.answer(questions_text)
 
+
     except Exception as e:
         logger.error(f"Error in cmd_my_questions for user {message.from_user.id}: {e}", exc_info=True)
         await message.answer("❌ Ошибка при получении ваших вопросов. Попробуйте позже.")
-
+    if is_callback:
+            await message_or_callback.answer()
 
 @router.message(Command("done"))
 async def cmd_done(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool):
