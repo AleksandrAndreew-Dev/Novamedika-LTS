@@ -79,6 +79,14 @@ class Question(Base):
         "Pharmacist", foreign_keys=[assigned_to], back_populates="assigned_questions"
     )
     answers = relationship("Answer", back_populates="question")
+    taken_by = Column(UUID(as_uuid=True), ForeignKey("qa_pharmacists.uuid"), nullable=True)
+    taken_at = Column(DateTime, nullable=True)
+
+    taken_pharmacist = relationship(
+        "Pharmacist",
+        foreign_keys=[taken_by],
+        backref="taken_questions"
+    )
 
 
 class Answer(Base):

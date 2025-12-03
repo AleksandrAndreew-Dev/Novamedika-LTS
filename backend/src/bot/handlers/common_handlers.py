@@ -15,38 +15,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db.qa_models import User
 from utils.time_utils import get_utc_now_naive
 from bot.handlers.qa_states import UserQAStates
+from bot.services.notification_service import (
+    notify_pharmacists_about_new_question,
+    notify_about_clarification
+)
 import logging
 
 logger = logging.getLogger(__name__)
 
-async def call_command_from_callback(
-    callback: CallbackQuery,
-    command_function,
-    *args,
-    **kwargs
-):
-    """Универсальная функция для вызова команд из callback"""
-    # Создаем Message-объект на основе callback
-    class CallbackMessage:
-        def __init__(self, callback):
-            self.message_id = callback.message.message_id
-            self.date = callback.message.date
-            self.chat = callback.message.chat
-            self.from_user = callback.from_user
-            self.text = getattr(callback, 'text', '')
-            self.bot = callback.bot
-            self.answer = self._answer
 
-        async def _answer(self, text, parse_mode=None, reply_markup=None):
-            await self.bot.send_message(
-                chat_id=self.chat.id,
-                text=text,
-                parse_mode=parse_mode,
-                reply_markup=reply_markup
-            )
-
-    message = CallbackMessage(callback)
-    await command_function(message, *args, **kwargs)
 
 router = Router()
 

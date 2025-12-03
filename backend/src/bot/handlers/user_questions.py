@@ -12,7 +12,8 @@ from sqlalchemy import select, and_
 from db.qa_models import User, Question, Answer, Pharmacist
 from bot.handlers.qa_states import UserQAStates
 from bot.handlers.common_handlers import get_user_keyboard
-from bot.keyboards.qa_keyboard import make_clarification_keyboard
+
+from bot.services.notification_service import notify_about_clarification
 
 import logging
 from datetime import datetime, timedelta
@@ -273,6 +274,7 @@ async def cmd_clarify(message: Message, state: FSMContext, db: AsyncSession, use
         logger.error(f"Error in cmd_clarify: {e}", exc_info=True)
         await message.answer("❌ Ошибка при создании уточнения.")
 
+# bot/handlers/user_questions.py - обновляем process_clarification
 @router.message(UserQAStates.waiting_for_clarification)
 async def process_clarification(
     message: Message,
@@ -280,7 +282,7 @@ async def process_clarification(
     db: AsyncSession,
     user: User
 ):
-    """Обработка уточнения пользователя - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+    """Обработка уточнения пользователя"""
     try:
         state_data = await state.get_data()
         question_uuid = state_data.get("clarify_question_id")
@@ -316,57 +318,18 @@ async def process_clarification(
 
         db.add(clarification_question)
         await db.commit()
+        await db.refresh(clarification_question)
 
-        # Уведомляем ВСЕХ активных фармацевтов (не только онлайн)
-        from sqlalchemy.orm import selectinload
-
-        result = await db.execute(
-            select(Pharmacist)
-            .options(selectinload(Pharmacist.user))
-            .where(Pharmacist.is_active == True)  # Все активные фармацевты
+        # Уведомляем о новом уточнении
+        await notify_about_clarification(
+            clarification_question,
+            original_question,
+            db
         )
-        all_active_pharmacists = result.scalars().all()
-
-        notified_count = 0
-        for pharmacist in all_active_pharmacists:
-            if pharmacist.user and pharmacist.user.telegram_id:
-                try:
-                    # Разные сообщения для онлайн и офлайн фармацевтов
-                    if pharmacist.is_online:
-                        message_text = (
-                            f"🔔 УТОЧНЕНИЕ К ВОПРОСУ!\n\n"
-                            f"❓ Исходный вопрос: {original_question.text}\n\n"
-                            f"💬 Уточнение: {message.text}\n\n"
-                            f"💡 Статус: Вы в онлайн - можете ответить сразу!"
-                        )
-                        # Для онлайн фармацевтов отправляем с кнопкой ответа
-                        reply_markup = make_clarification_keyboard(clarification_question.uuid)
-                    else:
-                        message_text = (
-                            f"📥 Уточнение к вопросу ожидает ответа\n\n"
-                            f"❓ Исходный вопрос: {original_question.text}\n\n"
-                            f"💬 Уточнение: {message.text}\n\n"
-                            f"💡 Статус: Вы в офлайн - перейдите в онлайн чтобы ответить\n"
-                            f"Используйте /online чтобы начать принимать вопросы"
-                        )
-                        reply_markup = None
-
-                    await message.bot.send_message(
-                        chat_id=pharmacist.user.telegram_id,
-                        text=message_text,
-                        reply_markup=reply_markup
-                    )
-                    notified_count += 1
-                    logger.info(f"Clarification notification sent to pharmacist {pharmacist.user.telegram_id}")
-                except Exception as e:
-                    logger.error(f"Failed to notify pharmacist {pharmacist.user.telegram_id}: {e}")
-
-        logger.info(f"Notified {notified_count} pharmacists about clarification for question {original_question.uuid}")
 
         await message.answer(
-            "✅ Ваше уточнение отправлено фармацевтам!\n\n"
-            f"👨‍⚕️ Уведомлено фармацевтов: {notified_count}\n\n"
-            "Фармацевт скоро ответит на ваше уточнение."
+            "✅ Ваше уточнение отправлено!\n\n"
+            "Фармацевт, который взял ваш вопрос, получил уведомление и скоро ответит."
         )
 
         await state.clear()

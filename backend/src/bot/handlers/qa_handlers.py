@@ -17,6 +17,11 @@ from bot.keyboards.qa_keyboard import (
     make_question_keyboard,
     make_clarification_keyboard
 )
+from bot.keyboards.qa_keyboard import (
+    make_question_keyboard,
+    make_clarification_keyboard
+)
+from services.assignment_service import QuestionAssignmentService
 
 from bot.handlers.common_handlers import get_pharmacist_keyboard
 import logging
@@ -252,6 +257,97 @@ async def cmd_questions(
         logger.error(f"Error in cmd_questions: {e}")
         await message.answer("❌ Ошибка при получении вопросов")
 
+# bot/handlers/qa_handlers.py - добавляем новую команду
+@router.message(Command("release_question"))
+async def cmd_release_question(
+    message: Message,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: Pharmacist
+):
+    """Освободить вопрос, если не можешь ответить"""
+    if not is_pharmacist or not pharmacist:
+        await message.answer("❌ Эта команда доступна только фармацевтам")
+        return
+
+    try:
+        # Находим вопросы, взятые текущим фармацевтом
+        result = await db.execute(
+            select(Question)
+            .where(
+                Question.taken_by == pharmacist.uuid,
+                Question.status == "in_progress"
+            )
+            .order_by(Question.taken_at.desc())
+        )
+        questions = result.scalars().all()
+
+        if not questions:
+            await message.answer("📝 У вас нет взятых вопросов.")
+            return
+
+        # Создаем клавиатуру с вопросами для освобождения
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[])
+        for question in questions[:5]:  # Ограничиваем 5 вопросами
+            question_preview = question.text[:50] + "..." if len(question.text) > 50 else question.text
+            keyboard.inline_keyboard.append([
+                InlineKeyboardButton(
+                    text=f"📌 {question_preview}",
+                    callback_data=f"release_{question.uuid}"
+                )
+            ])
+
+        await message.answer(
+            "📋 Выберите вопрос, который хотите освободить:",
+            reply_markup=keyboard
+        )
+
+    except Exception as e:
+        logger.error(f"Error in cmd_release_question: {e}")
+        await message.answer("❌ Ошибка при получении вопросов")
+
+@router.callback_query(F.data.startswith("release_"))
+async def release_question_callback(
+    callback: CallbackQuery,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: Pharmacist
+):
+    """Освободить выбранный вопрос"""
+    question_uuid = callback.data.replace("release_", "")
+
+    if not is_pharmacist or not pharmacist:
+        await callback.answer("❌ Эта функция доступна только фармацевтам", show_alert=True)
+        return
+
+    try:
+        result = await db.execute(
+            select(Question).where(Question.uuid == question_uuid)
+        )
+        question = result.scalar_one_or_none()
+
+        if not question or question.taken_by != pharmacist.uuid:
+            await callback.answer("❌ Вопрос не найден или не взят вами", show_alert=True)
+            return
+
+        # Освобождаем вопрос
+        question.taken_by = None
+        question.taken_at = None
+        question.status = "pending"
+
+        await db.commit()
+
+        await callback.answer("✅ Вопрос освобожден!")
+        await callback.message.edit_text(
+            f"✅ Вопрос освобожден.\n\n"
+            f"❓ Вопрос: {question.text[:100]}...\n\n"
+            f"Теперь его смогут взять другие фармацевты."
+        )
+
+    except Exception as e:
+        logger.error(f"Error releasing question: {e}")
+        await callback.answer("❌ Ошибка при освобождении вопроса", show_alert=True)
+
 
 @router.message(Command("debug_status"))
 @router.callback_query(F.data == "debug_status")  # Добавляем поддержку callback
@@ -318,6 +414,7 @@ async def debug_status(
         await message.answer("❌ Ошибка при получении статуса системы")
 
 
+# bot/handlers/qa_handlers.py - обновляем answer_question_callback
 @router.callback_query(F.data.startswith("answer_"))
 async def answer_question_callback(
     callback: CallbackQuery,
@@ -329,18 +426,23 @@ async def answer_question_callback(
     """Обработка нажатия на кнопку ответа на вопрос"""
     question_uuid = callback.data.replace("answer_", "")
 
-    logger.info(
-        f"Answer callback for question {question_uuid} from user {callback.from_user.id}"
-    )
-
     if not is_pharmacist or not pharmacist:
-        await callback.answer(
-            "❌ Эта функция доступна только фармацевтам", show_alert=True
-        )
+        await callback.answer("❌ Эта функция доступна только фармацевтам", show_alert=True)
         return
 
     try:
-        # Получаем вопрос
+        # Назначаем вопрос фармацевту
+        assignment_success = await QuestionAssignmentService.assign_question_to_pharmacist(
+            question_uuid,
+            str(pharmacist.uuid),
+            db
+        )
+
+        if not assignment_success:
+            await callback.answer("❌ Ошибка при назначении вопроса", show_alert=True)
+            return
+
+        # Остальная логика остается прежней...
         result = await db.execute(
             select(Question).where(Question.uuid == question_uuid)
         )
@@ -359,7 +461,7 @@ async def answer_question_callback(
         )
 
         await callback.message.answer(
-            f"💬 Вы отвечаете на вопрос:\n\n"
+            f"💬 Вы взяли вопрос на себя!\n\n"
             f"«{question_preview}»\n\n"
             f"Напишите ваш ответ ниже:\n"
             f"(или /cancel для отмены)"
@@ -368,10 +470,7 @@ async def answer_question_callback(
         await callback.answer()
 
     except Exception as e:
-        logger.error(
-            f"Error in answer_question_callback for user {callback.from_user.id}: {e}",
-            exc_info=True,
-        )
+        logger.error(f"Error in answer_question_callback: {e}")
         await callback.answer("❌ Ошибка при обработке запроса", show_alert=True)
 
 

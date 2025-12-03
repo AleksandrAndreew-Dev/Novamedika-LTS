@@ -8,83 +8,130 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db.qa_models import Pharmacist, User
 from bot.keyboards.qa_keyboard import make_question_keyboard, make_clarification_keyboard
 from sqlalchemy.orm import selectinload
+from services.assignment_service import QuestionAssignmentService
+from sqlalchemy.orm import selectinload
+from bot.services.notification_service import notify_about_clarification 
 
 logger = logging.getLogger(__name__)
 
 async def notify_pharmacists_about_new_question(question, db: AsyncSession):
-    """Уведомление фармацевтов о новом вопросе - РАСШИРЕННАЯ ВЕРСИЯ"""
+    """Уведомление фармацевтов о новом вопросе"""
     try:
         bot, _ = await bot_manager.initialize()
         if not bot:
             logger.error("Bot not initialized for notifications")
             return
 
-        # Получаем ВСЕХ активных фармацевтов (не только онлайн)
-        result = await db.execute(
-            select(Pharmacist)
-            .join(User, Pharmacist.user_id == User.uuid)
-            .options(selectinload(Pharmacist.user))
-            .where(Pharmacist.is_active == True)
-        )
-        all_pharmacists = result.scalars().all()
+        # Проверяем, нужно ли уведомлять всех
+        if await QuestionAssignmentService.should_notify_all_pharmacists(question.uuid, db):
+            # Уведомляем всех активных фармацевтов
+            result = await db.execute(
+                select(Pharmacist)
+                .join(User, Pharmacist.user_id == User.uuid)
+                .options(selectinload(Pharmacist.user))
+                .where(Pharmacist.is_active == True)
+            )
+            pharmacists = result.scalars().all()
+        else:
+            # Уведомляем только назначенного фармацевта
+            taker = await QuestionAssignmentService.get_question_taker(question.uuid, db)
+            pharmacists = [taker] if taker else []
 
-        logger.info(f"Found {len(all_pharmacists)} active pharmacists to notify")
-
-        if not all_pharmacists:
-            logger.info("No active pharmacists to notify")
+        if not pharmacists:
+            logger.info("No pharmacists to notify")
             return
 
         question_preview = question.text[:150] + "..." if len(question.text) > 150 else question.text
 
-        from bot.keyboards.qa_keyboard import make_question_keyboard
-
-        notified_count = 0
-        online_notified = 0
-        offline_notified = 0
-
-        for pharmacist in all_pharmacists:
+        for pharmacist in pharmacists:
             try:
                 if pharmacist.user and pharmacist.user.telegram_id:
-                    # Разные сообщения для онлайн и офлайн фармацевтов
+                    # Разные сообщения в зависимости от статуса
                     if pharmacist.is_online:
                         message_text = (
-                            f"🔔 НОВЫЙ ВОПРОС ОТ ПОЛЬЗОВАТЕЛЯ!\n\n"
+                            f"🔔 НОВЫЙ ВОПРОС!\n\n"
                             f"❓ Вопрос: {question_preview}\n\n"
-                            f"💡 Статус: Вы в онлайн - можете ответить сразу!\n"
-                            f"Используйте /questions чтобы просмотреть вопрос"
+                            f"💡 Статус: Вы в онлайн - можете ответить сразу!"
                         )
-                        online_notified += 1
+                        reply_markup = make_question_keyboard(question.uuid)
                     else:
                         message_text = (
                             f"📥 Новый вопрос ожидает ответа\n\n"
                             f"❓ Вопрос: {question_preview}\n\n"
-                            f"💡 Статус: Вы в офлайн - перейдите в онлайн чтобы ответить\n"
-                            f"Используйте /online чтобы начать принимать вопросы"
+                            f"💡 Статус: Вы в офлайн"
                         )
-                        offline_notified += 1
+                        reply_markup = None
 
                     await bot.send_message(
                         chat_id=pharmacist.user.telegram_id,
                         text=message_text,
-                        reply_markup=make_question_keyboard(question.uuid) if pharmacist.is_online else None
+                        reply_markup=reply_markup
                     )
-                    logger.info(f"✅ Уведомление отправлено фармацевту {pharmacist.user.telegram_id} о вопросе {question.uuid}")
-                    notified_count += 1
                     logger.info(f"Notification sent to pharmacist {pharmacist.user.telegram_id}")
 
-                    # Небольшая задержка между отправками
-                    import asyncio
-                    await asyncio.sleep(0.1)
-
             except Exception as e:
-                pharmacist_id = pharmacist.user.telegram_id if pharmacist.user else "unknown"
-                logger.error(f"Failed to notify pharmacist {pharmacist_id}: {e}")
-
-        logger.info(f"Notified {notified_count} pharmacists about new question {question.uuid} "
-                   f"(online: {online_notified}, offline: {offline_notified})")
+                logger.error(f"Failed to notify pharmacist: {e}")
 
     except Exception as e:
-        logger.error(f"Error in notify_pharmacists_about_new_question: {e}", exc_info=True)
+        logger.error(f"Error in notify_pharmacists_about_new_question: {e}")
+
+async def notify_about_clarification(question, original_question, db: AsyncSession):
+    """Уведомление об уточнении"""
+    try:
+        bot, _ = await bot_manager.initialize()
+        if not bot:
+            logger.error("Bot not initialized for notifications")
+            return
+
+        # Получаем фармацевта, который взял исходный вопрос
+        taker = await QuestionAssignmentService.get_question_taker(
+            original_question.uuid,
+            db
+        )
+
+        if not taker:
+            # Если никто не взял вопрос, уведомляем всех онлайн фармацевтов
+            result = await db.execute(
+                select(Pharmacist)
+                .join(User, Pharmacist.user_id == User.uuid)
+                .options(selectinload(Pharmacist.user))
+                .where(
+                    Pharmacist.is_active == True,
+                    Pharmacist.is_online == True
+                )
+            )
+            pharmacists = result.scalars().all()
+        else:
+            # Уведомляем только фармацевта, который взял вопрос
+            pharmacists = [taker]
+
+        for pharmacist in pharmacists:
+            try:
+                if pharmacist.user and pharmacist.user.telegram_id:
+                    message_text = (
+                        f"🔍 УТОЧНЕНИЕ К ВОПРОСУ!\n\n"
+                        f"❓ Исходный вопрос: {original_question.text}\n\n"
+                        f"💬 Уточнение: {question.text}\n\n"
+                    )
+
+                    if pharmacist.is_online:
+                        message_text += "💡 Статус: Вы в онлайн - можете ответить сразу!"
+                        reply_markup = make_clarification_keyboard(question.uuid)
+                    else:
+                        message_text += "💡 Статус: Вы в офлайн"
+                        reply_markup = None
+
+                    await bot.send_message(
+                        chat_id=pharmacist.user.telegram_id,
+                        text=message_text,
+                        reply_markup=reply_markup
+                    )
+
+            except Exception as e:
+                logger.error(f"Failed to notify pharmacist about clarification: {e}")
+
+    except Exception as e:
+        logger.error(f"Error in notify_about_clarification: {e}")
 
 async def get_online_pharmacists(db: AsyncSession):
     """Получить список онлайн фармацевтов"""
