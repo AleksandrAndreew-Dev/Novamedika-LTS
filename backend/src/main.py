@@ -11,6 +11,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot.core import bot_manager
 from bot.handlers import (
+    direct_questions,
     common_router,
     registration_router,
     user_questions_router,
@@ -65,10 +66,12 @@ async def lifespan(app: FastAPI):
     dp.update.outer_middleware(RoleMiddleware())
 
     # Регистрация роутеров
+    dp.include_router(direct_questions)
+    dp.include_router(common_router)
     dp.include_router(registration_router)
     dp.include_router(qa_handlers_router)
     dp.include_router(user_questions_router)
-    dp.include_router(common_router)
+
 
     # УСТАНОВКА WEBHOOK ПРИ ЗАПУСКЕ
     try:
