@@ -469,11 +469,7 @@ async def process_answer_text(
                 if patronymic:
                     pharmacist_name_parts.append(patronymic)
 
-                pharmacist_name = (
-                    " ".join(pharmacist_name_parts)
-                    if pharmacist_name_parts
-                    else "Фармацевт"
-                )
+                pharmacist_name = " ".join(pharmacist_name_parts) if pharmacist_name_parts else "Фармацевт"
 
                 pharmacist_info = f"{pharmacist_name}"
                 if chain and number:
@@ -481,34 +477,34 @@ async def process_answer_text(
                 if role and role != "Фармацевт":
                     pharmacist_info += f" ({role})"
 
+                # СОЗДАЕМ КНОПКУ УТОЧНЕНИЯ ДЛЯ ЛЮБОГО ТИПА ВОПРОСА
+                from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+                clarify_keyboard = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="✍️ Уточнить вопрос",
+                                callback_data=f"quick_clarify_{question.uuid}"
+                            )
+                        ]
+                    ]
+                )
+
                 if is_clarification:
                     # Сообщение для уточнения
                     original_question_id = question.context_data.get("original_question_id")
                     original_question_text = question.context_data.get("original_question_text", "")
 
                     message_text = (
-                        f"💊 На ваше уточнение получен ответ!\n\n"
-                        f"❓ Исходный вопрос: {original_question_text}\n\n"
-                        f"💬 Ваше уточнение: {question.text.replace('Уточнение: ', '')}\n\n"
-                        f"💬 Ответ: {message.text}\n\n"
-                        f"👨‍⚕️ Ответ предоставил: {pharmacist_info}"
+                        f"💊 <b>На ваше уточнение получен ответ!</b>\n\n"
+                        f"❓ <b>Исходный вопрос:</b>\n{original_question_text}\n\n"
+                        f"💬 <b>Ваше уточнение:</b>\n{question.text.replace('Уточнение: ', '')}\n\n"
+                        f"💬 <b>Ответ:</b>\n{message.text}\n\n"
+                        f"👨‍⚕️ <b>Ответ предоставил:</b> {pharmacist_info}"
                     )
                 else:
                     # Сообщение для обычного вопроса
-                    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-
-                    # Создаем клавиатуру с кнопкой уточнения
-                    clarify_keyboard = InlineKeyboardMarkup(
-                        inline_keyboard=[
-                            [
-                                InlineKeyboardButton(
-                                    text="✍️ Уточнить вопрос",
-                                    callback_data=f"quick_clarify_{question.uuid}"
-                                )
-                            ]
-                        ]
-                    )
-
                     message_text = (
                         f"💊 <b>На ваш вопрос получен ответ!</b>\n\n"
                         f"❓ <b>Ваш вопрос:</b>\n{question.text}\n\n"
@@ -518,15 +514,15 @@ async def process_answer_text(
                         f"нажмите кнопку ниже ↓</i>"
                     )
 
-                    await message.bot.send_message(
-                        chat_id=user.telegram_id,
-                        text=message_text,
-                        parse_mode="HTML",
-                        reply_markup=clarify_keyboard
-                    )
+                # ОТПРАВЛЯЕМ ВСЕГДА С КНОПКОЙ УТОЧНЕНИЯ
+                await message.bot.send_message(
+                    chat_id=user.telegram_id,
+                    text=message_text,
+                    parse_mode="HTML",
+                    reply_markup=clarify_keyboard
+                )
 
                 logger.info(f"Notification sent to user {user.telegram_id} about answer")
-
             except Exception as e:
                 logger.error(f"Failed to send notification to user {user.telegram_id}: {e}")
 

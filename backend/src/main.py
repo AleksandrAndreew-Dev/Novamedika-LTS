@@ -10,6 +10,7 @@ from aiogram.types import BotCommand  # Добавьте этот импорт
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot.core import bot_manager
+from bot.handlers.clarify_handlers import router as clarify_router
 from bot.handlers import (
     direct_questions_router,
     common_router,
@@ -69,8 +70,9 @@ async def lifespan(app: FastAPI):
     dp.include_router(common_router)
     dp.include_router(registration_router)
     dp.include_router(qa_handlers_router)
-    dp.include_router(user_questions_router) 
+    dp.include_router(user_questions_router)
     dp.include_router(direct_questions_router)
+    dp.include_router(clarify_router)
 
 
     # УСТАНОВКА WEBHOOK ПРИ ЗАПУСКЕ

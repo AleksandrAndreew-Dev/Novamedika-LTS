@@ -1,5 +1,6 @@
 from aiogram.types import Message as AiogramMessage
 from typing import Union
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
@@ -138,6 +139,26 @@ async def cmd_my_questions(
                     .order_by(Answer.created_at.asc())
                 )
                 answers = answers_result.scalars().all()
+
+                if question.status == "answered":
+                    # Создаем кнопку уточнения для каждого отвеченного вопроса
+                    clarify_keyboard = InlineKeyboardMarkup(
+                        inline_keyboard=[
+                            [
+                                InlineKeyboardButton(
+                                    text="✍️ Уточнить этот вопрос",
+                                    callback_data=f"quick_clarify_{question.uuid}"
+                                )
+                            ]
+                        ]
+                    )
+
+                    # Отправляем отдельное сообщение с кнопкой для каждого отвеченного вопроса
+                    await message.answer(
+                        f"❓ Вопрос: {question.text[:200]}...\n"
+                        f"✅ Отвечен: {question.answered_at.strftime('%d.%m.%Y %H:%M')}",
+                        reply_markup=clarify_keyboard
+                    )
 
                 if answers:
                     questions_text += "   💬 Ответы:\n"

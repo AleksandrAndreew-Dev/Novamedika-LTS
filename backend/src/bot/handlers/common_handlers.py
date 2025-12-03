@@ -79,25 +79,37 @@ def get_pharmacist_keyboard():
 
 
 # bot/handlers/common_handlers.py - ОБНОВИТЬ get_user_keyboard
+# Обновите функцию get_user_keyboard():
+
 def get_user_keyboard():
-    """Клавиатура для пользователей С КНОПКОЙ РЕГИСТРАЦИИ ФАРМАЦЕВТА"""
+    """Клавиатура для пользователей С КНОПКОЙ УТОЧНЕНИЯ"""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="💬 Задать вопрос", callback_data="ask_question"
+                    text="💬 Задать вопрос",
+                    callback_data="ask_question"
                 ),
                 InlineKeyboardButton(
-                    text="🔍 Уточнить вопрос", callback_data="clarify_question"
+                    text="✍️ Уточнить вопрос",
+                    callback_data="clarify_question"
                 ),
             ],
-            [InlineKeyboardButton(text="📖 Мои вопросы", callback_data="my_questions")],
+            [
+                InlineKeyboardButton(
+                    text="📖 Мои вопросы",
+                    callback_data="my_questions"
+                )
+            ],
             [
                 InlineKeyboardButton(
                     text="👨‍⚕️ Я фармацевт / Регистрация",
                     callback_data="i_am_pharmacist",
                 ),
-                InlineKeyboardButton(text="❓ Помощь", callback_data="user_help"),
+                InlineKeyboardButton(
+                    text="❓ Помощь",
+                    callback_data="user_help"
+                ),
             ],
         ]
     )

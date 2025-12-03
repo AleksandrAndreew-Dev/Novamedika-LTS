@@ -68,6 +68,7 @@ async def notify_pharmacists_about_new_question(question, db: AsyncSession):
                         text=message_text,
                         reply_markup=make_question_keyboard(question.uuid) if pharmacist.is_online else None
                     )
+                    logger.info(f"✅ Уведомление отправлено фармацевту {pharmacist.user.telegram_id} о вопросе {question.uuid}")
                     notified_count += 1
                     logger.info(f"Notification sent to pharmacist {pharmacist.user.telegram_id}")
 
