@@ -38,30 +38,31 @@ async def cmd_ask(message: Message):
     )
 
 @router.message(Command("my_questions"))
-@router.callback_query(F.data == "my_questions_callback")  # Альтернативный вариант
+@router.callback_query(F.data == "my_questions_callback")
 async def cmd_my_questions(
-    message_or_callback: Union[AiogramMessage, CallbackQuery],
+    update: Union[Message, CallbackQuery],
     db: AsyncSession,
     user: User,
     is_pharmacist: bool
 ):
-    """Показать вопросы пользователя или ответы фармацевта"""
-    # Определяем тип входящего объекта
-    if isinstance(message_or_callback, CallbackQuery):
-        message = message_or_callback.message
-        from_user = message_or_callback.from_user
+    """Показать вопросы пользователя или ответы фармацевта - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+
+    # Обрабатываем разные типы входящих данных
+    if isinstance(update, CallbackQuery):
+        message = update.message
+        from_user = update.from_user
         is_callback = True
     else:
-        message = message_or_callback
-        from_user = message.from_user
+        message = update
+        from_user = update.from_user
         is_callback = False
-    """Показать вопросы пользователя или ответы фармацевта - ОБНОВЛЕННАЯ ВЕРСИЯ С ФИО"""
-    logger.info(f"Command /my_questions from user {message.from_user.id}, is_pharmacist: {is_pharmacist}")
+
+    logger.info(f"Command /my_questions from user {from_user.id}, is_pharmacist: {is_pharmacist}")
 
     try:
         if is_pharmacist:
             # Для фармацевтов показываем вопросы, на которые они ответили
-            logger.info(f"Getting answered questions for pharmacist {user.telegram_id}")
+            logger.info(f"Getting answered questions for pharmacist {from_user.id}")
 
             result = await db.execute(
                 select(Question)
@@ -106,7 +107,7 @@ async def cmd_my_questions(
 
         else:
             # Для обычных пользователей показываем их вопросы
-            logger.info(f"Getting questions for user {user.telegram_id}")
+            logger.info(f"Getting questions for user {from_user.id}")
 
             result = await db.execute(
                 select(Question)
@@ -197,10 +198,10 @@ async def cmd_my_questions(
 
 
     except Exception as e:
-        logger.error(f"Error in cmd_my_questions for user {message.from_user.id}: {e}", exc_info=True)
+        logger.error(f"Error in cmd_my_questions for user {from_user.id}: {e}", exc_info=True)
         await message.answer("❌ Ошибка при получении ваших вопросов. Попробуйте позже.")
     if is_callback:
-            await message_or_callback.answer()
+        await update.answer()
 
 @router.message(Command("done"))
 async def cmd_done(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool):

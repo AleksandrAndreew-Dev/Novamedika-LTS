@@ -36,7 +36,7 @@ def get_reply_keyboard_with_webapp():
         keyboard=[[KeyboardButton(text="🔍 Поиск лекарств", web_app=web_app)]],
         resize_keyboard=True,
         one_time_keyboard=False,  # Не скрывать после нажатия
-        input_field_placeholder="Спросите фармацевта, например: можно ли детям принимать этот препарат?",
+        input_field_placeholder="Спросите фармацевта, например: витамины для детей",
     )
 
 
@@ -446,16 +446,9 @@ async def my_questions_callback(
     callback: CallbackQuery, db: AsyncSession, user: User, is_pharmacist: bool
 ):
     """Быстрый просмотр своих вопросов через кнопку"""
-    await callback.answer()
-
-    # Используем существующую функцию cmd_my_questions напрямую
-    message = callback.message
-    message.from_user = callback.from_user
-    message.text = "/my_questions"
-
+    # Вместо модификации message.from_user, передаем callback напрямую
     from bot.handlers.user_questions import cmd_my_questions
-
-    await cmd_my_questions(message, db, user, is_pharmacist)
+    await cmd_my_questions(callback, db, user, is_pharmacist)
 
 
 @router.callback_query(F.data == "user_help")
@@ -501,17 +494,11 @@ async def system_status_callback(
     callback: CallbackQuery, db: AsyncSession, is_pharmacist: bool
 ):
     """Статус системы через кнопку"""
-    await callback.answer()
-
     # Используем существующую функцию debug_status напрямую
     from bot.handlers.qa_handlers import debug_status
+    await debug_status(callback, db, is_pharmacist)
 
-    # Создаем Message-объект из callback
-    message = callback.message
-    # Добавляем недостающие атрибуты
-    message.from_user = callback.from_user
 
-    await debug_status(message, db, is_pharmacist)
 
 
 @router.callback_query(F.data == "clarify_question")
@@ -519,16 +506,9 @@ async def clarify_question_callback(
     callback: CallbackQuery, state: FSMContext, db: AsyncSession, user: User
 ):
     """Уточнение вопроса через кнопку"""
-    await callback.answer()
-
-    # Используем существующую функцию cmd_clarify напрямую
-    message = callback.message
-    message.from_user = callback.from_user
-    message.text = "/clarify"
-
-    from bot.handlers.user_questions import cmd_clarify
-
-    await cmd_clarify(message, state, db, user)
+    # Используем существующую функцию напрямую
+    from bot.handlers.clarify_handlers import clarify_command_handler
+    await clarify_command_handler(callback, state, db, user)
 
 
 @router.message(Command("cancel"))

@@ -5,13 +5,8 @@ from sqlalchemy import select, func
 from db.qa_models import Pharmacist, Question
 
 
-
-# services/assignment_service.py
-import logging
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from datetime import datetime
-from db.qa_models import Question, Pharmacist
+
 from utils.time_utils import get_utc_now_naive
 
 logger = logging.getLogger(__name__)
@@ -42,14 +37,11 @@ async def auto_assign_question(question, db: AsyncSession):
         return None
 
 
-
 class QuestionAssignmentService:
 
     @staticmethod
     async def assign_question_to_pharmacist(
-        question_id: str,
-        pharmacist_id: str,
-        db: AsyncSession
+        question_id: str, pharmacist_id: str, db: AsyncSession
     ) -> bool:
         """Назначить вопрос конкретному фармацевту"""
         try:
@@ -68,7 +60,9 @@ class QuestionAssignmentService:
             question.status = "in_progress"
 
             await db.commit()
-            logger.info(f"Question {question_id} assigned to pharmacist {pharmacist_id}")
+            logger.info(
+                f"Question {question_id} assigned to pharmacist {pharmacist_id}"
+            )
             return True
 
         except Exception as e:
@@ -78,8 +72,7 @@ class QuestionAssignmentService:
 
     @staticmethod
     async def get_question_taker(
-        question_id: str,
-        db: AsyncSession
+        question_id: str, db: AsyncSession
     ) -> Pharmacist | None:
         """Получить фармацевта, который взял вопрос"""
         try:
@@ -97,10 +90,7 @@ class QuestionAssignmentService:
             return None
 
     @staticmethod
-    async def should_notify_all_pharmacists(
-        question_id: str,
-        db: AsyncSession
-    ) -> bool:
+    async def should_notify_all_pharmacists(question_id: str, db: AsyncSession) -> bool:
         """Определить, нужно ли уведомлять всех фармацевтов"""
         try:
             # Проверяем, есть ли у вопроса назначенный фармацевт
