@@ -66,3 +66,44 @@ def make_clarification_keyboard(question_uuid: str) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="💬 Ответить на уточнение", callback_data=f"clarification_answer_{question_uuid}")]
         ]
     )
+
+
+# В файл qa_keyboard.py добавить
+
+def make_question_with_photo_keyboard(question_uuid: str) -> InlineKeyboardMarkup:
+    """Клавиатура для вопроса с возможностью запроса фото рецепта"""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="💬 Ответить на вопрос",
+                    callback_data=f"answer_{question_uuid}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📸 Запросить фото рецепта",
+                    callback_data=f"request_photo_{question_uuid}"
+                )
+            ]
+        ]
+    )
+
+def make_clarification_with_photo_keyboard(question_uuid: str) -> InlineKeyboardMarkup:
+    """Клавиатура для уточнения с возможностью запроса фото рецепта"""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="💬 Ответить на уточнение",
+                    callback_data=f"clarification_answer_{question_uuid}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📸 Запросить фото рецепта",
+                    callback_data=f"request_photo_{question_uuid}"
+                )
+            ]
+        ]
+    )

@@ -382,9 +382,8 @@ async def view_questions_callback(
                 )
 
                 # Для уточнений используем специальную клавиатуру
-                from bot.keyboards.qa_keyboard import make_clarification_keyboard
-
-                reply_markup = make_clarification_keyboard(question.uuid)
+                from bot.keyboards.qa_keyboard import make_clarification_with_photo_keyboard
+                reply_markup = make_clarification_with_photo_keyboard(question.uuid)
             else:
                 question_text = (
                     f"❓ Вопрос #{i}:\n{question.text}\n\n"
@@ -392,9 +391,8 @@ async def view_questions_callback(
                 )
 
                 # Для обычных вопросов используем обычную клавиатуру
-                from bot.keyboards.qa_keyboard import make_question_keyboard
-
-                reply_markup = make_question_keyboard(question.uuid)
+                from bot.keyboards.qa_keyboard import make_question_with_photo_keyboard
+                reply_markup = make_question_with_photo_keyboard(question.uuid)
 
             # Получаем пользователя
             user_result = await db.execute(
@@ -511,12 +509,20 @@ async def clarify_question_callback(
     await clarify_command_handler(callback, state, db, user)
 
 
+# В файл common_handlers.py добавить в universal_cancel
+
 @router.message(Command("cancel"))
 async def universal_cancel(message: Message, state: FSMContext):
     """Отмена текущего действия"""
     logger.info(f"Command /cancel from user {message.from_user.id}")
 
     current_state = await state.get_state()
+
+    if current_state == UserQAStates.waiting_for_prescription_photo:
+        await state.clear()
+        await message.answer("❌ Отправка фото рецепта отменена.")
+        return
+
     if current_state is None:
         await message.answer("❌ Нечего отменять.")
         return

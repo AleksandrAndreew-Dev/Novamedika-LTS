@@ -476,3 +476,276 @@ async def quick_clarify_callback(
     except Exception as e:
         logger.error(f"Error in quick_clarify_callback: {e}", exc_info=True)
         await callback.answer("❌ Ошибка при создании уточнения", show_alert=True)
+
+# В файл user_questions.py добавить
+
+@router.callback_query(F.data.startswith("send_prescription_photo_"))
+async def send_prescription_photo_callback(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db: AsyncSession,
+    user: User,
+    is_pharmacist: bool
+):
+    """Обработка нажатия кнопки отправки фото рецепта"""
+    if is_pharmacist:
+        await callback.answer("❌ Эта функция доступна только пользователям", show_alert=True)
+        return
+
+    question_uuid = callback.data.replace("send_prescription_photo_", "")
+
+    try:
+        # Получаем вопрос
+        result = await db.execute(
+            select(Question).where(Question.uuid == question_uuid)
+        )
+        question = result.scalar_one_or_none()
+
+        if not question or question.user_id != user.uuid:
+            await callback.answer("❌ Вопрос не найден или не принадлежит вам", show_alert=True)
+            return
+
+        # Устанавливаем состояние ожидания фото
+        await state.update_data(
+            prescription_photo_question_id=question_uuid,
+            prescription_photo_message_id=callback.message.message_id
+        )
+        await state.set_state(UserQAStates.waiting_for_prescription_photo)
+
+        await callback.message.answer(
+            "📸 <b>Отправка фото рецепта</b>\n\n"
+            "Пожалуйста, отправьте фото рецепта одним из способов:\n\n"
+            "1. <b>Как фото</b> - просто прикрепите фото к сообщению\n"
+            "2. <b>Как документ</b> - если нужно сохранить качество\n\n"
+            "💡 <b>Рекомендации:</b>\n"
+            "• Убедитесь, что все надписи читаемы\n"
+            "• Хорошее освещение\n"
+            "• Весь рецепт в кадре\n\n"
+            "Вы можете отправить несколько фото.\n"
+            "Когда закончите, нажмите /done\n"
+            "Для отмены: /cancel",
+            parse_mode="HTML"
+        )
+
+        await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Error in send_prescription_photo_callback: {e}", exc_info=True)
+        await callback.answer("❌ Ошибка при обработке запроса", show_alert=True)
+
+@router.message(UserQAStates.waiting_for_prescription_photo, F.photo)
+async def process_prescription_photo(
+    message: Message,
+    state: FSMContext,
+    db: AsyncSession,
+    user: User
+):
+    """Обработка отправленного фото рецепта"""
+    try:
+        state_data = await state.get_data()
+        question_uuid = state_data.get("prescription_photo_question_id")
+
+        if not question_uuid:
+            await message.answer("❌ Не удалось найти вопрос")
+            await state.clear()
+            return
+
+        # Получаем вопрос
+        result = await db.execute(
+            select(Question)
+            .options(
+                selectinload(Question.taken_pharmacist).selectinload(Pharmacist.user)
+            )
+            .where(Question.uuid == question_uuid)
+        )
+        question = result.scalar_one_or_none()
+
+        if not question:
+            await message.answer("❌ Вопрос не найден")
+            await state.clear()
+            return
+
+        # Сохраняем фото в базу
+        photo = message.photo[-1]  # Берем самую большую версию фото
+        from db.qa_models import PrescriptionPhoto
+
+        prescription_photo = PrescriptionPhoto(
+            question_id=question.uuid,
+            pharmacist_id=question.taken_by if question.taken_by else question.assigned_to,
+            file_id=photo.file_id,
+            file_type="photo",
+            caption=message.caption
+        )
+
+        db.add(prescription_photo)
+        await db.commit()
+
+        # Уведомляем фармацевта
+        if question.taken_pharmacist and question.taken_pharmacist.user:
+            pharmacist = question.taken_pharmacist
+
+            # Формируем ФИО пользователя
+            user_name = user.first_name or "Пользователь"
+            if user.last_name:
+                user_name = f"{user.first_name} {user.last_name}"
+
+            # Отправляем фото фармацевту
+            await message.bot.send_photo(
+                chat_id=pharmacist.user.telegram_id,
+                photo=photo.file_id,
+                caption=f"📸 <b>Получено фото рецепта</b>\n\n"
+                       f"👤 <b>От:</b> {user_name}\n"
+                       f"❓ <b>По вопросу:</b> {question.text[:100]}...\n"
+                       f"{'💬 <b>Описание:</b> ' + message.caption if message.caption else ''}",
+                parse_mode="HTML"
+            )
+
+        await message.answer(
+            "✅ Фото рецепта отправлено фармацевту!\n\n"
+            "Вы можете отправить еще фото или нажмите /done чтобы завершить."
+        )
+
+    except Exception as e:
+        logger.error(f"Error processing prescription photo: {e}", exc_info=True)
+        await message.answer("❌ Ошибка при обработке фото")
+
+@router.message(UserQAStates.waiting_for_prescription_photo, F.document)
+async def process_prescription_document(
+    message: Message,
+    state: FSMContext,
+    db: AsyncSession,
+    user: User
+):
+    """Обработка отправленного документа (фото рецепта как документ)"""
+    try:
+        state_data = await state.get_data()
+        question_uuid = state_data.get("prescription_photo_question_id")
+
+        if not question_uuid:
+            await message.answer("❌ Не удалось найти вопрос")
+            await state.clear()
+            return
+
+        # Проверяем, что это изображение
+        document = message.document
+        if not document.mime_type.startswith('image/'):
+            await message.answer("❌ Пожалуйста, отправьте изображение (фото)")
+            return
+
+        # Получаем вопрос
+        result = await db.execute(
+            select(Question)
+            .options(
+                selectinload(Question.taken_pharmacist).selectinload(Pharmacist.user)
+            )
+            .where(Question.uuid == question_uuid)
+        )
+        question = result.scalar_one_or_none()
+
+        if not question:
+            await message.answer("❌ Вопрос не найден")
+            await state.clear()
+            return
+
+        # Сохраняем документ в базу
+        from db.qa_models import PrescriptionPhoto
+
+        prescription_photo = PrescriptionPhoto(
+            question_id=question.uuid,
+            pharmacist_id=question.taken_by if question.taken_by else question.assigned_to,
+            file_id=document.file_id,
+            file_type="document",
+            caption=message.caption
+        )
+
+        db.add(prescription_photo)
+        await db.commit()
+
+        # Уведомляем фармацевта
+        if question.taken_pharmacist and question.taken_pharmacist.user:
+            pharmacist = question.taken_pharmacist
+
+            user_name = user.first_name or "Пользователь"
+            if user.last_name:
+                user_name = f"{user.first_name} {user.last_name}"
+
+            # Отправляем документ фармацевту
+            await message.bot.send_document(
+                chat_id=pharmacist.user.telegram_id,
+                document=document.file_id,
+                caption=f"📄 <b>Получен документ с рецептом</b>\n\n"
+                       f"👤 <b>От:</b> {user_name}\n"
+                       f"❓ <b>По вопросу:</b> {question.text[:100]}...\n"
+                       f"{'💬 <b>Описание:</b> ' + message.caption if message.caption else ''}",
+                parse_mode="HTML"
+            )
+
+        await message.answer(
+            "✅ Документ с рецептом отправлен фармацевту!\n\n"
+            "Вы можете отправить еще файлы или нажмите /done чтобы завершить."
+        )
+
+    except Exception as e:
+        logger.error(f"Error processing prescription document: {e}", exc_info=True)
+        await message.answer("❌ Ошибка при обработке документа")
+
+@router.message(Command("done"), UserQAStates.waiting_for_prescription_photo)
+async def finish_photo_upload(
+    message: Message,
+    state: FSMContext,
+    db: AsyncSession,
+    user: User
+):
+    """Завершение загрузки фото рецепта"""
+    try:
+        state_data = await state.get_data()
+        question_uuid = state_data.get("prescription_photo_question_id")
+        original_message_id = state_data.get("prescription_photo_message_id")
+
+        if question_uuid:
+            # Получаем вопрос
+            result = await db.execute(
+                select(Question)
+                .options(selectinload(Question.taken_pharmacist).selectinload(Pharmacist.user))
+                .where(Question.uuid == question_uuid)
+            )
+            question = result.scalar_one_or_none()
+
+            if question and question.taken_pharmacist and question.taken_pharmacist.user:
+                # Уведомляем фармацевта о завершении загрузки
+                pharmacist = question.taken_pharmacist
+
+                user_name = user.first_name or "Пользователь"
+                if user.last_name:
+                    user_name = f"{user.first_name} {user.last_name}"
+
+                await message.bot.send_message(
+                    chat_id=pharmacist.user.telegram_id,
+                    text=f"✅ <b>Пользователь завершил отправку фото рецепта</b>\n\n"
+                         f"👤 <b>Пользователь:</b> {user_name}\n"
+                         f"❓ <b>Вопрос:</b> {question.text[:150]}...\n\n"
+                         f"Все фото рецепта получены и сохранены.",
+                    parse_mode="HTML"
+                )
+
+        # Редактируем оригинальное сообщение (убираем кнопку)
+        try:
+            await message.bot.edit_message_reply_markup(
+                chat_id=message.chat.id,
+                message_id=original_message_id,
+                reply_markup=None
+            )
+        except:
+            pass
+
+        await message.answer(
+            "✅ Загрузка фото рецепта завершена!\n\n"
+            "Фармацевт получил все отправленные вами фото и ознакомится с ними."
+        )
+
+        await state.clear()
+
+    except Exception as e:
+        logger.error(f"Error finishing photo upload: {e}", exc_info=True)
+        await message.answer("❌ Ошибка при завершении загрузки")
+        await state.clear()
