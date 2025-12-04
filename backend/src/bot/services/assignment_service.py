@@ -77,7 +77,9 @@ class QuestionAssignmentService:
         try:
             result = await db.execute(
                 select(Question)
-                .options(selectinload(Question.taken_pharmacist))
+                .options(
+                    selectinload(Question.taken_pharmacist).selectinload(Pharmacist.user)
+                )
                 .where(Question.uuid == question_id)
             )
             question = result.scalar_one_or_none()

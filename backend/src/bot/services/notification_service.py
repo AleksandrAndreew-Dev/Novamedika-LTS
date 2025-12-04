@@ -26,15 +26,19 @@ async def notify_pharmacists_about_new_question(question, db: AsyncSession):
             # Уведомляем всех активных фармацевтов
             result = await db.execute(
                 select(Pharmacist)
-                .join(User, Pharmacist.user_id == User.uuid)
-                .options(selectinload(Pharmacist.user))
                 .where(Pharmacist.is_active == True)
             )
             pharmacists = result.scalars().all()
+
+            # Загружаем user для каждого фармацевта
+            for pharmacist in pharmacists:
+                await db.refresh(pharmacist, attribute_names=['user'])
         else:
             # Уведомляем только назначенного фармацевта
             taker = await QuestionAssignmentService.get_question_taker(question.uuid, db)
             pharmacists = [taker] if taker else []
+            if taker:
+                await db.refresh(taker, attribute_names=['user'])
 
         if not pharmacists:
             logger.info("No pharmacists to notify")
@@ -92,17 +96,23 @@ async def notify_about_clarification(question, original_question, db: AsyncSessi
             # Если никто не взял вопрос, уведомляем всех онлайн фармацевтов
             result = await db.execute(
                 select(Pharmacist)
-                .join(User, Pharmacist.user_id == User.uuid)
-                .options(selectinload(Pharmacist.user))
                 .where(
-                    Pharmacist.is_active == True,
-                    Pharmacist.is_online == True
+                    and_(
+                        Pharmacist.is_active == True,
+                        Pharmacist.is_online == True
+                    )
                 )
             )
             pharmacists = result.scalars().all()
+
+            # Загружаем user для каждого фармацевта отдельным запросом
+            for pharmacist in pharmacists:
+                await db.refresh(pharmacist, attribute_names=['user'])
         else:
             # Уведомляем только фармацевта, который взял вопрос
             pharmacists = [taker]
+            # Загружаем user для taker
+            await db.refresh(taker, attribute_names=['user'])
 
         for pharmacist in pharmacists:
             try:
@@ -137,8 +147,6 @@ async def get_online_pharmacists(db: AsyncSession):
     try:
         result = await db.execute(
             select(Pharmacist)
-            .join(User, Pharmacist.user_id == User.uuid)
-            .options(selectinload(Pharmacist.user))
             .where(
                 and_(
                     Pharmacist.is_online == True,
@@ -147,6 +155,11 @@ async def get_online_pharmacists(db: AsyncSession):
             )
         )
         pharmacists = result.scalars().all()
+
+        # Загружаем user для каждого фармацевта
+        for pharmacist in pharmacists:
+            await db.refresh(pharmacist, attribute_names=['user'])
+
         logger.info(f"Found {len(pharmacists)} online pharmacists")
         return pharmacists
     except Exception as e:
