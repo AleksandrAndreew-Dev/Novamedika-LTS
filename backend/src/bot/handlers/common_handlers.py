@@ -1,4 +1,4 @@
-from tkinter import N
+
 from aiogram.types import Message as AiogramMessage
 from typing import Optional
 from aiogram.types import WebAppInfo
