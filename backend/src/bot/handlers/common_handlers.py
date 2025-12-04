@@ -557,9 +557,11 @@ async def unknown_command(message: Message):
 
 @router.callback_query(F.data == "start_registration")
 async def start_registration_callback(
-    callback: CallbackQuery, state: FSMContext, db: AsyncSession, is_pharmacist: bool
+    callback: CallbackQuery,
+    state: FSMContext,
+    is_pharmacist: bool
 ):
-    """Запуск регистрации через кнопку"""
+    """Запуск регистрации через кнопку - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
     if is_pharmacist:
         await callback.answer(
             "❌ Вы уже зарегистрированы как фармацевт!", show_alert=True
@@ -568,14 +570,21 @@ async def start_registration_callback(
 
     await callback.answer()
 
-    # Используем существующую функцию cmd_register напрямую
-    message = callback.message
-    message.from_user = callback.from_user
-    message.text = "/register"
+    # НЕ создаем фиктивный Message, а напрямую переходим к регистрации
+    cancel_keyboard = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]],
+        resize_keyboard=True
+    )
 
-    from bot.handlers.registration import cmd_register
+    await callback.message.answer(
+        "🔐 Регистрация фармацевта\n\n"
+        "Для начала регистрации введите секретное слово:",
+        reply_markup=cancel_keyboard
+    )
 
-    await cmd_register(message, state, db, is_pharmacist)
+    # Устанавливаем состояние регистрации
+    from bot.handlers.registration import RegistrationStates
+    await state.set_state(RegistrationStates.waiting_secret_word)
 
 
 @router.callback_query(F.data == "registration_info")
