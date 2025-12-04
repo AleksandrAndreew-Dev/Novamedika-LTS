@@ -566,13 +566,32 @@ async def process_prescription_photo(
             await state.clear()
             return
 
+        # ИСПРАВЛЕНИЕ: Находим фармацевта, который взял вопрос или назначен
+        pharmacist_id = question.taken_by or question.assigned_to
+
+        # Если фармацевт не назначен, ищем любого активного фармацевта
+        if not pharmacist_id:
+            # Ищем любого активного онлайн фармацевта
+            pharmacist_result = await db.execute(
+                select(Pharmacist)
+                .where(Pharmacist.is_active == True)
+                .limit(1)
+            )
+            pharmacist_obj = pharmacist_result.scalar_one_or_none()
+
+            if pharmacist_obj:
+                pharmacist_id = pharmacist_obj.uuid
+            else:
+                # Если вообще нет активных фармацевтов, сохраняем фото без pharmacist_id
+                pharmacist_id = None
+
         # Сохраняем фото в базу
         photo = message.photo[-1]  # Берем самую большую версию фото
         from db.qa_models import PrescriptionPhoto
 
         prescription_photo = PrescriptionPhoto(
             question_id=question.uuid,
-            pharmacist_id=question.taken_by if question.taken_by else question.assigned_to,
+            pharmacist_id=pharmacist_id,  # Может быть None
             file_id=photo.file_id,
             file_type="photo",
             caption=message.caption
@@ -581,25 +600,31 @@ async def process_prescription_photo(
         db.add(prescription_photo)
         await db.commit()
 
-        # Уведомляем фармацевта
-        if question.taken_pharmacist and question.taken_pharmacist.user:
-            pharmacist = question.taken_pharmacist
-
-            # Формируем ФИО пользователя
-            user_name = user.first_name or "Пользователь"
-            if user.last_name:
-                user_name = f"{user.first_name} {user.last_name}"
-
-            # Отправляем фото фармацевту
-            await message.bot.send_photo(
-                chat_id=pharmacist.user.telegram_id,
-                photo=photo.file_id,
-                caption=f"📸 <b>Получено фото рецепта</b>\n\n"
-                       f"👤 <b>От:</b> {user_name}\n"
-                       f"❓ <b>По вопросу:</b> {question.text[:100]}...\n"
-                       f"{'💬 <b>Описание:</b> ' + message.caption if message.caption else ''}",
-                parse_mode="HTML"
+        # Уведомляем фармацевта, если он есть
+        if pharmacist_id:
+            pharmacist_result = await db.execute(
+                select(Pharmacist)
+                .options(selectinload(Pharmacist.user))
+                .where(Pharmacist.uuid == pharmacist_id)
             )
+            pharmacist = pharmacist_result.scalar_one_or_none()
+
+            if pharmacist and pharmacist.user:
+                # Формируем ФИО пользователя
+                user_name = user.first_name or "Пользователь"
+                if user.last_name:
+                    user_name = f"{user.first_name} {user.last_name}"
+
+                # Отправляем фото фармацевту
+                await message.bot.send_photo(
+                    chat_id=pharmacist.user.telegram_id,
+                    photo=photo.file_id,
+                    caption=f"📸 <b>Получено фото рецепта</b>\n\n"
+                           f"👤 <b>От:</b> {user_name}\n"
+                           f"❓ <b>По вопросу:</b> {question.text[:100]}...\n"
+                           f"{'💬 <b>Описание:</b> ' + message.caption if message.caption else ''}",
+                    parse_mode="HTML"
+                )
 
         await message.answer(
             "✅ Фото рецепта отправлено фармацевту!\n\n"
@@ -648,12 +673,29 @@ async def process_prescription_document(
             await state.clear()
             return
 
+        # ИСПРАВЛЕНИЕ: Находим фармацевта, который взял вопрос или назначен
+        pharmacist_id = question.taken_by or question.assigned_to
+
+        # Если фармацевт не назначен, ищем любого активного фармацевта
+        # В process_prescription_photo, после if not pharmacist_id:
+        if not pharmacist_id:
+            # Автоматически назначаем вопрос фармацевту
+            from bot.services.assignment_service import auto_assign_question
+            assigned_pharmacist = await auto_assign_question(question, db)
+            if assigned_pharmacist:
+                pharmacist_id = assigned_pharmacist.uuid
+                question.assigned_to = pharmacist_id
+                await db.commit()
+            else:
+                # Если не удалось назначить, сохраняем с pharmacist_id = None
+                pharmacist_id = None
+
         # Сохраняем документ в базу
         from db.qa_models import PrescriptionPhoto
 
         prescription_photo = PrescriptionPhoto(
             question_id=question.uuid,
-            pharmacist_id=question.taken_by if question.taken_by else question.assigned_to,
+            pharmacist_id=pharmacist_id,  # Может быть None
             file_id=document.file_id,
             file_type="document",
             caption=message.caption
@@ -662,24 +704,30 @@ async def process_prescription_document(
         db.add(prescription_photo)
         await db.commit()
 
-        # Уведомляем фармацевта
-        if question.taken_pharmacist and question.taken_pharmacist.user:
-            pharmacist = question.taken_pharmacist
-
-            user_name = user.first_name or "Пользователь"
-            if user.last_name:
-                user_name = f"{user.first_name} {user.last_name}"
-
-            # Отправляем документ фармацевту
-            await message.bot.send_document(
-                chat_id=pharmacist.user.telegram_id,
-                document=document.file_id,
-                caption=f"📄 <b>Получен документ с рецептом</b>\n\n"
-                       f"👤 <b>От:</b> {user_name}\n"
-                       f"❓ <b>По вопросу:</b> {question.text[:100]}...\n"
-                       f"{'💬 <b>Описание:</b> ' + message.caption if message.caption else ''}",
-                parse_mode="HTML"
+        # Уведомляем фармацевта, если он есть
+        if pharmacist_id:
+            pharmacist_result = await db.execute(
+                select(Pharmacist)
+                .options(selectinload(Pharmacist.user))
+                .where(Pharmacist.uuid == pharmacist_id)
             )
+            pharmacist = pharmacist_result.scalar_one_or_none()
+
+            if pharmacist and pharmacist.user:
+                user_name = user.first_name or "Пользователь"
+                if user.last_name:
+                    user_name = f"{user.first_name} {user.last_name}"
+
+                # Отправляем документ фармацевту
+                await message.bot.send_document(
+                    chat_id=pharmacist.user.telegram_id,
+                    document=document.file_id,
+                    caption=f"📄 <b>Получен документ с рецептом</b>\n\n"
+                           f"👤 <b>От:</b> {user_name}\n"
+                           f"❓ <b>По вопросу:</b> {question.text[:100]}...\n"
+                           f"{'💬 <b>Описание:</b> ' + message.caption if message.caption else ''}",
+                    parse_mode="HTML"
+                )
 
         await message.answer(
             "✅ Документ с рецептом отправлен фармацевту!\n\n"

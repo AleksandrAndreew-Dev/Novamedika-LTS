@@ -115,7 +115,7 @@ class PrescriptionPhoto(Base):
         UUID(as_uuid=True), ForeignKey("qa_questions.uuid"), nullable=False
     )
     pharmacist_id = Column(
-        UUID(as_uuid=True), ForeignKey("qa_pharmacists.uuid"), nullable=False
+        UUID(as_uuid=True), ForeignKey("qa_pharmacists.uuid"), nullable=True  # Изменено на nullable=True
     )
     file_id = Column(String(500), nullable=False)  # Telegram file_id
     file_type = Column(String(20), default="photo")  # photo, document
