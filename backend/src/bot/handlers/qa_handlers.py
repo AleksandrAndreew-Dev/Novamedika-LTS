@@ -1,4 +1,4 @@
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from typing import Union
 
 from aiogram import Router, F
@@ -7,6 +7,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
+from sqlalchemy.orm import selectinload  # Добавьте эту строку
 from db.qa_models import User, Pharmacist
 from db.qa_models import Question
 from db.qa_models import Answer
@@ -26,7 +27,6 @@ from utils.time_utils import get_utc_now_naive
 logger = logging.getLogger(__name__)
 
 router = Router()
-
 
 @router.message(Command("online"))
 async def set_online(
@@ -223,7 +223,7 @@ async def cmd_questions(
                 )
 
                 # Для обычных вопросов используем обычную клавиатуру
-               
+
                 from bot.keyboards.qa_keyboard import make_question_with_photo_keyboard
                 reply_markup = make_question_with_photo_keyboard(question.uuid)
 

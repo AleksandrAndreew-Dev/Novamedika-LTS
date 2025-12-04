@@ -8,6 +8,7 @@ from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
+from sqlalchemy.orm import selectinload  # Добавьте эту строку
 
 from db.qa_models import User, Question, Answer, Pharmacist
 from bot.handlers.qa_states import UserQAStates
