@@ -1,3 +1,4 @@
+from tkinter import N
 from aiogram.types import Message as AiogramMessage
 from typing import Optional
 from aiogram.types import WebAppInfo
@@ -26,24 +27,16 @@ logger = logging.getLogger(__name__)
 
 router = Router()
 
+
 def get_reply_keyboard_with_webapp():
     """Создает reply-клавиатуру с Web App кнопкой"""
-    web_app = WebAppInfo(
-        url="https://spravka.novamedika.com/"
-    )
+    web_app = WebAppInfo(url="https://spravka.novamedika.com/")
 
     return ReplyKeyboardMarkup(
-        keyboard=[
-            [
-                KeyboardButton(
-                    text="🔍 Поиск лекарств",
-                    web_app=web_app
-                )
-            ]
-        ],
+        keyboard=[[KeyboardButton(text="🔍 Поиск лекарств", web_app=web_app)]],
         resize_keyboard=True,
         one_time_keyboard=False,  # Не скрывать после нажатия
-        input_field_placeholder="Нажмите для поиска лекарств"  # Подсказка в поле ввода
+        input_field_placeholder="Спросите фармацевта, например: можно ли детям принимать этот препарат?",
     )
 
 
@@ -84,18 +77,16 @@ def get_user_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🔍 Поиск лекарств",
-                    callback_data="search_drugs"
+                    text="🔍 Поиск лекарств и бронирование",
+                    callback_data="search_drugs",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="📖 Мои вопросы",
-                    callback_data="my_questions"
+                    text="📖 Мои вопросы", callback_data="my_questions"
                 ),
                 InlineKeyboardButton(
-                    text="✍️ Уточнить вопрос",
-                    callback_data="clarify_question"
+                    text="✍️ Уточнить вопрос", callback_data="clarify_question"
                 ),
             ],
             [
@@ -103,13 +94,11 @@ def get_user_keyboard():
                     text="👨‍⚕️ Я фармацевт / Регистрация",
                     callback_data="i_am_pharmacist",
                 ),
-                InlineKeyboardButton(
-                    text="❓ Помощь",
-                    callback_data="user_help"
-                ),
+                InlineKeyboardButton(text="❓ Помощь", callback_data="user_help"),
             ],
         ]
     )
+
 
 @router.message(Command("hide_keyboard"))
 async def hide_keyboard(message: Message):
@@ -118,9 +107,10 @@ async def hide_keyboard(message: Message):
 
     await message.answer(
         "⌨️ Клавиатура скрыта. Используйте /search чтобы вернуть.",
-        reply_markup=ReplyKeyboardRemove()
+        reply_markup=ReplyKeyboardRemove(),
     )
-    
+
+
 @router.message(Command("start"))
 async def cmd_start(
     message: Message,
@@ -155,21 +145,17 @@ async def cmd_start(
             "📝 <b>Просто напишите ваш вопрос в чат!</b>\n\n"
             "Или используйте кнопки ниже:",
             parse_mode="HTML",
-            reply_markup=reply_kb
+            reply_markup=reply_kb,
         )
 
         # Дополнительно показываем inline-кнопки для других действий
-        await message.answer(
-            "Другие действия:",
-            reply_markup=get_user_keyboard()
-        )
+        await message.answer("Другие действия:", reply_markup=get_user_keyboard())
+
 
 @router.message(Command("search"))
 @router.callback_query(F.data == "search_drugs")
 async def show_search_webapp(
-    update: Message | CallbackQuery,
-    state: FSMContext,
-    is_pharmacist: bool
+    update: Message | CallbackQuery, state: FSMContext, is_pharmacist: bool
 ):
     """Показать Web App для поиска лекарств"""
     # Очищаем состояние
@@ -179,24 +165,19 @@ async def show_search_webapp(
     reply_kb = get_reply_keyboard_with_webapp()
 
     message_text = (
-        "🔍 <b>Поиск лекарств</b>\n\n"
-        "Нажмите на кнопку ниже, чтобы открыть справочник лекарств.\n"
-        "Там вы сможете найти информацию о препаратах, их аналоги и цены."
+        "🔍 <b>Поиск и бронирование лекарств</b>\n\n"
+        "Нажмите на кнопку ниже, чтобы открыть справку по аптекам.\n"
+        "Узнайте цены, аналоги и забронируйте препарат заранее."
     )
 
     if isinstance(update, CallbackQuery):
         await update.message.answer(
-            message_text,
-            parse_mode="HTML",
-            reply_markup=reply_kb
+            message_text, parse_mode="HTML", reply_markup=reply_kb
         )
         await update.answer()
     else:
-        await update.answer(
-            message_text,
-            parse_mode="HTML",
-            reply_markup=reply_kb
-        )
+        await update.answer(message_text, parse_mode="HTML", reply_markup=reply_kb)
+
 
 @router.message(Command("help"))
 async def cmd_help(message: Message, is_pharmacist: bool):
