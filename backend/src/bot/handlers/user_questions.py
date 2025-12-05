@@ -541,7 +541,7 @@ async def process_prescription_photo(
     db: AsyncSession,
     user: User
 ):
-    """Обработка отправленного фото рецепта"""
+    """Обработка отправленного фото рецепта - БЕЗ СОХРАНЕНИЯ В БД"""
     try:
         state_data = await state.get_data()
         question_uuid = state_data.get("prescription_photo_question_id")
@@ -551,7 +551,7 @@ async def process_prescription_photo(
             await state.clear()
             return
 
-        # Получаем вопрос
+        # Получаем вопрос и фармацевта
         result = await db.execute(
             select(Question)
             .options(
@@ -561,45 +561,31 @@ async def process_prescription_photo(
         )
         question = result.scalar_one_or_none()
 
-        if not question:
-            await message.answer("❌ Вопрос не найден")
+        if not question or not question.taken_pharmacist:
+            await message.answer("❌ Вопрос или фармацевт не найдены")
             await state.clear()
             return
 
-        # Сохраняем фото в базу
+        pharmacist = question.taken_pharmacist
+
+        # Формируем ФИО пользователя
+        user_name = user.first_name or "Пользователь"
+        if user.last_name:
+            user_name = f"{user.first_name} {user.last_name}"
+
+        # Отправляем фото фармацевту напрямую (без сохранения в БД)
         photo = message.photo[-1]  # Берем самую большую версию фото
-        from db.qa_models import PrescriptionPhoto
 
-        prescription_photo = PrescriptionPhoto(
-            question_id=question.uuid,
-            pharmacist_id=question.taken_by if question.taken_by else question.assigned_to,
-            file_id=photo.file_id,
-            file_type="photo",
-            caption=message.caption
+        await message.bot.send_photo(
+            chat_id=pharmacist.user.telegram_id,
+            photo=photo.file_id,
+            caption=f"📸 <b>Получено фото рецепта</b>\n\n"
+                   f"👤 <b>От:</b> {user_name}\n"
+                   f"❓ <b>По вопросу:</b> {question.text[:100]}...\n"
+                   f"{'💬 <b>Описание:</b> ' + message.caption if message.caption else ''}\n\n"
+                   f"⚠️ <i>Фото временное и не сохранено в системе</i>",
+            parse_mode="HTML"
         )
-
-        db.add(prescription_photo)
-        await db.commit()
-
-        # Уведомляем фармацевта
-        if question.taken_pharmacist and question.taken_pharmacist.user:
-            pharmacist = question.taken_pharmacist
-
-            # Формируем ФИО пользователя
-            user_name = user.first_name or "Пользователь"
-            if user.last_name:
-                user_name = f"{user.first_name} {user.last_name}"
-
-            # Отправляем фото фармацевту
-            await message.bot.send_photo(
-                chat_id=pharmacist.user.telegram_id,
-                photo=photo.file_id,
-                caption=f"📸 <b>Получено фото рецепта</b>\n\n"
-                       f"👤 <b>От:</b> {user_name}\n"
-                       f"❓ <b>По вопросу:</b> {question.text[:100]}...\n"
-                       f"{'💬 <b>Описание:</b> ' + message.caption if message.caption else ''}",
-                parse_mode="HTML"
-            )
 
         await message.answer(
             "✅ Фото рецепта отправлено фармацевту!\n\n"
@@ -608,7 +594,7 @@ async def process_prescription_photo(
 
     except Exception as e:
         logger.error(f"Error processing prescription photo: {e}", exc_info=True)
-        await message.answer("❌ Ошибка при обработке фото")
+        await message.answer("❌ Ошибка при отправке фото")
 
 @router.message(UserQAStates.waiting_for_prescription_photo, F.document)
 async def process_prescription_document(
@@ -617,7 +603,7 @@ async def process_prescription_document(
     db: AsyncSession,
     user: User
 ):
-    """Обработка отправленного документа (фото рецепта как документ)"""
+    """Обработка отправленного документа (фото рецепта как документ) - БЕЗ СОХРАНЕНИЯ В БД"""
     try:
         state_data = await state.get_data()
         question_uuid = state_data.get("prescription_photo_question_id")
@@ -633,7 +619,7 @@ async def process_prescription_document(
             await message.answer("❌ Пожалуйста, отправьте изображение (фото)")
             return
 
-        # Получаем вопрос
+        # Получаем вопрос и фармацевта
         result = await db.execute(
             select(Question)
             .options(
@@ -643,43 +629,29 @@ async def process_prescription_document(
         )
         question = result.scalar_one_or_none()
 
-        if not question:
-            await message.answer("❌ Вопрос не найден")
+        if not question or not question.taken_pharmacist:
+            await message.answer("❌ Вопрос или фармацевт не найдены")
             await state.clear()
             return
 
-        # Сохраняем документ в базу
-        from db.qa_models import PrescriptionPhoto
+        pharmacist = question.taken_pharmacist
 
-        prescription_photo = PrescriptionPhoto(
-            question_id=question.uuid,
-            pharmacist_id=question.taken_by if question.taken_by else question.assigned_to,
-            file_id=document.file_id,
-            file_type="document",
-            caption=message.caption
+        # Формируем ФИО пользователя
+        user_name = user.first_name or "Пользователь"
+        if user.last_name:
+            user_name = f"{user.first_name} {user.last_name}"
+
+        # Отправляем документ фармацевту напрямую
+        await message.bot.send_document(
+            chat_id=pharmacist.user.telegram_id,
+            document=document.file_id,
+            caption=f"📄 <b>Получен документ с рецептом</b>\n\n"
+                   f"👤 <b>От:</b> {user_name}\n"
+                   f"❓ <b>По вопросу:</b> {question.text[:100]}...\n"
+                   f"{'💬 <b>Описание:</b> ' + message.caption if message.caption else ''}\n\n"
+                   f"⚠️ <i>Документ временный и не сохранен в системе</i>",
+            parse_mode="HTML"
         )
-
-        db.add(prescription_photo)
-        await db.commit()
-
-        # Уведомляем фармацевта
-        if question.taken_pharmacist and question.taken_pharmacist.user:
-            pharmacist = question.taken_pharmacist
-
-            user_name = user.first_name or "Пользователь"
-            if user.last_name:
-                user_name = f"{user.first_name} {user.last_name}"
-
-            # Отправляем документ фармацевту
-            await message.bot.send_document(
-                chat_id=pharmacist.user.telegram_id,
-                document=document.file_id,
-                caption=f"📄 <b>Получен документ с рецептом</b>\n\n"
-                       f"👤 <b>От:</b> {user_name}\n"
-                       f"❓ <b>По вопросу:</b> {question.text[:100]}...\n"
-                       f"{'💬 <b>Описание:</b> ' + message.caption if message.caption else ''}",
-                parse_mode="HTML"
-            )
 
         await message.answer(
             "✅ Документ с рецептом отправлен фармацевту!\n\n"
@@ -688,7 +660,7 @@ async def process_prescription_document(
 
     except Exception as e:
         logger.error(f"Error processing prescription document: {e}", exc_info=True)
-        await message.answer("❌ Ошибка при обработке документа")
+        await message.answer("❌ Ошибка при отправке документа")
 
 @router.message(Command("done"), UserQAStates.waiting_for_prescription_photo)
 async def finish_photo_upload(
@@ -697,14 +669,14 @@ async def finish_photo_upload(
     db: AsyncSession,
     user: User
 ):
-    """Завершение загрузки фото рецепта"""
+    """Завершение загрузки фото рецепта - БЕЗ БД"""
     try:
         state_data = await state.get_data()
         question_uuid = state_data.get("prescription_photo_question_id")
         original_message_id = state_data.get("prescription_photo_message_id")
 
         if question_uuid:
-            # Получаем вопрос
+            # Получаем вопрос и фармацевта
             result = await db.execute(
                 select(Question)
                 .options(selectinload(Question.taken_pharmacist).selectinload(Pharmacist.user))
@@ -725,7 +697,7 @@ async def finish_photo_upload(
                     text=f"✅ <b>Пользователь завершил отправку фото рецепта</b>\n\n"
                          f"👤 <b>Пользователь:</b> {user_name}\n"
                          f"❓ <b>Вопрос:</b> {question.text[:150]}...\n\n"
-                         f"Все фото рецепта получены и сохранены.",
+                         f"Все фото рецепта получены и готовы для просмотра.",
                     parse_mode="HTML"
                 )
 
@@ -741,7 +713,7 @@ async def finish_photo_upload(
 
         await message.answer(
             "✅ Загрузка фото рецепта завершена!\n\n"
-            "Фармацевт получил все отправленные вами фото и ознакомится с ними."
+            "Фармацевт получил все отправленные вами фото."
         )
 
         await state.clear()

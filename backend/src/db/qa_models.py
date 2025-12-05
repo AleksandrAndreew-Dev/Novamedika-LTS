@@ -107,20 +107,3 @@ class Answer(Base):
 
 
 
-class PrescriptionPhoto(Base):
-    __tablename__ = "qa_prescription_photos"
-
-    uuid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    question_id = Column(
-        UUID(as_uuid=True), ForeignKey("qa_questions.uuid"), nullable=False
-    )
-    pharmacist_id = Column(
-        UUID(as_uuid=True), ForeignKey("qa_pharmacists.uuid"), nullable=False
-    )
-    file_id = Column(String(500), nullable=False)  # Telegram file_id
-    file_type = Column(String(20), default="photo")  # photo, document
-    caption = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=get_utc_now_naive)
-
-    question = relationship("Question", backref="prescription_photos")
-    pharmacist = relationship("Pharmacist", backref="requested_photos")
