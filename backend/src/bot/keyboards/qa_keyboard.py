@@ -4,6 +4,99 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+# qa_keyboard.py - НОВЫЕ КЛАВИАТУРЫ
+
+def make_pharmacist_dialog_keyboard(question_uuid: str):
+    """Клавиатура для фармацевта в диалоге"""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📸 Запросить фото рецепта",
+                    callback_data=f"request_photo_{question_uuid}"
+                ),
+                InlineKeyboardButton(
+                    text="💬 Ответить",
+                    callback_data=f"answer_{question_uuid}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✅ Завершить вопрос",
+                    callback_data=f"complete_{question_uuid}"
+                )
+            ]
+        ]
+    )
+
+def make_question_list_keyboard(question_uuid: str):
+    """Клавиатура для вопроса в списке (до взятия)"""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="💬 Ответить",
+                    callback_data=f"answer_{question_uuid}"
+                )
+            ]
+        ]
+    )
+
+def make_user_response_keyboard(question_uuid: str, photo_requested: bool = False):
+    """Клавиатура для пользователя после получения сообщения от фармацевта"""
+    buttons = []
+
+    # Кнопка уточнения всегда есть
+    buttons.append([
+        InlineKeyboardButton(
+            text="✍️ Уточнить вопрос",
+            callback_data=f"quick_clarify_{question_uuid}"
+        )
+    ])
+
+    # Кнопка фото только если запрошено
+    if photo_requested:
+        buttons.append([
+            InlineKeyboardButton(
+                text="📸 Отправить фото рецепта",
+                callback_data=f"send_prescription_photo_{question_uuid}"
+            )
+        ])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+# В qa_keyboard.py добавляем
+def make_user_dialog_keyboard(question_uuid: str, photo_requested: bool = False):
+    """Клавиатура для пользователя в диалоге"""
+    buttons = []
+
+    # Кнопка уточнения
+    buttons.append([
+        InlineKeyboardButton(
+            text="✍️ Уточнить вопрос",
+            callback_data=f"quick_clarify_{question_uuid}"
+        )
+    ])
+
+    # Кнопка фото только если запрошено
+    if photo_requested:
+        buttons.append([
+            InlineKeyboardButton(
+                text="📸 Отправить фото рецепта",
+                callback_data=f"send_prescription_photo_{question_uuid}"
+            )
+        ])
+
+    # Кнопка завершения диалога
+    buttons.append([
+        InlineKeyboardButton(
+            text="✅ Завершить диалог",
+            callback_data=f"complete_by_user_{question_uuid}"
+        )
+    ])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
 def make_question_keyboard(question_uuid: str) -> InlineKeyboardMarkup:
     """
     Создает клавиатуру с кнопкой ответа на вопрос

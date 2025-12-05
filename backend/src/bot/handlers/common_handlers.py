@@ -339,11 +339,12 @@ async def go_offline_callback(
 
 # В common_handlers.py обновляем view_questions_callback
 
+# Обновляем view_questions_callback для использования новой клавиатуры
 @router.callback_query(F.data == "view_questions")
 async def view_questions_callback(
     callback: CallbackQuery, db: AsyncSession, is_pharmacist: bool, pharmacist: object
 ):
-    """Быстрый просмотр вопросов через кнопку - ИСПРАВЛЕННАЯ ВЕРСИЯ С ПРАВИЛЬНЫМИ ФУНКЦИЯМИ"""
+    """Быстрый просмотр вопросов через кнопку"""
     if not is_pharmacist:
         await callback.answer(
             "❌ Эта функция доступна только фармацевтам", show_alert=True
@@ -353,14 +354,13 @@ async def view_questions_callback(
     await callback.answer()
 
     try:
-        # Используем реальный запрос к базе данных
         from sqlalchemy import select
         from db.qa_models import Question, User
 
         result = await db.execute(
             select(Question)
             .where(Question.status == "pending")
-            .order_by(Question.created_at.asc())
+            .order_by(Question.created_at.desc())  # Новые сверху
         )
         questions = result.scalars().all()
 
@@ -372,7 +372,6 @@ async def view_questions_callback(
             return
 
         for i, question in enumerate(questions, 1):
-            # Проверяем, является ли вопрос уточнением
             is_clarification = question.context_data and question.context_data.get(
                 "is_clarification"
             )
@@ -389,19 +388,15 @@ async def view_questions_callback(
                     f"💬 Уточнение: {question.text}\n\n"
                     f"🕒 Создано: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
                 )
-
-                # Для уточнений используем специальную клавиатуру БЕЗ запроса фото
-                from bot.keyboards.qa_keyboard import make_clarification_with_photo_and_answer_keyboard
-                reply_markup = make_clarification_with_photo_and_answer_keyboard(question.uuid)
             else:
                 question_text = (
                     f"❓ Вопрос #{i}:\n{question.text}\n\n"
                     f"🕒 Создан: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
                 )
 
-                # Для обычных вопросов используем клавиатуру БЕЗ запроса фото
-                from bot.keyboards.qa_keyboard import make_question_with_photo_and_clarify_keyboard
-                reply_markup = make_question_with_photo_and_clarify_keyboard(question.uuid)
+            # Для всех вопросов в списке - простая кнопка "Ответить"
+            from bot.keyboards.qa_keyboard import make_question_list_keyboard
+            reply_markup = make_question_list_keyboard(question.uuid)
 
             # Получаем пользователя
             user_result = await db.execute(
