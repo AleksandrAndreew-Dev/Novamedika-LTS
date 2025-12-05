@@ -761,21 +761,31 @@ async def process_answer_text(
                 # СОЗДАЕМ КНОПКИ ДЛЯ ПОЛЬЗОВАТЕЛЯ
                 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-                # ДЛЯ ОБЫЧНОГО ВОПРОСА - кнопки уточнения и отправки фото
+                # Проверяем, запрашивал ли фармацевт фото для этого вопроса
+                photo_requested = False
+                if question.context_data and "photo_requested_by" in question.context_data:
+                    photo_requested = True
+
+                # ДЛЯ ОБЫЧНОГО ВОПРОСА - кнопки уточнения и отправки фото (ТОЛЬКО ЕСЛИ ЗАПРОШЕНО)
                 if not is_clarification:
+                    # Создаем список кнопок
+                    buttons_row = []
+
+                    # Кнопка уточнения всегда есть
+                    buttons_row.append(InlineKeyboardButton(
+                        text="✍️ Уточнить вопрос",
+                        callback_data=f"quick_clarify_{question.uuid}",
+                    ))
+
+                    # Кнопка отправки фото ТОЛЬКО если фармацевт запросил фото
+                    if photo_requested:
+                        buttons_row.append(InlineKeyboardButton(
+                            text="📸 Отправить фото рецепта",
+                            callback_data=f"send_prescription_photo_{question.uuid}",
+                        ))
+
                     user_keyboard = InlineKeyboardMarkup(
-                        inline_keyboard=[
-                            [
-                                InlineKeyboardButton(
-                                    text="✍️ Уточнить вопрос",
-                                    callback_data=f"quick_clarify_{question.uuid}",
-                                ),
-                                InlineKeyboardButton(
-                                    text="📸 Отправить фото рецепта",
-                                    callback_data=f"send_prescription_photo_{question.uuid}",
-                                )
-                            ]
-                        ]
+                        inline_keyboard=[buttons_row]
                     )
 
                     message_text = (
@@ -783,11 +793,16 @@ async def process_answer_text(
                         f"❓ <b>Ваш вопрос:</b>\n{question.text}\n\n"
                         f"💬 <b>Ответ:</b>\n{message.text}\n\n"
                         f"👨‍⚕️ <b>Ответ предоставил:</b> {pharmacist_info}\n\n"
-                        f"<i>Если ответ неполный или у вас есть уточняющий вопрос, "
-                        f"используйте кнопки ниже ↓</i>"
                     )
+
+                    # Добавляем разное сообщение в зависимости от того, запрашивалось ли фото
+                    if photo_requested:
+                        message_text += f"<i>Фармацевт запросил фото рецепта. Вы можете отправить его, используя кнопку ниже ↓</i>"
+                    else:
+                        message_text += f"<i>Если ответ неполный или у вас есть уточняющий вопрос, используйте кнопку ниже ↓</i>"
+
                 else:
-                    # ДЛЯ УТОЧНЕНИЯ - только кнопка уточнения
+                    # ДЛЯ УТОЧНЕНИЯ - только кнопка уточнения (даже если запрошено фото, для уточнений не показываем кнопку фото)
                     user_keyboard = InlineKeyboardMarkup(
                         inline_keyboard=[
                             [
@@ -1004,11 +1019,13 @@ async def request_photo_callback(
         if not question.context_data:
             question.context_data = {}
 
+        # ЯВНО УСТАНАВЛИВАЕМ ФЛАГ, ЧТО ФОТО ЗАПРОШЕНО
         question.context_data["photo_requested_by"] = {
             "pharmacist_id": str(pharmacist.uuid),
             "telegram_id": pharmacist.user.telegram_id,
             "requested_at": get_utc_now_naive().isoformat(),
         }
+        question.context_data["photo_requested"] = True  # Явный флаг
 
         await db.commit()
 
@@ -1070,6 +1087,12 @@ async def process_photo_request_message(
             await state.clear()
             return
 
+        # Устанавливаем флаг, что фото запрошено
+        if not question.context_data:
+            question.context_data = {}
+        question.context_data["photo_requested"] = True
+        await db.commit()
+
         # Если это уточнение, также обновляем исходный вопрос (для контекста)
         if question.context_data and question.context_data.get("is_clarification"):
             original_question_id = question.context_data.get("original_question_id")
@@ -1082,12 +1105,15 @@ async def process_photo_request_message(
                 if original_question:
                     if not original_question.context_data:
                         original_question.context_data = {}
-                        original_question.context_data["photo_requested_by"] = {
-                            "pharmacist_id": str(pharmacist.uuid),
-                            "telegram_id": pharmacist.user.telegram_id,
-                            "requested_at": get_utc_now_naive().isoformat(),
-                        }
-                    await db.commit()
+                    original_question.context_data["photo_requested_by"] = {
+                        "pharmacist_id": str(pharmacist.uuid),
+                        "telegram_id": pharmacist.user.telegram_id,
+                        "requested_at": get_utc_now_naive().isoformat(),
+                    }
+                    original_question.context_data["photo_requested"] = True
+                await db.commit()
+
+        # ... остальной код функции остается без изменений ...
 
         # Формируем сообщение с ФИО фармацевта
         pharmacy_info = pharmacist.pharmacy_info or {}

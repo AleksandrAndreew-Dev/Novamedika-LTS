@@ -462,11 +462,18 @@ async def quick_clarify_callback(
         await state.update_data(clarify_question_id=question_uuid)
         await state.set_state(UserQAStates.waiting_for_clarification)
 
+        # Проверяем, запрашивалось ли фото для этого вопроса
+        photo_requested = question.context_data and question.context_data.get("photo_requested", False)
+
         message_text = f"💬 <b>Уточнение к вопросу:</b>\n\n"
         message_text += f"❓ <b>Ваш вопрос:</b>\n{question.text}\n\n"
 
         if last_answer:
             message_text += f"💬 <b>Полученный ответ:</b>\n{last_answer.text}\n\n"
+
+        if photo_requested:
+            message_text += "📸 <b>Фармацевт запросил фото рецепта для этого вопроса.</b>\n"
+            message_text += "Вы можете отправить его после уточнения.\n\n"
 
         message_text += "✍️ <b>Напишите ваше уточнение ниже:</b>\n"
         message_text += "(или /cancel для отмены)"
@@ -478,9 +485,6 @@ async def quick_clarify_callback(
         logger.error(f"Error in quick_clarify_callback: {e}", exc_info=True)
         await callback.answer("❌ Ошибка при создании уточнения", show_alert=True)
 
-# В файл user_questions.py добавить
-
-# В user_questions.py, обновляем функцию send_prescription_photo_callback:
 
 @router.callback_query(F.data.startswith("send_prescription_photo_"))
 async def send_prescription_photo_callback(
