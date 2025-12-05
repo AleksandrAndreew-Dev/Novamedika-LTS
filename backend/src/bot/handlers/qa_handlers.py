@@ -1,3 +1,4 @@
+# bot/handlers/qa_handlers.py - исправленный импорт
 from aiogram.types import (
     Message,
     CallbackQuery,
@@ -12,16 +13,16 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from sqlalchemy.orm import selectinload  # Добавьте эту строку
-from db.qa_models import User, Pharmacist
-from db.qa_models import Question
-from db.qa_models import Answer
+from sqlalchemy.orm import selectinload
+from db.qa_models import User, Pharmacist, Question, Answer
 from bot.handlers.qa_states import QAStates
 
-# ИСПРАВИТЬ импорт (убрать дублирование):
+# ИСПРАВЛЕННЫЙ импорт:
 from bot.keyboards.qa_keyboard import (
     make_question_keyboard,
     make_clarification_keyboard,
+    make_question_with_photo_and_clarify_keyboard,  # Добавлено
+    make_clarification_with_photo_and_answer_keyboard,  # Добавлено
 )
 from bot.services.assignment_service import QuestionAssignmentService
 
@@ -31,7 +32,6 @@ from datetime import datetime, timedelta
 from utils.time_utils import get_utc_now_naive
 
 logger = logging.getLogger(__name__)
-
 router = Router()
 
 

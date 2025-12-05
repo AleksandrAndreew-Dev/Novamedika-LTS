@@ -10,6 +10,13 @@ from aiogram.types import (
     InlineKeyboardButton,
     CallbackQuery,
 )
+
+from bot.keyboards.qa_keyboard import (
+    make_question_with_photo_and_clarify_keyboard,
+    make_clarification_with_photo_and_answer_keyboard
+)
+
+# Остальной код остается без изменений...
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -334,7 +341,7 @@ async def go_offline_callback(
 async def view_questions_callback(
     callback: CallbackQuery, db: AsyncSession, is_pharmacist: bool, pharmacist: object
 ):
-    """Быстрый просмотр вопросов через кнопку - ОБНОВЛЕННАЯ ВЕРСИЯ С ПРАВИЛЬНЫМИ КНОПКАМИ ДЛЯ УТОЧНЕНИЙ"""
+    """Быстрый просмотр вопросов через кнопку - ИСПРАВЛЕННАЯ ВЕРСИЯ С ПРАВИЛЬНЫМИ ФУНКЦИЯМИ"""
     if not is_pharmacist:
         await callback.answer(
             "❌ Эта функция доступна только фармацевтам", show_alert=True
@@ -382,8 +389,8 @@ async def view_questions_callback(
                 )
 
                 # Для уточнений используем специальную клавиатуру
-                from bot.keyboards.qa_keyboard import make_clarification_with_photo_keyboard
-                reply_markup = make_clarification_with_photo_keyboard(question.uuid)
+                # ИСПРАВЛЕНО: используем правильное имя функции
+                reply_markup = make_clarification_with_photo_and_answer_keyboard(question.uuid)
             else:
                 question_text = (
                     f"❓ Вопрос #{i}:\n{question.text}\n\n"
@@ -391,8 +398,8 @@ async def view_questions_callback(
                 )
 
                 # Для обычных вопросов используем обычную клавиатуру
-                from bot.keyboards.qa_keyboard import make_question_with_photo_keyboard
-                reply_markup = make_question_with_photo_keyboard(question.uuid)
+                # ИСПРАВЛЕНО: используем правильное имя функции
+                reply_markup = make_question_with_photo_and_clarify_keyboard(question.uuid)
 
             # Получаем пользователя
             user_result = await db.execute(
