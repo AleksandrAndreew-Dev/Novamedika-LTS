@@ -181,7 +181,7 @@ async def cmd_status(
 async def cmd_questions(
     message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist
 ):
-    """Показать вопросы с пагинацией - ОБНОВЛЕННАЯ ВЕРСИЯ С ПРАВИЛЬНЫМИ КНОПКАМИ ДЛЯ УТОЧНЕНИЙ"""
+    """Показать вопросы с пагинацией - ОБНОВЛЕННАЯ ВЕРСИЯ"""
     if not is_pharmacist or not pharmacist:
         await message.answer("❌ Эта команда доступна только фармацевтам")
         return
@@ -190,7 +190,7 @@ async def cmd_questions(
         result = await db.execute(
             select(Question)
             .where(Question.status == "pending")
-            .order_by(Question.created_at.asc())  # Сначала старые вопросы
+            .order_by(Question.created_at.asc())
         )
         questions = result.scalars().all()
 
@@ -202,7 +202,6 @@ async def cmd_questions(
             return
 
         for i, question in enumerate(questions, 1):
-            # Проверяем, является ли вопрос уточнением
             is_clarification = question.context_data and question.context_data.get(
                 "is_clarification"
             )
@@ -220,22 +219,16 @@ async def cmd_questions(
                     f"🕒 Создано: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
                 )
 
-                from bot.keyboards.qa_keyboard import (
-                    make_clarification_with_photo_keyboard,
-                )
-
-                reply_markup = make_clarification_with_photo_keyboard(question.uuid)
+                # Используем новую клавиатуру для уточнений
+                reply_markup = make_clarification_with_photo_and_answer_keyboard(question.uuid)
             else:
                 question_text = (
                     f"❓ Вопрос #{i}:\n{question.text}\n\n"
                     f"🕒 Создан: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
                 )
 
-                # Для обычных вопросов используем обычную клавиатуру
-
-                from bot.keyboards.qa_keyboard import make_question_with_photo_keyboard
-
-                reply_markup = make_question_with_photo_keyboard(question.uuid)
+                # Используем новую клавиатуру для обычных вопросов
+                reply_markup = make_question_with_photo_and_clarify_keyboard(question.uuid)
 
             # Получаем пользователя
             user_result = await db.execute(
@@ -251,11 +244,6 @@ async def cmd_questions(
 
             await message.answer(
                 question_text, parse_mode="HTML", reply_markup=reply_markup
-            )
-
-        if len(questions) == 5:
-            await message.answer(
-                "💡 Показаны первые 5 вопросов. Ответьте на них чтобы увидеть следующие."
             )
 
     except Exception as e:
@@ -311,6 +299,58 @@ async def cmd_release_question(
         logger.error(f"Error in cmd_release_question: {e}")
         await message.answer("❌ Ошибка при получении вопросов")
 
+
+
+@router.callback_query(F.data.startswith("complete_"))
+async def complete_question_callback(
+    callback: CallbackQuery,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: Pharmacist,
+):
+    """Завершение вопроса фармацевтом"""
+    question_uuid = callback.data.replace("complete_", "")
+
+    if not is_pharmacist or not pharmacist:
+        await callback.answer(
+            "❌ Эта функция доступна только фармацевтам", show_alert=True
+        )
+        return
+
+    try:
+        result = await db.execute(
+            select(Question).where(Question.uuid == question_uuid)
+        )
+        question = result.scalar_one_or_none()
+
+        if not question:
+            await callback.answer("❌ Вопрос не найден", show_alert=True)
+            return
+
+        # Проверяем, взят ли вопрос этим фармацевтом
+        if question.taken_by != pharmacist.uuid:
+            await callback.answer(
+                "❌ Вы не брали этот вопрос", show_alert=True
+            )
+            return
+
+        # Освобождаем вопрос
+        question.taken_by = None
+        question.taken_at = None
+        question.status = "pending"
+
+        await db.commit()
+
+        await callback.answer("✅ Вопрос освобожден!")
+        await callback.message.edit_text(
+            f"✅ Вопрос освобожден.\n\n"
+            f"❓ Вопрос: {question.text[:100]}...\n\n"
+            f"Теперь его смогут взять другие фармацевты."
+        )
+
+    except Exception as e:
+        logger.error(f"Error completing question: {e}")
+        await callback.answer("❌ Ошибка при завершении вопроса", show_alert=True)
 
 @router.callback_query(F.data.startswith("release_"))
 async def release_question_callback(
@@ -425,6 +465,7 @@ async def debug_status(
 
 
 # bot/handlers/qa_handlers.py - обновляем answer_question_callback
+# В функции answer_question_callback добавляем сохранение фармацевта
 @router.callback_query(F.data.startswith("answer_"))
 async def answer_question_callback(
     callback: CallbackQuery,
@@ -454,7 +495,7 @@ async def answer_question_callback(
             await callback.answer("❌ Ошибка при назначении вопроса", show_alert=True)
             return
 
-        # Остальная логика остается прежней...
+        # Получаем вопрос и обновляем информацию о взятии
         result = await db.execute(
             select(Question).where(Question.uuid == question_uuid)
         )
@@ -463,6 +504,13 @@ async def answer_question_callback(
         if not question:
             await callback.answer("❌ Вопрос не найден", show_alert=True)
             return
+
+        # Сохраняем ID фармацевта, который взял вопрос
+        question.taken_by = pharmacist.uuid
+        question.taken_at = get_utc_now_naive()
+        question.status = "in_progress"
+
+        await db.commit()
 
         # Сохраняем ID вопроса в состоянии
         await state.update_data(question_uuid=question_uuid)
@@ -777,15 +825,27 @@ async def request_photo_callback(
             await callback.answer("❌ Вопрос не найден", show_alert=True)
             return
 
-        # ВАЖНО: Сохраняем информацию о фармацевте, который запросил фото
-        # Сохраняем в состоянии фармацевта данные для отправки сообщения
+        # Проверяем, взят ли вопрос этим фармацевтом
+        if question.taken_by != pharmacist.uuid and question.status == "in_progress":
+            await callback.answer(
+                "❌ Этот вопрос уже взят другим фармацевтом", show_alert=True
+            )
+            return
+
+        # Если вопрос еще не взят, берем его
+        if question.status == "pending":
+            question.taken_by = pharmacist.uuid
+            question.taken_at = get_utc_now_naive()
+            question.status = "in_progress"
+
+        # Сохраняем информацию о фармацевте, который запросил фото
         await state.update_data(
             photo_request_question_id=question_uuid,
             photo_request_pharmacist_id=str(pharmacist.uuid),
             photo_request_message_id=callback.message.message_id,
         )
 
-        # ТАКЖЕ: Обновляем вопрос, указывая, какой фармацевт запросил фото
+        # Обновляем вопрос, указывая, какой фармацевт запросил фото
         if not question.context_data:
             question.context_data = {}
 

@@ -508,33 +508,30 @@ async def send_prescription_photo_callback(
             await callback.answer("❌ Вопрос не найден или не принадлежит вам", show_alert=True)
             return
 
-        # ВАЖНО: Получаем информацию о фармацевте, который запросил фото
-        photo_requested_by = None
-        if question.context_data and "photo_requested_by" in question.context_data:
-            photo_requested_by = question.context_data["photo_requested_by"]
-            pharmacist_id = photo_requested_by.get("pharmacist_id")
+        # Определяем, какой фармацевт должен получить фото
+        pharmacist_id = None
 
-            # Получаем фармацевта по ID
-            pharmacist_result = await db.execute(
-                select(Pharmacist)
-                .options(selectinload(Pharmacist.user))
-                .where(Pharmacist.uuid == pharmacist_id)
-            )
-            requested_pharmacist = pharmacist_result.scalar_one_or_none()
-        else:
-            # Если нет информации о запросе, берем фармацевта, который взял вопрос
-            pharmacist_result = await db.execute(
-                select(Question)
-                .options(
-                    selectinload(Question.taken_pharmacist).selectinload(Pharmacist.user)
-                )
-                .where(Question.uuid == question_uuid)
-            )
-            question_with_pharm = pharmacist_result.scalar_one_or_none()
-            requested_pharmacist = question_with_pharm.taken_pharmacist if question_with_pharm else None
+        # 1. Проверяем, есть ли запрос фото в context_data
+        if question.context_data and "photo_requested_by" in question.context_data:
+            pharmacist_id = question.context_data["photo_requested_by"].get("pharmacist_id")
+        # 2. Если нет, проверяем, взят ли вопрос фармацевтом
+        elif question.taken_by:
+            pharmacist_id = str(question.taken_by)
+
+        if not pharmacist_id:
+            await callback.answer("❌ Не найден фармацевт для отправки фото", show_alert=True)
+            return
+
+        # Получаем фармацевта по ID
+        pharmacist_result = await db.execute(
+            select(Pharmacist)
+            .options(selectinload(Pharmacist.user))
+            .where(Pharmacist.uuid == pharmacist_id)
+        )
+        requested_pharmacist = pharmacist_result.scalar_one_or_none()
 
         if not requested_pharmacist or not requested_pharmacist.user:
-            await callback.answer("❌ Фармацевт, запросивший фото, не найден", show_alert=True)
+            await callback.answer("❌ Фармацевт не найден", show_alert=True)
             return
 
         # Устанавливаем состояние ожидания фото

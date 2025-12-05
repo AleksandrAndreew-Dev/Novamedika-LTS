@@ -70,38 +70,43 @@ def make_clarification_keyboard(question_uuid: str) -> InlineKeyboardMarkup:
 
 # В файл qa_keyboard.py добавить
 
-def make_question_with_photo_keyboard(question_uuid: str) -> InlineKeyboardMarkup:
-    """Клавиатура для вопроса с возможностью запроса фото рецепта"""
+# keyboards/qa_keyboard.py
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+def make_question_with_photo_and_clarify_keyboard(question_uuid: str):
+    """Клавиатура для обычного вопроса с кнопками запроса фото и ответа"""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="💬 Ответить на вопрос",
+                    text="💬 Ответить",
                     callback_data=f"answer_{question_uuid}"
+                ),
+                InlineKeyboardButton(
+                    text="📸 Запросить рецепт",
+                    callback_data=f"request_photo_{question_uuid}"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="📸 Запросить фото рецепта",
-                    callback_data=f"request_photo_{question_uuid}"
+                    text="✅ Завершить вопрос",
+                    callback_data=f"complete_{question_uuid}"
                 )
             ]
         ]
     )
 
-def make_clarification_with_photo_keyboard(question_uuid: str) -> InlineKeyboardMarkup:
-    """Клавиатура для уточнения с возможностью запроса фото рецепта"""
+def make_clarification_with_photo_and_answer_keyboard(question_uuid: str):
+    """Клавиатура для уточнения с кнопками запроса фото и ответа"""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
                     text="💬 Ответить на уточнение",
                     callback_data=f"clarification_answer_{question_uuid}"
-                )
-            ],
-            [
+                ),
                 InlineKeyboardButton(
-                    text="📸 Запросить фото рецепта",
+                    text="📸 Запросить рецепт",
                     callback_data=f"request_photo_{question_uuid}"
                 )
             ]
