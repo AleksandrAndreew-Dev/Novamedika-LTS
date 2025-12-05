@@ -1,4 +1,9 @@
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import (
+    Message,
+    CallbackQuery,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+)
 from typing import Union
 
 from aiogram import Router, F
@@ -12,10 +17,11 @@ from db.qa_models import User, Pharmacist
 from db.qa_models import Question
 from db.qa_models import Answer
 from bot.handlers.qa_states import QAStates
+
 # ИСПРАВИТЬ импорт (убрать дублирование):
 from bot.keyboards.qa_keyboard import (
     make_question_keyboard,
-    make_clarification_keyboard
+    make_clarification_keyboard,
 )
 from bot.services.assignment_service import QuestionAssignmentService
 
@@ -27,6 +33,7 @@ from utils.time_utils import get_utc_now_naive
 logger = logging.getLogger(__name__)
 
 router = Router()
+
 
 @router.message(Command("online"))
 async def set_online(
@@ -184,7 +191,6 @@ async def cmd_questions(
             select(Question)
             .where(Question.status == "pending")
             .order_by(Question.created_at.asc())  # Сначала старые вопросы
-
         )
         questions = result.scalars().all()
 
@@ -197,14 +203,15 @@ async def cmd_questions(
 
         for i, question in enumerate(questions, 1):
             # Проверяем, является ли вопрос уточнением
-            is_clarification = (
-                question.context_data and
-                question.context_data.get("is_clarification")
+            is_clarification = question.context_data and question.context_data.get(
+                "is_clarification"
             )
 
             if is_clarification:
                 original_question_id = question.context_data.get("original_question_id")
-                original_question_text = question.context_data.get("original_question_text", "")
+                original_question_text = question.context_data.get(
+                    "original_question_text", ""
+                )
 
                 question_text = (
                     f"🔍 <b>УТОЧНЕНИЕ К ВОПРОСУ</b>\n\n"
@@ -213,8 +220,10 @@ async def cmd_questions(
                     f"🕒 Создано: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
                 )
 
+                from bot.keyboards.qa_keyboard import (
+                    make_clarification_with_photo_keyboard,
+                )
 
-                from bot.keyboards.qa_keyboard import make_clarification_with_photo_keyboard
                 reply_markup = make_clarification_with_photo_keyboard(question.uuid)
             else:
                 question_text = (
@@ -225,6 +234,7 @@ async def cmd_questions(
                 # Для обычных вопросов используем обычную клавиатуру
 
                 from bot.keyboards.qa_keyboard import make_question_with_photo_keyboard
+
                 reply_markup = make_question_with_photo_keyboard(question.uuid)
 
             # Получаем пользователя
@@ -240,9 +250,7 @@ async def cmd_questions(
                 question_text += f"\n👤 Пользователь: {user_info}"
 
             await message.answer(
-                question_text,
-                parse_mode="HTML",
-                reply_markup=reply_markup
+                question_text, parse_mode="HTML", reply_markup=reply_markup
             )
 
         if len(questions) == 5:
@@ -254,13 +262,11 @@ async def cmd_questions(
         logger.error(f"Error in cmd_questions: {e}")
         await message.answer("❌ Ошибка при получении вопросов")
 
+
 # bot/handlers/qa_handlers.py - добавляем новую команду
 @router.message(Command("release_question"))
 async def cmd_release_question(
-    message: Message,
-    db: AsyncSession,
-    is_pharmacist: bool,
-    pharmacist: Pharmacist
+    message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist
 ):
     """Освободить вопрос, если не можешь ответить"""
     if not is_pharmacist or not pharmacist:
@@ -272,8 +278,7 @@ async def cmd_release_question(
         result = await db.execute(
             select(Question)
             .where(
-                Question.taken_by == pharmacist.uuid,
-                Question.status == "in_progress"
+                Question.taken_by == pharmacist.uuid, Question.status == "in_progress"
             )
             .order_by(Question.taken_at.desc())
         )
@@ -286,35 +291,41 @@ async def cmd_release_question(
         # Создаем клавиатуру с вопросами для освобождения
         keyboard = InlineKeyboardMarkup(inline_keyboard=[])
         for question in questions[:5]:  # Ограничиваем 5 вопросами
-            question_preview = question.text[:50] + "..." if len(question.text) > 50 else question.text
-            keyboard.inline_keyboard.append([
-                InlineKeyboardButton(
-                    text=f"📌 {question_preview}",
-                    callback_data=f"release_{question.uuid}"
-                )
-            ])
+            question_preview = (
+                question.text[:50] + "..." if len(question.text) > 50 else question.text
+            )
+            keyboard.inline_keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        text=f"📌 {question_preview}",
+                        callback_data=f"release_{question.uuid}",
+                    )
+                ]
+            )
 
         await message.answer(
-            "📋 Выберите вопрос, который хотите освободить:",
-            reply_markup=keyboard
+            "📋 Выберите вопрос, который хотите освободить:", reply_markup=keyboard
         )
 
     except Exception as e:
         logger.error(f"Error in cmd_release_question: {e}")
         await message.answer("❌ Ошибка при получении вопросов")
 
+
 @router.callback_query(F.data.startswith("release_"))
 async def release_question_callback(
     callback: CallbackQuery,
     db: AsyncSession,
     is_pharmacist: bool,
-    pharmacist: Pharmacist
+    pharmacist: Pharmacist,
 ):
     """Освободить выбранный вопрос"""
     question_uuid = callback.data.replace("release_", "")
 
     if not is_pharmacist or not pharmacist:
-        await callback.answer("❌ Эта функция доступна только фармацевтам", show_alert=True)
+        await callback.answer(
+            "❌ Эта функция доступна только фармацевтам", show_alert=True
+        )
         return
 
     try:
@@ -324,7 +335,9 @@ async def release_question_callback(
         question = result.scalar_one_or_none()
 
         if not question or question.taken_by != pharmacist.uuid:
-            await callback.answer("❌ Вопрос не найден или не взят вами", show_alert=True)
+            await callback.answer(
+                "❌ Вопрос не найден или не взят вами", show_alert=True
+            )
             return
 
         # Освобождаем вопрос
@@ -351,7 +364,7 @@ async def release_question_callback(
 async def debug_status(
     message_or_callback: Union[Message, CallbackQuery],
     db: AsyncSession,
-    is_pharmacist: bool
+    is_pharmacist: bool,
 ):
     """Команда для отладки статуса системы"""
     # Определяем, что пришло: Message или CallbackQuery
@@ -424,15 +437,17 @@ async def answer_question_callback(
     question_uuid = callback.data.replace("answer_", "")
 
     if not is_pharmacist or not pharmacist:
-        await callback.answer("❌ Эта функция доступна только фармацевтам", show_alert=True)
+        await callback.answer(
+            "❌ Эта функция доступна только фармацевтам", show_alert=True
+        )
         return
 
     try:
         # Назначаем вопрос фармацевту
-        assignment_success = await QuestionAssignmentService.assign_question_to_pharmacist(
-            question_uuid,
-            str(pharmacist.uuid),
-            db
+        assignment_success = (
+            await QuestionAssignmentService.assign_question_to_pharmacist(
+                question_uuid, str(pharmacist.uuid), db
+            )
         )
 
         if not assignment_success:
@@ -469,8 +484,6 @@ async def answer_question_callback(
     except Exception as e:
         logger.error(f"Error in answer_question_callback: {e}")
         await callback.answer("❌ Ошибка при обработке запроса", show_alert=True)
-
-
 
 
 @router.message(QAStates.waiting_for_answer)
@@ -565,7 +578,11 @@ async def process_answer_text(
                 if patronymic:
                     pharmacist_name_parts.append(patronymic)
 
-                pharmacist_name = " ".join(pharmacist_name_parts) if pharmacist_name_parts else "Фармацевт"
+                pharmacist_name = (
+                    " ".join(pharmacist_name_parts)
+                    if pharmacist_name_parts
+                    else "Фармацевт"
+                )
 
                 pharmacist_info = f"{pharmacist_name}"
                 if chain and number:
@@ -581,7 +598,7 @@ async def process_answer_text(
                         [
                             InlineKeyboardButton(
                                 text="✍️ Уточнить вопрос",
-                                callback_data=f"quick_clarify_{question.uuid}"
+                                callback_data=f"quick_clarify_{question.uuid}",
                             )
                         ]
                     ]
@@ -589,8 +606,12 @@ async def process_answer_text(
 
                 if is_clarification:
                     # Сообщение для уточнения
-                    original_question_id = question.context_data.get("original_question_id")
-                    original_question_text = question.context_data.get("original_question_text", "")
+                    original_question_id = question.context_data.get(
+                        "original_question_id"
+                    )
+                    original_question_text = question.context_data.get(
+                        "original_question_text", ""
+                    )
 
                     message_text = (
                         f"💊 <b>На ваше уточнение получен ответ!</b>\n\n"
@@ -615,12 +636,16 @@ async def process_answer_text(
                     chat_id=user.telegram_id,
                     text=message_text,
                     parse_mode="HTML",
-                    reply_markup=clarify_keyboard
+                    reply_markup=clarify_keyboard,
                 )
 
-                logger.info(f"Notification sent to user {user.telegram_id} about answer")
+                logger.info(
+                    f"Notification sent to user {user.telegram_id} about answer"
+                )
             except Exception as e:
-                logger.error(f"Failed to send notification to user {user.telegram_id}: {e}")
+                logger.error(
+                    f"Failed to send notification to user {user.telegram_id}: {e}"
+                )
 
         success_message = "✅ Ответ успешно отправлен пользователю!"
         if is_clarification:
@@ -644,6 +669,7 @@ async def process_answer_text(
 
 # Добавьте этот метод в конец файла qa_handlers.py
 
+
 @router.callback_query(F.data.startswith("clarification_answer_"))
 async def answer_clarification_callback(
     callback: CallbackQuery,
@@ -655,10 +681,14 @@ async def answer_clarification_callback(
     """Обработка нажатия на кнопку ответа на уточнение"""
     question_uuid = callback.data.replace("clarification_answer_", "")
 
-    logger.info(f"Clarification answer callback for question {question_uuid} from user {callback.from_user.id}")
+    logger.info(
+        f"Clarification answer callback for question {question_uuid} from user {callback.from_user.id}"
+    )
 
     if not is_pharmacist or not pharmacist:
-        await callback.answer("❌ Эта функция доступна только фармацевтам", show_alert=True)
+        await callback.answer(
+            "❌ Эта функция доступна только фармацевтам", show_alert=True
+        )
         return
 
     try:
@@ -673,7 +703,10 @@ async def answer_clarification_callback(
             return
 
         # Проверяем, что это действительно уточнение
-        if not clarification_question.context_data or not clarification_question.context_data.get("is_clarification"):
+        if (
+            not clarification_question.context_data
+            or not clarification_question.context_data.get("is_clarification")
+        ):
             await callback.answer("❌ Это не уточнение", show_alert=True)
             return
 
@@ -681,11 +714,15 @@ async def answer_clarification_callback(
         await state.update_data(
             question_uuid=question_uuid,
             is_clarification=True,
-            original_question_id=clarification_question.context_data.get("original_question_id")
+            original_question_id=clarification_question.context_data.get(
+                "original_question_id"
+            ),
         )
         await state.set_state(QAStates.waiting_for_answer)
 
-        original_question_text = clarification_question.context_data.get("original_question_text", "")
+        original_question_text = clarification_question.context_data.get(
+            "original_question_text", ""
+        )
 
         await callback.message.answer(
             f"🔍 Вы отвечаете на <b>УТОЧНЕНИЕ</b>:\n\n"
@@ -693,18 +730,23 @@ async def answer_clarification_callback(
             f"💬 <b>Уточнение от пользователя:</b>\n{clarification_question.text}\n\n"
             f"✍️ <b>Напишите ваш ответ ниже:</b>\n"
             f"(или /cancel для отмены)",
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
 
         await callback.answer()
 
     except Exception as e:
-        logger.error(f"Error in answer_clarification_callback for user {callback.from_user.id}: {e}", exc_info=True)
+        logger.error(
+            f"Error in answer_clarification_callback for user {callback.from_user.id}: {e}",
+            exc_info=True,
+        )
         await callback.answer("❌ Ошибка при обработке запроса", show_alert=True)
 
 
 # В файл qa_handlers.py добавить
 
+
+# В файл qa_handlers.py, в функцию request_photo_callback добавить:
 @router.callback_query(F.data.startswith("request_photo_"))
 async def request_photo_callback(
     callback: CallbackQuery,
@@ -717,7 +759,9 @@ async def request_photo_callback(
     question_uuid = callback.data.replace("request_photo_", "")
 
     if not is_pharmacist or not pharmacist:
-        await callback.answer("❌ Эта функция доступна только фармацевтам", show_alert=True)
+        await callback.answer(
+            "❌ Эта функция доступна только фармацевтам", show_alert=True
+        )
         return
 
     try:
@@ -733,12 +777,26 @@ async def request_photo_callback(
             await callback.answer("❌ Вопрос не найден", show_alert=True)
             return
 
-        # Сохраняем данные о запросе фото
+        # ВАЖНО: Сохраняем информацию о фармацевте, который запросил фото
+        # Сохраняем в состоянии фармацевта данные для отправки сообщения
         await state.update_data(
             photo_request_question_id=question_uuid,
             photo_request_pharmacist_id=str(pharmacist.uuid),
-            photo_request_message_id=callback.message.message_id
+            photo_request_message_id=callback.message.message_id,
         )
+
+        # ТАКЖЕ: Обновляем вопрос, указывая, какой фармацевт запросил фото
+        if not question.context_data:
+            question.context_data = {}
+
+        question.context_data["photo_requested_by"] = {
+            "pharmacist_id": str(pharmacist.uuid),
+            "telegram_id": pharmacist.user.telegram_id,
+            "requested_at": get_utc_now_naive().isoformat(),
+        }
+
+        await db.commit()
+
         await state.set_state(QAStates.waiting_for_photo_request)
 
         # Предлагаем фармацевту ввести сообщение для пользователя
@@ -747,9 +805,9 @@ async def request_photo_callback(
             f"❓ Вопрос: {question.text[:200]}...\n\n"
             "✍️ <b>Напишите сообщение для пользователя:</b>\n"
             "Объясните, зачем вам нужно фото рецепта и какие детали должны быть видны.\n\n"
-            "<i>Например: \"Пожалуйста, отправьте фото рецепта, чтобы я мог точно определить дозировку и название препарата. Убедитесь, что все надписи читаемы.\"</i>\n\n"
+            '<i>Например: "Пожалуйста, отправьте фото рецепта, чтобы я мог точно определить дозировку и название препарата. Убедитесь, что все надписи читаемы."</i>\n\n'
             "(или /cancel для отмены)",
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
 
         await callback.answer()
@@ -757,6 +815,7 @@ async def request_photo_callback(
     except Exception as e:
         logger.error(f"Error in request_photo_callback: {e}", exc_info=True)
         await callback.answer("❌ Ошибка при обработке запроса", show_alert=True)
+
 
 @router.message(QAStates.waiting_for_photo_request)
 async def process_photo_request_message(
@@ -790,10 +849,30 @@ async def process_photo_request_message(
         )
         question = result.scalar_one_or_none()
 
+        # В process_photo_request_message, после получения вопроса:
         if not question or not question.user:
             await message.answer("❌ Вопрос или пользователь не найдены")
             await state.clear()
             return
+
+        # Если это уточнение, также обновляем исходный вопрос (для контекста)
+        if question.context_data and question.context_data.get("is_clarification"):
+            original_question_id = question.context_data.get("original_question_id")
+            if original_question_id:
+                # Обновляем исходный вопрос тоже
+                original_result = await db.execute(
+                    select(Question).where(Question.uuid == original_question_id)
+                )
+                original_question = original_result.scalar_one_or_none()
+                if original_question:
+                    if not original_question.context_data:
+                        original_question.context_data = {}
+                        original_question.context_data["photo_requested_by"] = {
+                            "pharmacist_id": str(pharmacist.uuid),
+                            "telegram_id": pharmacist.user.telegram_id,
+                            "requested_at": get_utc_now_naive().isoformat(),
+                        }
+                    await db.commit()
 
         # Формируем сообщение с ФИО фармацевта
         pharmacy_info = pharmacist.pharmacy_info or {}
@@ -809,7 +888,9 @@ async def process_photo_request_message(
         if patronymic:
             pharmacist_name_parts.append(patronymic)
 
-        pharmacist_name = " ".join(pharmacist_name_parts) if pharmacist_name_parts else "Фармацевт"
+        pharmacist_name = (
+            " ".join(pharmacist_name_parts) if pharmacist_name_parts else "Фармацевт"
+        )
 
         # Создаем клавиатуру для отправки фото
         from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -819,7 +900,7 @@ async def process_photo_request_message(
                 [
                     InlineKeyboardButton(
                         text="📸 Отправить фото рецепта",
-                        callback_data=f"send_prescription_photo_{question.uuid}"
+                        callback_data=f"send_prescription_photo_{question.uuid}",
                     )
                 ]
             ]
@@ -829,12 +910,12 @@ async def process_photo_request_message(
         await message.bot.send_message(
             chat_id=question.user.telegram_id,
             text=f"📸 <b>Фармацевт запросил фото рецепта</b>\n\n"
-                 f"👨‍⚕️ <b>Фармацевт:</b> {pharmacist_name}\n\n"
-                 f"💬 <b>Сообщение:</b>\n{message.text}\n\n"
-                 f"❓ <b>По вопросу:</b>\n{question.text}\n\n"
-                 f"Нажмите кнопку ниже, чтобы отправить фото рецепта:",
+            f"👨‍⚕️ <b>Фармацевт:</b> {pharmacist_name}\n\n"
+            f"💬 <b>Сообщение:</b>\n{message.text}\n\n"
+            f"❓ <b>По вопросу:</b>\n{question.text}\n\n"
+            f"Нажмите кнопку ниже, чтобы отправить фото рецепта:",
             parse_mode="HTML",
-            reply_markup=photo_keyboard
+            reply_markup=photo_keyboard,
         )
 
         # Уведомляем фармацевта
@@ -848,7 +929,7 @@ async def process_photo_request_message(
             await message.bot.edit_message_reply_markup(
                 chat_id=message.chat.id,
                 message_id=original_message_id,
-                reply_markup=None
+                reply_markup=None,
             )
         except:
             pass
