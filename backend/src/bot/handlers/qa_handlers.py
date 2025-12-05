@@ -19,10 +19,11 @@ from bot.handlers.qa_states import QAStates
 
 # ИСПРАВЛЕННЫЙ импорт:
 from bot.keyboards.qa_keyboard import (
-    make_question_list_keyboard,      # НОВОЕ
-    make_pharmacist_dialog_keyboard,  # НОВОЕ
+    make_question_list_keyboard,
+    make_pharmacist_dialog_keyboard,
     make_user_response_keyboard,
-    make_user_dialog_keyboard      # НОВОЕ
+    make_user_dialog_keyboard,
+    make_question_keyboard  # ДОБАВЬТЕ ЭТОТ ИМПОРТ
 )
 from bot.services.assignment_service import QuestionAssignmentService
 
@@ -622,6 +623,11 @@ async def answer_question_callback(
                     question_uuid, str(pharmacist.uuid), db
                 )
             )
+            await state.update_data(
+        question_uuid=question_uuid,
+        dialog_partner_id=str(pharmacist.uuid)
+    )
+            await state.set_state(QAStates.in_dialog_with_user)
 
             if not assignment_success:
                 await callback.answer("❌ Ошибка при назначении вопроса", show_alert=True)
@@ -659,7 +665,51 @@ async def answer_question_callback(
 
 
 # В qa_handlers.py обновляем process_answer_text
+@router.callback_query(F.data.startswith("complete_after_photo_"))
+async def complete_after_photo_callback(
+    callback: CallbackQuery,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: Pharmacist,
+    state: FSMContext
+):
+    """Завершение вопроса после получения фото"""
+    question_uuid = callback.data.replace("complete_after_photo_", "")
 
+    if not is_pharmacist or not pharmacist:
+        await callback.answer("❌ Эта функция доступна только фармацевтам", show_alert=True)
+        return
+
+    try:
+        # Получаем вопрос
+        result = await db.execute(
+            select(Question).where(Question.uuid == question_uuid)
+        )
+        question = result.scalar_one_or_none()
+
+        if not question:
+            await callback.answer("❌ Вопрос не найден", show_alert=True)
+            return
+
+        # Завершаем вопрос
+        question.status = "answered"
+        question.answered_at = get_utc_now_naive()
+
+        await db.commit()
+        await state.clear()
+
+        await callback.answer("✅ Консультация завершена!")
+        await callback.message.answer(
+            f"✅ <b>Консультация завершена</b>\n\n"
+            f"❓ Вопрос: {question.text[:200]}...\n\n"
+            f"💬 Вы получили фото рецепта и завершили консультацию."
+        )
+
+    except Exception as e:
+        logger.error(f"Error in complete_after_photo_callback: {e}")
+        await callback.answer("❌ Ошибка при завершении", show_alert=True)
+
+        
 @router.message(QAStates.waiting_for_answer)
 async def process_answer_text(
     message: Message,
