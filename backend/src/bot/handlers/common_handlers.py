@@ -337,6 +337,8 @@ async def go_offline_callback(
         await callback.answer("❌ Ошибка при переходе в офлайн", show_alert=True)
 
 
+# В common_handlers.py обновляем view_questions_callback
+
 @router.callback_query(F.data == "view_questions")
 async def view_questions_callback(
     callback: CallbackQuery, db: AsyncSession, is_pharmacist: bool, pharmacist: object
@@ -388,8 +390,8 @@ async def view_questions_callback(
                     f"🕒 Создано: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
                 )
 
-                # Для уточнений используем специальную клавиатуру
-                # ИСПРАВЛЕНО: используем правильное имя функции
+                # Для уточнений используем специальную клавиатуру БЕЗ запроса фото
+                from bot.keyboards.qa_keyboard import make_clarification_with_photo_and_answer_keyboard
                 reply_markup = make_clarification_with_photo_and_answer_keyboard(question.uuid)
             else:
                 question_text = (
@@ -397,8 +399,8 @@ async def view_questions_callback(
                     f"🕒 Создан: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
                 )
 
-                # Для обычных вопросов используем обычную клавиатуру
-                # ИСПРАВЛЕНО: используем правильное имя функции
+                # Для обычных вопросов используем клавиатуру БЕЗ запроса фото
+                from bot.keyboards.qa_keyboard import make_question_with_photo_and_clarify_keyboard
                 reply_markup = make_question_with_photo_and_clarify_keyboard(question.uuid)
 
             # Получаем пользователя

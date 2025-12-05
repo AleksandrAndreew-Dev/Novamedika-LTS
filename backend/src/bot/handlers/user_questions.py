@@ -568,6 +568,8 @@ async def send_prescription_photo_callback(
 
 # В user_questions.py, обновляем process_prescription_photo:
 
+# В user_questions.py, обновляем process_prescription_photo и process_prescription_document
+
 @router.message(UserQAStates.waiting_for_prescription_photo, F.photo)
 async def process_prescription_photo(
     message: Message,
@@ -630,6 +632,30 @@ async def process_prescription_photo(
         # Отправляем фото фармацевту напрямую (без сохранения в БД)
         photo = message.photo[-1]  # Берем самую большую версию фото
 
+        # Создаем клавиатуру с кнопками для фармацевта
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+        pharmacist_keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="💬 Ответить пользователю",
+                        callback_data=f"answer_after_photo_{question_uuid}"
+                    ),
+                    InlineKeyboardButton(
+                        text="📸 Запросить еще фото",
+                        callback_data=f"request_more_photos_{question_uuid}"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="✅ Завершить консультацию",
+                        callback_data=f"complete_after_photo_{question_uuid}"
+                    )
+                ]
+            ]
+        )
+
         await message.bot.send_photo(
             chat_id=pharmacist.user.telegram_id,
             photo=photo.file_id,
@@ -640,7 +666,8 @@ async def process_prescription_photo(
                    f"{'💬 <b>Описание:</b> ' + message.caption if message.caption else ''}\n\n"
                    f"⚠️ <i>Фото временное и не сохранено в системе</i>\n"
                    f"💊 <i>Это фото было запрошено вами у пользователя</i>",
-            parse_mode="HTML"
+            parse_mode="HTML",
+            reply_markup=pharmacist_keyboard
         )
 
         await message.answer(

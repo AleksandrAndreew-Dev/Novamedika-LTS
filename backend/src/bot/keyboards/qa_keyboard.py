@@ -72,9 +72,43 @@ def make_clarification_keyboard(question_uuid: str) -> InlineKeyboardMarkup:
 
 # keyboards/qa_keyboard.py
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+# В qa_keyboard.py - обновить функции клавиатур
 
 def make_question_with_photo_and_clarify_keyboard(question_uuid: str):
-    """Клавиатура для обычного вопроса с кнопками запроса фото и ответа"""
+    """Клавиатура для обычного вопроса БЕЗ кнопки запроса фото"""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="💬 Ответить",
+                    callback_data=f"answer_{question_uuid}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✅ Завершить вопрос",
+                    callback_data=f"complete_{question_uuid}"
+                )
+            ]
+        ]
+    )
+
+def make_clarification_with_photo_and_answer_keyboard(question_uuid: str):
+    """Клавиатура для уточнения БЕЗ кнопки запроса фото"""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="💬 Ответить на уточнение",
+                    callback_data=f"clarification_answer_{question_uuid}"
+                )
+            ]
+        ]
+    )
+
+# НОВАЯ функция для ответа с кнопкой запроса фото
+def make_answer_with_photo_request_keyboard(question_uuid: str):
+    """Клавиатура для ответа с возможностью запросить фото"""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -91,23 +125,6 @@ def make_question_with_photo_and_clarify_keyboard(question_uuid: str):
                 InlineKeyboardButton(
                     text="✅ Завершить вопрос",
                     callback_data=f"complete_{question_uuid}"
-                )
-            ]
-        ]
-    )
-
-def make_clarification_with_photo_and_answer_keyboard(question_uuid: str):
-    """Клавиатура для уточнения с кнопками запроса фото и ответа"""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="💬 Ответить на уточнение",
-                    callback_data=f"clarification_answer_{question_uuid}"
-                ),
-                InlineKeyboardButton(
-                    text="📸 Запросить рецепт",
-                    callback_data=f"request_photo_{question_uuid}"
                 )
             ]
         ]

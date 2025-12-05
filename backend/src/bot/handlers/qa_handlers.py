@@ -177,11 +177,13 @@ async def cmd_status(
     )
 
 
+# В qa_handlers.py обновляем cmd_questions
+
 @router.message(Command("questions"))
 async def cmd_questions(
     message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist
 ):
-    """Показать вопросы с пагинацией - ОБНОВЛЕННАЯ ВЕРСИЯ"""
+    """Показать вопросы с пагинацией - ОБНОВЛЕННАЯ ВЕРСИЯ БЕЗ КНОПКИ ЗАПРОСА ФОТО"""
     if not is_pharmacist or not pharmacist:
         await message.answer("❌ Эта команда доступна только фармацевтам")
         return
@@ -219,7 +221,8 @@ async def cmd_questions(
                     f"🕒 Создано: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
                 )
 
-                # Используем новую клавиатуру для уточнений
+                # Для уточнений используем клавиатуру БЕЗ запроса фото
+                from bot.keyboards.qa_keyboard import make_clarification_with_photo_and_answer_keyboard
                 reply_markup = make_clarification_with_photo_and_answer_keyboard(question.uuid)
             else:
                 question_text = (
@@ -227,7 +230,8 @@ async def cmd_questions(
                     f"🕒 Создан: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
                 )
 
-                # Используем новую клавиатуру для обычных вопросов
+                # Для обычных вопросов используем клавиатуру БЕЗ запроса фото
+                from bot.keyboards.qa_keyboard import make_question_with_photo_and_clarify_keyboard
                 reply_markup = make_question_with_photo_and_clarify_keyboard(question.uuid)
 
             # Получаем пользователя
@@ -399,6 +403,121 @@ async def release_question_callback(
         await callback.answer("❌ Ошибка при освобождении вопроса", show_alert=True)
 
 
+
+
+# В qa_handlers.py добавить новые обработчики
+
+@router.callback_query(F.data.startswith("answer_after_photo_"))
+async def answer_after_photo_callback(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: Pharmacist,
+):
+    """Продолжить диалог после получения фото"""
+    question_uuid = callback.data.replace("answer_after_photo_", "")
+
+    if not is_pharmacist or not pharmacist:
+        await callback.answer(
+            "❌ Эта функция доступна только фармацевтам", show_alert=True
+        )
+        return
+
+    try:
+        # Получаем вопрос
+        result = await db.execute(
+            select(Question).where(Question.uuid == question_uuid)
+        )
+        question = result.scalar_one_or_none()
+
+        if not question:
+            await callback.answer("❌ Вопрос не найден", show_alert=True)
+            return
+
+        # Проверяем, что вопрос взят этим фармацевтом
+        if question.taken_by != pharmacist.uuid and question.status == "in_progress":
+            await callback.answer(
+                "❌ Этот вопрос уже взят другим фармацевтом", show_alert=True
+            )
+            return
+
+        # Сохраняем ID вопроса в состоянии для продолжения диалога
+        await state.update_data(question_uuid=question_uuid)
+        await state.set_state(QAStates.waiting_for_answer)
+
+        await callback.message.answer(
+            f"💬 <b>Продолжение консультации после фото</b>\n\n"
+            f"❓ Вопрос: {question.text[:200]}...\n\n"
+            f"Напишите дополнительный ответ или уточнение пользователю:\n"
+            f"(или /cancel для отмены)",
+            parse_mode="HTML"
+        )
+
+        await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Error in answer_after_photo_callback: {e}")
+        await callback.answer("❌ Ошибка при продолжении диалога", show_alert=True)
+
+@router.callback_query(F.data.startswith("request_more_photos_"))
+async def request_more_photos_callback(
+    callback: CallbackQuery,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: Pharmacist,
+):
+    """Запросить дополнительные фото"""
+    question_uuid = callback.data.replace("request_more_photos_", "")
+
+    if not is_pharmacist or not pharmacist:
+        await callback.answer(
+            "❌ Эта функция доступна только фармацевтам", show_alert=True
+        )
+        return
+
+    try:
+        # Получаем вопрос
+        result = await db.execute(
+            select(Question)
+            .options(selectinload(Question.user))
+            .where(Question.uuid == question_uuid)
+        )
+        question = result.scalar_one_or_none()
+
+        if not question or not question.user:
+            await callback.answer("❌ Вопрос не найден", show_alert=True)
+            return
+
+        # Создаем клавиатуру для пользователя
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+        photo_keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="📸 Отправить дополнительное фото",
+                        callback_data=f"send_prescription_photo_{question.uuid}",
+                    )
+                ]
+            ]
+        )
+
+        # Отправляем запрос пользователю
+        await callback.bot.send_message(
+            chat_id=question.user.telegram_id,
+            text=f"📸 <b>Фармацевт запросил дополнительные фото</b>\n\n"
+                 f"Пожалуйста, отправьте еще фото рецепта для более точной консультации.",
+            parse_mode="HTML",
+            reply_markup=photo_keyboard
+        )
+
+        await callback.answer("✅ Запрос на дополнительные фото отправлен пользователю")
+
+    except Exception as e:
+        logger.error(f"Error in request_more_photos_callback: {e}")
+        await callback.answer("❌ Ошибка при запросе фото", show_alert=True)
+
 @router.message(Command("debug_status"))
 @router.callback_query(F.data == "debug_status")  # Добавляем поддержку callback
 async def debug_status(
@@ -534,6 +653,8 @@ async def answer_question_callback(
         await callback.answer("❌ Ошибка при обработке запроса", show_alert=True)
 
 
+# В qa_handlers.py обновляем process_answer_text
+
 @router.message(QAStates.waiting_for_answer)
 async def process_answer_text(
     message: Message,
@@ -593,8 +714,7 @@ async def process_answer_text(
             question.answered_at = get_utc_now_naive()
         else:
             # Для обычного вопроса обновляем статус
-            question.status = "answered"
-            question.answered_at = get_utc_now_naive()
+            question.status = "in_progress"
 
         await db.commit()
 
@@ -638,22 +758,47 @@ async def process_answer_text(
                 if role and role != "Фармацевт":
                     pharmacist_info += f" ({role})"
 
-                # СОЗДАЕМ КНОПКУ УТОЧНЕНИЯ ДЛЯ ЛЮБОГО ТИПА ВОПРОСА
+                # СОЗДАЕМ КНОПКИ ДЛЯ ПОЛЬЗОВАТЕЛЯ
                 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-                clarify_keyboard = InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [
-                            InlineKeyboardButton(
-                                text="✍️ Уточнить вопрос",
-                                callback_data=f"quick_clarify_{question.uuid}",
-                            )
+                # ДЛЯ ОБЫЧНОГО ВОПРОСА - кнопки уточнения и отправки фото
+                if not is_clarification:
+                    user_keyboard = InlineKeyboardMarkup(
+                        inline_keyboard=[
+                            [
+                                InlineKeyboardButton(
+                                    text="✍️ Уточнить вопрос",
+                                    callback_data=f"quick_clarify_{question.uuid}",
+                                ),
+                                InlineKeyboardButton(
+                                    text="📸 Отправить фото рецепта",
+                                    callback_data=f"send_prescription_photo_{question.uuid}",
+                                )
+                            ]
                         ]
-                    ]
-                )
+                    )
 
-                if is_clarification:
-                    # Сообщение для уточнения
+                    message_text = (
+                        f"💊 <b>На ваш вопрос получен ответ!</b>\n\n"
+                        f"❓ <b>Ваш вопрос:</b>\n{question.text}\n\n"
+                        f"💬 <b>Ответ:</b>\n{message.text}\n\n"
+                        f"👨‍⚕️ <b>Ответ предоставил:</b> {pharmacist_info}\n\n"
+                        f"<i>Если ответ неполный или у вас есть уточняющий вопрос, "
+                        f"используйте кнопки ниже ↓</i>"
+                    )
+                else:
+                    # ДЛЯ УТОЧНЕНИЯ - только кнопка уточнения
+                    user_keyboard = InlineKeyboardMarkup(
+                        inline_keyboard=[
+                            [
+                                InlineKeyboardButton(
+                                    text="✍️ Уточнить вопрос",
+                                    callback_data=f"quick_clarify_{question.uuid}",
+                                )
+                            ]
+                        ]
+                    )
+
                     original_question_id = question.context_data.get(
                         "original_question_id"
                     )
@@ -668,23 +813,13 @@ async def process_answer_text(
                         f"💬 <b>Ответ:</b>\n{message.text}\n\n"
                         f"👨‍⚕️ <b>Ответ предоставил:</b> {pharmacist_info}"
                     )
-                else:
-                    # Сообщение для обычного вопроса
-                    message_text = (
-                        f"💊 <b>На ваш вопрос получен ответ!</b>\n\n"
-                        f"❓ <b>Ваш вопрос:</b>\n{question.text}\n\n"
-                        f"💬 <b>Ответ:</b>\n{message.text}\n\n"
-                        f"👨‍⚕️ <b>Ответ предоставил:</b> {pharmacist_info}\n\n"
-                        f"<i>Если ответ неполный или у вас есть уточняющий вопрос, "
-                        f"нажмите кнопку ниже ↓</i>"
-                    )
 
-                # ОТПРАВЛЯЕМ ВСЕГДА С КНОПКОЙ УТОЧНЕНИЯ
+                # Отправляем сообщение пользователю
                 await message.bot.send_message(
                     chat_id=user.telegram_id,
                     text=message_text,
                     parse_mode="HTML",
-                    reply_markup=clarify_keyboard,
+                    reply_markup=user_keyboard,
                 )
 
                 logger.info(
@@ -695,13 +830,34 @@ async def process_answer_text(
                     f"Failed to send notification to user {user.telegram_id}: {e}"
                 )
 
+        # Сообщение для фармацевта с клавиатурой для запроса фото
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+        pharmacist_keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="📸 Запросить фото рецепта",
+                        callback_data=f"request_photo_{question_uuid}"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="✅ Завершить вопрос",
+                        callback_data=f"complete_{question_uuid}"
+                    )
+                ]
+            ]
+        )
+
         success_message = "✅ Ответ успешно отправлен пользователю!"
         if is_clarification:
             success_message = "✅ Ответ на уточнение успешно отправлен пользователю!"
 
         await message.answer(
             f"{success_message}\n\n"
-            "Используйте /questions для просмотра других вопросов."
+            "Вы можете запросить фото рецепта у пользователя для более точной консультации.",
+            reply_markup=pharmacist_keyboard
         )
 
         await state.clear()
@@ -713,7 +869,6 @@ async def process_answer_text(
         )
         await message.answer("❌ Ошибка при отправке ответа")
         await state.clear()
-
 
 # Добавьте этот метод в конец файла qa_handlers.py
 
