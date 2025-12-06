@@ -763,8 +763,9 @@ async def process_answer_text(
             sender_type='pharmacist',
             sender_id=pharmacist.uuid,
             message_type='answer',
+            db=db,
             text=message.text,
-            db=db
+
         )
 
         await db.commit()

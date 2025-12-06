@@ -1,9 +1,10 @@
-# services/dialog_service.py
+# services/dialog_service.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
 import logging
 from typing import List, Optional
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload  # Добавьте эту строку
 
 from db.qa_models import DialogMessage, Question
 from utils.time_utils import get_utc_now_naive
@@ -18,10 +19,10 @@ class DialogService:
         sender_type: str,
         sender_id: UUID,
         message_type: str,
+        db: AsyncSession,  # ⚠️ ПЕРЕМЕСТИТЕ db ПЕРЕД необязательными параметрами
         text: Optional[str] = None,
         file_id: Optional[str] = None,
         caption: Optional[str] = None,
-        db: AsyncSession
     ) -> DialogMessage:
         """Добавить сообщение в историю диалога"""
         try:
@@ -80,8 +81,8 @@ class DialogService:
             sender_type='user',
             sender_id=question.user_id,
             message_type='question',
-            text=question.text,
-            db=db
+            db=db,  # ⚠️ ИЗМЕНИТЕ ПОРЯДОК ПАРАМЕТРОВ
+            text=question.text
         )
 
     @staticmethod

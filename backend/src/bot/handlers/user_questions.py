@@ -268,8 +268,9 @@ async def process_clarification(message: Message, state: FSMContext, db: AsyncSe
             sender_type='user',
             sender_id=user.uuid,
             message_type='clarification',
+            db=db,
             text=message.text,
-            db=db
+
         )
         await db.commit()
 
@@ -695,8 +696,9 @@ async def process_prescription_photo(message: Message, state: FSMContext, db: As
         sender_id=user.uuid,
         message_type='photo',
         file_id=photo.file_id,
+        db=db,
         caption=message.caption,
-        db=db
+
     )
 
         await message.answer(
