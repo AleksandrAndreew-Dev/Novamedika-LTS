@@ -668,7 +668,7 @@ async def answer_question_callback(
 
 # В qa_handlers.py обновляем process_answer_text
 @router.callback_query(F.data.startswith("complete_after_photo_"))
-async def process_answer_text(
+async def complete_after_photo_callback(
     message: Message, state: FSMContext, db: AsyncSession, pharmacist: Pharmacist
 ):
     """Завершение вопроса после получения фото"""
@@ -763,11 +763,11 @@ async def process_answer_text(
 
         # ✅ Добавляем сообщение в историю диалога
         await DialogService.add_message(
+            db=db,
             question_id=question.uuid,
             sender_type="pharmacist",
             sender_id=pharmacist.uuid,
             message_type="answer",
-            db=db,
             text=message.text,
         )
 

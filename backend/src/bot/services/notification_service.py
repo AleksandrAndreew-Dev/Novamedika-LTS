@@ -8,6 +8,8 @@ from db.qa_models import Pharmacist, User, Question
 from bot.keyboards.qa_keyboard import make_question_keyboard, make_clarification_keyboard
 from bot.services.assignment_service import QuestionAssignmentService
 from utils.time_utils import get_utc_now_naive
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
 
 logger = logging.getLogger(__name__)
 

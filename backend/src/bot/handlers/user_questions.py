@@ -306,11 +306,11 @@ async def process_clarification(
 
         # ✅ Добавляем сообщение об уточнении в диалог
         await DialogService.add_message(
+            db=db,
             question_id=original_question.uuid,
             sender_type="user",
             sender_id=user.uuid,
             message_type="clarification",
-            db=db,
             text=message.text,
         )
         await db.commit()
@@ -335,7 +335,11 @@ async def process_clarification(
 
 @router.message(UserQAStates.waiting_for_question)
 async def process_user_question(
-    message: Message, state: FSMContext, db: AsyncSession, user: User
+    message: Message,
+    state: FSMContext,
+    db: AsyncSession,
+    user: User,
+    is_pharmacist: bool
 ):
     """Упрощенная обработка вопроса от пользователя"""
     logger.info(f"Processing question from user {message.from_user.id}")
@@ -360,8 +364,7 @@ async def process_user_question(
         await db.commit()
         await db.refresh(question)
 
-        # ✅ Создаем первое сообщение в диалоге
-        await DialogService.create_question_message(question, db)
+
         logger.info(
             f"Question created for user {user.telegram_id}, question_id: {question.uuid}"
         )
@@ -764,12 +767,12 @@ async def process_prescription_photo(
             reply_markup=pharmacist_keyboard,
         )
         await DialogService.add_message(
+             db=db,
             question_id=question_uuid,
             sender_type="user",
             sender_id=user.uuid,
             message_type="photo",
             file_id=photo.file_id,
-            db=db,
             caption=message.caption,
         )
 

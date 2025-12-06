@@ -11,11 +11,12 @@ from utils.time_utils import get_utc_now_naive
 
 logger = logging.getLogger(__name__)
 
+
 class DialogService:
 
     @staticmethod
     async def add_message(
-        db: AsyncSession,  
+        db: AsyncSession,
         question_id: UUID,
         sender_type: str,
         sender_id: UUID,
@@ -34,14 +35,14 @@ class DialogService:
                 text=text,
                 file_id=file_id,
                 caption=caption,
-                created_at=get_utc_now_naive()
+                created_at=get_utc_now_naive(),
             )
 
             await db.flush()
 
-
-
-            logger.info(f"Dialog message added: question_id={question_id}, type={message_type}")
+            logger.info(
+                f"Dialog message added: question_id={question_id}, type={message_type}"
+            )
             return message
 
         except Exception as e:
@@ -51,9 +52,7 @@ class DialogService:
 
     @staticmethod
     async def get_dialog_history(
-        question_id: UUID,
-        db: AsyncSession,
-        limit: int = 100
+        question_id: UUID, db: AsyncSession, limit: int = 100
     ) -> List[DialogMessage]:
         """Получить полную историю диалога по вопросу"""
         try:
@@ -72,23 +71,21 @@ class DialogService:
 
     @staticmethod
     async def create_question_message(
-        question: Question,
-        db: AsyncSession
+        question: Question, db: AsyncSession
     ) -> DialogMessage:
         """Создать первое сообщение - сам вопрос"""
         return await DialogService.add_message(
+            db=db,
             question_id=question.uuid,
-            sender_type='user',
+            sender_type="user",
             sender_id=question.user_id,
-            message_type='question',
+            message_type="question",
             text=question.text,
-            db=db
         )
 
     @staticmethod
     async def get_question_with_dialog(
-        question_id: UUID,
-        db: AsyncSession
+        question_id: UUID, db: AsyncSession
     ) -> Optional[Question]:
         """Получить вопрос со всей историей диалога"""
         try:

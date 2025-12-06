@@ -1,4 +1,4 @@
-# bot/handlers/qa_states.py - ОБНОВЛЕННАЯ ВЕРСИЯ
+
 from aiogram.fsm.state import State, StatesGroup
 
 
@@ -7,7 +7,7 @@ class QAStates(StatesGroup):
     waiting_for_answer = State()
     viewing_questions = State()
     waiting_for_photo_request = State()
-    in_dialog_with_user = State()  
+    in_dialog_with_user = State()
 
 class UserQAStates(StatesGroup):
     waiting_for_question = State()
