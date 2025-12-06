@@ -73,8 +73,14 @@ async def notify_pharmacists_about_new_question(question, db: AsyncSession):
         logger.error(f"Error in notify_pharmacists_about_new_question: {e}")
 
 # bot/services/notification_service.py - исправленная функция notify_about_clarification
-async def notify_about_clarification(question, original_question, db: AsyncSession):
-    """Уведомление об уточнении - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+# Замените функцию notify_about_clarification на эту:
+
+async def notify_about_clarification(
+    original_question: Question,
+    clarification_text: str,
+    db: AsyncSession
+):
+    """Уведомление об уточнении - АДАПТИРОВАННАЯ ВЕРСИЯ"""
     try:
         bot, _ = await bot_manager.initialize()
         if not bot:
@@ -82,8 +88,9 @@ async def notify_about_clarification(question, original_question, db: AsyncSessi
             return
 
         # Получаем фармацевта, который взял исходный вопрос
+        from bot.services.assignment_service import QuestionAssignmentService
         taker = await QuestionAssignmentService.get_question_taker(
-            original_question.uuid,
+            str(original_question.uuid),
             db
         )
 
@@ -103,7 +110,6 @@ async def notify_about_clarification(question, original_question, db: AsyncSessi
             pharmacists_to_notify = result.scalars().all()
         else:
             # Уведомляем только фармацевта, который взял вопрос
-            # Загружаем пользователя для фармацевта
             taker_result = await db.execute(
                 select(Pharmacist)
                 .options(selectinload(Pharmacist.user))
@@ -113,42 +119,36 @@ async def notify_about_clarification(question, original_question, db: AsyncSessi
             if taker_with_user:
                 pharmacists_to_notify = [taker_with_user]
 
-        # Собираем задачи для отправки сообщений
-        tasks = []
         for pharmacist in pharmacists_to_notify:
             if pharmacist.user and pharmacist.user.telegram_id:
                 message_text = (
                     f"🔍 УТОЧНЕНИЕ К ВОПРОСУ!\n\n"
-                    f"❓ Исходный вопрос: {original_question.text}\n\n"
-                    f"💬 Уточнение: {question.text}\n\n"
+                    f"❓ Исходный вопрос: {original_question.text[:200]}...\n\n"
+                    f"💬 Уточнение пользователя: {clarification_text[:200]}...\n\n"
                 )
 
                 if pharmacist.is_online:
                     message_text += "💡 Статус: Вы в онлайн - можете ответить сразу!"
-                    reply_markup = make_clarification_keyboard(question.uuid)
+                    reply_markup = InlineKeyboardMarkup(
+                        inline_keyboard=[
+                            [
+                                InlineKeyboardButton(
+                                    text="💬 Ответить на уточнение",
+                                    callback_data=f"answer_{original_question.uuid}"  # Ответ на исходный вопрос
+                                )
+                            ]
+                        ]
+                    )
                 else:
                     message_text += "💡 Статус: Вы в офлайн"
                     reply_markup = None
 
-                # Создаем задачу отправки сообщения
-                try:
-                    task = bot.send_message(
-                        chat_id=pharmacist.user.telegram_id,
-                        text=message_text,
-                        reply_markup=reply_markup
-                    )
-                    tasks.append(task)
-                except Exception as e:
-                    logger.error(f"Error creating send task for pharmacist {pharmacist.uuid}: {e}")
-
-        # Выполняем все задачи параллельно
-        if tasks:
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            for i, result in enumerate(results):
-                if isinstance(result, Exception):
-                    logger.error(f"Failed to send notification to pharmacist {i}: {result}")
-                else:
-                    logger.info(f"Notification sent successfully to pharmacist {i}")
+                await bot.send_message(
+                    chat_id=pharmacist.user.telegram_id,
+                    text=message_text,
+                    reply_markup=reply_markup
+                )
+                logger.info(f"Clarification notification sent to pharmacist {pharmacist.user.telegram_id}")
 
     except Exception as e:
         logger.error(f"Error in notify_about_clarification: {e}", exc_info=True)

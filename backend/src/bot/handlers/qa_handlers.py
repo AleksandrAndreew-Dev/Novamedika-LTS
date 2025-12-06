@@ -16,6 +16,7 @@ from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 from db.qa_models import User, Pharmacist, Question, Answer
 from bot.handlers.qa_states import QAStates
+from services.dialog_service import DialogService
 
 # ИСПРАВЛЕННЫЙ импорт:
 from bot.keyboards.qa_keyboard import (
@@ -666,13 +667,7 @@ async def answer_question_callback(
 
 # В qa_handlers.py обновляем process_answer_text
 @router.callback_query(F.data.startswith("complete_after_photo_"))
-async def complete_after_photo_callback(
-    callback: CallbackQuery,
-    db: AsyncSession,
-    is_pharmacist: bool,
-    pharmacist: Pharmacist,
-    state: FSMContext
-):
+async def process_answer_text(message: Message, state: FSMContext, db: AsyncSession, pharmacist: Pharmacist):
     """Завершение вопроса после получения фото"""
     question_uuid = callback.data.replace("complete_after_photo_", "")
 
@@ -695,6 +690,7 @@ async def complete_after_photo_callback(
         question.status = "answered"
         question.answered_at = get_utc_now_naive()
 
+
         await db.commit()
         await state.clear()
 
@@ -709,7 +705,7 @@ async def complete_after_photo_callback(
         logger.error(f"Error in complete_after_photo_callback: {e}")
         await callback.answer("❌ Ошибка при завершении", show_alert=True)
 
-        
+
 @router.message(QAStates.waiting_for_answer)
 async def process_answer_text(
     message: Message,
@@ -760,6 +756,17 @@ async def process_answer_text(
         )
 
         db.add(answer)
+
+        # ✅ Добавляем сообщение в историю диалога
+        await DialogService.add_message(
+            question_id=question.uuid,
+            sender_type='pharmacist',
+            sender_id=pharmacist.uuid,
+            message_type='answer',
+            text=message.text,
+            db=db
+        )
+
         await db.commit()
 
         # Уведомляем пользователя

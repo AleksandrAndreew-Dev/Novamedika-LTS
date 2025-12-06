@@ -16,9 +16,11 @@ from bot.handlers.common_handlers import get_user_keyboard
 
 from bot.services.notification_service import notify_about_clarification
 
+
 import logging
 from datetime import datetime, timedelta
 from utils.time_utils import get_utc_now_naive
+from services.dialog_service import DialogService
 
 logger = logging.getLogger(__name__)
 
@@ -40,15 +42,9 @@ async def cmd_ask(message: Message):
 
 @router.message(Command("my_questions"))
 @router.callback_query(F.data == "my_questions_callback")
-async def cmd_my_questions(
-    update: Union[Message, CallbackQuery],
-    db: AsyncSession,
-    user: User,
-    is_pharmacist: bool
-):
+async def cmd_my_questions(update: Union[Message, CallbackQuery], db: AsyncSession, user: User, is_pharmacist: bool):
     """Показать вопросы пользователя или ответы фармацевта - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
 
-    # Обрабатываем разные типы входящих данных
     if isinstance(update, CallbackQuery):
         message = update.message
         from_user = update.from_user
@@ -107,14 +103,14 @@ async def cmd_my_questions(
             await message.answer(questions_text)
 
         else:
-            # Для обычных пользователей показываем их вопросы
+            # Для обычных пользователей показываем их вопросы с историей диалога
             logger.info(f"Getting questions for user {from_user.id}")
 
             result = await db.execute(
                 select(Question)
                 .where(Question.user_id == user.uuid)
                 .order_by(Question.created_at.desc())
-                .limit(20)
+                .limit(10)  # Уменьшили лимит для лучшей читаемости
             )
             user_questions = result.scalars().all()
 
@@ -124,23 +120,34 @@ async def cmd_my_questions(
                 await message.answer("📝 У вас пока нет вопросов.\n\nИспользуйте /ask чтобы задать первый вопрос!")
                 return
 
-            questions_text = "📋 Ваши вопросы:\n\n"
+            for question in user_questions:
+                # Получаем историю диалога
+                dialog_messages = await DialogService.get_dialog_history(question.uuid, db)
 
-            for i, question in enumerate(user_questions, 1):
-                questions_text += f"{i}. ❓ Вопрос: {question.text}\n"
-                questions_text += f"   📊 Статус: {question.status}\n"
+                question_text = f"📋 Вопрос: {question.text}\n"
+                question_text += f"📊 Статус: {question.status}\n"
+                question_text += f"🕒 Создан: {question.created_at.strftime('%d.%m.%Y %H:%M')}\n"
 
-                # ИСПРАВЛЕНИЕ: избегаем ленивой загрузки answers
-                # Вместо question.answers делаем отдельный запрос
-                answers_result = await db.execute(
-                    select(Answer)
-                    .where(Answer.question_id == question.uuid)
-                    .order_by(Answer.created_at.asc())
-                )
-                answers = answers_result.scalars().all()
+                if question.answered_at:
+                    question_text += f"✅ Ответ получен: {question.answered_at.strftime('%d.%m.%Y %H:%M')}\n"
 
+                if dialog_messages:
+                    question_text += "\n💬 История диалога:\n"
+                    for msg in dialog_messages:
+                        timestamp = msg.created_at.strftime('%H:%M')
+
+                        if msg.message_type == 'question':
+                            question_text += f"   [{timestamp}] ❓ Вопрос: {msg.text[:80]}...\n"
+                        elif msg.message_type == 'answer':
+                            sender = "Фармацевт" if msg.sender_type == 'pharmacist' else "Вы"
+                            question_text += f"   [{timestamp}] 💬 {sender}: {msg.text[:80]}...\n"
+                        elif msg.message_type == 'clarification':
+                            question_text += f"   [{timestamp}] ✍️ Уточнение: {msg.text[:80]}...\n"
+                        elif msg.message_type == 'photo':
+                            question_text += f"   [{timestamp}] 📸 Фото рецепта\n"
+
+                # Добавляем кнопки для активных вопросов
                 if question.status == "answered":
-                    # Создаем кнопку уточнения для каждого отвеченного вопроса
                     clarify_keyboard = InlineKeyboardMarkup(
                         inline_keyboard=[
                             [
@@ -151,56 +158,16 @@ async def cmd_my_questions(
                             ]
                         ]
                     )
+                    await message.answer(question_text, reply_markup=clarify_keyboard)
+                else:
+                    await message.answer(question_text)
 
-                    # Отправляем отдельное сообщение с кнопкой для каждого отвеченного вопроса
-                    await message.answer(
-                        f"❓ Вопрос: {question.text[:200]}...\n"
-                        f"✅ Отвечен: {question.answered_at.strftime('%d.%m.%Y %H:%M')}",
-                        reply_markup=clarify_keyboard
-                    )
-
-                if answers:
-                    questions_text += "   💬 Ответы:\n"
-                    for answer in answers:
-                        # Получаем информацию о фармацевте
-                        pharmacist_result = await db.execute(
-                            select(Pharmacist).where(Pharmacist.uuid == answer.pharmacist_id)
-                        )
-                        pharmacist = pharmacist_result.scalar_one_or_none()
-
-                        # Формируем имя фармацевта с ФИО
-                        pharmacist_name = "Фармацевт"
-                        if pharmacist and pharmacist.pharmacy_info:
-                            first_name = pharmacist.pharmacy_info.get('first_name', '')
-                            last_name = pharmacist.pharmacy_info.get('last_name', '')
-                            patronymic = pharmacist.pharmacy_info.get('patronymic', '')
-
-                            name_parts = []
-                            if last_name:
-                                name_parts.append(last_name)
-                            if first_name:
-                                name_parts.append(first_name)
-                            if patronymic:
-                                name_parts.append(patronymic)
-
-                            pharmacist_name = " ".join(name_parts) if name_parts else "Фармацевт"
-
-                        answer_preview = answer.text[:80] + "..." if len(answer.text) > 80 else answer.text
-                        questions_text += f"     - {pharmacist_name}: {answer_preview}\n"
-
-                questions_text += f"   🕒 Создан: {question.created_at.strftime('%d.%m.%Y %H:%M')}\n"
-
-                if question.answered_at:
-                    questions_text += f"   ✅ Ответ получен: {question.answered_at.strftime('%d.%m.%Y %H:%M')}\n"
-
-                questions_text += "   ---\n\n"
-
-            await message.answer(questions_text)
-
+                await message.answer("─" * 30)  # Разделитель между вопросами
 
     except Exception as e:
         logger.error(f"Error in cmd_my_questions for user {from_user.id}: {e}", exc_info=True)
         await message.answer("❌ Ошибка при получении ваших вопросов. Попробуйте позже.")
+
     if is_callback:
         await update.answer()
 
@@ -272,15 +239,9 @@ async def cmd_clarify(message: Message, state: FSMContext, db: AsyncSession, use
         logger.error(f"Error in cmd_clarify: {e}", exc_info=True)
         await message.answer("❌ Ошибка при создании уточнения.")
 
-# bot/handlers/user_questions.py - обновляем process_clarification
 @router.message(UserQAStates.waiting_for_clarification)
-async def process_clarification(
-    message: Message,
-    state: FSMContext,
-    db: AsyncSession,
-    user: User
-):
-    """Обработка уточнения пользователя"""
+async def process_clarification(message: Message, state: FSMContext, db: AsyncSession, user: User):
+    """Обработка уточнения пользователя - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
     try:
         state_data = await state.get_data()
         question_uuid = state_data.get("clarify_question_id")
@@ -301,28 +262,22 @@ async def process_clarification(
             await state.clear()
             return
 
-        # Создаем новый вопрос как уточнение
-        clarification_question = Question(
-            text=f"Уточнение: {message.text}",
-            user_id=user.uuid,
-            status="pending",
-            category=original_question.category,
-            context_data={
-                "is_clarification": True,
-                "original_question_id": str(original_question.uuid),
-                "original_question_text": original_question.text
-            }
+        # ✅ Добавляем сообщение об уточнении в диалог
+        await DialogService.add_message(
+            question_id=original_question.uuid,
+            sender_type='user',
+            sender_id=user.uuid,
+            message_type='clarification',
+            text=message.text,
+            db=db
         )
-
-        db.add(clarification_question)
         await db.commit()
-        await db.refresh(clarification_question)
 
-        # Уведомляем о новом уточнении
+        # ✅ Уведомляем о новом уточнении (передаем текст уточнения)
         await notify_about_clarification(
-            clarification_question,
-            original_question,
-            db
+            original_question=original_question,
+            clarification_text=message.text,
+            db=db
         )
 
         await message.answer(
@@ -338,13 +293,7 @@ async def process_clarification(
         await state.clear()
 
 @router.message(UserQAStates.waiting_for_question)
-async def process_user_question(
-    message: Message,
-    state: FSMContext,
-    db: AsyncSession,
-    is_pharmacist: bool,
-    user: User
-):
+async def process_user_question(message: Message, state: FSMContext, db: AsyncSession, user: User):
     """Упрощенная обработка вопроса от пользователя"""
     logger.info(f"Processing question from user {message.from_user.id}")
 
@@ -356,20 +305,24 @@ async def process_user_question(
     try:
         # Создаем вопрос
         question = Question(
-            text=message.text,
-            user_id=user.uuid,
-            status="pending",
-            created_at=get_utc_now_naive()
-        )
+        text=message.text,
+        user_id=user.uuid,
+        status="pending",
+        created_at=get_utc_now_naive()
+    )
 
         db.add(question)
         await db.commit()
         await db.refresh(question)
+
+        # ✅ Создаем первое сообщение в диалоге
+        await DialogService.create_question_message(question, db)
         logger.info(f"Question created for user {user.telegram_id}, question_id: {question.uuid}")
 
         # Уведомляем фармацевтов
         try:
             from bot.services.notification_service import notify_pharmacists_about_new_question
+            await DialogService.create_question_message(question, db)
             await notify_pharmacists_about_new_question(question, db)
         except Exception as e:
             logger.error(f"Error in notification service: {e}")
@@ -570,12 +523,9 @@ async def send_prescription_photo_callback(
         logger.error(f"Error in send_prescription_photo_callback: {e}", exc_info=True)
         await callback.answer("❌ Ошибка при обработке запроса", show_alert=True)
 
-# В user_questions.py, обновляем process_prescription_photo:
-
-# В user_questions.py, обновляем process_prescription_photo и process_prescription_document
 
 
-# В user_questions.py добавляем
+
 @router.callback_query(F.data.startswith("complete_by_user_"))
 async def complete_by_user_callback(
     callback: CallbackQuery,
@@ -644,14 +594,9 @@ async def complete_by_user_callback(
         logger.error(f"Error in complete_by_user_callback: {e}")
         await callback.answer("❌ Ошибка при завершении диалога", show_alert=True)
 
-        
+
 @router.message(UserQAStates.waiting_for_prescription_photo, F.photo)
-async def process_prescription_photo(
-    message: Message,
-    state: FSMContext,
-    db: AsyncSession,
-    user: User
-):
+async def process_prescription_photo(message: Message, state: FSMContext, db: AsyncSession, user: User):
     """Обработка отправленного фото рецепта - БЕЗ СОХРАНЕНИЯ В БД"""
     try:
         state_data = await state.get_data()
@@ -744,6 +689,15 @@ async def process_prescription_photo(
             parse_mode="HTML",
             reply_markup=pharmacist_keyboard
         )
+        await DialogService.add_message(
+        question_id=question_uuid,
+        sender_type='user',
+        sender_id=user.uuid,
+        message_type='photo',
+        file_id=photo.file_id,
+        caption=message.caption,
+        db=db
+    )
 
         await message.answer(
             f"✅ Фото рецепта отправлено фармацевту {pharmacist_name}!\n\n"

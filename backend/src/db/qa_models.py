@@ -87,6 +87,11 @@ class Question(Base):
         foreign_keys=[taken_by],
         backref="taken_questions"
     )
+    dialog_messages = relationship(
+        "DialogMessage",
+        back_populates="question",
+        order_by="DialogMessage.created_at"
+    )
 
 
 class Answer(Base):
@@ -107,3 +112,30 @@ class Answer(Base):
 
 
 
+# Добавим в qa_models.py
+class DialogMessage(Base):
+    __tablename__ = "qa_dialog_messages"
+
+    uuid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    question_id = Column(UUID(as_uuid=True), ForeignKey("qa_questions.uuid"), nullable=False)
+
+    # Тип сообщения
+    message_type = Column(String(20), nullable=False)  # 'question', 'answer', 'clarification', 'photo', 'document'
+
+    # Отправитель
+    sender_type = Column(String(20), nullable=False)  # 'user' или 'pharmacist'
+    sender_id = Column(UUID(as_uuid=True), nullable=False)  # user_id или pharmacist_id
+
+    # Содержимое
+    text = Column(Text, nullable=True)  # Текст для question/answer/clarification
+    file_id = Column(String(500), nullable=True)  # file_id из Telegram для фото/документов
+    caption = Column(Text, nullable=True)  # Описание для фото
+
+    # Метаданные
+    created_at = Column(DateTime, default=get_utc_now_naive)
+    is_deleted = Column(Boolean, default=False)
+
+    # Связи
+    question = relationship("Question", back_populates="dialog_messages")
+    sender_user = relationship("User", foreign_keys=[sender_id], primaryjoin="DialogMessage.sender_type=='user' and DialogMessage.sender_id==User.uuid", uselist=False)
+    sender_pharmacist = relationship("Pharmacist", foreign_keys=[sender_id], primaryjoin="DialogMessage.sender_type=='pharmacist' and DialogMessage.sender_id==Pharmacist.uuid", uselist=False)
