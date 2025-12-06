@@ -22,7 +22,6 @@ from bot.services.dialog_service import DialogService
 from bot.keyboards.qa_keyboard import (
     make_question_list_keyboard,
     make_pharmacist_dialog_keyboard_with_end,
-    make_user_response_keyboard,
     make_user_dialog_keyboard_with_end,
     make_question_keyboard,  # ДОБАВЬТЕ ЭТОТ ИМПОРТ
 )
