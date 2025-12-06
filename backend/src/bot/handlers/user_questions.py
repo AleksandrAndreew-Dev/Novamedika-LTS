@@ -62,28 +62,11 @@ async def cmd_my_questions(
     )
 
     try:
+        # В функции cmd_my_questions обновите отображение статуса:
         if is_pharmacist:
-            # Для фармацевтов показываем вопросы, на которые они ответили
-            logger.info(f"Getting answered questions for pharmacist {from_user.id}")
-
-            result = await db.execute(
-                select(Question)
-                .join(Answer, Answer.question_id == Question.uuid)
-                .where(Answer.pharmacist_id == user.uuid)
-                .order_by(Answer.created_at.desc())
-                .limit(20)
-            )
-            answered_questions = result.scalars().all()
-
-            logger.info(
-                f"Found {len(answered_questions)} answered questions for pharmacist {user.telegram_id}"
-            )
-
-            if not answered_questions:
-                await message.answer("📝 Вы еще не ответили ни на один вопрос.")
-                return
-
-            questions_text = "📋 Ваши ответы на вопросы:\n\n"
+            # Для фармацевтов
+            questions_text = "📋 <b>ВАШИ ОТВЕТЫ НА ВОПРОСЫ</b>\n\n"
+            questions_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
 
             for i, question in enumerate(answered_questions, 1):
                 # Получаем последний ответ этого фармацевта на данный вопрос
@@ -100,80 +83,51 @@ async def cmd_my_questions(
                 )
                 answer = answer_result.scalar_one_or_none()
 
-                questions_text += f"{i}. ❓ Вопрос: {question.text[:100]}{'...' if len(question.text) > 100 else ''}\n"
+                # Определяем иконку статуса
+                status_icon = "🟢" if question.status == "completed" else "🟡" if question.status == "answered" else "🔵"
+
+                questions_text += f"<b>{i}. {status_icon} {question.status.upper()}</b>\n"
+                questions_text += f"❓ Вопрос: {question.text[:80]}{'...' if len(question.text) > 80 else ''}\n"
+
                 if answer:
                     answer_preview = (
-                        answer.text[:100] + "..."
-                        if len(answer.text) > 100
+                        answer.text[:80] + "..."
+                        if len(answer.text) > 80
                         else answer.text
                     )
-                    questions_text += f"   💬 Ваш ответ: {answer_preview}\n"
-                questions_text += (
-                    f"   🕒 Создан: {question.created_at.strftime('%d.%m.%Y %H:%M')}\n"
-                )
-                questions_text += "   ---\n\n"
+                    questions_text += f"💬 Ваш ответ: {answer_preview}\n"
 
-            await message.answer(questions_text)
+                questions_text += f"📅 {question.created_at.strftime('%d.%m.%Y %H:%M')}\n"
+                questions_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+
+            await message.answer(questions_text, parse_mode="HTML")
 
         else:
-            # Для обычных пользователей показываем их вопросы с историей диалога
-            logger.info(f"Getting questions for user {from_user.id}")
-
-            result = await db.execute(
-                select(Question)
-                .where(Question.user_id == user.uuid)
-                .order_by(Question.created_at.desc())
-                .limit(10)  # Уменьшили лимит для лучшей читаемости
-            )
-            user_questions = result.scalars().all()
-
-            logger.info(
-                f"Found {len(user_questions)} questions for user {user.telegram_id}"
-            )
-
-            if not user_questions:
-                await message.answer(
-                    "📝 У вас пока нет вопросов.\n\nИспользуйте /ask чтобы задать первый вопрос!"
-                )
-                return
-
+            # Для пользователей - обновите отображение вопроса
             for question in user_questions:
-                # Получаем историю диалога
-                dialog_messages = await DialogService.get_dialog_history(
-                    question.uuid, db
-                )
+                # Определяем иконку статуса
+                if question.status == "completed":
+                    status_icon = "✅ ЗАВЕРШЕН"
+                    status_color = "#2ecc71"
+                elif question.status == "answered":
+                    status_icon = "💬 ОТВЕЧЕНО"
+                    status_color = "#3498db"
+                elif question.status == "in_progress":
+                    status_icon = "🔄 В РАБОТЕ"
+                    status_color = "#f39c12"
+                else:
+                    status_icon = "⏳ ОЖИДАЕТ"
+                    status_color = "#95a5a6"
 
-                question_text = f"📋 Вопрос: {question.text}\n"
-                question_text += f"📊 Статус: {question.status}\n"
-                question_text += (
-                    f"🕒 Создан: {question.created_at.strftime('%d.%m.%Y %H:%M')}\n"
-                )
+                question_text = f"<b>📋 ВОПРОС</b>\n\n"
+                question_text += f"<b>Статус:</b> {status_icon}\n"
+                question_text += f"<b>Создан:</b> {question.created_at.strftime('%d.%m.%Y %H:%M')}\n"
 
                 if question.answered_at:
-                    question_text += f"✅ Ответ получен: {question.answered_at.strftime('%d.%m.%Y %H:%M')}\n"
+                    question_text += f"<b>Ответ получен:</b> {question.answered_at.strftime('%d.%m.%Y %H:%M')}\n"
 
-                if dialog_messages:
-                    question_text += "\n💬 История диалога:\n"
-                    for msg in dialog_messages:
-                        timestamp = msg.created_at.strftime("%H:%M")
-
-                        if msg.message_type == "question":
-                            question_text += (
-                                f"   [{timestamp}] ❓ Вопрос: {msg.text[:80]}...\n"
-                            )
-                        elif msg.message_type == "answer":
-                            sender = (
-                                "Фармацевт" if msg.sender_type == "pharmacist" else "Вы"
-                            )
-                            question_text += (
-                                f"   [{timestamp}] 💬 {sender}: {msg.text[:80]}...\n"
-                            )
-                        elif msg.message_type == "clarification":
-                            question_text += (
-                                f"   [{timestamp}] ✍️ Уточнение: {msg.text[:80]}...\n"
-                            )
-                        elif msg.message_type == "photo":
-                            question_text += f"   [{timestamp}] 📸 Фото рецепта\n"
+                question_text += f"\n<b>❓ Вопрос:</b>\n{question.text}\n\n"
+                question_text += "━━━━━━━━━━━━━━━━━━━━"
 
                 # Добавляем кнопки для активных вопросов
                 if question.status == "answered":
@@ -183,15 +137,28 @@ async def cmd_my_questions(
                                 InlineKeyboardButton(
                                     text="✍️ Уточнить этот вопрос",
                                     callback_data=f"quick_clarify_{question.uuid}",
+                                ),
+                                InlineKeyboardButton(
+                                    text="✅ Завершить консультацию",
+                                    callback_data=f"end_dialog_{question.uuid}",
                                 )
                             ]
                         ]
                     )
-                    await message.answer(question_text, reply_markup=clarify_keyboard)
-                else:
-                    await message.answer(question_text)
+                    await message.answer(question_text, parse_mode="HTML", reply_markup=clarify_keyboard)
+                elif question.status == "completed":
+                    # Для завершенных вопросов показываем финальный статус
+                    completed_text = f"✅ <b>КОНСУЛЬТАЦИЯ ЗАВЕРШЕНА</b>\n\n"
+                    completed_text += f"❓ <b>Вопрос:</b>\n{question.text}\n\n"
+                    completed_text += f"📅 <b>Дата завершения:</b> {question.answered_at.strftime('%d.%m.%Y %H:%M') if question.answered_at else 'Не указана'}\n\n"
+                    completed_text += "💡 <b>Статус:</b> Консультация успешно завершена\n"
+                    completed_text += "━━━━━━━━━━━━━━━━━━━━"
 
-                await message.answer("─" * 30)  # Разделитель между вопросами
+                    await message.answer(completed_text, parse_mode="HTML")
+                else:
+                    await message.answer(question_text, parse_mode="HTML")
+
+                await message.answer("━" * 40)  # Разделитель между вопросами
 
     except Exception as e:
         logger.error(
