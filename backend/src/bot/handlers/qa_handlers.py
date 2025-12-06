@@ -809,6 +809,86 @@ async def request_photo_callback(
         await callback.answer("❌ Ошибка при обработке запроса", show_alert=True)
 
 
+@router.callback_query(F.data.startswith("request_more_photos_"))
+async def request_more_photos_callback(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: Pharmacist,
+):
+    """Запросить еще фото рецепта"""
+    question_uuid = callback.data.replace("request_more_photos_", "")
+
+    if not is_pharmacist or not pharmacist:
+        await callback.answer(
+            "❌ Эта функция доступна только фармацевтам", show_alert=True
+        )
+        return
+
+    try:
+        # Получаем вопрос
+        result = await db.execute(
+            select(Question)
+            .options(selectinload(Question.user))
+            .where(Question.uuid == question_uuid)
+        )
+        question = result.scalar_one_or_none()
+
+        if not question:
+            await callback.answer("❌ Вопрос не найден", show_alert=True)
+            return
+
+        # Сохраняем информацию о запросе дополнительного фото
+        if not question.context_data:
+            question.context_data = {}
+
+        question.context_data["photo_requested_by"] = {
+            "pharmacist_id": str(pharmacist.uuid),
+            "telegram_id": pharmacist.user.telegram_id,
+            "requested_at": get_utc_now_naive().isoformat(),
+        }
+        question.context_data["photo_requested"] = True
+
+        await db.commit()
+
+        # Создаем клавиатуру для отправки фото
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+        photo_keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="📸 Отправить еще фото рецепта",
+                        callback_data=f"send_prescription_photo_{question.uuid}",
+                    )
+                ]
+            ]
+        )
+
+        # Отправляем запрос пользователю
+        await callback.bot.send_message(
+            chat_id=question.user.telegram_id,
+            text=f"📸 <b>Фармацевт запросил дополнительное фото рецепта</b>\n\n"
+            f"❓ <b>По вопросу:</b>\n{question.text}\n\n"
+            f"Пожалуйста, отправьте еще фото рецепта:",
+            parse_mode="HTML",
+            reply_markup=photo_keyboard,
+        )
+
+        await callback.answer("✅ Запрос на дополнительное фото отправлен пользователю!")
+
+        # Продолжаем диалог
+        await callback.message.answer(
+            "📸 Запрос на дополнительное фото отправлен пользователю.\n\n"
+            "Продолжайте диалог:",
+            reply_markup=make_pharmacist_dialog_keyboard(question_uuid),
+        )
+
+    except Exception as e:
+        logger.error(f"Error in request_more_photos_callback: {e}", exc_info=True)
+        await callback.answer("❌ Ошибка при обработке запроса", show_alert=True)
+
 @router.message(QAStates.waiting_for_photo_request)
 async def process_photo_request_message(
     message: Message,

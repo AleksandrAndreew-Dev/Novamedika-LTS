@@ -661,7 +661,8 @@ async def process_prescription_photo(
                 [
                     InlineKeyboardButton(
                         text="💬 Ответить пользователю",
-                        callback_data=f"answer_after_photo_{question_uuid}",
+                        # ИСПРАВЛЕНО: Убрали префикс after_photo_
+                        callback_data=f"answer_{question_uuid}",
                     ),
                     InlineKeyboardButton(
                         text="📸 Запросить еще фото",
@@ -676,6 +677,8 @@ async def process_prescription_photo(
                 ],
             ]
         )
+
+
 
         await message.bot.send_photo(
             chat_id=pharmacist.user.telegram_id,
@@ -753,7 +756,7 @@ async def process_prescription_document(
         )
         question = question_result.scalar_one_or_none()
 
-        # Формируем ФИО пользователя и фармацевта (как в process_prescription_photo)
+        # Формируем ФИО пользователя и фармацевта
         user_name = user.first_name or "Пользователь"
         if user.last_name:
             user_name = f"{user.first_name} {user.last_name}"
@@ -774,7 +777,32 @@ async def process_prescription_document(
 
             pharmacist_name = " ".join(name_parts) if name_parts else "Фармацевт"
 
-        # Отправляем документ фармацевту напрямую
+        # Создаем клавиатуру с кнопками для фармацевта (исправлено)
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+        pharmacist_keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="💬 Ответить пользователю",
+                        # ИСПРАВЛЕНО: Правильный формат callback_data
+                        callback_data=f"answer_{question_uuid}",
+                    ),
+                    InlineKeyboardButton(
+                        text="📸 Запросить еще фото",
+                        callback_data=f"request_more_photos_{question_uuid}",
+                    ),
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="✅ Завершить консультацию",
+                        callback_data=f"end_dialog_{question_uuid}",
+                    )
+                ],
+            ]
+        )
+
+        # Отправляем документ фармацевту напрямую с клавиатурой
         await message.bot.send_document(
             chat_id=pharmacist.user.telegram_id,
             document=document.file_id,
@@ -784,8 +812,20 @@ async def process_prescription_document(
             f"❓ <b>По вопросу:</b> {question.text[:100] if question else 'Вопрос не найден'}...\n"
             f"{'💬 <b>Описание:</b> ' + message.caption if message.caption else ''}\n\n"
             f"⚠️ <i>Документ временный и не сохранен в системе</i>\n"
-            f"💊 <i>Это документ был запрошен вами у пользователя</i>",
+            f"💊 <i>Этот документ был запрошен вами у пользователя</i>",
             parse_mode="HTML",
+            reply_markup=pharmacist_keyboard,  # Добавляем клавиатуру
+        )
+
+        # ✅ Добавляем сообщение о фото в историю диалога
+        await DialogService.add_message(
+            db=db,
+            question_id=question_uuid,
+            sender_type="user",
+            sender_id=user.uuid,
+            message_type="photo",
+            file_id=document.file_id,
+            caption=message.caption,
         )
 
         await message.answer(
