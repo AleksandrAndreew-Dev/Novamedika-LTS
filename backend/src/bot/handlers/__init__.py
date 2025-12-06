@@ -5,6 +5,7 @@ from .qa_handlers import router as qa_handlers_router
 from bot.middleware.role_middleware import RoleMiddleware
 from .direct_questions import router as direct_questions_router
 from .clarify_handlers import router as clarify_router
+from .dialog_management import router as dialog_management_router
 
 __all__ = [
     "direct_questions_router",
@@ -15,4 +16,5 @@ __all__ = [
     "RoleMiddleware",
     "clarify_router",
     "RegistrationStates",
+    "dialog_management_router",
 ]

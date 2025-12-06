@@ -17,6 +17,7 @@ from bot.handlers import (
     registration_router,
     user_questions_router,
     qa_handlers_router,
+    dialog_management_router
 )
 from bot.middleware.role_middleware import RoleMiddleware
 from db.database import init_models, async_session_maker
@@ -61,6 +62,7 @@ async def lifespan(app: FastAPI):
     dp.update.outer_middleware(RoleMiddleware())
 
     dp.include_router(common_router)
+    dp.include_router(dialog_management_router)
     dp.include_router(registration_router)
     dp.include_router(qa_handlers_router)
     dp.include_router(user_questions_router)

@@ -222,3 +222,60 @@ def make_answer_with_photo_request_keyboard(question_uuid: str):
             ]
         ]
     )
+
+
+# В qa_keyboard.py добавить/обновить функции:
+
+def make_pharmacist_dialog_keyboard_with_end(question_uuid: str):
+    """Клавиатура для фармацевта в диалоге С КНОПКОЙ ЗАВЕРШЕНИЯ"""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📸 Запросить фото рецепта",
+                    callback_data=f"request_photo_{question_uuid}"
+                ),
+                InlineKeyboardButton(
+                    text="💬 Ответить",
+                    callback_data=f"answer_{question_uuid}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✅ Завершить диалог",
+                    callback_data=f"end_dialog_{question_uuid}"
+                )
+            ]
+        ]
+    )
+
+def make_user_dialog_keyboard_with_end(question_uuid: str, photo_requested: bool = False):
+    """Клавиатура для пользователя в диалоге С КНОПКОЙ ЗАВЕРШЕНИЯ"""
+    buttons = []
+
+    # Кнопка уточнения
+    buttons.append([
+        InlineKeyboardButton(
+            text="✍️ Уточнить вопрос",
+            callback_data=f"quick_clarify_{question_uuid}"
+        )
+    ])
+
+    # Кнопка фото только если запрошено
+    if photo_requested:
+        buttons.append([
+            InlineKeyboardButton(
+                text="📸 Отправить фото рецепта",
+                callback_data=f"send_prescription_photo_{question_uuid}"
+            )
+        ])
+
+    # Кнопка завершения диалога
+    buttons.append([
+        InlineKeyboardButton(
+            text="✅ Завершить диалог",
+            callback_data=f"end_dialog_{question_uuid}"
+        )
+    ])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)

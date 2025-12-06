@@ -21,9 +21,9 @@ from bot.services.dialog_service import DialogService
 # ИСПРАВЛЕННЫЙ импорт:
 from bot.keyboards.qa_keyboard import (
     make_question_list_keyboard,
-    make_pharmacist_dialog_keyboard,
+    make_pharmacist_dialog_keyboard_with_end,
     make_user_response_keyboard,
-    make_user_dialog_keyboard,
+    make_user_dialog_keyboard_with_end,
     make_question_keyboard,  # ДОБАВЬТЕ ЭТОТ ИМПОРТ
 )
 from bot.services.assignment_service import QuestionAssignmentService
@@ -301,6 +301,52 @@ async def cmd_release_question(
         logger.error(f"Error in cmd_release_question: {e}")
         await message.answer("❌ Ошибка при получении вопросов")
 
+
+@router.callback_query(F.data.startswith("complete_after_photo_"))
+async def complete_after_photo_callback(
+    callback: CallbackQuery,  # ИСПРАВЛЕНО: было message: Message
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: Pharmacist,
+    state: FSMContext,
+):
+    """Завершение вопроса после получения фото"""
+    question_uuid = callback.data.replace("complete_after_photo_", "")
+
+    if not is_pharmacist or not pharmacist:
+        await callback.answer(
+            "❌ Эта функция доступна только фармацевтам", show_alert=True
+        )
+        return
+
+    try:
+        # Получаем вопрос
+        result = await db.execute(
+            select(Question).where(Question.uuid == question_uuid)
+        )
+        question = result.scalar_one_or_none()
+
+        if not question:
+            await callback.answer("❌ Вопрос не найден", show_alert=True)
+            return
+
+        # Завершаем вопрос
+        question.status = "answered"
+        question.answered_at = get_utc_now_naive()
+
+        await db.commit()
+        await state.clear()
+
+        await callback.answer("✅ Консультация завершена!")
+        await callback.message.answer(
+            f"✅ <b>Консультация завершена</b>\n\n"
+            f"❓ Вопрос: {question.text[:200]}...\n\n"
+            f"💬 Вы получили фото рецепта и завершили консультацию."
+        )
+
+    except Exception as e:
+        logger.error(f"Error in complete_after_photo_callback: {e}")
+        await callback.answer("❌ Ошибка при завершении", show_alert=True)
 
 @router.callback_query(F.data.startswith("complete_"))
 async def complete_question_callback(
@@ -656,7 +702,7 @@ async def answer_question_callback(
             f"Напишите ваш ответ или уточняющий вопрос:\n"
             f"(или нажмите кнопки ниже для других действий)",
             parse_mode="HTML",
-            reply_markup=make_pharmacist_dialog_keyboard(question_uuid),
+            reply_markup = make_pharmacist_dialog_keyboard_with_end(question_uuid),
         )
 
         await callback.answer()
@@ -666,48 +712,7 @@ async def answer_question_callback(
         await callback.answer("❌ Ошибка при обработке запроса", show_alert=True)
 
 
-# В qa_handlers.py обновляем process_answer_text
-@router.callback_query(F.data.startswith("complete_after_photo_"))
-async def complete_after_photo_callback(
-    message: Message, state: FSMContext, db: AsyncSession, pharmacist: Pharmacist
-):
-    """Завершение вопроса после получения фото"""
-    question_uuid = callback.data.replace("complete_after_photo_", "")
 
-    if not is_pharmacist or not pharmacist:
-        await callback.answer(
-            "❌ Эта функция доступна только фармацевтам", show_alert=True
-        )
-        return
-
-    try:
-        # Получаем вопрос
-        result = await db.execute(
-            select(Question).where(Question.uuid == question_uuid)
-        )
-        question = result.scalar_one_or_none()
-
-        if not question:
-            await callback.answer("❌ Вопрос не найден", show_alert=True)
-            return
-
-        # Завершаем вопрос
-        question.status = "answered"
-        question.answered_at = get_utc_now_naive()
-
-        await db.commit()
-        await state.clear()
-
-        await callback.answer("✅ Консультация завершена!")
-        await callback.message.answer(
-            f"✅ <b>Консультация завершена</b>\n\n"
-            f"❓ Вопрос: {question.text[:200]}...\n\n"
-            f"💬 Вы получили фото рецепта и завершили консультацию."
-        )
-
-    except Exception as e:
-        logger.error(f"Error in complete_after_photo_callback: {e}")
-        await callback.answer("❌ Ошибка при завершении", show_alert=True)
 
 
 @router.message(QAStates.waiting_for_answer)
@@ -841,7 +846,7 @@ async def process_answer_text(
                     chat_id=user.telegram_id,
                     text=message_text,
                     parse_mode="HTML",
-                    reply_markup=make_user_dialog_keyboard(
+                    reply_markup = make_user_dialog_keyboard_with_end(
                         question.uuid, photo_requested
                     ),
                 )
