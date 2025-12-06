@@ -112,7 +112,7 @@ class Answer(Base):
 
 
 
-# Добавим в qa_models.py
+# Вместо сложных отношений, используем более простой подход
 class DialogMessage(Base):
     __tablename__ = "qa_dialog_messages"
 
@@ -135,7 +135,7 @@ class DialogMessage(Base):
     created_at = Column(DateTime, default=get_utc_now_naive)
     is_deleted = Column(Boolean, default=False)
 
-    # Связи
+    # Связи - УПРОЩЕННЫЕ ОТНОШЕНИЯ
     question = relationship("Question", back_populates="dialog_messages")
-    sender_user = relationship("User", foreign_keys=[sender_id], primaryjoin="DialogMessage.sender_type=='user' and DialogMessage.sender_id==User.uuid", uselist=False)
-    sender_pharmacist = relationship("Pharmacist", foreign_keys=[sender_id], primaryjoin="DialogMessage.sender_type=='pharmacist' and DialogMessage.sender_id==Pharmacist.uuid", uselist=False)
+
+ 

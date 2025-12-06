@@ -64,52 +64,48 @@ async def get_pharmacist_by_telegram_id(
 
 
 class RoleMiddleware(BaseMiddleware):
-    async def __call__(self, handler, event, data: Dict[str, Any]):
-        logger.info(f"RoleMiddleware: Processing update {event.update_id if hasattr(event, 'update_id') else 'unknown'}")
-        # defaults — всегда ставим ключи
-        data.setdefault("is_pharmacist", False)
-        data.setdefault("pharmacist", None)
-        data.setdefault("user_role", "customer")
-        data.setdefault("user", None)
-        data.setdefault("user_id", None)
+    # В файле role_middleware.py исправьте функцию __call__:
 
-        real_event = event
-        if isinstance(event, Update):
-            # предпочитаем последовательность: message, edited_message, callback_query
-            real_event = event.message or event.edited_message or event.callback_query
-            if real_event is None:
-                return await handler(event, data)
-
-        if not getattr(real_event, "from_user", None):
-            return await handler(event, data)
-
+    async def __call__(self, handler, event, data):
+        """Основной обработчик middleware"""
         db = data.get("db")
-        if not (hasattr(db, "execute") and hasattr(db, "commit")):
-            logger.error("Database session not found or invalid in data")
+        if not db:
+            raise RuntimeError("Database session not found in data")
+
+        user_id = None
+        from_user = None
+
+        # Определяем тип события и получаем from_user
+        if isinstance(event, Message):
+            from_user = event.from_user
+        elif isinstance(event, CallbackQuery):
+            from_user = event.from_user
+        elif isinstance(event, types.Poll):
             return await handler(event, data)
 
-        user_id = real_event.from_user.id
-        data["user_id"] = user_id
+        if not from_user:
+            return await handler(event, data)
+
+        user_id = from_user.id
 
         try:
             user = await get_or_create_user(user_id, db)
-            pharmacist = await get_pharmacist_by_telegram_id(user_id, db)
-
-            data["user"] = user
-            data["is_pharmacist"] = pharmacist is not None
-            data["pharmacist"] = pharmacist
-            data["user_role"] = "pharmacist" if pharmacist else "customer"
-
-            logger.debug(
-                "Role middleware: user %s is_pharmacist=%s",
-                user_id,
-                pharmacist is not None,
-            )
-        except Exception:
-            logger.exception("Error in role middleware user processing for %s", user_id)
-            # оставить defaults, не прерываем поток
+            pharmacist = await get_pharmacist_by_user_id(user.uuid, db)
+        except Exception as e:
+            logger.error(f"Error in role middleware user processing for {user_id}")
+            logger.error(e)
+            # ❌ ИСПРАВЛЯЕМ: устанавливаем pharmacist в None вместо вызова raise
+            pharmacist = None
+            user = None  # также устанавливаем user в None
+            # Продолжаем выполнение, но логируем ошибку
 
         logger.info(f"RoleMiddleware: User {user_id} - is_pharmacist: {pharmacist is not None}")
+
+        # Добавляем данные в контекст
+        data["user"] = user
+        data["pharmacist"] = pharmacist
+        data["is_pharmacist"] = pharmacist is not None
+
         return await handler(event, data)
 
 
