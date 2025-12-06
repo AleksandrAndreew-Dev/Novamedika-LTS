@@ -113,6 +113,8 @@ async def confirm_end_dialog_callback(
     user: User,
     state: FSMContext
 ):
+
+
     """Подтверждение завершения диалога"""
     question_uuid = callback.data.replace("confirm_end_dialog_", "")
 
@@ -124,6 +126,10 @@ async def confirm_end_dialog_callback(
 
         if not question:
             await callback.answer("❌ Вопрос не найден", show_alert=True)
+            return
+
+        if question.status in ["completed", "answered"]:
+            await callback.answer("❌ Этот диалог уже завершен", show_alert=True)
             return
 
         # Завершаем диалог

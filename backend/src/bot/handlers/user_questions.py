@@ -339,7 +339,7 @@ async def process_user_question(
     state: FSMContext,
     db: AsyncSession,
     user: User,
-    is_pharmacist: bool
+    is_pharmacist: bool,
 ):
     """Упрощенная обработка вопроса от пользователя"""
     logger.info(f"Processing question from user {message.from_user.id}")
@@ -363,7 +363,6 @@ async def process_user_question(
         db.add(question)
         await db.commit()
         await db.refresh(question)
-
 
         logger.info(
             f"Question created for user {user.telegram_id}, question_id: {question.uuid}"
@@ -467,9 +466,7 @@ async def quick_clarify_callback(
         last_answer = answer_result.scalar_one_or_none()
 
         if not last_answer:
-            await callback.answer(
-                "❌ На этот вопрос еще нет ответа", show_alert=True
-            )
+            await callback.answer("❌ На этот вопрос еще нет ответа", show_alert=True)
             return
 
         # Сохраняем ID вопроса в состоянии
@@ -597,79 +594,6 @@ async def send_prescription_photo_callback(
         await callback.answer("❌ Ошибка при обработке запроса", show_alert=True)
 
 
-@router.callback_query(F.data.startswith("complete_by_user_"))
-async def complete_by_user_callback(
-    callback: CallbackQuery,
-    db: AsyncSession,
-    user: User,
-    is_pharmacist: bool,
-    state: FSMContext,
-):
-    """Завершение вопроса пользователем"""
-    if is_pharmacist:
-        await callback.answer(
-            "❌ Эта функция доступна только пользователям", show_alert=True
-        )
-        return
-
-    question_uuid = callback.data.replace("complete_by_user_", "")
-
-    try:
-        # Получаем вопрос
-        result = await db.execute(
-            select(Question).where(Question.uuid == question_uuid)
-        )
-        question = result.scalar_one_or_none()
-
-        if not question or question.user_id != user.uuid:
-            await callback.answer(
-                "❌ Вопрос не найден или не принадлежит вам", show_alert=True
-            )
-            return
-
-        # Завершаем вопрос
-        question.status = "answered"
-        question.answered_at = get_utc_now_naive()
-
-        await db.commit()
-
-        # Очищаем состояние
-        await state.clear()
-
-        await callback.answer("✅ Диалог завершен!")
-
-        # Редактируем или отправляем новое сообщение
-        await callback.message.answer(
-            f"✅ <b>Диалог завершен</b>\n\n"
-            f"❓ Вопрос: {question.text[:200]}...\n\n"
-            f"💬 Вы завершили консультацию с фармацевтом.\n\n"
-            f"Если у вас есть новые вопросы, просто напишите их в чат!"
-        )
-
-        # Уведомляем фармацевта
-        if question.taken_by:
-            pharmacist_result = await db.execute(
-                select(Pharmacist)
-                .options(selectinload(Pharmacist.user))
-                .where(Pharmacist.uuid == question.taken_by)
-            )
-            pharmacist = pharmacist_result.scalar_one_or_none()
-
-            if pharmacist and pharmacist.user:
-                await callback.bot.send_message(
-                    chat_id=pharmacist.user.telegram_id,
-                    text=f"✅ <b>Пользователь завершил диалог</b>\n\n"
-                    f"❓ Вопрос: {question.text[:200]}...\n\n"
-                    f"👤 Пользователь завершил консультацию.\n\n"
-                    f"Вопрос переведен в статус 'завершен'.",
-                    parse_mode="HTML",
-                )
-
-    except Exception as e:
-        logger.error(f"Error in complete_by_user_callback: {e}")
-        await callback.answer("❌ Ошибка при завершении диалога", show_alert=True)
-
-
 @router.message(UserQAStates.waiting_for_prescription_photo, F.photo)
 async def process_prescription_photo(
     message: Message, state: FSMContext, db: AsyncSession, user: User
@@ -767,7 +691,7 @@ async def process_prescription_photo(
             reply_markup=pharmacist_keyboard,
         )
         await DialogService.add_message(
-             db=db,
+            db=db,
             question_id=question_uuid,
             sender_type="user",
             sender_id=user.uuid,

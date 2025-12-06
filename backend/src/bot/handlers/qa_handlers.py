@@ -348,61 +348,6 @@ async def complete_after_photo_callback(
         logger.error(f"Error in complete_after_photo_callback: {e}")
         await callback.answer("❌ Ошибка при завершении", show_alert=True)
 
-@router.callback_query(F.data.startswith("complete_"))
-async def complete_question_callback(
-    callback: CallbackQuery,
-    db: AsyncSession,
-    is_pharmacist: bool,
-    pharmacist: Pharmacist,
-    state: FSMContext,  # Добавляем state для очистки
-):
-    """Завершение вопроса фармацевтом"""
-    question_uuid = callback.data.replace("complete_", "")
-
-    if not is_pharmacist or not pharmacist:
-        await callback.answer(
-            "❌ Эта функция доступна только фармацевтам", show_alert=True
-        )
-        return
-
-    try:
-        result = await db.execute(
-            select(Question).where(Question.uuid == question_uuid)
-        )
-        question = result.scalar_one_or_none()
-
-        if not question:
-            await callback.answer("❌ Вопрос не найден", show_alert=True)
-            return
-
-        # Проверяем, взят ли вопрос этим фармацевтом
-        if question.taken_by != pharmacist.uuid:
-            await callback.answer("❌ Вы не брали этот вопрос", show_alert=True)
-            return
-
-        # Завершаем вопрос
-        question.status = "answered"
-        question.answered_at = get_utc_now_naive()
-
-        await db.commit()
-
-        # Очищаем состояние фармацевта
-        await state.clear()
-
-        await callback.answer("✅ Вопрос завершен!")
-
-        # Редактируем последнее сообщение или отправляем новое
-        await callback.message.answer(
-            f"✅ <b>Вопрос завершен</b>\n\n"
-            f"❓ Вопрос: {question.text[:200]}...\n\n"
-            f"💬 Диалог завершен. Пользователь уведомлен.\n\n"
-            f"Используйте /questions для просмотра других вопросов."
-        )
-
-    except Exception as e:
-        logger.error(f"Error completing question: {e}")
-        await callback.answer("❌ Ошибка при завершении вопроса", show_alert=True)
-
 
 @router.callback_query(F.data.startswith("release_"))
 async def release_question_callback(
@@ -702,7 +647,7 @@ async def answer_question_callback(
             f"Напишите ваш ответ или уточняющий вопрос:\n"
             f"(или нажмите кнопки ниже для других действий)",
             parse_mode="HTML",
-            reply_markup = make_pharmacist_dialog_keyboard_with_end(question_uuid),
+            reply_markup=make_pharmacist_dialog_keyboard_with_end(question_uuid),
         )
 
         await callback.answer()
@@ -710,9 +655,6 @@ async def answer_question_callback(
     except Exception as e:
         logger.error(f"Error in answer_question_callback: {e}")
         await callback.answer("❌ Ошибка при обработке запроса", show_alert=True)
-
-
-
 
 
 @router.message(QAStates.waiting_for_answer)
@@ -766,8 +708,8 @@ async def process_answer_text(
 
         db.add(answer)
 
-        # ✅ ОБНОВЛЕНО: Меняем статус вопроса на "answered" после первого ответа
-        question.status = "answered"
+        if question.status != "completed":
+            question.status = "answered"
         question.answered_at = get_utc_now_naive()
         question.answered_by = pharmacist.uuid
 
@@ -846,7 +788,7 @@ async def process_answer_text(
                     chat_id=user.telegram_id,
                     text=message_text,
                     parse_mode="HTML",
-                    reply_markup = make_user_dialog_keyboard_with_end(
+                    reply_markup=make_user_dialog_keyboard_with_end(
                         question.uuid, photo_requested
                     ),
                 )
@@ -923,9 +865,7 @@ async def answer_clarification_callback(
         last_answer = answer_result.scalar_one_or_none()
 
         if not last_answer and question.status != "answered":
-            await callback.answer(
-                "❌ На этот вопрос еще нет ответа", show_alert=True
-            )
+            await callback.answer("❌ На этот вопрос еще нет ответа", show_alert=True)
             return
 
         # Сохраняем ID вопроса в состоянии
