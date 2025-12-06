@@ -15,11 +15,11 @@ class DialogService:
 
     @staticmethod
     async def add_message(
+        db: AsyncSession,  
         question_id: UUID,
         sender_type: str,
         sender_id: UUID,
         message_type: str,
-        db: AsyncSession,  # ⚠️ ПЕРЕМЕСТИТЕ db ПЕРЕД необязательными параметрами
         text: Optional[str] = None,
         file_id: Optional[str] = None,
         caption: Optional[str] = None,
@@ -37,9 +37,9 @@ class DialogService:
                 created_at=get_utc_now_naive()
             )
 
-            db.add(message)
-            await db.commit()
-            await db.refresh(message)
+            await db.flush()
+
+
 
             logger.info(f"Dialog message added: question_id={question_id}, type={message_type}")
             return message
@@ -81,8 +81,8 @@ class DialogService:
             sender_type='user',
             sender_id=question.user_id,
             message_type='question',
-            db=db,  # ⚠️ ИЗМЕНИТЕ ПОРЯДОК ПАРАМЕТРОВ
-            text=question.text
+            text=question.text,
+            db=db
         )
 
     @staticmethod

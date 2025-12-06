@@ -8,6 +8,7 @@ from sqlalchemy import (
     DateTime,
     JSON,
     ForeignKey,
+    Index
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -138,4 +139,10 @@ class DialogMessage(Base):
     # Связи - УПРОЩЕННЫЕ ОТНОШЕНИЯ
     question = relationship("Question", back_populates="dialog_messages")
 
- 
+    # В модели DialogMessage
+    __table_args__ = (
+        Index('idx_dialog_question_id', 'question_id'),
+        Index('idx_dialog_created_at', 'created_at'),
+        Index('idx_dialog_sender', 'sender_type', 'sender_id'),
+    )
+
