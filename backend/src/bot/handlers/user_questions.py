@@ -20,7 +20,7 @@ from bot.services.notification_service import notify_about_clarification
 import logging
 from datetime import datetime, timedelta
 from utils.time_utils import get_utc_now_naive
-from bot.bot.services.dialog_service import DialogService
+from bot.services.dialog_service import DialogService
 
 logger = logging.getLogger(__name__)
 

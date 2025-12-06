@@ -16,7 +16,7 @@ from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 from db.qa_models import User, Pharmacist, Question, Answer
 from bot.handlers.qa_states import QAStates
-from services.dialog_service import DialogService
+from bot.services.dialog_service import DialogService
 
 # ИСПРАВЛЕННЫЙ импорт:
 from bot.keyboards.qa_keyboard import (
@@ -24,7 +24,7 @@ from bot.keyboards.qa_keyboard import (
     make_pharmacist_dialog_keyboard,
     make_user_response_keyboard,
     make_user_dialog_keyboard,
-    make_question_keyboard  # ДОБАВЬТЕ ЭТОТ ИМПОРТ
+    make_question_keyboard,  # ДОБАВЬТЕ ЭТОТ ИМПОРТ
 )
 from bot.services.assignment_service import QuestionAssignmentService
 
@@ -181,6 +181,7 @@ async def cmd_status(
 
 # В qa_handlers.py обновляем cmd_questions
 
+
 @router.message(Command("questions"))
 async def cmd_questions(
     message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist
@@ -301,7 +302,6 @@ async def cmd_release_question(
         await message.answer("❌ Ошибка при получении вопросов")
 
 
-
 @router.callback_query(F.data.startswith("complete_"))
 async def complete_question_callback(
     callback: CallbackQuery,
@@ -331,9 +331,7 @@ async def complete_question_callback(
 
         # Проверяем, взят ли вопрос этим фармацевтом
         if question.taken_by != pharmacist.uuid:
-            await callback.answer(
-                "❌ Вы не брали этот вопрос", show_alert=True
-            )
+            await callback.answer("❌ Вы не брали этот вопрос", show_alert=True)
             return
 
         # Завершаем вопрос
@@ -358,6 +356,7 @@ async def complete_question_callback(
     except Exception as e:
         logger.error(f"Error completing question: {e}")
         await callback.answer("❌ Ошибка при завершении вопроса", show_alert=True)
+
 
 @router.callback_query(F.data.startswith("release_"))
 async def release_question_callback(
@@ -406,9 +405,8 @@ async def release_question_callback(
         await callback.answer("❌ Ошибка при освобождении вопроса", show_alert=True)
 
 
-
-
 # В qa_handlers.py добавить новые обработчики
+
 
 @router.callback_query(F.data.startswith("answer_after_photo_"))
 async def answer_after_photo_callback(
@@ -454,7 +452,7 @@ async def answer_after_photo_callback(
             f"❓ Вопрос: {question.text[:200]}...\n\n"
             f"Напишите дополнительный ответ или уточнение пользователю:\n"
             f"(или /cancel для отмены)",
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
 
         await callback.answer()
@@ -462,6 +460,7 @@ async def answer_after_photo_callback(
     except Exception as e:
         logger.error(f"Error in answer_after_photo_callback: {e}")
         await callback.answer("❌ Ошибка при продолжении диалога", show_alert=True)
+
 
 @router.callback_query(F.data.startswith("request_more_photos_"))
 async def request_more_photos_callback(
@@ -510,9 +509,9 @@ async def request_more_photos_callback(
         await callback.bot.send_message(
             chat_id=question.user.telegram_id,
             text=f"📸 <b>Фармацевт запросил дополнительные фото</b>\n\n"
-                 f"Пожалуйста, отправьте еще фото рецепта для более точной консультации.",
+            f"Пожалуйста, отправьте еще фото рецепта для более точной консультации.",
             parse_mode="HTML",
-            reply_markup=photo_keyboard
+            reply_markup=photo_keyboard,
         )
 
         await callback.answer("✅ Запрос на дополнительные фото отправлен пользователю")
@@ -520,6 +519,7 @@ async def request_more_photos_callback(
     except Exception as e:
         logger.error(f"Error in request_more_photos_callback: {e}")
         await callback.answer("❌ Ошибка при запросе фото", show_alert=True)
+
 
 @router.message(Command("debug_status"))
 @router.callback_query(F.data == "debug_status")  # Добавляем поддержку callback
@@ -625,13 +625,14 @@ async def answer_question_callback(
                 )
             )
             await state.update_data(
-        question_uuid=question_uuid,
-        dialog_partner_id=str(pharmacist.uuid)
-    )
+                question_uuid=question_uuid, dialog_partner_id=str(pharmacist.uuid)
+            )
             await state.set_state(QAStates.in_dialog_with_user)
 
             if not assignment_success:
-                await callback.answer("❌ Ошибка при назначении вопроса", show_alert=True)
+                await callback.answer(
+                    "❌ Ошибка при назначении вопроса", show_alert=True
+                )
                 return
 
             # Обновляем информацию о взятии
@@ -655,7 +656,7 @@ async def answer_question_callback(
             f"Напишите ваш ответ или уточняющий вопрос:\n"
             f"(или нажмите кнопки ниже для других действий)",
             parse_mode="HTML",
-            reply_markup=make_pharmacist_dialog_keyboard(question_uuid)
+            reply_markup=make_pharmacist_dialog_keyboard(question_uuid),
         )
 
         await callback.answer()
@@ -667,12 +668,16 @@ async def answer_question_callback(
 
 # В qa_handlers.py обновляем process_answer_text
 @router.callback_query(F.data.startswith("complete_after_photo_"))
-async def process_answer_text(message: Message, state: FSMContext, db: AsyncSession, pharmacist: Pharmacist):
+async def process_answer_text(
+    message: Message, state: FSMContext, db: AsyncSession, pharmacist: Pharmacist
+):
     """Завершение вопроса после получения фото"""
     question_uuid = callback.data.replace("complete_after_photo_", "")
 
     if not is_pharmacist or not pharmacist:
-        await callback.answer("❌ Эта функция доступна только фармацевтам", show_alert=True)
+        await callback.answer(
+            "❌ Эта функция доступна только фармацевтам", show_alert=True
+        )
         return
 
     try:
@@ -689,7 +694,6 @@ async def process_answer_text(message: Message, state: FSMContext, db: AsyncSess
         # Завершаем вопрос
         question.status = "answered"
         question.answered_at = get_utc_now_naive()
-
 
         await db.commit()
         await state.clear()
@@ -760,12 +764,11 @@ async def process_answer_text(
         # ✅ Добавляем сообщение в историю диалога
         await DialogService.add_message(
             question_id=question.uuid,
-            sender_type='pharmacist',
+            sender_type="pharmacist",
             sender_id=pharmacist.uuid,
-            message_type='answer',
+            message_type="answer",
             db=db,
             text=message.text,
-
         )
 
         await db.commit()
@@ -812,7 +815,10 @@ async def process_answer_text(
 
                 # Проверяем, запрашивал ли фармацевт фото
                 photo_requested = False
-                if question.context_data and "photo_requested_by" in question.context_data:
+                if (
+                    question.context_data
+                    and "photo_requested_by" in question.context_data
+                ):
                     photo_requested = True
 
                 # Формируем сообщение для пользователя
@@ -830,7 +836,9 @@ async def process_answer_text(
                     chat_id=user.telegram_id,
                     text=message_text,
                     parse_mode="HTML",
-                    reply_markup=make_user_dialog_keyboard(question.uuid, photo_requested)
+                    reply_markup=make_user_dialog_keyboard(
+                        question.uuid, photo_requested
+                    ),
                 )
 
                 logger.info(f"Message sent to user {user.telegram_id}")
@@ -844,7 +852,7 @@ async def process_answer_text(
             f"💬 <b>Ваше сообщение:</b>\n{message.text[:200]}...\n\n"
             f"Продолжайте диалог или используйте другие действия:",
             parse_mode="HTML",
-            reply_markup=make_pharmacist_dialog_keyboard(question_uuid)
+            reply_markup=make_pharmacist_dialog_keyboard(question_uuid),
         )
 
         # НЕ очищаем состояние - фармацевт может продолжать диалог
@@ -856,6 +864,8 @@ async def process_answer_text(
         )
         await message.answer("❌ Ошибка при отправке сообщения")
         await state.clear()
+
+
 # Добавьте этот метод в конец файла qa_handlers.py
 
 
@@ -1003,7 +1013,7 @@ async def request_photo_callback(
             f"Пользователь получил уведомление о необходимости отправить фото.\n\n"
             f"Продолжайте диалог:",
             parse_mode="HTML",
-            reply_markup=make_pharmacist_dialog_keyboard(question_uuid)
+            reply_markup=make_pharmacist_dialog_keyboard(question_uuid),
         )
 
     except Exception as e:
