@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from aiogram import Bot, Dispatcher
-from aiogram.types import BotCommand  # Добавьте этот импорт
+from aiogram.types import BotCommand
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot.core import bot_manager
@@ -31,7 +31,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-async def set_bot_commands(bot: Bot):  # Теперь Bot импортирован
+async def set_bot_commands(bot: Bot):
     commands = [
         BotCommand(command="/start", description="Главное меню"),
         BotCommand(command="/ask", description="Задать вопрос"),
@@ -55,16 +55,17 @@ async def lifespan(app: FastAPI):
         logger.error("Failed to initialize bot")
         return
 
-    # УСТАНОВКА КОМАНД БОТА
-    try:
-        await set_bot_commands(bot)
-        logger.info("Bot commands set successfully")
-    except Exception as e:
-        logger.error(f"Failed to set bot commands: {e}")
+    # ПОДКЛЮЧЕНИЕ MIDDLEWARE В ПРАВИЛЬНОМ ПОРЯДКЕ
+    # ВАЖНО: outer_middleware добавляется в обратном порядке выполнения
 
-    # ПОДКЛЮЧЕНИЕ MIDDLEWARE
-    dp.update.outer_middleware(DbMiddleware())
+    # 1. Сначала RoleMiddleware (он будет выполняться вторым в цепочке)
     dp.update.outer_middleware(RoleMiddleware())
+
+    # 2. Потом DbMiddleware (он будет выполняться первым в цепочке)
+    dp.update.outer_middleware(DbMiddleware())
+
+    # ПРИМЕЧАНИЕ: outer_middleware добавляет middleware в начало цепочки (LIFO),
+    # поэтому последний добавленный будет выполняться первым
 
     # Регистрация роутеров
     dp.include_router(common_router)
@@ -74,6 +75,12 @@ async def lifespan(app: FastAPI):
     dp.include_router(direct_questions_router)
     dp.include_router(clarify_router)
 
+    # УСТАНОВКА КОМАНД БОТА
+    try:
+        await set_bot_commands(bot)
+        logger.info("Bot commands set successfully")
+    except Exception as e:
+        logger.error(f"Failed to set bot commands: {e}")
 
     # УСТАНОВКА WEBHOOK ПРИ ЗАПУСКЕ
     try:
@@ -117,9 +124,11 @@ app = FastAPI(lifespan=lifespan, title="Novamedika Q&A Bot API")
 # ДОБАВИТЬ CORS MIDDLEWARE
 origins = os.getenv("CORS_ORIGINS", "").split(",")
 if not origins or origins == [""]:
-    origins = ["http://localhost:3000", "https://spravka.novamedika.com",
-               "https://booking.novamedika.com"
-               ]
+    origins = [
+        "http://localhost:3000",
+        "https://spravka.novamedika.com",
+        "https://booking.novamedika.com"
+    ]
 
 app.add_middleware(
     CORSMiddleware,
