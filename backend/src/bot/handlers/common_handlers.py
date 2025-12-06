@@ -11,10 +11,7 @@ from aiogram.types import (
     CallbackQuery,
 )
 
-from bot.keyboards.qa_keyboard import (
-    make_question_with_photo_and_clarify_keyboard,
-    make_clarification_with_photo_and_answer_keyboard
-)
+
 
 # Остальной код остается без изменений...
 from aiogram.filters import Command
