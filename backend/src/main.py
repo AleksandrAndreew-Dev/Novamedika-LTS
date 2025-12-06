@@ -31,6 +31,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 async def set_bot_commands(bot: Bot):
     commands = [
         BotCommand(command="/start", description="Главное меню"),
@@ -45,6 +46,7 @@ async def set_bot_commands(bot: Bot):
     ]
     await bot.set_my_commands(commands)
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Инициализация бота при запуске
@@ -55,19 +57,9 @@ async def lifespan(app: FastAPI):
         logger.error("Failed to initialize bot")
         return
 
-    # ПОДКЛЮЧЕНИЕ MIDDLEWARE В ПРАВИЛЬНОМ ПОРЯДКЕ
-    # ВАЖНО: outer_middleware добавляется в обратном порядке выполнения
-
-    # 1. Сначала RoleMiddleware (он будет выполняться вторым в цепочке)
+    dp.update.outer_middleware(DbMiddleware())
     dp.update.outer_middleware(RoleMiddleware())
 
-    # 2. Потом DbMiddleware (он будет выполняться первым в цепочке)
-    dp.update.outer_middleware(DbMiddleware())
-
-    # ПРИМЕЧАНИЕ: outer_middleware добавляет middleware в начало цепочки (LIFO),
-    # поэтому последний добавленный будет выполняться первым
-
-    # Регистрация роутеров
     dp.include_router(common_router)
     dp.include_router(registration_router)
     dp.include_router(qa_handlers_router)
@@ -119,6 +111,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Error deleting webhook: {e}")
 
+
 app = FastAPI(lifespan=lifespan, title="Novamedika Q&A Bot API")
 
 # ДОБАВИТЬ CORS MIDDLEWARE
@@ -127,7 +120,6 @@ if not origins or origins == [""]:
     origins = [
         "http://localhost:3000",
         "https://spravka.novamedika.com",
-        "https://booking.novamedika.com"
     ]
 
 app.add_middleware(
@@ -156,14 +148,18 @@ app.include_router(upload.router, tags=["upload"])
 app.include_router(pharmacies_info.router, tags=["pharmacies"])
 app.include_router(booking_router.router, tags=["booking"])
 
+
 @app.get("/")
 async def root():
     return {"status": "ok", "message": "Novamedika Q&A Bot API"}
+
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
 
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
