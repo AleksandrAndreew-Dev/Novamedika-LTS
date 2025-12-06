@@ -56,16 +56,17 @@ async def handle_direct_text(
 ):
     """Обработка прямых текстовых сообщений как вопросов"""
 
-    # Пропускаем фармацевтов
+
     if is_pharmacist:
         return
 
-    # Проверяем текущее состояние пользователя
+
     current_state = await state.get_state()
     if current_state is not None:
-        return
+       
+        if current_state != UserQAStates.waiting_for_prescription_photo:
+            return
 
-    # Проверяем, стоит ли создавать вопрос
     if not should_create_question(message.text):
         return
 

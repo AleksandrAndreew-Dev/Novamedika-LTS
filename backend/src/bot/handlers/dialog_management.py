@@ -5,6 +5,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 import logging
 from utils.time_utils import get_utc_now_naive
 
@@ -44,6 +45,20 @@ def make_end_dialog_confirm_keyboard(question_uuid: str) -> InlineKeyboardMarkup
             ]
         ]
     )
+
+
+async def get_active_question_for_user(user: User, db: AsyncSession) -> Optional[Question]:
+    """Получить активный вопрос пользователя"""
+    result = await db.execute(
+        select(Question)
+        .where(
+            Question.user_id == user.uuid,
+            Question.status.in_(["in_progress", "answered"])
+        )
+        .order_by(Question.created_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
 
 @router.callback_query(F.data.startswith("end_dialog_"))
 async def end_dialog_callback(
@@ -137,7 +152,15 @@ async def confirm_end_dialog_callback(
         question.answered_at = get_utc_now_naive()
 
         # Очищаем состояние
-        await state.clear()
+        # Получаем данные состояния
+        state_data = await state.get_data()
+        current_question_uuid = state_data.get("question_uuid")
+        clarify_question_id = state_data.get("clarify_question_id")
+
+        # Очищаем состояние только если оно относится к завершаемому вопросу
+        if current_question_uuid == question_uuid or clarify_question_id == question_uuid:
+            await state.clear()
+
         await db.commit()
 
         if is_pharmacist:
@@ -193,21 +216,31 @@ async def confirm_end_dialog_callback(
 @router.callback_query(F.data.startswith("cancel_end_dialog_"))
 async def cancel_end_dialog_callback(
     callback: CallbackQuery,
-    is_pharmacist: bool
+    is_pharmacist: bool,
+    state: FSMContext
 ):
     """Отмена завершения диалога"""
     await callback.answer("❌ Завершение диалога отменено")
 
+    state_data = await state.get_data()
+    current_question = state_data.get("question_uuid")
+
     if is_pharmacist:
         await callback.message.answer(
             "🔄 Продолжайте диалог с пользователем.\n"
-            "Используйте /questions для просмотра других вопросов."
+            f"Используйте /questions для просмотра других вопросов."
         )
     else:
-        await callback.message.answer(
-            "🔄 Диалог продолжается.\n"
-            "Вы можете задать уточняющий вопрос или отправить фото."
-        )
+        # Если у пользователя есть активный вопрос, показываем соответствующее сообщение
+        if current_question:
+            await callback.message.answer(
+                "🔄 Диалог продолжается.\n"
+                "Вы можете задать уточняющий вопрос или отправить фото."
+            )
+        else:
+            await callback.message.answer(
+                "🔄 Вы можете задать новый вопрос, просто напишите его в чат!"
+            )
 
 @router.message(Command("end_dialog"))
 async def cmd_end_dialog(
