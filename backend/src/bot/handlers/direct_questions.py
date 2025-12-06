@@ -1,16 +1,13 @@
-from db.qa_models import User, Question
-from utils.time_utils import get_utc_now_naive
-
-
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
-
+from db.qa_models import User, Question
+from utils.time_utils import get_utc_now_naive
 from bot.services.notification_service import notify_pharmacists_about_new_question
-
+from bot.handlers.qa_states import UserQAStates  # ДОБАВЬТЕ ЭТОТ ИМПОРТ
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -24,8 +21,8 @@ def should_create_question(text: str) -> bool:
     if text.startswith("/"):
         return False
 
-    # 2. Проверяем длину (минимально 5 символов)
-    if len(text_lower) < 5:
+    # 2. Проверяем длину (минимально 2 символов)
+    if len(text_lower) < 2:
         return False
 
     # 3. Проверяем, что это не просто набор символов или цифр
@@ -56,14 +53,11 @@ async def handle_direct_text(
 ):
     """Обработка прямых текстовых сообщений как вопросов"""
 
-
     if is_pharmacist:
         return
 
-
     current_state = await state.get_state()
     if current_state is not None:
-       
         if current_state != UserQAStates.waiting_for_prescription_photo:
             return
 
@@ -90,11 +84,11 @@ async def handle_direct_text(
 
         # Подтверждение пользователю
         await message.answer(
-        "✅ <b>Вопрос отправлен!</b>\n\n"
-        "Фармацевты получили уведомление и скоро ответят.\n\n"
-        "💡 <i>Используйте /my_questions чтобы отслеживать статус</i>",
-        parse_mode="HTML",
-    )
+            "✅ <b>Вопрос отправлен!</b>\n\n"
+            "Фармацевты получили уведомление и скоро ответят.\n\n"
+            "💡 <i>Используйте /my_questions чтобы отслеживать статус</i>",
+            parse_mode="HTML",
+        )
 
     except Exception as e:
         logger.error(f"Error in direct question: {e}")
