@@ -761,6 +761,11 @@ async def process_answer_text(
 
         db.add(answer)
 
+        # ✅ ОБНОВЛЕНО: Меняем статус вопроса на "answered" после первого ответа
+        question.status = "answered"
+        question.answered_at = get_utc_now_naive()
+        question.answered_by = pharmacist.uuid
+
         # ✅ Добавляем сообщение в историю диалога
         await DialogService.add_message(
             db=db,
@@ -846,16 +851,17 @@ async def process_answer_text(
             except Exception as e:
                 logger.error(f"Failed to send message to user {user.telegram_id}: {e}")
 
-        # Уведомляем фармацевта и снова показываем клавиатуру диалога
+        # Уведомляем фармацевта
         await message.answer(
             f"✅ Сообщение отправлено пользователю!\n\n"
             f"💬 <b>Ваше сообщение:</b>\n{message.text[:200]}...\n\n"
-            f"Продолжайте диалог или используйте другие действия:",
+            f"Пользователь может уточнить вопрос или отправить фото.\n"
+            f"Используйте /questions для новых вопросов.",
             parse_mode="HTML",
-            reply_markup=make_pharmacist_dialog_keyboard(question_uuid),
         )
 
-        # НЕ очищаем состояние - фармацевт может продолжать диалог
+        # Очищаем состояние фармацевта после ответа
+        await state.clear()
 
     except Exception as e:
         logger.error(
@@ -891,43 +897,44 @@ async def answer_clarification_callback(
         return
 
     try:
-        # Получаем вопрос уточнения
+        # Получаем вопрос
         result = await db.execute(
             select(Question).where(Question.uuid == question_uuid)
         )
-        clarification_question = result.scalar_one_or_none()
+        question = result.scalar_one_or_none()
 
-        if not clarification_question:
+        if not question:
             await callback.answer("❌ Вопрос не найден", show_alert=True)
             return
 
-        # Проверяем, что это действительно уточнение
-        if (
-            not clarification_question.context_data
-            or not clarification_question.context_data.get("is_clarification")
-        ):
-            await callback.answer("❌ Это не уточнение", show_alert=True)
+        # ✅ ОБНОВЛЕНО: Проверяем, есть ли у этого вопроса уточнения или он был отвечен
+        # Получаем последний ответ для контекста
+        answer_result = await db.execute(
+            select(Answer)
+            .where(Answer.question_id == question.uuid)
+            .order_by(Answer.created_at.desc())
+            .limit(1)
+        )
+        last_answer = answer_result.scalar_one_or_none()
+
+        if not last_answer and question.status != "answered":
+            await callback.answer(
+                "❌ На этот вопрос еще нет ответа", show_alert=True
+            )
             return
 
-        # Сохраняем ID вопроса уточнения в состоянии
+        # Сохраняем ID вопроса в состоянии
         await state.update_data(
             question_uuid=question_uuid,
             is_clarification=True,
-            original_question_id=clarification_question.context_data.get(
-                "original_question_id"
-            ),
         )
         await state.set_state(QAStates.waiting_for_answer)
 
-        original_question_text = clarification_question.context_data.get(
-            "original_question_text", ""
-        )
-
         await callback.message.answer(
             f"🔍 Вы отвечаете на <b>УТОЧНЕНИЕ</b>:\n\n"
-            f"❓ <b>Исходный вопрос:</b>\n{original_question_text}\n\n"
-            f"💬 <b>Уточнение от пользователя:</b>\n{clarification_question.text}\n\n"
-            f"✍️ <b>Напишите ваш ответ ниже:</b>\n"
+            f"❓ <b>Вопрос:</b>\n{question.text}\n\n"
+            f"💬 <b>Предыдущий ответ:</b>\n{last_answer.text if last_answer else 'Нет предыдущих ответов'}\n\n"
+            f"✍️ <b>Напишите ваш ответ на уточнение ниже:</b>\n"
             f"(или /cancel для отмены)",
             parse_mode="HTML",
         )

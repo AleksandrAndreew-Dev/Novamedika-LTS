@@ -456,14 +456,8 @@ async def quick_clarify_callback(
             await callback.answer("❌ Этот вопрос не принадлежит вам", show_alert=True)
             return
 
-        # Проверяем, что вопрос отвечен
-        if question.status != "answered":
-            await callback.answer(
-                "❌ Этот вопрос еще не получил ответ", show_alert=True
-            )
-            return
-
-        # Получаем последний ответ на вопрос
+        # ✅ ОБНОВЛЕНО: Разрешаем уточнение для вопросов с ответами
+        # Проверяем, есть ли ответы на этот вопрос
         answer_result = await db.execute(
             select(Answer)
             .where(Answer.question_id == question.uuid)
@@ -471,6 +465,12 @@ async def quick_clarify_callback(
             .limit(1)
         )
         last_answer = answer_result.scalar_one_or_none()
+
+        if not last_answer:
+            await callback.answer(
+                "❌ На этот вопрос еще нет ответа", show_alert=True
+            )
+            return
 
         # Сохраняем ID вопроса в состоянии
         await state.update_data(clarify_question_id=question_uuid)

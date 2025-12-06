@@ -70,7 +70,7 @@ def make_user_dialog_keyboard(question_uuid: str, photo_requested: bool = False)
     """Клавиатура для пользователя в диалоге"""
     buttons = []
 
-    # Кнопка уточнения
+    # Кнопка уточнения - всегда показываем, если есть хотя бы один ответ
     buttons.append([
         InlineKeyboardButton(
             text="✍️ Уточнить вопрос",
