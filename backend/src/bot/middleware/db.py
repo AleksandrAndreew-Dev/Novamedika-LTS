@@ -1,5 +1,5 @@
 from aiogram import BaseMiddleware
-from aiogram.types import Message, CallbackQuery, Update
+from aiogram.types import Message, CallbackQuery, Update, Poll  # Добавить Poll
 from typing import Callable, Dict, Any, Awaitable, Union
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,7 +9,7 @@ class DbMiddleware(BaseMiddleware):
     async def __call__(
         self,
         handler: Callable[[Union[Message, CallbackQuery], Dict[str, Any]], Awaitable[Any]],
-        event: Union[Update, Message, CallbackQuery],
+        event: Union[Update, Message, CallbackQuery, Poll],  # Добавить Poll
         data: Dict[str, Any]
     ) -> Any:
         async with async_session_maker() as session:

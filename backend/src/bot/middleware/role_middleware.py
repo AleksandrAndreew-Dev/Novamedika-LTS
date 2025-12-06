@@ -1,16 +1,13 @@
-from aiogram import BaseMiddleware
-from aiogram.types import Message, CallbackQuery, Update
-from typing import Callable, Dict, Any, Awaitable, Union
+from aiogram import Router, BaseMiddleware
+from aiogram.types import Message, CallbackQuery, Update, Poll  # Добавьте Poll в импорт
+from typing import Callable, Dict, Any, Awaitable, Union, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 import logging
 from sqlalchemy.exc import IntegrityError
-from typing import Optional
 
 from db.qa_models import Pharmacist, User
-
-
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -64,8 +61,6 @@ async def get_pharmacist_by_telegram_id(
 
 
 class RoleMiddleware(BaseMiddleware):
-    # В файле role_middleware.py исправьте функцию __call__:
-
     async def __call__(self, handler, event, data):
         """Основной обработчик middleware"""
         db = data.get("db")
@@ -74,13 +69,32 @@ class RoleMiddleware(BaseMiddleware):
 
         user_id = None
         from_user = None
+        event_for_processing = event
 
         # Определяем тип события и получаем from_user
-        if isinstance(event, Message):
+        if isinstance(event, Update):
+            # Если это Update, извлекаем из него Message или CallbackQuery
+            if event.message:
+                event_for_processing = event.message
+                from_user = event.message.from_user
+            elif event.callback_query:
+                event_for_processing = event.callback_query
+                from_user = event.callback_query.from_user
+            elif event.poll:
+                # Для Poll нет from_user, пропускаем middleware
+                return await handler(event, data)
+            else:
+                # Неизвестный тип обновления, пропускаем
+                return await handler(event, data)
+        elif isinstance(event, Message):
             from_user = event.from_user
         elif isinstance(event, CallbackQuery):
             from_user = event.from_user
-        elif isinstance(event, types.Poll):
+        elif isinstance(event, Poll):
+            # Для Poll нет from_user, пропускаем middleware
+            return await handler(event, data)
+        else:
+            # Неизвестный тип события, пропускаем
             return await handler(event, data)
 
         if not from_user:
@@ -90,14 +104,12 @@ class RoleMiddleware(BaseMiddleware):
 
         try:
             user = await get_or_create_user(user_id, db)
-            pharmacist = await get_pharmacist_by_user_id(user.uuid, db)
+            pharmacist = await get_pharmacist_by_telegram_id(user_id, db)  # Используем telegram_id
         except Exception as e:
-            logger.error(f"Error in role middleware user processing for {user_id}")
+            logger.error(f"Error in role middleware user processing for {user_id}: {e}")
             logger.error(e)
-            # ❌ ИСПРАВЛЯЕМ: устанавливаем pharmacist в None вместо вызова raise
             pharmacist = None
-            user = None  # также устанавливаем user в None
-            # Продолжаем выполнение, но логируем ошибку
+            user = None
 
         logger.info(f"RoleMiddleware: User {user_id} - is_pharmacist: {pharmacist is not None}")
 
@@ -106,6 +118,4 @@ class RoleMiddleware(BaseMiddleware):
         data["pharmacist"] = pharmacist
         data["is_pharmacist"] = pharmacist is not None
 
-        return await handler(event, data)
-
-
+        return await handler(event_for_processing, data)
