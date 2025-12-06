@@ -21,7 +21,7 @@ from bot.services.dialog_service import DialogService
 # ИСПРАВЛЕННЫЙ импорт:
 from bot.keyboards.qa_keyboard import (
     make_question_list_keyboard,
-    make_pharmacist_dialog_keyboard_with_end,
+    make_pharmacist_dialog_keyboard,
     make_user_dialog_keyboard_with_end,
     make_question_keyboard,  # ДОБАВЬТЕ ЭТОТ ИМПОРТ
 )
@@ -301,53 +301,6 @@ async def cmd_release_question(
         await message.answer("❌ Ошибка при получении вопросов")
 
 
-@router.callback_query(F.data.startswith("complete_after_photo_"))
-async def complete_after_photo_callback(
-    callback: CallbackQuery,  # ИСПРАВЛЕНО: было message: Message
-    db: AsyncSession,
-    is_pharmacist: bool,
-    pharmacist: Pharmacist,
-    state: FSMContext,
-):
-    """Завершение вопроса после получения фото"""
-    question_uuid = callback.data.replace("complete_after_photo_", "")
-
-    if not is_pharmacist or not pharmacist:
-        await callback.answer(
-            "❌ Эта функция доступна только фармацевтам", show_alert=True
-        )
-        return
-
-    try:
-        # Получаем вопрос
-        result = await db.execute(
-            select(Question).where(Question.uuid == question_uuid)
-        )
-        question = result.scalar_one_or_none()
-
-        if not question:
-            await callback.answer("❌ Вопрос не найден", show_alert=True)
-            return
-
-        # Завершаем вопрос
-        question.status = "answered"
-        question.answered_at = get_utc_now_naive()
-
-        await db.commit()
-        await state.clear()
-
-        await callback.answer("✅ Консультация завершена!")
-        await callback.message.answer(
-            f"✅ <b>Консультация завершена</b>\n\n"
-            f"❓ Вопрос: {question.text[:200]}...\n\n"
-            f"💬 Вы получили фото рецепта и завершили консультацию."
-        )
-
-    except Exception as e:
-        logger.error(f"Error in complete_after_photo_callback: {e}")
-        await callback.answer("❌ Ошибка при завершении", show_alert=True)
-
-
 @router.callback_query(F.data.startswith("release_"))
 async def release_question_callback(
     callback: CallbackQuery,
@@ -393,122 +346,6 @@ async def release_question_callback(
     except Exception as e:
         logger.error(f"Error releasing question: {e}")
         await callback.answer("❌ Ошибка при освобождении вопроса", show_alert=True)
-
-
-# В qa_handlers.py добавить новые обработчики
-
-
-@router.callback_query(F.data.startswith("answer_after_photo_"))
-async def answer_after_photo_callback(
-    callback: CallbackQuery,
-    state: FSMContext,
-    db: AsyncSession,
-    is_pharmacist: bool,
-    pharmacist: Pharmacist,
-):
-    """Продолжить диалог после получения фото"""
-    question_uuid = callback.data.replace("answer_after_photo_", "")
-
-    if not is_pharmacist or not pharmacist:
-        await callback.answer(
-            "❌ Эта функция доступна только фармацевтам", show_alert=True
-        )
-        return
-
-    try:
-        # Получаем вопрос
-        result = await db.execute(
-            select(Question).where(Question.uuid == question_uuid)
-        )
-        question = result.scalar_one_or_none()
-
-        if not question:
-            await callback.answer("❌ Вопрос не найден", show_alert=True)
-            return
-
-        # Проверяем, что вопрос взят этим фармацевтом
-        if question.taken_by != pharmacist.uuid and question.status == "in_progress":
-            await callback.answer(
-                "❌ Этот вопрос уже взят другим фармацевтом", show_alert=True
-            )
-            return
-
-        # Сохраняем ID вопроса в состоянии для продолжения диалога
-        await state.update_data(question_uuid=question_uuid)
-        await state.set_state(QAStates.waiting_for_answer)
-
-        await callback.message.answer(
-            f"💬 <b>Продолжение консультации после фото</b>\n\n"
-            f"❓ Вопрос: {question.text[:200]}...\n\n"
-            f"Напишите дополнительный ответ или уточнение пользователю:\n"
-            f"(или /cancel для отмены)",
-            parse_mode="HTML",
-        )
-
-        await callback.answer()
-
-    except Exception as e:
-        logger.error(f"Error in answer_after_photo_callback: {e}")
-        await callback.answer("❌ Ошибка при продолжении диалога", show_alert=True)
-
-
-@router.callback_query(F.data.startswith("request_more_photos_"))
-async def request_more_photos_callback(
-    callback: CallbackQuery,
-    db: AsyncSession,
-    is_pharmacist: bool,
-    pharmacist: Pharmacist,
-):
-    """Запросить дополнительные фото"""
-    question_uuid = callback.data.replace("request_more_photos_", "")
-
-    if not is_pharmacist or not pharmacist:
-        await callback.answer(
-            "❌ Эта функция доступна только фармацевтам", show_alert=True
-        )
-        return
-
-    try:
-        # Получаем вопрос
-        result = await db.execute(
-            select(Question)
-            .options(selectinload(Question.user))
-            .where(Question.uuid == question_uuid)
-        )
-        question = result.scalar_one_or_none()
-
-        if not question or not question.user:
-            await callback.answer("❌ Вопрос не найден", show_alert=True)
-            return
-
-        # Создаем клавиатуру для пользователя
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-
-        photo_keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="📸 Отправить дополнительное фото",
-                        callback_data=f"send_prescription_photo_{question.uuid}",
-                    )
-                ]
-            ]
-        )
-
-        # Отправляем запрос пользователю
-        await callback.bot.send_message(
-            chat_id=question.user.telegram_id,
-            text=f"📸 <b>Фармацевт запросил дополнительные фото</b>\n\n"
-            f"Пожалуйста, отправьте еще фото рецепта для более точной консультации.",
-            parse_mode="HTML",
-            reply_markup=photo_keyboard,
-        )
-
-        await callback.answer("✅ Запрос на дополнительные фото отправлен пользователю")
-
-    except Exception as e:
-        logger.error(f"Error in request_more_photos_callback: {e}")
-        await callback.answer("❌ Ошибка при запросе фото", show_alert=True)
 
 
 @router.message(Command("debug_status"))
@@ -646,7 +483,7 @@ async def answer_question_callback(
             f"Напишите ваш ответ или уточняющий вопрос:\n"
             f"(или нажмите кнопки ниже для других действий)",
             parse_mode="HTML",
-            reply_markup=make_pharmacist_dialog_keyboard_with_end(question_uuid),
+            reply_markup=make_pharmacist_dialog_keyboard(question_uuid),
         )
 
         await callback.answer()

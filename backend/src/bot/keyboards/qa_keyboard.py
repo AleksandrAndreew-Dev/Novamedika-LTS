@@ -7,28 +7,6 @@ logger = logging.getLogger(__name__)
 # qa_keyboard.py - НОВЫЕ КЛАВИАТУРЫ
 
 
-def make_pharmacist_dialog_keyboard(question_uuid: str):
-    """Клавиатура для фармацевта в диалоге"""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="📸 Запросить фото рецепта",
-                    callback_data=f"request_photo_{question_uuid}",
-                ),
-                InlineKeyboardButton(
-                    text="💬 Ответить", callback_data=f"answer_{question_uuid}"
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    text="✅ Завершить вопрос",
-                    callback_data=f"complete_{question_uuid}",
-                )
-            ],
-        ]
-    )
-
 
 def make_question_list_keyboard(question_uuid: str):
     """Клавиатура для вопроса в списке (до взятия)"""
@@ -77,7 +55,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 # В qa_keyboard.py добавить/обновить функции:
 
 
-def make_pharmacist_dialog_keyboard_with_end(question_uuid: str):
+def make_pharmacist_dialog_keyboard(question_uuid: str):
     """Клавиатура для фармацевта в диалоге С КНОПКОЙ ЗАВЕРШЕНИЯ"""
     return InlineKeyboardMarkup(
         inline_keyboard=[

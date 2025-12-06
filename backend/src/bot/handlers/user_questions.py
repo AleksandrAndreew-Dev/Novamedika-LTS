@@ -671,7 +671,7 @@ async def process_prescription_photo(
                 [
                     InlineKeyboardButton(
                         text="✅ Завершить консультацию",
-                        callback_data=f"complete_after_photo_{question_uuid}",
+                        callback_data=f"end_dialog_{question_uuid}",
                     )
                 ],
             ]
