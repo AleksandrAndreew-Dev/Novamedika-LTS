@@ -125,14 +125,15 @@ async def cmd_my_questions(
                     )
                     questions_text += f"💬 Ваш ответ: {answer_preview}\n"
 
-                questions_text += f"📅 {question.created_at.strftime('%d.%m.%Y %H:%M')}\n"
+                questions_text += (
+                    f"📅 {question.created_at.strftime('%d.%m.%Y %H:%M')}\n"
+                )
                 questions_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
 
             await message.answer(questions_text, parse_mode="HTML")
 
         else:
-            # Для пользователей - ИСПРАВЛЕННАЯ ВЕРСИЯ
-            # Получаем все вопросы пользователя от старых к новым
+
             result = await db.execute(
                 select(Question)
                 .where(Question.user_id == user.uuid)
@@ -166,13 +167,14 @@ async def cmd_my_questions(
 
                 question_text = f"<b>📋 ВОПРОС #{i}</b>\n\n"
                 question_text += f"<b>Статус:</b> {status_icon}\n"
-                question_text += f"<b>Создан:</b> {question.created_at.strftime('%d.%m.%Y %H:%M')}\n"
+                question_text += (
+                    f"<b>Создан:</b> {question.created_at.strftime('%d.%m.%Y %H:%M')}\n"
+                )
 
                 if question.answered_at:
                     question_text += f"<b>Ответ получен:</b> {question.answered_at.strftime('%d.%m.%Y %H:%M')}\n"
 
                 question_text += f"\n<b>❓ Вопрос:</b>\n{question.text}\n\n"
-                question_text += "━━━━━━━━━━━━━━━━━━━━"
 
                 # Добавляем кнопки для активных вопросов
                 if question.status == "answered":
@@ -186,24 +188,30 @@ async def cmd_my_questions(
                                 InlineKeyboardButton(
                                     text="✅ Завершить консультацию",
                                     callback_data=f"end_dialog_{question.uuid}",
-                                )
+                                ),
                             ]
                         ]
                     )
-                    await message.answer(question_text, parse_mode="HTML", reply_markup=clarify_keyboard)
+                    await message.answer(
+                        question_text, parse_mode="HTML", reply_markup=clarify_keyboard
+                    )
                 elif question.status == "completed":
                     # Для завершенных вопросов показываем финальный статус
                     completed_text = f"✅ <b>КОНСУЛЬТАЦИЯ ЗАВЕРШЕНА</b>\n\n"
                     completed_text += f"❓ <b>Вопрос:</b>\n{question.text}\n\n"
                     completed_text += f"📅 <b>Дата завершения:</b> {question.answered_at.strftime('%d.%m.%Y %H:%M') if question.answered_at else 'Не указана'}\n\n"
-                    completed_text += "💡 <b>Статус:</b> Консультация успешно завершена\n"
-                    completed_text += "━━━━━━━━━━━━━━━━━━━━"
+                    completed_text += "💡 <b>Статус:</b> Консультация успешно завершена"
+                    # Убрали разделитель в конце, чтобы не было двойного
 
                     await message.answer(completed_text, parse_mode="HTML")
                 else:
                     await message.answer(question_text, parse_mode="HTML")
 
-                await message.answer("━" * 40)  # Разделитель между вопросами
+                # Добавляем разделитель между вопросами, но не после последнего
+                if i < len(user_questions):
+                    await message.answer(
+                        "━" * 20
+                    )  # Короткий разделитель вместо длинного
 
     except Exception as e:
         logger.error(
@@ -689,8 +697,6 @@ async def process_prescription_photo(
                 ],
             ]
         )
-
-
 
         await message.bot.send_photo(
             chat_id=pharmacist.user.telegram_id,
