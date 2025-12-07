@@ -8,7 +8,7 @@ from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from sqlalchemy.orm import selectinload  # Добавьте эту строку
+from sqlalchemy.orm import selectinload
 
 from db.qa_models import User, Question, Answer, Pharmacist
 from bot.handlers.qa_states import UserQAStates
@@ -62,9 +62,26 @@ async def cmd_my_questions(
     )
 
     try:
-        # В функции cmd_my_questions обновите отображение статуса:
         if is_pharmacist:
             # Для фармацевтов
+            # Получаем вопросы, на которые данный фармацевт дал ответы
+            result = await db.execute(
+                select(Question)
+                .join(Answer, Question.uuid == Answer.question_id)
+                .where(Answer.pharmacist_id == user.uuid)
+                .order_by(Question.created_at.asc())  # Старые сверху
+            )
+            answered_questions = result.scalars().all()
+
+            if not answered_questions:
+                await message.answer(
+                    "📋 У вас пока нет отвеченных вопросов.\n\n"
+                    "Используйте /questions чтобы просмотреть новые вопросы."
+                )
+                if is_callback:
+                    await update.answer()
+                return
+
             questions_text = "📋 <b>ВАШИ ОТВЕТЫ НА ВОПРОСЫ</b>\n\n"
             questions_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
 
@@ -84,9 +101,20 @@ async def cmd_my_questions(
                 answer = answer_result.scalar_one_or_none()
 
                 # Определяем иконку статуса
-                status_icon = "🟢" if question.status == "completed" else "🟡" if question.status == "answered" else "🔵"
+                if question.status == "completed":
+                    status_icon = "✅"
+                    status_text = "ЗАВЕРШЕН"
+                elif question.status == "answered":
+                    status_icon = "💬"
+                    status_text = "ОТВЕЧЕНО"
+                elif question.status == "in_progress":
+                    status_icon = "🔄"
+                    status_text = "В РАБОТЕ"
+                else:
+                    status_icon = "⏳"
+                    status_text = "ОЖИДАЕТ"
 
-                questions_text += f"<b>{i}. {status_icon} {question.status.upper()}</b>\n"
+                questions_text += f"<b>{i}. {status_icon} {status_text}</b>\n"
                 questions_text += f"❓ Вопрос: {question.text[:80]}{'...' if len(question.text) > 80 else ''}\n"
 
                 if answer:
@@ -103,8 +131,25 @@ async def cmd_my_questions(
             await message.answer(questions_text, parse_mode="HTML")
 
         else:
-            # Для пользователей - обновите отображение вопроса
-            for question in user_questions:
+            # Для пользователей - ИСПРАВЛЕННАЯ ВЕРСИЯ
+            # Получаем все вопросы пользователя от старых к новым
+            result = await db.execute(
+                select(Question)
+                .where(Question.user_id == user.uuid)
+                .order_by(Question.created_at.asc())  # Старые сверху
+            )
+            user_questions = result.scalars().all()
+
+            if not user_questions:
+                await message.answer(
+                    "📭 У вас пока нет заданных вопросов.\n\n"
+                    "Просто напишите ваш вопрос в чат, чтобы начать консультацию!"
+                )
+                if is_callback:
+                    await update.answer()
+                return
+
+            for i, question in enumerate(user_questions, 1):
                 # Определяем иконку статуса
                 if question.status == "completed":
                     status_icon = "✅ ЗАВЕРШЕН"
@@ -119,7 +164,7 @@ async def cmd_my_questions(
                     status_icon = "⏳ ОЖИДАЕТ"
                     status_color = "#95a5a6"
 
-                question_text = f"<b>📋 ВОПРОС</b>\n\n"
+                question_text = f"<b>📋 ВОПРОС #{i}</b>\n\n"
                 question_text += f"<b>Статус:</b> {status_icon}\n"
                 question_text += f"<b>Создан:</b> {question.created_at.strftime('%d.%m.%Y %H:%M')}\n"
 
