@@ -121,7 +121,6 @@ async def end_dialog_callback(
         logger.error(f"Error in end_dialog_callback: {e}")
         await callback.answer("❌ Ошибка при завершении диалога", show_alert=True)
 
-# В начале функции confirm_end_dialog_callback добавьте:
 @router.callback_query(F.data.startswith("confirm_end_dialog_"))
 async def confirm_end_dialog_callback(
     callback: CallbackQuery,
@@ -131,12 +130,15 @@ async def confirm_end_dialog_callback(
     user: User,
     state: FSMContext
 ):
-    """Подтверждение завершения диалога - УЛУЧШЕННАЯ ВЕРСИЯ"""
+    """Подтверждение завершения диалога - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
     question_uuid = callback.data.replace("confirm_end_dialog_", "")
 
     try:
+        # Получаем вопрос с пользователем
         result = await db.execute(
-            select(Question).where(Question.uuid == question_uuid)
+            select(Question)
+            .options(selectinload(Question.user))
+            .where(Question.uuid == question_uuid)
         )
         question = result.scalar_one_or_none()
 
@@ -145,7 +147,6 @@ async def confirm_end_dialog_callback(
             return
 
         if question.status in ["completed", "answered"]:
-            # Показываем интуитивное сообщение для уже завершенного вопроса
             status_icon = "✅" if question.status == "completed" else "💬"
             await callback.answer(
                 f"{status_icon} Этот диалог уже завершен\n"
@@ -169,7 +170,7 @@ async def confirm_end_dialog_callback(
         await db.commit()
 
         if is_pharmacist:
-            # Уведомляем пользователя с визуальными маркерами
+            # Уведомляем пользователя
             if question.user and question.user.telegram_id:
                 # Получаем имя фармацевта для персонализации
                 pharmacy_info = pharmacist.pharmacy_info or {}
