@@ -22,7 +22,7 @@ from bot.services.dialog_service import DialogService
 from bot.keyboards.qa_keyboard import (
     make_question_list_keyboard,
     make_pharmacist_dialog_keyboard,
-    make_user_dialog_keyboard_with_end,
+    make_user_consultation_keyboard,
     make_question_keyboard,  # ДОБАВЬТЕ ЭТОТ ИМПОРТ
 )
 from bot.services.assignment_service import QuestionAssignmentService
@@ -624,9 +624,7 @@ async def process_answer_text(
                     chat_id=user.telegram_id,
                     text=message_text,
                     parse_mode="HTML",
-                    reply_markup=make_user_dialog_keyboard_with_end(
-                        question.uuid, photo_requested
-                    ),
+                    reply_markup=make_user_consultation_keyboard(question.uuid),
                 )
 
                 logger.info(f"Message sent to user {user.telegram_id}")

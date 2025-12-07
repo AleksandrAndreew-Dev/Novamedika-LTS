@@ -6,7 +6,30 @@ logger = logging.getLogger(__name__)
 
 # qa_keyboard.py - НОВЫЕ КЛАВИАТУРЫ
 
-
+def make_user_consultation_keyboard(question_uuid: str) -> InlineKeyboardMarkup:
+    """Клавиатура для пользователя после ответа фармацевта"""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✍️ Уточнить вопрос",
+                    callback_data=f"quick_clarify_{question_uuid}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📸 Отправить фото рецепта",
+                    callback_data=f"send_prescription_photo_{question_uuid}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✅ Завершить консультацию",
+                    callback_data=f"complete_consultation_{question_uuid}"
+                )
+            ]
+        ]
+    )
 
 def make_completed_dialog_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура после завершения диалога"""

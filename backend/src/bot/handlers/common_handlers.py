@@ -553,7 +553,62 @@ async def clarify_question_callback(
 
 
 # В файл common_handlers.py добавить в universal_cancel
+@router.message(Command("complete"))
+async def cmd_complete(
+    message: Message,
+    state: FSMContext,
+    db: AsyncSession,
+    user: User,
+    is_pharmacist: bool
+):
+    """Команда для завершения консультации пользователем"""
+    if is_pharmacist:
+        await message.answer("👨‍⚕️ Вы фармацевт. Используйте /end_dialog для завершения диалогов.")
+        return
 
+    try:
+        # Получаем последнюю отвеченную консультацию пользователя
+        result = await db.execute(
+            select(Question)
+            .where(
+                Question.user_id == user.uuid,
+                Question.status == "answered"
+            )
+            .order_by(Question.answered_at.desc())
+            .limit(5)
+        )
+        questions = result.scalars().all()
+
+        if not questions:
+            await message.answer(
+                "📭 У вас нет активных консультаций для завершения.\n\n"
+                "Сначала задайте вопрос и дождитесь ответа фармацевта."
+            )
+            return
+
+        # Создаем клавиатуру с консультациями для завершения
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[])
+        for question in questions:
+            question_preview = question.text[:50] + "..." if len(question.text) > 50 else question.text
+            keyboard.inline_keyboard.append([
+                InlineKeyboardButton(
+                    text=f"❓ {question_preview}",
+                    callback_data=f"complete_consultation_{question.uuid}"
+                )
+            ])
+
+        await message.answer(
+            "📋 <b>Выберите консультацию для завершения:</b>\n\n"
+            "Нажмите на консультацию, которую хотите завершить.\n\n"
+            "💡 <i>Завершать можно только те консультации, на которые вы уже получили ответ.</i>",
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+
+    except Exception as e:
+        logger.error(f"Error in cmd_complete: {e}")
+        await message.answer("❌ Ошибка при получении консультаций")
+        
 @router.message(Command("cancel"))
 async def universal_cancel(message: Message, state: FSMContext):
     """Отмена текущего действия"""
