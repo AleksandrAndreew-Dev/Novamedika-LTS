@@ -13,6 +13,7 @@ from utils.time_utils import get_utc_now_naive
 
 from db.qa_models import Question, User, Pharmacist
 from bot.handlers.qa_states import QAStates, UserQAStates
+from bot.keyboards.qa_keyboard import make_completed_dialog_keyboard
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -178,27 +179,29 @@ async def confirm_end_dialog_callback(
                 if not pharmacist_name:
                     pharmacist_name = "Фармацевт"
 
-                # Создаем красивое сообщение с эмодзи
-                await callback.bot.send_message(
-                    chat_id=question.user.telegram_id,
-                    text=(
-                        "🎯 <b>КОНСУЛЬТАЦИЯ ЗАВЕРШЕНА</b>\n\n"
-                        "━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"👨‍⚕️ <b>Фармацевт:</b> {pharmacist_name}\n"
-                        f"📅 <b>Дата завершения:</b> {get_utc_now_naive().strftime('%d.%m.%Y %H:%M')}\n"
-                        "━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"❓ <b>Ваш вопрос:</b>\n"
-                        f"<i>{question.text[:200]}{'...' if len(question.text) > 200 else ''}</i>\n\n"
-                        "✅ <b>Консультация успешно завершена!</b>\n\n"
-                        "💡 <b>Что дальше?</b>\n"
-                        "• Задайте новый вопрос в чате\n"
-                        "• Используйте /clarify для уточнений\n"
-                        "• Посмотрите историю через /my_questions\n\n"
-                        "━━━━━━━━━━━━━━━━━━━━\n"
-                        "💊 <i>Спасибо, что пользуетесь нашим сервисом!</i>"
-                    ),
-                    parse_mode="HTML"
-                )
+
+
+            await callback.bot.send_message(
+            chat_id=question.user.telegram_id,
+            text=(
+                "🎯 <b>КОНСУЛЬТАЦИЯ ЗАВЕРШЕНА</b>\n\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"👨‍⚕️ <b>Фармацевт:</b> {pharmacist_name}\n"
+                f"📅 <b>Дата завершения:</b> {get_utc_now_naive().strftime('%d.%m.%Y %H:%M')}\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"❓ <b>Ваш вопрос:</b>\n"
+                f"<i>{question.text[:200]}{'...' if len(question.text) > 200 else ''}</i>\n\n"
+                "✅ <b>Консультация успешно завершена!</b>\n\n"
+                "✨ <b>Есть еще вопросы? Выберите действие:</b>\n\n"
+                "💬 <b>Задать новый вопрос</b> - нажмите кнопку ниже\n"
+                "🔍 <b>Поиск лекарств</b> - ищите препараты и аналоги\n"
+                "📖 <b>Мои вопросы</b> - история ваших консультаций\n\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "💊 <i>Спасибо, что пользуетесь нашим сервисом!</i>"
+            ),
+            parse_mode="HTML",
+            reply_markup=make_completed_dialog_keyboard()  # ДОБАВЬТЕ ЭТУ СТРОКУ
+        )
 
             await callback.answer("✅ Диалог завершен!")
 
@@ -253,22 +256,25 @@ async def confirm_end_dialog_callback(
 
             await callback.answer("✅ Диалог завершен!")
 
-            # Сообщение пользователю с визуальными маркерами
+
+
             await callback.message.answer(
-                "🎯 <b>ВАША КОНСУЛЬТАЦИЯ ЗАВЕРШЕНА</b>\n\n"
-                "━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"✅ <b>Статус:</b> Консультация завершена\n"
-                f"👨‍⚕️ <b>Фармацевт:</b> Уведомлен о завершении\n"
-                f"📅 <b>Время:</b> {get_utc_now_naive().strftime('%H:%M:%S')}\n\n"
-                f"❓ <b>Ваш вопрос:</b>\n"
-                f"<i>{question.text[:150]}{'...' if len(question.text) > 150 else ''}</i>\n\n"
-                "💡 <b>Что дальше?</b>\n"
-                "• Просто напишите новый вопрос в чат\n"
-                "• Или нажмите /ask для быстрого старта\n\n"
-                "━━━━━━━━━━━━━━━━━━━━\n"
-                "💊 <i>Спасибо за использование нашего сервиса!</i>",
-                parse_mode="HTML"
-            )
+    "🎯 <b>ВАША КОНСУЛЬТАЦИЯ ЗАВЕРШЕНА</b>\n\n"
+    "━━━━━━━━━━━━━━━━━━━━\n\n"
+    f"✅ <b>Статус:</b> Консультация завершена\n"
+    f"👨‍⚕️ <b>Фармацевт:</b> Уведомлен о завершении\n"
+    f"📅 <b>Время:</b> {get_utc_now_naive().strftime('%H:%M:%S')}\n\n"
+    f"❓ <b>Ваш вопрос:</b>\n"
+    f"<i>{question.text[:150]}{'...' if len(question.text) > 150 else ''}</i>\n\n"
+    "✨ <b>Что дальше? Выберите действие:</b>\n\n"
+    "💬 <b>Задать новый вопрос</b> - нажмите кнопку ниже\n"
+    "🔍 <b>Поиск лекарств</b> - ищите препараты и аналоги\n"
+    "📖 <b>Мои вопросы</b> - история ваших консультаций\n\n"
+    "━━━━━━━━━━━━━━━━━━━━\n"
+    "💊 <i>Мы всегда готовы помочь!</i>",
+    parse_mode="HTML",
+    reply_markup=make_completed_dialog_keyboard()
+)
 
     except Exception as e:
         logger.error(f"Error in confirm_end_dialog_callback: {e}")

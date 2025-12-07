@@ -574,6 +574,50 @@ async def universal_cancel(message: Message, state: FSMContext):
     await message.answer("✅ Текущее действие отменено.")
 
 
+# Добавьте в dialog_management.py или common_handlers.py
+
+@router.callback_query(F.data == "ask_new_question")
+async def ask_new_question_callback(callback: CallbackQuery, state: FSMContext):
+    """Обработка кнопки 'Задать новый вопрос'"""
+    await callback.answer()
+
+    await state.set_state(UserQAStates.waiting_for_question)
+    await callback.message.answer(
+        "📝 <b>Задайте ваш новый вопрос:</b>\n\n"
+        "Опишите вашу проблему подробно, чтобы фармацевт мог дать точный ответ.\n\n"
+        "<i>Просто напишите ваш вопрос в чат ↓</i>\n"
+        "<i>Для отмены используйте /cancel</i>",
+        parse_mode="HTML",
+    )
+
+@router.callback_query(F.data == "search_drugs")
+async def search_drugs_from_completed_callback(
+    callback: CallbackQuery, state: FSMContext, is_pharmacist: bool
+):
+    """Обработка кнопки 'Поиск лекарств' из завершенного диалога"""
+    await state.clear()
+
+    if is_pharmacist:
+        await callback.answer("🔍 Используйте /questions для работы с вопросами", show_alert=True)
+        return
+
+    await callback.answer()
+
+    # Используем существующую функцию из common_handlers
+    from bot.handlers.common_handlers import show_search_webapp
+    await show_search_webapp(callback, state, is_pharmacist)
+
+@router.callback_query(F.data == "my_questions")
+async def my_questions_from_completed_callback(
+    callback: CallbackQuery, db: AsyncSession, user: User, is_pharmacist: bool
+):
+    """Обработка кнопки 'Мои вопросы' из завершенного диалога"""
+    await callback.answer()
+
+    # Используем существующую функцию
+    from bot.handlers.user_questions import cmd_my_questions
+    await cmd_my_questions(callback, db, user, is_pharmacist)
+
 @router.message(F.command)
 async def unknown_command(message: Message):
     """Обработка неизвестных команд - ДОЛЖЕН БЫТЬ ПОСЛЕДНИМ"""

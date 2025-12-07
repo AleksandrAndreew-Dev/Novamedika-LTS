@@ -8,6 +8,29 @@ logger = logging.getLogger(__name__)
 
 
 
+def make_completed_dialog_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура после завершения диалога"""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="💬 Задать новый вопрос",
+                    callback_data="ask_new_question"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔍 Поиск лекарств",
+                    callback_data="search_drugs"
+                ),
+                InlineKeyboardButton(
+                    text="📖 Мои вопросы",
+                    callback_data="my_questions"
+                )
+            ]
+        ]
+    )
+
 def make_question_list_keyboard(question_uuid: str):
     """Клавиатура для вопроса в списке (до взятия)"""
     return InlineKeyboardMarkup(
