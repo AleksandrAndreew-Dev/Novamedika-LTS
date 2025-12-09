@@ -107,17 +107,23 @@ class DialogService:
         db: AsyncSession,
         limit: int = 50
     ) -> Tuple[str, List[str]]:
-        """Форматировать историю диалога для отображения"""
+        """Форматировать историю диалога для отображения - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
         try:
             # Получаем историю диалога
             messages = await DialogService.get_dialog_history(question_id, db, limit)
 
             if not messages:
-                return "История диалога пуста.", []
+                # Если сообщений нет, создаем базовую структуру
+                return "📋 <b>ИСТОРИЯ КОНСУЛЬТАЦИИ</b>\n\n" \
+                    "Пока что история диалога пуста. " \
+                    "Все сообщения будут отображаться здесь по мере общения.\n\n" \
+                    "━" * 30 + "\n", []
 
             # Группируем сообщения по датам
             formatted_messages = []
             file_ids = []
+
+            current_date = None
 
             for msg in messages:
                 # Определяем отправителя и иконку
@@ -128,41 +134,50 @@ class DialogService:
                     sender_icon = "👨‍⚕️"
                     sender_name = "Фармацевт"
 
-                # Форматируем время
+                # Форматируем дату и время
+                message_date = msg.created_at.date()
                 time_str = msg.created_at.strftime("%H:%M")
 
+                # Если дата изменилась, добавляем разделитель
+                if current_date != message_date:
+                    date_str = msg.created_at.strftime("%d.%m.%Y")
+                    formatted_messages.append(f"\n📅 <b>{date_str}</b>\n")
+                    current_date = message_date
+
+                # Форматируем контент в зависимости от типа сообщения
                 if msg.message_type == "question":
-                    content = f"❓ Вопрос: {msg.text}"
+                    content = f"❓ <b>Вопрос:</b>\n{msg.text}"
                 elif msg.message_type == "answer":
-                    content = f"💬 Ответ: {msg.text}"
+                    content = f"💬 <b>Ответ:</b>\n{msg.text}"
                 elif msg.message_type == "clarification":
-                    content = f"🔍 Уточнение: {msg.text}"
+                    content = f"🔍 <b>Уточнение:</b>\n{msg.text}"
                 elif msg.message_type == "photo":
-                    content = "📸 Фото рецепта"
+                    content = "📸 <b>Фото рецепта</b>"
                     if msg.caption:
-                        content += f": {msg.caption}"
+                        content += f"\n📝 <i>{msg.caption}</i>"
                     if msg.file_id:
                         file_ids.append(msg.file_id)
                 else:
-                    content = f"💭 Сообщение: {msg.text}"
+                    content = f"💭 <b>Сообщение:</b>\n{msg.text}"
 
                 formatted_msg = (
                     f"{sender_icon} <b>{sender_name}</b> [{time_str}]\n"
-                    f"{content}"
+                    f"{content}\n"
+                    f"━" * 20
                 )
                 formatted_messages.append(formatted_msg)
 
             # Собираем полную историю
-            history_text = "<b>📋 ПОЛНАЯ ИСТОРИЯ ДИАЛОГА</b>\n"
-            history_text += "━" * 30 + "\n\n"
+            history_text = "📋 <b>ПОЛНАЯ ИСТОРИЯ ДИАЛОГА</b>\n\n"
 
-            for i, msg in enumerate(reversed(formatted_messages), 1):
+            # Выводим сообщения в обратном порядке (последние сверху)
+            for msg in reversed(formatted_messages):
                 history_text += f"{msg}\n\n"
-                if i < len(formatted_messages):
-                    history_text += "―" * 20 + "\n\n"
 
             return history_text, file_ids
 
         except Exception as e:
-            logger.error(f"Error formatting dialog history: {e}")
-            return "❌ Не удалось загрузить историю диалога.", []
+            logger.error(f"Error formatting dialog history: {e}", exc_info=True)
+            return "📋 <b>ИСТОРИЯ ДИАЛОГА</b>\n\n" \
+                "❌ Не удалось загрузить полную историю диалога.\n\n" \
+                "━" * 30 + "\n", []

@@ -74,20 +74,30 @@ async def notify_pharmacists_about_new_question(question, db: AsyncSession):
     except Exception as e:
         logger.error(f"Error in notify_pharmacists_about_new_question: {e}")
 
-# bot/services/notification_service.py - исправленная функция notify_about_clarification
-# Замените функцию notify_about_clarification на эту:
+
 
 async def notify_about_clarification(
     original_question: Question,
     clarification_text: str,
     db: AsyncSession
 ):
-    """Уведомление об уточнении - АДАПТИРОВАННАЯ ВЕРСИЯ"""
+    """Уведомление об уточнении - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
     try:
         bot, _ = await bot_manager.initialize()
         if not bot:
             logger.error("Bot not initialized for notifications")
             return
+
+        # ✅ ВАЖНО: Добавляем уточнение в историю диалога
+        await DialogService.add_message(
+            db=db,
+            question_id=original_question.uuid,
+            sender_type="user",
+            sender_id=original_question.user_id,
+            message_type="clarification",
+            text=clarification_text,
+        )
+        await db.commit()
 
         # Получаем фармацевта, который взял исходный вопрос
         taker = await QuestionAssignmentService.get_question_taker(
@@ -120,33 +130,41 @@ async def notify_about_clarification(
             if taker_with_user:
                 pharmacists_to_notify = [taker_with_user]
 
+        # ✅ Получаем историю диалога для уведомления
+        history_text, _ = await DialogService.format_dialog_history_for_display(
+            original_question.uuid, db, limit=10  # Показываем последние 10 сообщений
+        )
+
         for pharmacist in pharmacists_to_notify:
             if pharmacist.user and pharmacist.user.telegram_id:
                 message_text = (
                     f"🔍 УТОЧНЕНИЕ К ВОПРОСУ!\n\n"
                     f"❓ Исходный вопрос: {original_question.text[:200]}...\n\n"
                     f"💬 Уточнение пользователя: {clarification_text[:200]}...\n\n"
+                    f"📋 История диалога:\n"
+                    f"{history_text}"
                 )
 
                 if pharmacist.is_online:
-                    message_text += "💡 Статус: Вы в онлайн - можете ответить сразу!"
+                    message_text += "\n💡 Статус: Вы в онлайн - можете ответить сразу!"
                     reply_markup = InlineKeyboardMarkup(
                         inline_keyboard=[
                             [
                                 InlineKeyboardButton(
                                     text="💬 Ответить на уточнение",
-                                    callback_data=f"answer_{original_question.uuid}"  # Ответ на исходный вопрос
+                                    callback_data=f"answer_{original_question.uuid}"
                                 )
                             ]
                         ]
                     )
                 else:
-                    message_text += "💡 Статус: Вы в офлайн"
+                    message_text += "\n💡 Статус: Вы в офлайн"
                     reply_markup = None
 
                 await bot.send_message(
                     chat_id=pharmacist.user.telegram_id,
                     text=message_text,
+                    parse_mode="HTML",
                     reply_markup=reply_markup
                 )
                 logger.info(f"Clarification notification sent to pharmacist {pharmacist.user.telegram_id}")

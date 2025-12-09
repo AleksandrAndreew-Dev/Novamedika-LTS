@@ -6,7 +6,7 @@ from .notification_service import (
 )
 from .assignment_service import QuestionAssignmentService
 from .qa_service import answer_question_internal
-from .dialog_service import DialogService
+from .dialog_service import DialogService 
 
 __all__ = [
     'notify_pharmacists_about_new_question',

@@ -4,11 +4,12 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload  # Добавьте эту строку
 import logging
 
 from db.qa_models import User, Question, Answer
 from bot.handlers.qa_states import UserQAStates
+from bot.services.dialog_service import DialogService
+from bot.services.notification_service import notify_about_clarification
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -80,7 +81,7 @@ async def clarify_command_handler(
 async def process_clarification(
     message: Message, state: FSMContext, db: AsyncSession, user: User
 ):
-    """Обработка уточнения пользователя"""
+    """Обработка уточнения пользователя - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
     try:
         state_data = await state.get_data()
         question_uuid = state_data.get("clarify_question_id")
@@ -118,6 +119,11 @@ async def process_clarification(
         )
         await db.commit()
 
+        # ✅ Получаем полную историю диалога
+        history_text, file_ids = await DialogService.format_dialog_history_for_display(
+            original_question.uuid, db, limit=20
+        )
+
         # ✅ Уведомляем о новом уточнении
         await notify_about_clarification(
             original_question=original_question,
@@ -125,9 +131,21 @@ async def process_clarification(
             db=db
         )
 
+        # ✅ Показываем пользователю полную историю С КНОПКАМИ
         await message.answer(
-            "✅ Ваше уточнение отправлено!\n\n"
-            "Фармацевт получил уведомление и скоро ответит."
+            f"💬 <b>ВАШЕ УТОЧНЕНИЕ ОТПРАВЛЕНО</b>\n\n"
+            f"{history_text}",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="✅ Завершить консультацию",
+                            callback_data=f"end_dialog_{original_question.uuid}"
+                        )
+                    ]
+                ]
+            )
         )
 
         await state.clear()

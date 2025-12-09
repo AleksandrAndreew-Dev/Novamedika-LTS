@@ -93,11 +93,19 @@ async def handle_direct_text(
         await db.commit()
         await db.refresh(question)
 
+        # ✅ ЛОГИРОВАНИЕ: Отслеживаем создание вопроса
+        logger.info(f"Direct question created: ID={question.uuid}, text='{message.text[:50]}...'")
+
         # СОЗДАЕМ ПЕРВОЕ СООБЩЕНИЕ В ИСТОРИИ ДИАЛОГА
-        await DialogService.create_question_message(question, db)
+        dialog_message = await DialogService.create_question_message(question, db)
         await db.commit()  # Фиксируем создание сообщения
 
-        logger.info(f"Direct question from {user.telegram_id}: {message.text[:50]}...")
+        # ✅ ЛОГИРОВАНИЕ: Отслеживаем создание сообщения в диалоге
+        logger.info(f"Dialog message created: question_id={dialog_message.question_id}, type={dialog_message.message_type}")
+
+        # Проверяем, есть ли сообщения в истории
+        history = await DialogService.get_dialog_history(question.uuid, db, limit=10)
+        logger.info(f"Dialog history after creation: {len(history)} messages")
 
         # Уведомляем фармацевтов
         await notify_pharmacists_about_new_question(question, db)
@@ -111,4 +119,8 @@ async def handle_direct_text(
         )
 
     except Exception as e:
-        logger.error(f"Error in direct question: {e}")
+        logger.error(f"Error in direct question: {e}", exc_info=True)
+        await message.answer(
+            "❌ Произошла ошибка при отправке вопроса. Пожалуйста, попробуйте еще раз.",
+            parse_mode="HTML",
+        )
