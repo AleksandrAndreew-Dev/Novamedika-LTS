@@ -895,6 +895,61 @@ async def answer_question_callback(
         await callback.answer("❌ Ошибка при обработке запроса", show_alert=True)
 
 
+@router.message(QAStates.in_dialog_with_user)
+async def continue_dialog_message(
+    message: Message,
+    state: FSMContext,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: Pharmacist,
+):
+    """Продолжение диалога - просто показываем историю"""
+    if not is_pharmacist or not pharmacist:
+        await message.answer("❌ Эта функция доступна только фармацевтам")
+        await state.clear()
+        return
+
+    try:
+        state_data = await state.get_data()
+        question_uuid = state_data.get("question_uuid")
+
+        if not question_uuid:
+            await message.answer("❌ Не удалось найти вопрос для ответа")
+            await state.clear()
+            return
+
+        result = await db.execute(
+            select(Question).where(Question.uuid == question_uuid)
+        )
+        question = result.scalar_one_or_none()
+
+        if not question:
+            await message.answer("❌ Вопрос не найден")
+            await state.clear()
+            return
+
+        # Получаем полную историю диалога
+        history_text, _ = await DialogService.format_dialog_history_for_display(
+            question.uuid, db
+        )
+
+        # Показываем историю
+        await message.answer(
+            f"💬 <b>ТЕКУЩИЙ ДИАЛОГ</b>\n\n"
+            f"{history_text}\n\n"
+            f"✍️ <b>Напишите ваш следующий ответ:</b>",
+            parse_mode="HTML"
+        )
+
+        # Сохраняем текст для ответа
+        await state.update_data(answer_text=message.text)
+        await state.set_state(QAStates.waiting_for_answer)
+
+    except Exception as e:
+        logger.error(f"Error continuing dialog: {e}")
+        await message.answer("❌ Ошибка при получении истории диалога")
+        await state.clear()
+
 @router.message(QAStates.waiting_for_answer)
 async def process_answer_text(
     message: Message,
@@ -963,6 +1018,11 @@ async def process_answer_text(
 
         await db.commit()
 
+        # ✅ Получаем полную историю диалога для отправки
+        history_text, file_ids = await DialogService.format_dialog_history_for_display(
+            question.uuid, db
+        )
+
         # Уведомляем пользователя
         user_result = await db.execute(
             select(User).where(User.uuid == question.user_id)
@@ -997,36 +1057,25 @@ async def process_answer_text(
                     else "Фармацевт"
                 )
 
-                pharmacist_info = f"{pharmacist_name}"
+                pharmacist_info_text = f"{pharmacist_name}"
                 if chain and number:
-                    pharmacist_info += f", {chain}, аптека №{number}"
+                    pharmacist_info_text += f", {chain}, аптека №{number}"
                 if role and role != "Фармацевт":
-                    pharmacist_info += f" ({role})"
+                    pharmacist_info_text += f" ({role})"
 
-                # Проверяем, запрашивал ли фармацевт фото
-                photo_requested = False
-                if (
-                    question.context_data
-                    and "photo_requested_by" in question.context_data
-                ):
-                    photo_requested = True
-
-                # Формируем сообщение для пользователя
-                message_text = (
-                    f"💊 <b>Сообщение от фармацевта</b>\n\n"
-                    f"👨‍⚕️ <b>Фармацевт:</b> {pharmacist_info}\n\n"
-                    f"💬 <b>Сообщение:</b>\n{message.text}\n\n"
+                # Формируем полное сообщение с историей
+                full_message = (
+                    f"💬 <b>ОТВЕТ ФАРМАЦЕВТА</b>\n\n"
+                    f"{history_text}\n\n"
+                    f"👨‍⚕️ <b>Фармацевт:</b> {pharmacist_info_text}"
                 )
 
-                if photo_requested:
-                    message_text += f"📸 <i>Фармацевт запросил фото рецепта</i>"
-
-                # Отправляем сообщение пользователю с клавиатурой
+                # Отправляем сообщение пользователю БЕЗ КНОПОК
                 await message.bot.send_message(
                     chat_id=user.telegram_id,
-                    text=message_text,
-                    parse_mode="HTML",
-                    reply_markup=make_user_consultation_keyboard(question.uuid),
+                    text=full_message,
+                    parse_mode="HTML"
+                    # Убрано: reply_markup=make_user_consultation_keyboard(question.uuid)
                 )
 
                 logger.info(f"Message sent to user {user.telegram_id}")
@@ -1034,17 +1083,20 @@ async def process_answer_text(
             except Exception as e:
                 logger.error(f"Failed to send message to user {user.telegram_id}: {e}")
 
-        # Уведомляем фармацевта
-        await message.answer(
-            f"✅ Сообщение отправлено пользователю!\n\n"
-            f"💬 <b>Ваше сообщение:</b>\n{message.text[:200]}...\n\n"
-            f"Пользователь может уточнить вопрос или отправить фото.\n"
-            f"Используйте /questions для новых вопросов.",
-            parse_mode="HTML",
+        # ✅ Показываем фармацевту полную историю диалога
+        pharmacist_history_text, _ = await DialogService.format_dialog_history_for_display(
+            question.uuid, db
         )
 
-        # Очищаем состояние фармацевта после ответа
-        await state.clear()
+        await message.answer(
+            f"💬 <b>ВЫ ОТПРАВИЛИ ОТВЕТ</b>\n\n"
+            f"{pharmacist_history_text}",
+            parse_mode="HTML"
+            # Убрано: reply_markup=make_pharmacist_dialog_keyboard(question.uuid)
+        )
+
+        # НЕ очищаем состояние фармацевта - оставляем в диалоге
+        await state.set_state(QAStates.in_dialog_with_user)
 
     except Exception as e:
         logger.error(
@@ -1055,7 +1107,6 @@ async def process_answer_text(
         await state.clear()
 
 
-# Добавьте этот метод в конец файла qa_handlers.py
 
 
 @router.callback_query(F.data.startswith("clarification_answer_"))

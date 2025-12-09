@@ -59,7 +59,7 @@ async def answer_question_internal(
 
 # bot/services/qa_service.py - исправленная функция send_answer_to_user
 async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncSession):
-    """Отправка ответа пользователю в Telegram с историей"""
+    """Отправка ответа пользователю в Telegram с полной историей"""
     try:
         bot, _ = await bot_manager.initialize()
 
@@ -67,26 +67,14 @@ async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncS
             logger.error("Cannot send answer: bot, user or telegram_id not available")
             return
 
-        # Формируем информацию о фармацевте
-        pharmacy_info = getattr(pharmacist, "pharmacy_info", {}) or {}
-
-        # Получаем историю диалога
+        # ✅ Получаем полную историю диалога
         history_text, file_ids = await DialogService.format_dialog_history_for_display(
             question.uuid, db
         )
 
-        # Создаем отформатированное сообщение с историей
-        message_text = (
-            "💊 <b>ПОЛУЧЕН ОТВЕТ НА ВАШ ВОПРОС!</b>\n\n"
-            f"❓ <b>Ваш вопрос:</b>\n{question.text}\n\n"
-            f"💬 <b>Ответ:</b>\n{answer_text}\n"
-        )
+        # Формируем информацию о фармацевте
+        pharmacy_info = getattr(pharmacist, "pharmacy_info", {}) or {}
 
-        # Добавляем историю диалога, если она есть
-        if history_text and history_text != "История диалога пуста.":
-            message_text += "\n\n" + history_text
-
-        # Информация о фармацевте
         first_name = pharmacy_info.get("first_name", "")
         last_name = pharmacy_info.get("last_name", "")
         patronymic = pharmacy_info.get("patronymic", "")
@@ -100,53 +88,32 @@ async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncS
             pharmacist_name_parts.append(patronymic)
 
         pharmacist_name = " ".join(pharmacist_name_parts) if pharmacist_name_parts else "Фармацевт"
-        pharmacist_info = f"{pharmacist_name}"
+        pharmacist_info_text = f"{pharmacist_name}"
 
         chain = pharmacy_info.get("chain", "")
         number = pharmacy_info.get("number", "")
         role = pharmacy_info.get("role", "Фармацевт")
 
         if chain and number:
-            pharmacist_info += f", {chain}, аптека №{number}"
+            pharmacist_info_text += f", {chain}, аптека №{number}"
         if role and role != "Фармацевт":
-            pharmacist_info += f" ({role})"
+            pharmacist_info_text += f" ({role})"
 
-        message_text += f"\n\n👨‍⚕️ <b>Ответ предоставил:</b> {pharmacist_info}"
-
-        # Клавиатура с кнопкой истории
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-
-        keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="✍️ Уточнить этот вопрос",
-                        callback_data=f"quick_clarify_{question.uuid}"
-                    ),
-                    InlineKeyboardButton(
-                        text="✅ Завершить консультацию",
-                        callback_data=f"end_dialog_{question.uuid}"
-                    )
-                ]
-            ]
+        # Формируем полное сообщение
+        message_text = (
+            f"💬 <b>ОТВЕТ ФАРМАЦЕВТА</b>\n\n"
+            f"{history_text}\n\n"
+            f"👨‍⚕️ <b>Фармацевт:</b> {pharmacist_info_text}"
         )
 
+        # Отправляем сообщение пользователю БЕЗ КНОПОК
         await bot.send_message(
             chat_id=question.user.telegram_id,
             text=message_text,
-            parse_mode="HTML",
-            reply_markup=keyboard
+            parse_mode="HTML"
         )
 
-        # Если в истории были фото, просто упоминаем об этом
-        if file_ids:
-            await bot.send_message(
-                chat_id=question.user.telegram_id,
-                text="📸 <i>В истории диалога были переданы фото рецепта</i>",
-                parse_mode="HTML"
-            )
-
-        logger.info(f"Answer sent to user {question.user.telegram_id} with history")
+        logger.info(f"Answer sent to user {question.user.telegram_id} with full history")
 
     except Exception as e:
         logger.error(f"Failed to send answer to user: {e}")

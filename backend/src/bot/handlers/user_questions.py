@@ -236,7 +236,7 @@ async def process_clarification(
             await state.clear()
             return
 
-        # ✅ Добавляем сообщение об уточнении в диалог
+        # ✅ Добавляем сообщение об уточнении в историю диалога
         await DialogService.add_message(
             db=db,
             question_id=original_question.uuid,
@@ -247,20 +247,40 @@ async def process_clarification(
         )
         await db.commit()
 
-        # ✅ Уведомляем о новом уточнении (передаем текст уточнения)
-        await notify_about_clarification(
-            original_question=original_question, clarification_text=message.text, db=db
+        # ✅ Получаем полную историю диалога
+        history_text, file_ids = await DialogService.format_dialog_history_for_display(
+            original_question.uuid, db
         )
 
+        # Показываем пользователю полную историю
         await message.answer(
-            "✅ Ваше уточнение отправлено!\n\n"
-            "Фармацевт, который взял ваш вопрос, получил уведомление и скоро ответит."
+            f"💬 <b>ВАШЕ УТОЧНЕНИЕ ОТПРАВЛЕНО</b>\n\n"
+            f"{history_text}",
+            parse_mode="HTML"
         )
+
+        # ✅ Уведомляем фармацевта с полной историей
+        # Получаем фармацевта, который взял вопрос
+        if original_question.taken_by:
+            pharmacist_result = await db.execute(
+                select(Pharmacist)
+                .options(selectinload(Pharmacist.user))
+                .where(Pharmacist.uuid == original_question.taken_by)
+            )
+            pharmacist = pharmacist_result.scalar_one_or_none()
+
+            if pharmacist and pharmacist.user:
+                await message.bot.send_message(
+                    chat_id=pharmacist.user.telegram_id,
+                    text=f"💬 <b>ПОЛУЧЕНО УТОЧНЕНИЕ</b>\n\n"
+                         f"{history_text}",
+                    parse_mode="HTML"
+                )
 
         await state.clear()
 
     except Exception as e:
-        logger.error(f"Error processing clarification: {e}")
+        logger.error(f"Error processing clarification: {e}", exc_info=True)
         await message.answer("❌ Ошибка при отправке уточнения.")
         await state.clear()
 
@@ -538,7 +558,7 @@ async def send_prescription_photo_callback(
 async def process_prescription_photo(
     message: Message, state: FSMContext, db: AsyncSession, user: User
 ):
-    """Обработка отправленного фото рецепта - БЕЗ СОХРАНЕНИЯ В БД"""
+    """Обработка отправленного фото рецепта"""
     try:
         state_data = await state.get_data()
         question_uuid = state_data.get("prescription_photo_question_id")
@@ -573,66 +593,10 @@ async def process_prescription_photo(
         if user.last_name:
             user_name = f"{user.first_name} {user.last_name}"
 
-        # Формируем ФИО фармацевта
-        pharmacist_name = "Фармацевт"
-        if pharmacist.pharmacy_info:
-            first_name = pharmacist.pharmacy_info.get("first_name", "")
-            last_name = pharmacist.pharmacy_info.get("last_name", "")
-            patronymic = pharmacist.pharmacy_info.get("patronymic", "")
-
-            name_parts = []
-            if last_name:
-                name_parts.append(last_name)
-            if first_name:
-                name_parts.append(first_name)
-            if patronymic:
-                name_parts.append(patronymic)
-
-            pharmacist_name = " ".join(name_parts) if name_parts else "Фармацевт"
-
-        # Отправляем фото фармацевту напрямую (без сохранения в БД)
+        # Отправляем фото фармацевту напрямую
         photo = message.photo[-1]  # Берем самую большую версию фото
 
-        # Создаем клавиатуру с кнопками для фармацевта
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-
-        # В process_prescription_photo:
-        pharmacist_keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="💬 Ответить пользователю",
-                        callback_data=f"answer_{question_uuid}",  # Исправить на этот формат
-                    ),
-                    InlineKeyboardButton(
-                        text="📸 Запросить еще фото",
-                        callback_data=f"request_more_photos_{question_uuid}",
-                    ),
-                ],
-                [
-                    InlineKeyboardButton(
-                        text="✅ Завершить консультацию",
-                        callback_data=f"end_dialog_{question_uuid}",
-                    )
-                ],
-            ]
-        )
-
-# В process_prescription_document аналогично исправить
-
-        await message.bot.send_photo(
-            chat_id=pharmacist.user.telegram_id,
-            photo=photo.file_id,
-            caption=f"📸 <b>Получено фото рецепта</b>\n\n"
-            f"👤 <b>От пользователя:</b> {user_name}\n"
-            f"📅 <b>Время:</b> {get_utc_now_naive().strftime('%d.%m.%Y %H:%M')}\n"
-            f"❓ <b>По вопросу:</b> {question.text[:100] if question else 'Вопрос не найден'}...\n"
-            f"{'💬 <b>Описание:</b> ' + message.caption if message.caption else ''}\n\n"
-            f"⚠️ <i>Фото временное и не сохранено в системе</i>\n"
-            f"💊 <i>Это фото было запрошено вами у пользователя</i>",
-            parse_mode="HTML",
-            reply_markup=pharmacist_keyboard,
-        )
+        # ✅ Добавляем сообщение о фото в историю диалога
         await DialogService.add_message(
             db=db,
             question_id=question_uuid,
@@ -642,16 +606,33 @@ async def process_prescription_photo(
             file_id=photo.file_id,
             caption=message.caption,
         )
+        await db.commit()
 
+        # ✅ Получаем полную историю диалога
+        history_text, _ = await DialogService.format_dialog_history_for_display(
+            question_uuid, db
+        )
+
+        # Отправляем фото с подписью
+        await message.bot.send_photo(
+            chat_id=pharmacist.user.telegram_id,
+            photo=photo.file_id,
+            caption=f"📸 <b>Получено фото рецепта</b>\n\n"
+                    f"👤 <b>От пользователя:</b> {user_name}\n"
+                    f"📅 <b>Время:</b> {get_utc_now_naive().strftime('%d.%m.%Y %H:%M')}\n\n"
+                    f"{history_text}",
+            parse_mode="HTML"
+        )
+
+        # Показываем пользователю подтверждение
         await message.answer(
-            f"✅ Фото рецепта отправлено фармацевту {pharmacist_name}!\n\n"
-            "Вы можете отправить еще фото или нажмите /done чтобы завершить."
+            f"✅ Фото рецепта отправлено фармацевту!\n\n"
+            f"📸 <b>Фото добавлено в историю диалога.</b>"
         )
 
     except Exception as e:
         logger.error(f"Error processing prescription photo: {e}", exc_info=True)
         await message.answer("❌ Ошибка при отправке фото")
-
 
 # Аналогично обновляем process_prescription_document:
 
