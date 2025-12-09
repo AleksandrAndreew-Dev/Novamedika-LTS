@@ -194,7 +194,7 @@ async def cmd_questions(
         result = await db.execute(
             select(Question)
             .where(Question.status == "pending")
-            .order_by(Question.created_at.desc())  # Новые сверху
+            .order_by(Question.created_at.desc())
         )
         questions = result.scalars().all()
 
@@ -206,30 +206,67 @@ async def cmd_questions(
             return
 
         for i, question in enumerate(questions, 1):
-            is_clarification = question.context_data and question.context_data.get(
-                "is_clarification"
-            )
+            # ПРОВЕРЯЕМ ВЗЯТИЕ ВОПРОСА
+            is_taken = question.taken_by is not None
+            is_taken_by_me = is_taken and question.taken_by == pharmacist.uuid
 
-            if is_clarification:
-                original_question_id = question.context_data.get("original_question_id")
-                original_question_text = question.context_data.get(
-                    "original_question_text", ""
+            # ОПРЕДЕЛЯЕМ ФАРМАЦЕВТА, КОТОРЫЙ ВЗЯЛ ВОПРОС
+            taken_by_info = ""
+            if is_taken and not is_taken_by_me:
+                # Получаем информацию о фармацевте
+                pharmacist_result = await db.execute(
+                    select(Pharmacist)
+                    .where(Pharmacist.uuid == question.taken_by)
                 )
+                taken_pharmacist = pharmacist_result.scalar_one_or_none()
 
-                question_text = (
-                    f"🔍 <b>УТОЧНЕНИЕ К ВОПРОСУ</b>\n\n"
-                    f"❓ Исходный вопрос: {original_question_text}\n\n"
-                    f"💬 Уточнение: {question.text}\n\n"
-                    f"🕒 Создано: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
-                )
+                if taken_pharmacist and taken_pharmacist.pharmacy_info:
+                    # Формируем ФИО
+                    first_name = taken_pharmacist.pharmacy_info.get("first_name", "")
+                    last_name = taken_pharmacist.pharmacy_info.get("last_name", "")
+                    patronymic = taken_pharmacist.pharmacy_info.get("patronymic", "")
+
+                    name_parts = []
+                    if last_name:
+                        name_parts.append(last_name)
+                    if first_name:
+                        name_parts.append(first_name)
+                    if patronymic:
+                        name_parts.append(patronymic)
+
+                    pharmacist_name = " ".join(name_parts) if name_parts else "Фармацевт"
+                    chain = taken_pharmacist.pharmacy_info.get("chain", "")
+                    number = taken_pharmacist.pharmacy_info.get("number", "")
+
+                    taken_by_info = f"\n👨‍⚕️ Взял: {pharmacist_name}"
+                    if chain and number:
+                        taken_by_info += f" ({chain}, аптека №{number})"
+
+            # ФОРМИРУЕМ СООБЩЕНИЕ
+            status_color = ""
+            status_icon = ""
+            status_text = ""
+
+            if is_taken_by_me:
+                status_color = "🟡"
+                status_icon = "👤"
+                status_text = "ВЗЯТ ВАМИ"
+            elif is_taken:
+                status_color = "🔴"
+                status_icon = "⛔"
+                status_text = "УЖЕ ВЗЯТ"
             else:
-                question_text = (
-                    f"❓ Вопрос #{i}:\n{question.text}\n\n"
-                    f"🕒 Создан: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
-                )
+                status_color = "🟢"
+                status_icon = "✅"
+                status_text = "СВОБОДЕН"
 
-            # Для всех вопросов в списке - простая кнопка "Ответить"
-            reply_markup = make_question_list_keyboard(question.uuid)
+            question_text = (
+                f"{status_color} <b>{status_icon} {status_text}</b>\n"
+                f"{taken_by_info}\n"
+                f"⏰ Время взятия: {question.taken_at.strftime('%H:%M:%S') if question.taken_at else 'Не взято'}\n\n"
+                f"❓ <b>Вопрос #{i}:</b>\n{question.text}\n\n"
+                f"🕒 Создан: {question.created_at.strftime('%d.%m.%Y %H:%M')}"
+            )
 
             # Получаем пользователя
             user_result = await db.execute(
@@ -243,8 +280,55 @@ async def cmd_questions(
                     user_info = f"{user.first_name} {user.last_name}"
                 question_text += f"\n👤 Пользователь: {user_info}"
 
+            # СОЗДАЕМ КЛАВИАТУРУ
+            reply_markup = None
+            if is_taken_by_me:
+                # Вопрос взят мной - можно ответить или освободить
+                reply_markup = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="💬 Ответить",
+                                callback_data=f"answer_{question.uuid}"
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                text="🔄 Освободить вопрос",
+                                callback_data=f"release_{question.uuid}"
+                            )
+                        ]
+                    ]
+                )
+            elif not is_taken:
+                # Свободный вопрос - можно взять
+                reply_markup = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="💬 Взять и ответить",
+                                callback_data=f"answer_{question.uuid}"
+                            )
+                        ]
+                    ]
+                )
+            else:
+                # Вопрос взят другим - только просмотр
+                reply_markup = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="👀 Только просмотр",
+                                callback_data=f"view_only_{question.uuid}"
+                            )
+                        ]
+                    ]
+                )
+
             await message.answer(
-                question_text, parse_mode="HTML", reply_markup=reply_markup
+                question_text,
+                parse_mode="HTML",
+                reply_markup=reply_markup
             )
 
     except Exception as e:
@@ -300,6 +384,87 @@ async def cmd_release_question(
         logger.error(f"Error in cmd_release_question: {e}")
         await message.answer("❌ Ошибка при получении вопросов")
 
+
+
+@router.callback_query(F.data.startswith("view_only_"))
+async def view_only_question_callback(
+    callback: CallbackQuery,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: Pharmacist
+):
+    """Просмотр вопроса, который уже взят другим фармацевтом"""
+    question_uuid = callback.data.replace("view_only_", "")
+
+    if not is_pharmacist or not pharmacist:
+        await callback.answer(
+            "❌ Эта функция доступна только фармацевтам",
+            show_alert=True
+        )
+        return
+
+    try:
+        # Получаем вопрос
+        result = await db.execute(
+            select(Question).where(Question.uuid == question_uuid)
+        )
+        question = result.scalar_one_or_none()
+
+        if not question:
+            await callback.answer("❌ Вопрос не найден", show_alert=True)
+            return
+
+        # Получаем информацию о фармацевте, который взял вопрос
+        pharmacist_info = ""
+        if question.taken_by:
+            pharmacist_result = await db.execute(
+                select(Pharmacist)
+                .where(Pharmacist.uuid == question.taken_by)
+            )
+            taken_pharmacist = pharmacist_result.scalar_one_or_none()
+
+            if taken_pharmacist and taken_pharmacist.pharmacy_info:
+                first_name = taken_pharmacist.pharmacy_info.get("first_name", "")
+                last_name = taken_pharmacist.pharmacy_info.get("last_name", "")
+                patronymic = taken_pharmacist.pharmacy_info.get("patronymic", "")
+
+                name_parts = []
+                if last_name:
+                    name_parts.append(last_name)
+                if first_name:
+                    name_parts.append(first_name)
+                if patronymic:
+                    name_parts.append(patronymic)
+
+                pharmacist_name = " ".join(name_parts) if name_parts else "Фармацевт"
+                chain = taken_pharmacist.pharmacy_info.get("chain", "")
+                number = taken_pharmacist.pharmacy_info.get("number", "")
+
+                pharmacist_info = f"👨‍⚕️ <b>Взял:</b> {pharmacist_name}"
+                if chain and number:
+                    pharmacist_info += f" ({chain}, аптека №{number})"
+                if question.taken_at:
+                    pharmacist_info += f"\n⏰ <b>Время взятия:</b> {question.taken_at.strftime('%H:%M:%S')}"
+
+        # Формируем сообщение
+        message_text = (
+            f"🔴 <b>ВОПРОС УЖЕ ВЗЯТ ДРУГИМ ФАРМАЦЕВТОМ</b>\n\n"
+            f"{pharmacist_info}\n\n"
+            f"❓ <b>Вопрос:</b>\n{question.text}\n\n"
+            f"🕒 <b>Создан:</b> {question.created_at.strftime('%d.%m.%Y %H:%M')}\n"
+            f"📊 <b>Статус:</b> В работе другим фармацевтом"
+        )
+
+        await callback.message.answer(
+            message_text,
+            parse_mode="HTML"
+        )
+
+        await callback.answer("Этот вопрос уже взят другим фармацевтом")
+
+    except Exception as e:
+        logger.error(f"Error in view_only_question_callback: {e}")
+        await callback.answer("❌ Ошибка при просмотре вопроса", show_alert=True)
 
 @router.callback_query(F.data.startswith("release_"))
 async def release_question_callback(
