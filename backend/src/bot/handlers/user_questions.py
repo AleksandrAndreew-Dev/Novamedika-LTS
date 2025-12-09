@@ -684,13 +684,13 @@ async def process_prescription_photo(
         # Создаем клавиатуру с кнопками для фармацевта
         from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
+        # В process_prescription_photo:
         pharmacist_keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
                         text="💬 Ответить пользователю",
-                        # ИСПРАВЛЕНО: Убрали префикс after_photo_
-                        callback_data=f"answer_{question_uuid}",
+                        callback_data=f"answer_{question_uuid}",  # Исправить на этот формат
                     ),
                     InlineKeyboardButton(
                         text="📸 Запросить еще фото",
@@ -705,6 +705,8 @@ async def process_prescription_photo(
                 ],
             ]
         )
+
+# В process_prescription_document аналогично исправить
 
         await message.bot.send_photo(
             chat_id=pharmacist.user.telegram_id,

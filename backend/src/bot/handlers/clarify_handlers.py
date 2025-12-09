@@ -75,6 +75,69 @@ async def clarify_command_handler(
         else:
             await update.answer(error_msg)
 
+
+@router.message(UserQAStates.waiting_for_clarification)
+async def process_clarification(
+    message: Message, state: FSMContext, db: AsyncSession, user: User
+):
+    """Обработка уточнения пользователя"""
+    try:
+        state_data = await state.get_data()
+        question_uuid = state_data.get("clarify_question_id")
+
+        if not question_uuid:
+            await message.answer("❌ Не удалось найти вопрос для уточнения.")
+            await state.clear()
+            return
+
+        # Получаем исходный вопрос
+        result = await db.execute(
+            select(Question).where(Question.uuid == question_uuid)
+        )
+        original_question = result.scalar_one_or_none()
+
+        if not original_question:
+            await message.answer("❌ Вопрос не найден.")
+            await state.clear()
+            return
+
+        # Проверяем, что вопрос имеет статус "answered"
+        if original_question.status != "answered":
+            await message.answer("❌ На этот вопрос еще нет ответа.")
+            await state.clear()
+            return
+
+        # ✅ Добавляем сообщение об уточнении в диалог
+        await DialogService.add_message(
+            db=db,
+            question_id=original_question.uuid,
+            sender_type="user",
+            sender_id=user.uuid,
+            message_type="clarification",
+            text=message.text,
+        )
+        await db.commit()
+
+        # ✅ Уведомляем о новом уточнении
+        await notify_about_clarification(
+            original_question=original_question,
+            clarification_text=message.text,
+            db=db
+        )
+
+        await message.answer(
+            "✅ Ваше уточнение отправлено!\n\n"
+            "Фармацевт получил уведомление и скоро ответит."
+        )
+
+        await state.clear()
+
+    except Exception as e:
+        logger.error(f"Error processing clarification: {e}", exc_info=True)
+        await message.answer("❌ Ошибка при отправке уточнения.")
+        await state.clear()
+
+
 @router.callback_query(F.data.startswith("clarify_select_"))
 async def clarify_select_question(
     callback: CallbackQuery,

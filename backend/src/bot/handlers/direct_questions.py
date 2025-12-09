@@ -58,17 +58,19 @@ async def handle_direct_text(
 
     current_state = await state.get_state()
 
-    # Если есть активное состояние, обрабатываем его корректно
+    # Если есть активное состояние - не обрабатываем как прямой вопрос
     if current_state is not None:
-        if current_state == UserQAStates.waiting_for_prescription_photo:
-            # Обработка продолжается в другом обработчике
+        # Для этих состояний пропускаем обработку (уже есть другие обработчики)
+        if current_state in [
+            UserQAStates.waiting_for_prescription_photo,
+            UserQAStates.waiting_for_clarification,
+            UserQAStates.in_dialog,
+            UserQAStates.waiting_for_question
+        ]:
             return
-        elif current_state == UserQAStates.waiting_for_question:
-            # Явно сбрасываем состояние если пользователь отправляет не-команду
-            await state.clear()
-        else:
-            # Для других состояний просто выходим
-            return
+
+        # Для других состояний сбрасываем
+        await state.clear()
 
     # Проверяем текст
     if not message.text or not message.text.strip():
@@ -78,6 +80,8 @@ async def handle_direct_text(
         return
 
     
+
+
 
     try:
         # Создаем вопрос
