@@ -1,4 +1,4 @@
-
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -9,6 +9,7 @@ from fastapi import HTTPException, status
 from db.qa_models import Question, Answer
 from db.qa_schemas import AnswerBase
 from bot.core import bot_manager
+
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ async def answer_question_internal(
         raise
 
 
+# bot/services/qa_service.py - исправленная функция send_answer_to_user
 async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncSession):
     """Отправка ответа пользователю в Telegram с историей"""
     try:
@@ -68,43 +70,21 @@ async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncS
         # Формируем информацию о фармацевте
         pharmacy_info = getattr(pharmacist, "pharmacy_info", {}) or {}
 
-        # Получаем последние 3 сообщения для превью
-        recent_messages = await DialogService.get_dialog_history(question.uuid, db, limit=3)
+        # Получаем историю диалога
+        history_text, file_ids = await DialogService.format_dialog_history_for_display(
+            question.uuid, db
+        )
 
-        # Формируем превью истории
-        history_preview = ""
-        if recent_messages:
-            history_preview = "\n\n📜 <b>Последние сообщения:</b>\n"
-            for msg in reversed(recent_messages):
-                if msg.sender_type == "user":
-                    sender = "👤 Вы"
-                else:
-                    sender = "👨‍⚕️ Фармацевт"
-
-                time_str = msg.created_at.strftime("%H:%M")
-
-                if msg.message_type == "question":
-                    preview = f"❓ {msg.text[:50]}..." if len(msg.text) > 50 else f"❓ {msg.text}"
-                elif msg.message_type == "answer":
-                    preview = f"💬 {msg.text[:50]}..." if len(msg.text) > 50 else f"💬 {msg.text}"
-                elif msg.message_type == "photo":
-                    preview = "📸 Фото рецепта"
-                else:
-                    preview = f"💭 {msg.text[:50]}..." if len(msg.text) > 50 else f"💭 {msg.text}"
-
-                history_preview += f"{sender} [{time_str}]: {preview}\n"
-
-        # Полное сообщение
+        # Создаем отформатированное сообщение с историей
         message_text = (
             "💊 <b>ПОЛУЧЕН ОТВЕТ НА ВАШ ВОПРОС!</b>\n\n"
             f"❓ <b>Ваш вопрос:</b>\n{question.text}\n\n"
             f"💬 <b>Ответ:</b>\n{answer_text}\n"
         )
 
-        if history_preview:
-            message_text += history_preview
-
-        message_text += "\n━━━━━━━━━━━━━━━━━━━━\n\n"
+        # Добавляем историю диалога, если она есть
+        if history_text and history_text != "История диалога пуста.":
+            message_text += "\n\n" + history_text
 
         # Информация о фармацевте
         first_name = pharmacy_info.get("first_name", "")
@@ -131,18 +111,13 @@ async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncS
         if role and role != "Фармацевт":
             pharmacist_info += f" ({role})"
 
-        message_text += f"👨‍⚕️ <b>Ответ предоставил:</b> {pharmacist_info}\n\n"
-        message_text += "💡 <i>Вы можете посмотреть полную историю диалога или уточнить вопрос</i>"
+        message_text += f"\n\n👨‍⚕️ <b>Ответ предоставил:</b> {pharmacist_info}"
 
         # Клавиатура с кнопкой истории
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="📋 Полная история диалога",
-                        callback_data=f"show_history_{question.uuid}"
-                    )
-                ],
                 [
                     InlineKeyboardButton(
                         text="✍️ Уточнить этот вопрос",
@@ -163,8 +138,15 @@ async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncS
             reply_markup=keyboard
         )
 
+        # Если в истории были фото, просто упоминаем об этом
+        if file_ids:
+            await bot.send_message(
+                chat_id=question.user.telegram_id,
+                text="📸 <i>В истории диалога были переданы фото рецепта</i>",
+                parse_mode="HTML"
+            )
+
         logger.info(f"Answer sent to user {question.user.telegram_id} with history")
 
     except Exception as e:
         logger.error(f"Failed to send answer to user: {e}")
-
