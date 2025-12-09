@@ -29,15 +29,20 @@ async def get_or_create_user(telegram_id: int, db: AsyncSession) -> User:
             user_type="customer"
         )
         db.add(new_user)
-        await db.commit()
-        await db.refresh(new_user)
-        logger.info(f"Created new user with telegram_id: {telegram_id}")
-        return new_user
+        try:
+            await db.commit()
+            await db.refresh(new_user)
+            logger.info(f"Created new user with telegram_id: {telegram_id}")
+            return new_user
+        except Exception as e:
+            await db.rollback()
+            # Если не удалось создать пользователя, возвращаем None
+            logger.exception(f"Failed to create user for {telegram_id}: {e}")
+            return None
 
     except Exception as e:
-        await db.rollback()
         logger.exception(f"Error in get_or_create_user for {telegram_id}: {e}")
-        raise
+        return None  # Возвращаем None вместо исключения
 
 
 async def get_pharmacist_by_telegram_id(

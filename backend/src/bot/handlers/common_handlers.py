@@ -608,7 +608,7 @@ async def cmd_complete(
     except Exception as e:
         logger.error(f"Error in cmd_complete: {e}")
         await message.answer("❌ Ошибка при получении консультаций")
-        
+
 @router.message(Command("cancel"))
 async def universal_cancel(message: Message, state: FSMContext):
     """Отмена текущего действия"""
@@ -616,20 +616,17 @@ async def universal_cancel(message: Message, state: FSMContext):
 
     current_state = await state.get_state()
 
-    if current_state == UserQAStates.waiting_for_prescription_photo:
-        await state.clear()
-        await message.answer("❌ Отправка фото рецепта отменена.")
-        return
-
     if current_state is None:
         await message.answer("❌ Нечего отменять.")
         return
 
+    # Очищаем состояние
     await state.clear()
+
+    # Уведомляем пользователя
     await message.answer("✅ Текущее действие отменено.")
 
 
-# Добавьте в dialog_management.py или common_handlers.py
 
 @router.callback_query(F.data == "ask_new_question")
 async def ask_new_question_callback(callback: CallbackQuery, state: FSMContext):

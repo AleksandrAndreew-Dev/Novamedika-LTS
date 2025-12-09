@@ -364,6 +364,13 @@ async def process_user_question(
     """Упрощенная обработка вопроса от пользователя"""
     logger.info(f"Processing question from user {message.from_user.id}")
 
+    # === ДОБАВИТЬ ПРОВЕРКУ ===
+    if not message.text or not message.text.strip():
+        await message.answer("❌ Вопрос не может быть пустым. Пожалуйста, напишите текст вопроса.")
+        await state.clear()
+        return
+    # =========================
+
     if is_pharmacist:
         await message.answer(
             "ℹ️ Вы фармацевт. Используйте /questions для ответов на вопросы."
@@ -374,11 +381,12 @@ async def process_user_question(
     try:
         # Создаем вопрос
         question = Question(
-            text=message.text,
+            text=message.text.strip(),
             user_id=user.uuid,
             status="pending",
             created_at=get_utc_now_naive(),
         )
+
 
         db.add(question)
         await db.commit()
