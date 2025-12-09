@@ -903,7 +903,7 @@ async def continue_dialog_message(
     is_pharmacist: bool,
     pharmacist: Pharmacist,
 ):
-    """Продолжение диалога - просто показываем историю"""
+    """Продолжение диалога - показываем историю и кнопки"""
     if not is_pharmacist or not pharmacist:
         await message.answer("❌ Эта функция доступна только фармацевтам")
         await state.clear()
@@ -933,12 +933,13 @@ async def continue_dialog_message(
             question.uuid, db
         )
 
-        # Показываем историю
+        # Показываем историю С КНОПКАМИ
         await message.answer(
             f"💬 <b>ТЕКУЩИЙ ДИАЛОГ</b>\n\n"
             f"{history_text}\n\n"
             f"✍️ <b>Напишите ваш следующий ответ:</b>",
-            parse_mode="HTML"
+            parse_mode="HTML",
+            reply_markup=make_pharmacist_dialog_keyboard(question.uuid)
         )
 
         # Сохраняем текст для ответа
@@ -1070,12 +1071,12 @@ async def process_answer_text(
                     f"👨‍⚕️ <b>Фармацевт:</b> {pharmacist_info_text}"
                 )
 
-                # Отправляем сообщение пользователю БЕЗ КНОПОК
+                # Отправляем сообщение пользователю С КНОПКАМИ
                 await message.bot.send_message(
                     chat_id=user.telegram_id,
                     text=full_message,
-                    parse_mode="HTML"
-                    # Убрано: reply_markup=make_user_consultation_keyboard(question.uuid)
+                    parse_mode="HTML",
+                    reply_markup=make_user_consultation_keyboard(question.uuid)
                 )
 
                 logger.info(f"Message sent to user {user.telegram_id}")
@@ -1083,16 +1084,17 @@ async def process_answer_text(
             except Exception as e:
                 logger.error(f"Failed to send message to user {user.telegram_id}: {e}")
 
-        # ✅ Показываем фармацевту полную историю диалога
+        # ✅ Показываем фармацевту полную историю диалога С КНОПКАМИ
         pharmacist_history_text, _ = await DialogService.format_dialog_history_for_display(
             question.uuid, db
         )
 
         await message.answer(
             f"💬 <b>ВЫ ОТПРАВИЛИ ОТВЕТ</b>\n\n"
-            f"{pharmacist_history_text}",
-            parse_mode="HTML"
-            # Убрано: reply_markup=make_pharmacist_dialog_keyboard(question.uuid)
+            f"{pharmacist_history_text}\n\n"
+            f"<b>Доступные действия:</b>",
+            parse_mode="HTML",
+            reply_markup=make_pharmacist_dialog_keyboard(question.uuid)
         )
 
         # НЕ очищаем состояние фармацевта - оставляем в диалоге
@@ -1105,9 +1107,6 @@ async def process_answer_text(
         )
         await message.answer("❌ Ошибка при отправке сообщения")
         await state.clear()
-
-
-
 
 @router.callback_query(F.data.startswith("clarification_answer_"))
 async def answer_clarification_callback(

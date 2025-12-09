@@ -57,7 +57,6 @@ async def answer_question_internal(
         raise
 
 
-# bot/services/qa_service.py - исправленная функция send_answer_to_user
 async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncSession):
     """Отправка ответа пользователю в Telegram с полной историей"""
     try:
@@ -106,11 +105,15 @@ async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncS
             f"👨‍⚕️ <b>Фармацевт:</b> {pharmacist_info_text}"
         )
 
-        # Отправляем сообщение пользователю БЕЗ КНОПОК
+        # Создаем клавиатуру для пользователя
+        from bot.keyboards.qa_keyboard import make_user_consultation_keyboard
+
+        # Отправляем сообщение пользователю С КНОПКАМИ
         await bot.send_message(
             chat_id=question.user.telegram_id,
             text=message_text,
-            parse_mode="HTML"
+            parse_mode="HTML",
+            reply_markup=make_user_consultation_keyboard(question.uuid)
         )
 
         logger.info(f"Answer sent to user {question.user.telegram_id} with full history")

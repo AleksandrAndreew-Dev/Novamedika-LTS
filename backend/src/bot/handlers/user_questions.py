@@ -215,7 +215,7 @@ async def cmd_clarify(
 async def process_clarification(
     message: Message, state: FSMContext, db: AsyncSession, user: User
 ):
-    """Обработка уточнения пользователя - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+    """Обработка уточнения пользователя"""
     try:
         state_data = await state.get_data()
         question_uuid = state_data.get("clarify_question_id")
@@ -252,15 +252,24 @@ async def process_clarification(
             original_question.uuid, db
         )
 
-        # Показываем пользователю полную историю
+        # Показываем пользователю полную историю С КНОПКАМИ
         await message.answer(
             f"💬 <b>ВАШЕ УТОЧНЕНИЕ ОТПРАВЛЕНО</b>\n\n"
             f"{history_text}",
-            parse_mode="HTML"
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="✅ Завершить консультацию",
+                            callback_data=f"end_dialog_{original_question.uuid}"
+                        )
+                    ]
+                ]
+            )
         )
 
-        # ✅ Уведомляем фармацевта с полной историей
-        # Получаем фармацевта, который взял вопрос
+        # ✅ Уведомляем фармацевта с полной историей и кнопками
         if original_question.taken_by:
             pharmacist_result = await db.execute(
                 select(Pharmacist)
@@ -270,11 +279,14 @@ async def process_clarification(
             pharmacist = pharmacist_result.scalar_one_or_none()
 
             if pharmacist and pharmacist.user:
+                from bot.keyboards.qa_keyboard import make_pharmacist_dialog_keyboard
+
                 await message.bot.send_message(
                     chat_id=pharmacist.user.telegram_id,
                     text=f"💬 <b>ПОЛУЧЕНО УТОЧНЕНИЕ</b>\n\n"
                          f"{history_text}",
-                    parse_mode="HTML"
+                    parse_mode="HTML",
+                    reply_markup=make_pharmacist_dialog_keyboard(original_question.uuid)
                 )
 
         await state.clear()
@@ -613,7 +625,31 @@ async def process_prescription_photo(
             question_uuid, db
         )
 
-        # Отправляем фото с подписью
+        # Создаем клавиатуру для фармацевта
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+        pharmacist_keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="💬 Ответить пользователю",
+                        callback_data=f"answer_{question_uuid}",
+                    ),
+                    InlineKeyboardButton(
+                        text="📸 Запросить еще фото",
+                        callback_data=f"request_more_photos_{question_uuid}",
+                    ),
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="✅ Завершить консультацию",
+                        callback_data=f"end_dialog_{question_uuid}",
+                    )
+                ],
+            ]
+        )
+
+        # Отправляем фото с подписью и историей С КНОПКАМИ
         await message.bot.send_photo(
             chat_id=pharmacist.user.telegram_id,
             photo=photo.file_id,
@@ -621,20 +657,33 @@ async def process_prescription_photo(
                     f"👤 <b>От пользователя:</b> {user_name}\n"
                     f"📅 <b>Время:</b> {get_utc_now_naive().strftime('%d.%m.%Y %H:%M')}\n\n"
                     f"{history_text}",
-            parse_mode="HTML"
+            parse_mode="HTML",
+            reply_markup=pharmacist_keyboard
         )
 
-        # Показываем пользователю подтверждение
+        # Показываем пользователю подтверждение С КНОПКАМИ
         await message.answer(
             f"✅ Фото рецепта отправлено фармацевту!\n\n"
-            f"📸 <b>Фото добавлено в историю диалога.</b>"
+            f"📸 <b>Фото добавлено в историю диалога.</b>",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="✍️ Уточнить вопрос",
+                            callback_data=f"quick_clarify_{question_uuid}"
+                        ),
+                        InlineKeyboardButton(
+                            text="✅ Завершить консультацию",
+                            callback_data=f"end_dialog_{question_uuid}"
+                        )
+                    ]
+                ]
+            )
         )
 
     except Exception as e:
         logger.error(f"Error processing prescription photo: {e}", exc_info=True)
         await message.answer("❌ Ошибка при отправке фото")
-
-# Аналогично обновляем process_prescription_document:
 
 
 @router.message(UserQAStates.waiting_for_prescription_photo, F.document)
