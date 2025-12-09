@@ -225,6 +225,68 @@ async def end_dialog_callback(
         await callback.answer("❌ Ошибка", show_alert=True)
 
 
+
+
+@router.callback_query(F.data.startswith("complete_consultation_"))
+async def complete_consultation_callback(
+    callback: CallbackQuery,
+    db: AsyncSession,
+    user: User,
+    is_pharmacist: bool,
+    state: FSMContext
+):
+    """Обработка завершения консультации через кнопку в /complete"""
+    if is_pharmacist:
+        await callback.answer(
+            "👨‍⚕️ Вы фармацевт. Используйте /end_dialog для завершения диалогов.",
+            show_alert=True
+        )
+        return
+
+    question_uuid = callback.data.replace("complete_consultation_", "")
+
+    try:
+        # Получаем вопрос
+        result = await db.execute(
+            select(Question).where(Question.uuid == question_uuid)
+        )
+        question = result.scalar_one_or_none()
+
+        if not question or question.user_id != user.uuid:
+            await callback.answer("❌ Вопрос не найден или не принадлежит вам", show_alert=True)
+            return
+
+        if question.status == "completed":
+            await callback.answer("✅ Эта консультация уже завершена", show_alert=True)
+            return
+
+        # Используем универсальную функцию завершения диалога
+        success = await complete_dialog_service(
+            question_uuid=question_uuid,
+            db=db,
+            initiator_type="user",
+            initiator=user,
+            callback=callback,
+            message=callback.message
+        )
+
+        if success:
+            # Обновляем сообщение
+            await callback.message.edit_text(
+                f"✅ Консультация успешно завершена!\n\n"
+                f"❓ Вопрос: {question.text[:100]}...\n\n"
+                f"Теперь вы можете задать новый вопрос или посмотреть другие консультации.",
+                parse_mode="HTML",
+                reply_markup=make_completed_dialog_keyboard()
+            )
+            await callback.answer()
+        else:
+            await callback.answer("❌ Ошибка при завершении консультации", show_alert=True)
+
+    except Exception as e:
+        logger.error(f"Error in complete_consultation_callback: {e}")
+        await callback.answer("❌ Ошибка при обработке запроса", show_alert=True)
+
 @router.callback_query(F.data.startswith("confirm_end_"))
 async def confirm_end_dialog_callback(
     callback: CallbackQuery,
