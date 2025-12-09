@@ -1,3 +1,4 @@
+# qa_service.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,10 +10,10 @@ from fastapi import HTTPException, status
 from db.qa_models import Question, Answer
 from db.qa_schemas import AnswerBase
 from bot.core import bot_manager
-
+from bot.services.dialog_service import DialogService  # ✅ ДОБАВИЛИ
+from bot.keyboards.qa_keyboard import make_user_consultation_keyboard  # ✅ ДОБАВИЛИ
 
 logger = logging.getLogger(__name__)
-
 
 async def answer_question_internal(
     question_id: str,
@@ -32,6 +33,17 @@ async def answer_question_internal(
         if not question:
             raise HTTPException(status_code=404, detail="Question not found")
 
+        # ✅ СОХРАНЯЕМ ОТВЕТ В ИСТОРИЮ ДИАЛОГА
+        await DialogService.add_message(
+            db=db,
+            question_id=question.uuid,
+            sender_type="pharmacist",
+            sender_id=pharmacist.uuid,
+            message_type="answer",
+            text=answer.text
+        )
+
+        # Создаем запись ответа
         new_answer = Answer(
             uuid=uuid.uuid4(),
             question_id=question.uuid,
@@ -55,7 +67,6 @@ async def answer_question_internal(
         await db.rollback()
         logger.error(f"Error in answer_question_internal: {e}")
         raise
-
 
 async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncSession):
     """Отправка ответа пользователю в Telegram с полной историей"""
@@ -104,9 +115,6 @@ async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncS
             f"{history_text}\n\n"
             f"👨‍⚕️ <b>Фармацевт:</b> {pharmacist_info_text}"
         )
-
-        # Создаем клавиатуру для пользователя
-        from bot.keyboards.qa_keyboard import make_user_consultation_keyboard
 
         # Отправляем сообщение пользователю С КНОПКАМИ
         await bot.send_message(

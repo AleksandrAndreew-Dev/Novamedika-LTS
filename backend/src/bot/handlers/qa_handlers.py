@@ -1,37 +1,37 @@
-# bot/handlers/qa_handlers.py - исправленный импорт
+# Стандартная библиотека
+import logging
+from datetime import datetime, timedelta
+from typing import Union
+
+# Сторонние пакеты
+from aiogram import Router, F
 from aiogram.types import (
     Message,
     CallbackQuery,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
 )
-from typing import Union
-
-from aiogram import Router, F
-
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from db.qa_models import User, Pharmacist, Question, Answer
-from bot.handlers.qa_states import QAStates
-from bot.services.dialog_service import DialogService
 
-# ИСПРАВЛЕННЫЙ импорт:
+# Внутренние модули проекта
+from utils.time_utils import get_utc_now_naive
+from db.qa_models import User, Pharmacist, Question, Answer, DialogMessage
+from bot.handlers.qa_states import QAStates
+from bot.handlers.common_handlers import get_pharmacist_keyboard
+from bot.services.dialog_service import DialogService
+from bot.services.assignment_service import QuestionAssignmentService
 from bot.keyboards.qa_keyboard import (
     make_question_list_keyboard,
     make_pharmacist_dialog_keyboard,
     make_user_consultation_keyboard,
-    make_question_keyboard,  # ДОБАВЬТЕ ЭТОТ ИМПОРТ
+    make_question_keyboard,
 )
-from bot.services.assignment_service import QuestionAssignmentService
 
-from bot.handlers.common_handlers import get_pharmacist_keyboard
-import logging
-from datetime import datetime, timedelta
-from utils.time_utils import get_utc_now_naive
-
+# Инициализация
 logger = logging.getLogger(__name__)
 router = Router()
 

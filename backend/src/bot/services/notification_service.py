@@ -90,7 +90,6 @@ async def notify_about_clarification(
             return
 
         # Получаем фармацевта, который взял исходный вопрос
-        from bot.services.assignment_service import QuestionAssignmentService
         taker = await QuestionAssignmentService.get_question_taker(
             str(original_question.uuid),
             db

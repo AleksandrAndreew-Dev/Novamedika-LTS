@@ -247,6 +247,14 @@ async def process_clarification(
         )
         await db.commit()
 
+        # ✅ Уведомляем о новом уточнении
+        from bot.services.notification_service import notify_about_clarification
+        await notify_about_clarification(
+            original_question=original_question,
+            clarification_text=message.text,
+            db=db
+        )
+
         # ✅ Получаем полную историю диалога
         history_text, file_ids = await DialogService.format_dialog_history_for_display(
             original_question.uuid, db
@@ -335,6 +343,7 @@ async def process_user_question(
         db.add(question)
         await db.commit()
         await db.refresh(question)
+        await DialogService.create_question_message(question, db)
 
         logger.info(
             f"Question created for user {user.telegram_id}, question_id: {question.uuid}"
