@@ -1,10 +1,11 @@
 # services/dialog_service.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
 import logging
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload  # Добавьте эту строку
+from sqlalchemy.orm import selectinload
+from datetime import datetime
 
 from db.qa_models import DialogMessage, Question
 from utils.time_utils import get_utc_now_naive
@@ -99,3 +100,69 @@ class DialogService:
         except Exception as e:
             logger.error(f"Error getting question with dialog: {e}")
             return None
+
+    @staticmethod
+    async def format_dialog_history_for_display(
+        question_id: UUID,
+        db: AsyncSession,
+        limit: int = 50
+    ) -> Tuple[str, List[str]]:
+        """Форматировать историю диалога для отображения"""
+        try:
+            # Получаем историю диалога
+            messages = await DialogService.get_dialog_history(question_id, db, limit)
+
+            if not messages:
+                return "История диалога пуста.", []
+
+            # Группируем сообщения по датам
+            formatted_messages = []
+            file_ids = []
+
+            for msg in messages:
+                # Определяем отправителя и иконку
+                if msg.sender_type == "user":
+                    sender_icon = "👤"
+                    sender_name = "Вы"
+                else:
+                    sender_icon = "👨‍⚕️"
+                    sender_name = "Фармацевт"
+
+                # Форматируем время
+                time_str = msg.created_at.strftime("%H:%M")
+
+                if msg.message_type == "question":
+                    content = f"❓ Вопрос: {msg.text}"
+                elif msg.message_type == "answer":
+                    content = f"💬 Ответ: {msg.text}"
+                elif msg.message_type == "clarification":
+                    content = f"🔍 Уточнение: {msg.text}"
+                elif msg.message_type == "photo":
+                    content = "📸 Фото рецепта"
+                    if msg.caption:
+                        content += f": {msg.caption}"
+                    if msg.file_id:
+                        file_ids.append(msg.file_id)
+                else:
+                    content = f"💭 Сообщение: {msg.text}"
+
+                formatted_msg = (
+                    f"{sender_icon} <b>{sender_name}</b> [{time_str}]\n"
+                    f"{content}"
+                )
+                formatted_messages.append(formatted_msg)
+
+            # Собираем полную историю
+            history_text = "<b>📋 ПОЛНАЯ ИСТОРИЯ ДИАЛОГА</b>\n"
+            history_text += "━" * 30 + "\n\n"
+
+            for i, msg in enumerate(reversed(formatted_messages), 1):
+                history_text += f"{msg}\n\n"
+                if i < len(formatted_messages):
+                    history_text += "―" * 20 + "\n\n"
+
+            return history_text, file_ids
+
+        except Exception as e:
+            logger.error(f"Error formatting dialog history: {e}")
+            return "❌ Не удалось загрузить историю диалога.", []

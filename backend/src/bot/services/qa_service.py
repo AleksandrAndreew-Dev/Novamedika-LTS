@@ -57,56 +57,113 @@ async def answer_question_internal(
 
 
 async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncSession):
-    """Отправка ответа пользователю в Telegram - ОБНОВЛЕННАЯ ВЕРСИЯ С ФИО"""
+    """Отправка ответа пользователю в Telegram с историей"""
     try:
         bot, _ = await bot_manager.initialize()
 
-        if not bot:
-            logger.error("Bot not initialized for sending answer to user")
+        if not bot or not question.user or not question.user.telegram_id:
+            logger.error("Cannot send answer: bot, user or telegram_id not available")
             return
 
-        if question.user and question.user.telegram_id:
-            # Формируем информацию о фармацевте с ФИО
-            pharmacy_info = getattr(pharmacist, "pharmacy_info", {}) or {}
-            chain = pharmacy_info.get("chain", "Не указана")
-            number = pharmacy_info.get("number", "Не указан")
-            role = pharmacy_info.get("role", "Фармацевт")
+        # Формируем информацию о фармацевте
+        pharmacy_info = getattr(pharmacist, "pharmacy_info", {}) or {}
 
-            # Получаем ФИО фармацевта
-            first_name = pharmacy_info.get("first_name", "")
-            last_name = pharmacy_info.get("last_name", "")
-            patronymic = pharmacy_info.get("patronymic", "")
+        # Получаем последние 3 сообщения для превью
+        recent_messages = await DialogService.get_dialog_history(question.uuid, db, limit=3)
 
-            # Формируем строку с ФИО
-            pharmacist_name_parts = []
-            if last_name:
-                pharmacist_name_parts.append(last_name)
-            if first_name:
-                pharmacist_name_parts.append(first_name)
-            if patronymic:
-                pharmacist_name_parts.append(patronymic)
+        # Формируем превью истории
+        history_preview = ""
+        if recent_messages:
+            history_preview = "\n\n📜 <b>Последние сообщения:</b>\n"
+            for msg in reversed(recent_messages):
+                if msg.sender_type == "user":
+                    sender = "👤 Вы"
+                else:
+                    sender = "👨‍⚕️ Фармацевт"
 
-            pharmacist_name = " ".join(pharmacist_name_parts) if pharmacist_name_parts else "Фармацевт"
+                time_str = msg.created_at.strftime("%H:%M")
 
-            pharmacist_info = f"{pharmacist_name}"
-            if chain and number:
-                pharmacist_info += f", {chain}, аптека №{number}"
-            if role and role != "Фармацевт":
-                pharmacist_info += f" ({role})"
+                if msg.message_type == "question":
+                    preview = f"❓ {msg.text[:50]}..." if len(msg.text) > 50 else f"❓ {msg.text}"
+                elif msg.message_type == "answer":
+                    preview = f"💬 {msg.text[:50]}..." if len(msg.text) > 50 else f"💬 {msg.text}"
+                elif msg.message_type == "photo":
+                    preview = "📸 Фото рецепта"
+                else:
+                    preview = f"💭 {msg.text[:50]}..." if len(msg.text) > 50 else f"💭 {msg.text}"
 
-            message_text = (
-                "💊 Получен ответ на ваш вопрос!\n\n"
-                f"❓ Ваш вопрос: {question.text}\n\n"
-                f"💬 Ответ: {answer_text}\n\n"
-                f"👨‍⚕️ Ответ предоставил: {pharmacist_info}\n\n"
-                "Спасибо, что пользуйтесь нашим сервисом! ❤️"
-            )
+                history_preview += f"{sender} [{time_str}]: {preview}\n"
 
-            await bot.send_message(
-                chat_id=question.user.telegram_id,
-                text=message_text
-            )
-            logger.info(f"Answer sent to user {question.user.telegram_id} from pharmacist {pharmacist.uuid}")
+        # Полное сообщение
+        message_text = (
+            "💊 <b>ПОЛУЧЕН ОТВЕТ НА ВАШ ВОПРОС!</b>\n\n"
+            f"❓ <b>Ваш вопрос:</b>\n{question.text}\n\n"
+            f"💬 <b>Ответ:</b>\n{answer_text}\n"
+        )
+
+        if history_preview:
+            message_text += history_preview
+
+        message_text += "\n━━━━━━━━━━━━━━━━━━━━\n\n"
+
+        # Информация о фармацевте
+        first_name = pharmacy_info.get("first_name", "")
+        last_name = pharmacy_info.get("last_name", "")
+        patronymic = pharmacy_info.get("patronymic", "")
+
+        pharmacist_name_parts = []
+        if last_name:
+            pharmacist_name_parts.append(last_name)
+        if first_name:
+            pharmacist_name_parts.append(first_name)
+        if patronymic:
+            pharmacist_name_parts.append(patronymic)
+
+        pharmacist_name = " ".join(pharmacist_name_parts) if pharmacist_name_parts else "Фармацевт"
+        pharmacist_info = f"{pharmacist_name}"
+
+        chain = pharmacy_info.get("chain", "")
+        number = pharmacy_info.get("number", "")
+        role = pharmacy_info.get("role", "Фармацевт")
+
+        if chain and number:
+            pharmacist_info += f", {chain}, аптека №{number}"
+        if role and role != "Фармацевт":
+            pharmacist_info += f" ({role})"
+
+        message_text += f"👨‍⚕️ <b>Ответ предоставил:</b> {pharmacist_info}\n\n"
+        message_text += "💡 <i>Вы можете посмотреть полную историю диалога или уточнить вопрос</i>"
+
+        # Клавиатура с кнопкой истории
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="📋 Полная история диалога",
+                        callback_data=f"show_history_{question.uuid}"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="✍️ Уточнить этот вопрос",
+                        callback_data=f"quick_clarify_{question.uuid}"
+                    ),
+                    InlineKeyboardButton(
+                        text="✅ Завершить консультацию",
+                        callback_data=f"end_dialog_{question.uuid}"
+                    )
+                ]
+            ]
+        )
+
+        await bot.send_message(
+            chat_id=question.user.telegram_id,
+            text=message_text,
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+
+        logger.info(f"Answer sent to user {question.user.telegram_id} with history")
 
     except Exception as e:
         logger.error(f"Failed to send answer to user: {e}")

@@ -38,6 +38,8 @@ async def cmd_ask(message: Message):
     )
 
 
+# В user_questions.py обновляем cmd_my_questions:
+
 @router.message(Command("my_questions"))
 @router.callback_query(F.data == "my_questions_callback")
 async def cmd_my_questions(
@@ -46,8 +48,7 @@ async def cmd_my_questions(
     user: User,
     is_pharmacist: bool,
 ):
-    """Показать вопросы пользователя или ответы фармацевта - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
-
+    """Показать вопросы пользователя или ответы фармацевта"""
     if isinstance(update, CallbackQuery):
         message = update.message
         from_user = update.from_user
@@ -57,172 +58,83 @@ async def cmd_my_questions(
         from_user = update.from_user
         is_callback = False
 
-    logger.info(
-        f"Command /my_questions from user {from_user.id}, is_pharmacist: {is_pharmacist}"
-    )
-
     try:
         if is_pharmacist:
-            # Для фармацевтов
-            # Получаем вопросы, на которые данный фармацевт дал ответы
+            # Для фармацевтов - активные диалоги
             result = await db.execute(
                 select(Question)
-                .join(Answer, Question.uuid == Answer.question_id)
-                .where(Answer.pharmacist_id == user.uuid)
-                .order_by(Question.created_at.asc())  # Старые сверху
+                .where(
+                    Question.taken_by == user.uuid,
+                    Question.status.in_(["in_progress", "answered"])
+                )
+                .order_by(Question.taken_at.desc())
             )
-            answered_questions = result.scalars().all()
-
-            if not answered_questions:
-                await message.answer(
-                    "📋 У вас пока нет отвеченных вопросов.\n\n"
-                    "Используйте /questions чтобы просмотреть новые вопросы."
-                )
-                if is_callback:
-                    await update.answer()
-                return
-
-            questions_text = "📋 <b>ВАШИ ОТВЕТЫ НА ВОПРОСЫ</b>\n\n"
-            questions_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
-
-            for i, question in enumerate(answered_questions, 1):
-                # Получаем последний ответ этого фармацевта на данный вопрос
-                answer_result = await db.execute(
-                    select(Answer)
-                    .where(
-                        and_(
-                            Answer.question_id == question.uuid,
-                            Answer.pharmacist_id == user.uuid,
-                        )
-                    )
-                    .order_by(Answer.created_at.desc())
-                    .limit(1)
-                )
-                answer = answer_result.scalar_one_or_none()
-
-                # Определяем иконку статуса
-                if question.status == "completed":
-                    status_icon = "✅"
-                    status_text = "ЗАВЕРШЕН"
-                elif question.status == "answered":
-                    status_icon = "💬"
-                    status_text = "ОТВЕЧЕНО"
-                elif question.status == "in_progress":
-                    status_icon = "🔄"
-                    status_text = "В РАБОТЕ"
-                else:
-                    status_icon = "⏳"
-                    status_text = "ОЖИДАЕТ"
-
-                questions_text += f"<b>{i}. {status_icon} {status_text}</b>\n"
-                questions_text += f"❓ Вопрос: {question.text[:80]}{'...' if len(question.text) > 80 else ''}\n"
-
-                if answer:
-                    answer_preview = (
-                        answer.text[:80] + "..."
-                        if len(answer.text) > 80
-                        else answer.text
-                    )
-                    questions_text += f"💬 Ваш ответ: {answer_preview}\n"
-
-                questions_text += (
-                    f"📅 {question.created_at.strftime('%d.%m.%Y %H:%M')}\n"
-                )
-                questions_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
-
-            await message.answer(questions_text, parse_mode="HTML")
-
+            questions = result.scalars().all()
         else:
-
+            # Для пользователей - вопросы со статусом answered или in_progress
             result = await db.execute(
                 select(Question)
-                .where(Question.user_id == user.uuid)
-                .order_by(Question.created_at.asc())  # Старые сверху
+                .where(
+                    Question.user_id == user.uuid,
+                    Question.status.in_(["in_progress", "answered"])
+                )
+                .order_by(Question.created_at.desc())
             )
-            user_questions = result.scalars().all()
+            questions = result.scalars().all()
 
-            if not user_questions:
-                await message.answer(
-                    "📭 У вас пока нет заданных вопросов.\n\n"
-                    "Просто напишите ваш вопрос в чат, чтобы начать консультацию!"
+        if not questions:
+            await message.answer(
+                "📭 У вас нет активных диалогов.\n\n"
+                "Начните новый диалог, отправив вопрос в чат."
+            )
+            if is_callback:
+                await update.answer()
+            return
+
+        # Создаем клавиатуру с диалогами
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[])
+
+        for i, question in enumerate(questions[:10], 1):  # Ограничиваем 10 диалогами
+            status_icon = "💬" if question.status == "answered" else "🔄"
+            question_preview = question.text[:50] + "..." if len(question.text) > 50 else question.text
+
+            keyboard.inline_keyboard.append([
+                InlineKeyboardButton(
+                    text=f"{status_icon} Диалог #{i}: {question_preview}",
+                    callback_data=f"view_dialog_{question.uuid}"
                 )
-                if is_callback:
-                    await update.answer()
-                return
+            ])
 
-            for i, question in enumerate(user_questions, 1):
-                # Определяем иконку статуса
-                if question.status == "completed":
-                    status_icon = "✅ ЗАВЕРШЕН"
-                    status_color = "#2ecc71"
-                elif question.status == "answered":
-                    status_icon = "💬 ОТВЕЧЕНО"
-                    status_color = "#3498db"
-                elif question.status == "in_progress":
-                    status_icon = "🔄 В РАБОТЕ"
-                    status_color = "#f39c12"
-                else:
-                    status_icon = "⏳ ОЖИДАЕТ"
-                    status_color = "#95a5a6"
-
-                question_text = f"<b>📋 ВОПРОС #{i}</b>\n\n"
-                question_text += f"<b>Статус:</b> {status_icon}\n"
-                question_text += (
-                    f"<b>Создан:</b> {question.created_at.strftime('%d.%m.%Y %H:%M')}\n"
+        # Добавляем кнопку для всех завершенных диалогов
+        if is_pharmacist:
+            keyboard.inline_keyboard.append([
+                InlineKeyboardButton(
+                    text="📚 Все мои ответы",
+                    callback_data="all_my_answers"
                 )
+            ])
+        else:
+            keyboard.inline_keyboard.append([
+                InlineKeyboardButton(
+                    text="📚 Архив завершенных консультаций",
+                    callback_data="completed_consultations"
+                )
+            ])
 
-                if question.answered_at:
-                    question_text += f"<b>Ответ получен:</b> {question.answered_at.strftime('%d.%m.%Y %H:%M')}\n"
+        await message.answer(
+            f"💬 <b>ВАШИ АКТИВНЫЕ ДИАЛОГИ</b>\n\n"
+            f"Всего активных диалогов: {len(questions)}\n\n"
+            f"Выберите диалог для просмотра истории:",
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
 
-                question_text += f"\n<b>❓ Вопрос:</b>\n{question.text}\n\n"
-
-                # Добавляем кнопки для активных вопросов
-                if question.status == "answered":
-                    clarify_keyboard = InlineKeyboardMarkup(
-                        inline_keyboard=[
-                            [
-                                InlineKeyboardButton(
-                                    text="✍️ Уточнить этот вопрос",
-                                    callback_data=f"quick_clarify_{question.uuid}",
-                                ),
-                                InlineKeyboardButton(
-                                    text="✅ Завершить консультацию",
-                                    callback_data=f"end_dialog_{question.uuid}",
-                                ),
-                            ]
-                        ]
-                    )
-                    await message.answer(
-                        question_text, parse_mode="HTML", reply_markup=clarify_keyboard
-                    )
-                elif question.status == "completed":
-                    # Для завершенных вопросов показываем финальный статус
-                    completed_text = f"✅ <b>КОНСУЛЬТАЦИЯ ЗАВЕРШЕНА</b>\n\n"
-                    completed_text += f"❓ <b>Вопрос:</b>\n{question.text}\n\n"
-                    completed_text += f"📅 <b>Дата завершения:</b> {question.answered_at.strftime('%d.%m.%Y %H:%M') if question.answered_at else 'Не указана'}\n\n"
-                    completed_text += "💡 <b>Статус:</b> Консультация успешно завершена"
-                    # Убрали разделитель в конце, чтобы не было двойного
-
-                    await message.answer(completed_text, parse_mode="HTML")
-                else:
-                    await message.answer(question_text, parse_mode="HTML")
-
-                # Добавляем разделитель между вопросами, но не после последнего
-                if i < len(user_questions):
-                    await message.answer(
-                        "━" * 20
-                    )  # Короткий разделитель вместо длинного
+        if is_callback:
+            await update.answer()
 
     except Exception as e:
-        logger.error(
-            f"Error in cmd_my_questions for user {from_user.id}: {e}", exc_info=True
-        )
-        await message.answer(
-            "❌ Ошибка при получении ваших вопросов. Попробуйте позже."
-        )
-
-    if is_callback:
-        await update.answer()
+        logger.error(f"Error in cmd_my_questions: {e}")
+        await message.answer("❌ Ошибка при получении диалогов")
 
 
 @router.message(Command("done"))

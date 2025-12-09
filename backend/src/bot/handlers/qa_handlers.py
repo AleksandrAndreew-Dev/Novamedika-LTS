@@ -148,6 +148,57 @@ async def set_offline(
         await message.answer("❌ Ошибка при изменении статуса")
 
 
+@router.message(Command("export_history"))
+async def cmd_export_history(
+    message: Message,
+    db: AsyncSession,
+    user: User,
+    is_pharmacist: bool
+):
+    """Экспорт истории диалогов"""
+    try:
+        if is_pharmacist:
+            result = await db.execute(
+                select(Question)
+                .where(Question.taken_by == user.uuid)
+                .order_by(Question.created_at.desc())
+                .limit(5)
+            )
+        else:
+            result = await db.execute(
+                select(Question)
+                .where(Question.user_id == user.uuid)
+                .order_by(Question.created_at.desc())
+                .limit(5)
+            )
+
+        questions = result.scalars().all()
+
+        if not questions:
+            await message.answer("📭 У вас нет диалогов для экспорта.")
+            return
+
+        await message.answer(
+            "📤 <b>Экспорт истории диалогов</b>\n\n"
+            "Выберите диалог для экспорта:",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text=f"Диалог #{i+1}: {q.text[:30]}...",
+                            callback_data=f"export_dialog_{q.uuid}"
+                        )
+                    ] for i, q in enumerate(questions[:5])
+                ]
+            )
+        )
+
+    except Exception as e:
+        logger.error(f"Error in cmd_export_history: {e}")
+        await message.answer("❌ Ошибка при экспорте истории")
+
+
 @router.message(Command("status"))
 async def cmd_status(
     message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist
@@ -383,6 +434,192 @@ async def cmd_release_question(
     except Exception as e:
         logger.error(f"Error in cmd_release_question: {e}")
         await message.answer("❌ Ошибка при получении вопросов")
+
+
+# В файл qa_handlers.py добавляем новые обработчики:
+
+@router.callback_query(F.data.startswith("show_history_"))
+async def show_dialog_history_callback(
+    callback: CallbackQuery,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: Pharmacist,
+    user: User
+):
+    """Показать полную историю диалога"""
+    question_uuid = callback.data.replace("show_history_", "")
+
+    try:
+        # Получаем вопрос
+        result = await db.execute(
+            select(Question)
+            .where(Question.uuid == question_uuid)
+        )
+        question = result.scalar_one_or_none()
+
+        if not question:
+            await callback.answer("❌ Вопрос не найден", show_alert=True)
+            return
+
+        # Проверяем доступ
+        if is_pharmacist:
+            if question.taken_by != pharmacist.uuid and question.taken_by is not None:
+                await callback.answer("❌ Вы не ведете этот диалог", show_alert=True)
+                return
+        else:
+            if question.user_id != user.uuid:
+                await callback.answer("❌ Это не ваш вопрос", show_alert=True)
+                return
+
+        # Получаем отформатированную историю
+        history_text, file_ids = await DialogService.format_dialog_history_for_display(
+            question_uuid, db
+        )
+
+        # Отправляем историю
+        await callback.message.answer(
+            history_text,
+            parse_mode="HTML"
+        )
+
+        # Если есть фото, отправляем их
+        if file_ids:
+            for file_id in file_ids:
+                try:
+                    await callback.message.answer_photo(
+                        file_id,
+                        caption="📸 Фото из истории диалога"
+                    )
+                except Exception as e:
+                    logger.error(f"Error sending photo: {e}")
+                    await callback.message.answer(
+                        "⚠️ Не удалось отправить одно из фото (файл устарел)"
+                    )
+
+        await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Error in show_dialog_history_callback: {e}")
+        await callback.answer("❌ Ошибка при загрузке истории", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("view_dialog_"))
+async def view_dialog_callback(
+    callback: CallbackQuery,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: Pharmacist,
+    user: User
+):
+    """Просмотр диалога с историей"""
+    question_uuid = callback.data.replace("view_dialog_", "")
+
+    try:
+        # Получаем вопрос
+        result = await db.execute(
+            select(Question)
+            .options(selectinload(Question.user))
+            .where(Question.uuid == question_uuid)
+        )
+        question = result.scalar_one_or_none()
+
+        if not question:
+            await callback.answer("❌ Вопрос не найден", show_alert=True)
+            return
+
+        # Проверяем доступ
+        if is_pharmacist:
+            if question.taken_by != pharmacist.uuid and question.taken_by is not None:
+                await callback.answer("❌ Вы не ведете этот диалог", show_alert=True)
+                return
+        else:
+            if question.user_id != user.uuid:
+                await callback.answer("❌ Это не ваш вопрос", show_alert=True)
+                return
+
+        # Получаем последние 5 сообщений для быстрого просмотра
+        messages = await DialogService.get_dialog_history(question.uuid, db, limit=5)
+
+        # Формируем сообщение
+        if is_pharmacist:
+            user_info = f"{question.user.first_name or 'Пользователь'}"
+            if question.user.last_name:
+                user_info = f"{question.user.first_name} {question.user.last_name}"
+            message_text = (
+                f"💬 <b>ДИАЛОГ С ПОЛЬЗОВАТЕЛЕМ</b>\n\n"
+                f"👤 <b>Пользователь:</b> {user_info}\n"
+                f"❓ <b>Вопрос:</b> {question.text[:200]}...\n\n"
+            )
+        else:
+            message_text = (
+                f"💬 <b>ВАШ ДИАЛОГ С ФАРМАЦЕВТОМ</b>\n\n"
+                f"❓ <b>Ваш вопрос:</b> {question.text[:200]}...\n\n"
+            )
+
+        # Добавляем последние сообщения
+        if messages:
+            message_text += "<b>Последние сообщения:</b>\n"
+            message_text += "─" * 20 + "\n"
+
+            for msg in reversed(messages[-3:]):  # Последние 3 сообщения
+                if msg.sender_type == "user":
+                    sender = "👤 Вы" if not is_pharmacist else "👤 Пользователь"
+                else:
+                    sender = "👨‍⚕️ Фармацевт" if is_pharmacist else "👨‍⚕️ Фармацевт"
+
+                time_str = msg.created_at.strftime("%H:%M")
+
+                if msg.message_type == "question":
+                    preview = f"❓ {msg.text[:80]}..." if len(msg.text) > 80 else f"❓ {msg.text}"
+                elif msg.message_type == "answer":
+                    preview = f"💬 {msg.text[:80]}..." if len(msg.text) > 80 else f"💬 {msg.text}"
+                elif msg.message_type == "clarification":
+                    preview = f"🔍 {msg.text[:80]}..." if len(msg.text) > 80 else f"🔍 {msg.text}"
+                elif msg.message_type == "photo":
+                    preview = "📸 Фото рецепта"
+                else:
+                    preview = f"💭 {msg.text[:80]}..." if len(msg.text) > 80 else f"💭 {msg.text}"
+
+                message_text += f"{sender} [{time_str}]: {preview}\n"
+
+        # Создаем клавиатуру
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📋 Полная история диалога",
+                    callback_data=f"show_history_{question.uuid}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="💬 Продолжить общение",
+                    callback_data=f"answer_{question.uuid}"
+                ) if is_pharmacist else InlineKeyboardButton(
+                    text="✍️ Уточнить",
+                    callback_data=f"quick_clarify_{question.uuid}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✅ Завершить диалог",
+                    callback_data=f"end_dialog_{question.uuid}"
+                )
+            ]
+        ])
+
+        await callback.message.answer(
+            message_text,
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+
+        await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Error in view_dialog_callback: {e}")
+        await callback.answer("❌ Ошибка при просмотре диалога", show_alert=True)
 
 
 

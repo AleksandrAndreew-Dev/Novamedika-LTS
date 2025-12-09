@@ -160,3 +160,89 @@ def make_user_dialog_keyboard_with_end(
     )
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def make_dialog_history_keyboard(question_uuid: str, is_pharmacist: bool = True) -> InlineKeyboardMarkup:
+    """Клавиатура для просмотра истории диалога"""
+    if is_pharmacist:
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    text="📋 Полная история диалога",
+                    callback_data=f"show_history_{question_uuid}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="💬 Продолжить общение",
+                    callback_data=f"answer_{question_uuid}"
+                ),
+                InlineKeyboardButton(
+                    text="📸 Запросить фото",
+                    callback_data=f"request_photo_{question_uuid}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✅ Завершить диалог",
+                    callback_data=f"end_dialog_{question_uuid}"
+                )
+            ]
+        ]
+    else:
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    text="📋 Полная история диалога",
+                    callback_data=f"show_history_{question_uuid}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✍️ Уточнить",
+                    callback_data=f"quick_clarify_{question_uuid}"
+                ),
+                InlineKeyboardButton(
+                    text="📸 Отправить фото",
+                    callback_data=f"send_prescription_photo_{question_uuid}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✅ Завершить консультацию",
+                    callback_data=f"end_dialog_{question_uuid}"
+                )
+            ]
+        ]
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def make_completed_dialog_history_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура для завершенного диалога с историей"""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📚 Посмотреть историю диалога",
+                    callback_data="view_completed_dialog_history"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="💬 Задать новый вопрос",
+                    callback_data="ask_new_question"
+                ),
+                InlineKeyboardButton(
+                    text="📋 Мои вопросы",
+                    callback_data="my_questions"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔍 Поиск лекарств",
+                    callback_data="search_drugs"
+                )
+            ]
+        ]
+    )

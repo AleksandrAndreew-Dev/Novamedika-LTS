@@ -115,6 +115,90 @@ async def hide_keyboard(message: Message):
     )
 
 
+# В common_handlers.py добавляем:
+
+@router.message(Command("history"))
+async def cmd_history(
+    message: Message,
+    db: AsyncSession,
+    user: User,
+    is_pharmacist: bool
+):
+    """Показать историю всех диалогов"""
+    try:
+        if is_pharmacist:
+            # Все диалоги фармацевта
+            result = await db.execute(
+                select(Question)
+                .where(Question.taken_by == user.uuid)
+                .order_by(Question.taken_at.desc())
+                .limit(20)
+            )
+        else:
+            # Все диалоги пользователя
+            result = await db.execute(
+                select(Question)
+                .where(Question.user_id == user.uuid)
+                .order_by(Question.created_at.desc())
+                .limit(20)
+            )
+
+        questions = result.scalars().all()
+
+        if not questions:
+            await message.answer(
+                "📭 У вас пока нет диалогов.\n\n"
+                "Начните новый диалог, отправив вопрос в чат."
+            )
+            return
+
+        message_text = f"📚 <b>ИСТОРИЯ ДИАЛОГОВ</b>\n\n"
+        message_text += f"Всего диалогов: {len(questions)}\n\n"
+
+        # Группируем по статусу
+        active_dialogs = []
+        completed_dialogs = []
+
+        for q in questions:
+            if q.status == "completed":
+                completed_dialogs.append(q)
+            else:
+                active_dialogs.append(q)
+
+        if active_dialogs:
+            message_text += "💬 <b>Активные диалоги:</b>\n"
+            for i, q in enumerate(active_dialogs[:5], 1):
+                preview = q.text[:60] + "..." if len(q.text) > 60 else q.text
+                message_text += f"{i}. {preview}\n"
+                message_text += f"   📅 {q.created_at.strftime('%d.%m.%Y')}\n"
+
+        if completed_dialogs:
+            message_text += "\n✅ <b>Завершенные диалоги:</b>\n"
+            for i, q in enumerate(completed_dialogs[:5], 1):
+                preview = q.text[:60] + "..." if len(q.text) > 60 else q.text
+                message_text += f"{i}. {preview}\n"
+                message_text += f"   📅 {q.created_at.strftime('%d.%m.%Y')}\n"
+
+        if len(questions) > 10:
+            message_text += f"\n📋 ... и еще {len(questions) - 10} диалогов"
+
+        await message.answer(
+            message_text,
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[[
+                    InlineKeyboardButton(
+                        text="📋 Посмотреть все диалоги",
+                        callback_data="view_all_dialogs"
+                    )
+                ]]
+            )
+        )
+
+    except Exception as e:
+        logger.error(f"Error in cmd_history: {e}")
+        await message.answer("❌ Ошибка при загрузке истории диалогов")
+
 @router.message(Command("start"))
 async def cmd_start(
     message: Message,
