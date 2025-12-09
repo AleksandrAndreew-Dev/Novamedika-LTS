@@ -39,16 +39,17 @@ class DialogService:
                 created_at=get_utc_now_naive(),
             )
 
+            db.add(message)
             await db.flush()
 
             logger.info(
-                f"Dialog message added: question_id={question_id}, type={message_type}"
+                f"Dialog message added: question_id={question_id}, type={message_type}, text='{text[:50] if text else ''}...'"
             )
             return message
 
         except Exception as e:
             await db.rollback()
-            logger.error(f"Error adding dialog message: {e}")
+            logger.error(f"Error adding dialog message: {e}", exc_info=True)
             raise
 
     @staticmethod
@@ -67,7 +68,7 @@ class DialogService:
             return result.scalars().all()
 
         except Exception as e:
-            logger.error(f"Error getting dialog history: {e}")
+            logger.error(f"Error getting dialog history: {e}", exc_info=True)
             return []
 
     @staticmethod
@@ -98,34 +99,39 @@ class DialogService:
             return result.scalar_one_or_none()
 
         except Exception as e:
-            logger.error(f"Error getting question with dialog: {e}")
+            logger.error(f"Error getting question with dialog: {e}", exc_info=True)
             return None
 
     @staticmethod
     async def format_dialog_history_for_display(
         question_id: UUID,
         db: AsyncSession,
-        limit: int = 50
+        limit: int = 20
     ) -> Tuple[str, List[str]]:
         """Форматировать историю диалога для отображения - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
         try:
             # Получаем историю диалога
             messages = await DialogService.get_dialog_history(question_id, db, limit)
 
-            if not messages:
-                # Если сообщений нет, создаем базовую структуру
-                return "📋 <b>ИСТОРИЯ КОНСУЛЬТАЦИИ</b>\n\n" \
-                    "Пока что история диалога пуста. " \
-                    "Все сообщения будут отображаться здесь по мере общения.\n\n" \
-                    "━" * 30 + "\n", []
+            # ✅ ЛОГИРОВАНИЕ для отладки
+            logger.info(f"Formatting dialog history for question {question_id}: {len(messages)} messages")
 
-            # Группируем сообщения по датам
+            if not messages:
+                return "📋 <b>ИСТОРИЯ ДИАЛОГА</b>\n\n" \
+                       "Пока что история диалога пуста. " \
+                       "Все сообщения будут отображаться здесь по мере общения.\n\n" \
+                       "━" * 30, []
+
+            # Группируем сообщения
             formatted_messages = []
             file_ids = []
 
             current_date = None
 
             for msg in messages:
+                # ✅ ЛОГИРОВАНИЕ каждого сообщения
+                logger.info(f"Message: type={msg.message_type}, sender={msg.sender_type}, text='{msg.text[:50] if msg.text else 'None'}'")
+
                 # Определяем отправителя и иконку
                 if msg.sender_type == "user":
                     sender_icon = "👤"
@@ -134,15 +140,15 @@ class DialogService:
                     sender_icon = "👨‍⚕️"
                     sender_name = "Фармацевт"
 
-                # Форматируем дату и время
-                message_date = msg.created_at.date()
+                # Форматируем время
                 time_str = msg.created_at.strftime("%H:%M")
 
-                # Если дата изменилась, добавляем разделитель
+                # Проверяем, изменилась ли дата
+                message_date = msg.created_at.strftime("%d.%m.%Y")
                 if current_date != message_date:
-                    date_str = msg.created_at.strftime("%d.%m.%Y")
-                    formatted_messages.append(f"\n📅 <b>{date_str}</b>\n")
                     current_date = message_date
+                    date_header = f"\n📅 <b>{current_date}</b>\n" + "─" * 30 + "\n"
+                    formatted_messages.append(date_header)
 
                 # Форматируем контент в зависимости от типа сообщения
                 if msg.message_type == "question":
@@ -160,24 +166,26 @@ class DialogService:
                 else:
                     content = f"💭 <b>Сообщение:</b>\n{msg.text}"
 
-                formatted_msg = (
-                    f"{sender_icon} <b>{sender_name}</b> [{time_str}]\n"
-                    f"{content}\n"
-                    f"━" * 20
-                )
+                formatted_msg = f"{sender_icon} <b>{sender_name}</b> [{time_str}]\n{content}\n"
                 formatted_messages.append(formatted_msg)
 
-            # Собираем полную историю
+            # Собираем полную историю (новые сообщения внизу)
             history_text = "📋 <b>ПОЛНАЯ ИСТОРИЯ ДИАЛОГА</b>\n\n"
 
-            # Выводим сообщения в обратном порядке (последние сверху)
-            for msg in reversed(formatted_messages):
-                history_text += f"{msg}\n\n"
+            # Добавляем все отформатированные сообщения
+            for formatted_msg in formatted_messages:
+                history_text += formatted_msg + "\n"
+
+            # Добавляем разделитель в конце
+            history_text += "━" * 30
+
+            # ✅ ЛОГИРОВАНИЕ результата
+            logger.info(f"Formatted history length: {len(history_text)} chars")
 
             return history_text, file_ids
 
         except Exception as e:
             logger.error(f"Error formatting dialog history: {e}", exc_info=True)
             return "📋 <b>ИСТОРИЯ ДИАЛОГА</b>\n\n" \
-                "❌ Не удалось загрузить полную историю диалога.\n\n" \
-                "━" * 30 + "\n", []
+                   "❌ Не удалось загрузить историю диалога.\n\n" \
+                   "━" * 30, []

@@ -992,6 +992,10 @@ async def process_answer_text(
             pharmacist.last_seen = get_utc_now_naive()
             await db.commit()
 
+        # ✅ ЛОГИРОВАНИЕ: Отслеживаем создание ответа
+        logger.info(f"Creating answer for question {question.uuid} by pharmacist {pharmacist.uuid}")
+        logger.info(f"Answer text: '{message.text}'")
+
         # Создаем ответ/сообщение
         answer = Answer(
             text=message.text,
@@ -1008,7 +1012,7 @@ async def process_answer_text(
         question.answered_by = pharmacist.uuid
 
         # ✅ ВАЖНО: Добавляем сообщение в историю диалога
-        await DialogService.add_message(
+        dialog_message = await DialogService.add_message(
             db=db,
             question_id=question.uuid,
             sender_type="pharmacist",
@@ -1017,12 +1021,19 @@ async def process_answer_text(
             text=message.text,
         )
 
+        # ✅ ЛОГИРОВАНИЕ: Отслеживаем создание сообщения в диалоге
+        logger.info(f"Dialog message created: {dialog_message.uuid}, type={dialog_message.message_type}")
+
         await db.commit()
 
         # ✅ Получаем полную историю диалога для отправки
         history_text, file_ids = await DialogService.format_dialog_history_for_display(
-            question.uuid, db
+            question.uuid, db, limit=20
         )
+
+        # ✅ ЛОГИРОВАНИЕ: Отслеживаем сформированную историю
+        logger.info(f"History text length: {len(history_text)}")
+        logger.info(f"History text preview: {history_text[:200]}...")
 
         # Уведомляем пользователя
         user_result = await db.execute(
@@ -1082,7 +1093,7 @@ async def process_answer_text(
                 logger.info(f"Message sent to user {user.telegram_id}")
 
             except Exception as e:
-                logger.error(f"Failed to send message to user {user.telegram_id}: {e}")
+                logger.error(f"Failed to send message to user {user.telegram_id}: {e}", exc_info=True)
 
         # ✅ Показываем фармацевту полную историю диалога С КНОПКАМИ
         await message.answer(
