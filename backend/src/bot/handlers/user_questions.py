@@ -236,7 +236,7 @@ async def process_clarification(
             await state.clear()
             return
 
-        # ✅ Добавляем сообщение об уточнении в историю диалога
+        # ✅ ВАЖНО: Добавляем сообщение об уточнении в историю диалога
         await DialogService.add_message(
             db=db,
             question_id=original_question.uuid,
@@ -246,14 +246,6 @@ async def process_clarification(
             text=message.text,
         )
         await db.commit()
-
-        # ✅ Уведомляем о новом уточнении
-        from bot.services.notification_service import notify_about_clarification
-        await notify_about_clarification(
-            original_question=original_question,
-            clarification_text=message.text,
-            db=db
-        )
 
         # ✅ Получаем полную историю диалога
         history_text, file_ids = await DialogService.format_dialog_history_for_display(

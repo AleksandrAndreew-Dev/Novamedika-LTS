@@ -7,7 +7,8 @@ import logging
 from db.qa_models import User, Question
 from utils.time_utils import get_utc_now_naive
 from bot.services.notification_service import notify_pharmacists_about_new_question
-from bot.handlers.qa_states import UserQAStates  # ДОБАВЬТЕ ЭТОТ ИМПОРТ
+from bot.handlers.qa_states import UserQAStates
+from bot.services.dialog_service import DialogService
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -79,10 +80,6 @@ async def handle_direct_text(
     if not should_create_question(message.text):
         return
 
-    
-
-
-
     try:
         # Создаем вопрос
         question = Question(
@@ -95,6 +92,10 @@ async def handle_direct_text(
         db.add(question)
         await db.commit()
         await db.refresh(question)
+
+        # СОЗДАЕМ ПЕРВОЕ СООБЩЕНИЕ В ИСТОРИИ ДИАЛОГА
+        await DialogService.create_question_message(question, db)
+        await db.commit()  # Фиксируем создание сообщения
 
         logger.info(f"Direct question from {user.telegram_id}: {message.text[:50]}...")
 

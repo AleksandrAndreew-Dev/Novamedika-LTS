@@ -1007,7 +1007,7 @@ async def process_answer_text(
         question.answered_at = get_utc_now_naive()
         question.answered_by = pharmacist.uuid
 
-        # ✅ Добавляем сообщение в историю диалога
+        # ✅ ВАЖНО: Добавляем сообщение в историю диалога
         await DialogService.add_message(
             db=db,
             question_id=question.uuid,
@@ -1085,13 +1085,9 @@ async def process_answer_text(
                 logger.error(f"Failed to send message to user {user.telegram_id}: {e}")
 
         # ✅ Показываем фармацевту полную историю диалога С КНОПКАМИ
-        pharmacist_history_text, _ = await DialogService.format_dialog_history_for_display(
-            question.uuid, db
-        )
-
         await message.answer(
             f"💬 <b>ВЫ ОТПРАВИЛИ ОТВЕТ</b>\n\n"
-            f"{pharmacist_history_text}\n\n"
+            f"{history_text}\n\n"
             f"<b>Доступные действия:</b>",
             parse_mode="HTML",
             reply_markup=make_pharmacist_dialog_keyboard(question.uuid)
