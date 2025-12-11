@@ -41,7 +41,7 @@ export default function SearchResults({
       },
       form: {
         // Если есть данные пользователя Telegram, подставляем их
-        customer_name: telegramUser?.first_name || telegramUser?.username || "",
+        customer_name: "",
         customer_phone: telegramUser?.phone_number || "",
       },
       success: false,
