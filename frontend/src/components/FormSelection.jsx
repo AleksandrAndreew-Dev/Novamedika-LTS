@@ -40,8 +40,8 @@ export default function FormSelection({
                 <h2 className="text-lg font-semibold text-gray-900 tracking-wide leading-relaxed">
                   По вашему запросу
                   <span className="font-semibold uppercase">
-                    {searchData.name}
-                    {searchData.city && ` в городе ${searchData.city}`}
+                    { searchData.name}</span> в городе
+                    <span className="font-semibold uppercase"> {searchData.city && ` ${searchData.city}`}
                   </span> найдено
                 </h2>
                 {/* <p className="text-gray-800 text-sm mt-1">
