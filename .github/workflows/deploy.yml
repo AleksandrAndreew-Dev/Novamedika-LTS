@@ -163,37 +163,42 @@ jobs:
           script: |
             set -euo pipefail
 
-            # Рабочая директория
+            # Рабочая директория (существует на сервере)
             DEPLOY_DIR="/opt/novamedika-prod"
             cd "$DEPLOY_DIR"
 
-            # Логинимся в GHCR
+            # Логинимся в GHCR (PAT хранится в secrets.GHCR_PAT)
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ secrets.GHCR_USER }} --password-stdin
 
-            # Проверяем файл
+            # Проверим, что docker-compose.deploy.yml есть
             if [ ! -f docker-compose.deploy.yml ]; then
               echo "ERROR: docker-compose.deploy.yml not found in $DEPLOY_DIR"
               ls -la
               exit 2
             fi
 
-            # Удаляем старый образ фронтенда для принудительной загрузки нового
-            docker image rm ghcr.io/aleksandrandreew-dev/novamedika-lts/frontend:latest || true
+            # Стартуем безопасно: останов, pull, up
+            docker-compose -f docker-compose.deploy.yml down || true
+            docker-compose -f docker-compose.deploy.yml pull
+            docker-compose -f docker-compose.deploy.yml up -d
 
-            # Принудительно скачиваем новый образ
-            docker-compose -f docker-compose.deploy.yml pull frontend
+            # Небольшая задержка, затем проверка здоровья сервисов
+            sleep 60
+            set +e
+            docker exec backend-prod curl -f http://localhost:8000/health || { echo "backend health failed"; exit 3; }
+            docker exec frontend-prod curl -f http://localhost:80/ || { echo "frontend health failed"; exit 4; }
+            set -e
 
-            # Перезапускаем только фронтенд
-            docker-compose -f docker-compose.deploy.yml up -d --no-deps frontend
-
-            # Проверяем здоровье
             sleep 30
 
-            FRONTEND_STATUS=$(docker inspect -f '{{.State.Status}}' frontend-prod)
-            if [ "$FRONTEND_STATUS" != "running" ]; then
-              echo "Frontend container status is '$FRONTEND_STATUS', expected 'running'"
-              exit 4
+            CELERY_STATUS=$(docker inspect -f '{{.State.Status}}' celery-worker-prod)
+            if [ "$CELERY_STATUS" != "running" ]; then
+              echo "celery container status is '$CELERY_STATUS', expected 'running'"
+              exit 5
             fi
 
-            echo "✅ Frontend deployment completed successfully!"
+            # Очистка
+            docker system prune -af || true
+
+            echo "✅ Deployment completed successfully!"
 
