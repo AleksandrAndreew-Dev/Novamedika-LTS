@@ -23,7 +23,7 @@ export default function FormSelection({
   };
 
   const handleKeyPress = (combination, event) => {
-    if (event.key === 'Enter' || event.key === ' ') {
+    if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       handleCombinationClick(combination);
     }
@@ -39,10 +39,14 @@ export default function FormSelection({
               <div className="flex-1">
                 <h2 className="text-lg font-semibold text-gray-900 tracking-wide leading-relaxed">
                   По вашему запросу
+                  <span className="font-semibold uppercase ml-1">
+                    {searchData.name}
+                  </span>
+                  в городе
                   <span className="font-semibold uppercase">
-                    { searchData.name}</span> в городе
-                    <span className="font-semibold uppercase"> {searchData.city && ` ${searchData.city}`}
-                  </span> найдено
+                    {searchData.city && ` ${searchData.city}`}
+                  </span>
+                  найдено
                 </h2>
                 {/* <p className="text-gray-800 text-sm mt-1">
                   По запросу "
@@ -94,7 +98,11 @@ export default function FormSelection({
 
           {/* Combinations as Cards */}
           {availableCombinations.length > 0 && (
-            <div className="space-y-3" role="list" aria-label="Доступные варианты препаратов">
+            <div
+              className="space-y-3"
+              role="list"
+              aria-label="Доступные варианты препаратов"
+            >
               {availableCombinations.map((combo, index) => {
                 const comboKey = `${combo.name}|${combo.form}|${combo.manufacturer}|${combo.country}`;
                 const isSelected = selectedCombination === comboKey;
@@ -104,19 +112,23 @@ export default function FormSelection({
                     key={index}
                     className={`border rounded-xl p-4 transition-all cursor-pointer min-h-[60px] ${
                       isSelected
-                        ? 'border-telegram-primary bg-blue-50 shadow-sm ring-2 ring-telegram-primary'
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                        ? "border-telegram-primary bg-blue-50 shadow-sm ring-2 ring-telegram-primary"
+                        : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                     } focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:ring-offset-2`}
                     onClick={() => handleCombinationClick(combo)}
                     onKeyDown={(e) => handleKeyPress(combo, e)}
                     tabIndex={0}
                     role="button"
-                    aria-label={`Выбрать ${combo.name}, форма: ${combo.form || "не указана"}, производитель: ${combo.manufacturer || "не указан"}`}
+                    aria-label={`Выбрать ${combo.name}, форма: ${
+                      combo.form || "не указана"
+                    }, производитель: ${combo.manufacturer || "не указан"}`}
                     aria-pressed={isSelected}
                   >
                     <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
                       <div className="flex-1">
-                        <h3 className="font-semibold text-gray-900 text-base md:text-lg">{combo.name}</h3>
+                        <h3 className="font-semibold text-gray-900 text-base md:text-lg">
+                          {combo.name}
+                        </h3>
                         <div className="flex flex-wrap gap-1 md:gap-2 mt-2">
                           <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 min-h-[24px]">
                             {combo.form || "Не указана"}
@@ -137,12 +149,17 @@ export default function FormSelection({
                           {combo.min_price} - {combo.max_price} Br
                         </div>
                         {isSelected && loading && (
-                          <div className="flex items-center justify-start sm:justify-end mt-2" aria-live="polite">
+                          <div
+                            className="flex items-center justify-start sm:justify-end mt-2"
+                            aria-live="polite"
+                          >
                             <div
                               className="animate-spin rounded-full h-5 w-5 border-b-2 border-telegram-primary"
                               aria-hidden="true"
                             ></div>
-                            <span className="text-sm text-gray-700 ml-2">Загрузка результатов...</span>
+                            <span className="text-sm text-gray-700 ml-2">
+                              Загрузка результатов...
+                            </span>
                           </div>
                         )}
                       </div>
