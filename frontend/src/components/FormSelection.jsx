@@ -40,13 +40,13 @@ export default function FormSelection({
                 <h2 className="text-lg font-semibold text-gray-900 tracking-wide leading-relaxed">
                   Выберите форму препарата
                 </h2>
-                <p className="text-gray-800 text-sm mt-1">
-                  Найдено вариантов по запросу "
+                {/* <p className="text-gray-800 text-sm mt-1">
+                  По запросу "
                   <span className="font-semibold uppercase">
                     {searchData.name}
                   </span>"
                   {searchData.city && ` в городе ${searchData.city}`}
-                </p>
+                </p> */}
               </div>
 
               <button
@@ -82,9 +82,9 @@ export default function FormSelection({
               <h3 className="text-base md:text-lg font-medium text-gray-900 mb-2">
                 Выберите нужное название, форму, производителя и страну
               </h3>
-              <p className="text-gray-800 text-sm">
+              {/* <p className="text-gray-800 text-sm">
                 Найдено {availableCombinations.length} вариантов
-              </p>
+              </p> */}
             </div>
           )}
 
