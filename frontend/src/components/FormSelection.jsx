@@ -42,7 +42,7 @@ export default function FormSelection({
                   <span className="font-semibold uppercase">
                     {searchData.name}
                     {searchData.city && ` в городе ${searchData.city}`}
-                  </span>" найдено
+                  </span> найдено
                 </h2>
                 {/* <p className="text-gray-800 text-sm mt-1">
                   По запросу "
