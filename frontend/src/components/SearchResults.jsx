@@ -476,7 +476,7 @@ export default function SearchResults({
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
             <div className="flex-1">
               <h2 className="text-xl font-semibold text-gray-900 tracking-wide leading-relaxed">
-                Результаты поиска
+                Результаты поиска:
               </h2>
               <p className="text-gray-800 mt-1 text-sm md:text-base">
                 {searchData.name}
@@ -542,12 +542,12 @@ export default function SearchResults({
             <h3 className="text-lg font-medium text-gray-900 mb-2">
               Выберите удобную для Вас аптеку:
             </h3>
-            <p className="text-gray-800 text-sm">
+            {/* <p className="text-gray-800 text-sm">
               <span className="mr-1">{searchData.name}</span>
               {searchData.form}
               {searchData.manufacturer && ` - ${searchData.manufacturer}`}
               {searchData.country && ` (${searchData.country})`}
-            </p>
+            </p> */}
           </div>
 
           {loading && (
