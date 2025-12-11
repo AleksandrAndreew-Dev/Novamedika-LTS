@@ -540,7 +540,7 @@ export default function SearchResults({
         <div className="p-4 md:p-6">
           <div className="mb-4 md:mb-6">
             <h3 className="text-lg font-medium text-gray-900 mb-2">
-              Найдено результатов: {pagination.total}
+              Выберите удобную для Вас аптеку:
             </h3>
             <p className="text-gray-800 text-sm">
               <span className="mr-1">{searchData.name}</span>
