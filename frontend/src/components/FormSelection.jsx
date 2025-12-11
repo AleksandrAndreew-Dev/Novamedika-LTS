@@ -38,16 +38,17 @@ export default function FormSelection({
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
               <div className="flex-1">
                 <h2 className="text-lg font-semibold text-gray-900 tracking-wide leading-relaxed">
-                  По вашему запросу
-                  <span className="font-semibold uppercase ml-1">
-                    {searchData.name}
-                  </span>
-                  в городе
+                  По вашему запросу{" "}
                   <span className="font-semibold uppercase">
-                    {searchData.city && ` ${searchData.city}`}
-                  </span>
+                    {searchData.name}
+                  </span>{" "}
+                  в городе{" "}
+                  <span className="font-semibold uppercase">
+                    {searchData.city && searchData.city}
+                  </span>{" "}
                   найдено
                 </h2>
+
                 {/* <p className="text-gray-800 text-sm mt-1">
                   По запросу "
                   <span className="font-semibold uppercase">
