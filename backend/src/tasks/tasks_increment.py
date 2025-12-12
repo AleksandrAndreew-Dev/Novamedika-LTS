@@ -458,7 +458,7 @@ def process_csv_data_with_hashes(
     normalized_content = normalized_content.lstrip("\ufeff").lstrip("\ufffe")
 
     # Разделяем на строки и обрабатываем каждую вручную для лучшего контроля
-    lines = normalized_content.strip().split('\n')
+    lines = normalized_content.strip().split("\n")
     processed_data = []
     hashes = {}
     processed_products = set()
@@ -470,11 +470,13 @@ def process_csv_data_with_hashes(
                 continue
 
             # Разделяем строку по точкам с запятой
-            fields = line.split(';')
+            fields = line.split(";")
 
             # Должно быть 15 полей (без pharmacy_number)
             if len(fields) < 15:
-                logger.warning(f"Row {row_num} has only {len(fields)} fields, expected 15")
+                logger.warning(
+                    f"Row {row_num} has only {len(fields)} fields, expected 15"
+                )
                 continue
 
             # Пропускаем заголовок
@@ -483,7 +485,9 @@ def process_csv_data_with_hashes(
 
             # Создаем словарь с полями
             row = {}
-            for i, field_name in enumerate(fieldnames[:15]):  # Берем только первые 15 полей из CSV
+            for i, field_name in enumerate(
+                fieldnames[:15]
+            ):  # Берем только первые 15 полей из CSV
                 if i < len(fields):
                     row[field_name] = fields[i].strip()
                 else:
@@ -541,7 +545,9 @@ def process_csv_data_with_hashes(
             total_price_raw = row.get("total_price", "0").strip()
 
             # Отладочная информация
-            logger.debug(f"Row {row_num}: price_raw='{price_raw}', quantity_raw='{quantity_raw}', total_price_raw='{total_price_raw}'")
+            logger.debug(
+                f"Row {row_num}: price_raw='{price_raw}', quantity_raw='{quantity_raw}', total_price_raw='{total_price_raw}'"
+            )
 
             # Если price содержит "РОЦ 0" или другие проблемы, пытаемся исправить
             if "РОЦ" in price_raw or "Поступление" in price_raw:
@@ -549,7 +555,7 @@ def process_csv_data_with_hashes(
                 # Это может быть ошибка смещения полей
                 for i in range(4, min(8, len(fields))):
                     field_val = fields[i].strip() if i < len(fields) else ""
-                    if re.match(r'^\d+\.?\d*$', field_val) and float(field_val) > 0:
+                    if re.match(r"^\d+\.?\d*$", field_val) and float(field_val) > 0:
                         price_raw = field_val
                         # Корректируем остальные поля
                         if i + 1 < len(fields):
@@ -611,7 +617,9 @@ def process_csv_data_with_hashes(
 
             processed_data.append(product_data)
 
-            logger.debug(f"Processed product: {product_name}, price={price}, quantity={quantity}")
+            logger.debug(
+                f"Processed product: {product_name}, price={price}, quantity={quantity}"
+            )
 
         except Exception as e:
             logger.error(f"Error processing row {row_num}: {e}", exc_info=True)
@@ -947,11 +955,14 @@ def safe_float(value: str) -> float:
 
 def parse_product_details(product_string: str) -> Tuple[str, str]:
     form_keywords = [
+        "КАПС",
+        "КАПС.",
+        "КАПС.,",
+        "КАПС,",
         "АМП",
         "ТАБЛ",
         "ТАБЛ.",
         "ТАБЛ,",
-        "ТАБЛ",
         "ТАБЛ.П/О",
         "ТАБЛ.РАСТВ.",
         "МАЗЬ",
@@ -961,7 +972,6 @@ def parse_product_details(product_string: str) -> Tuple[str, str]:
         "ФЛ",
         "Р-Р",
         "ТУБА",
-        "капс",
         "уп",
         "паста",
         "пак",
@@ -991,18 +1001,41 @@ def parse_product_details(product_string: str) -> Tuple[str, str]:
     if not product_string:
         return "-", "-"
 
+    # Ищем ключевые слова формы как отдельные слова (с пробелом перед ними)
+    # Это предотвратит обрезку "КАПС" в названии "ЭССЕНЦИКАПС"
     form_regex = re.compile(
-        r"(" + "|".join(re.escape(kw) for kw in form_keywords) + r")([\s\.,].*)?$",
+        r"\s(" + "|".join(re.escape(kw) for kw in form_keywords) + r")([\s\.,].*)?$",
         re.IGNORECASE,
     )
 
     match = form_regex.search(product_string)
     if match:
-        form_start = match.start()
+        # Форма найдена как отдельное слово
+        form_start = match.start(1)  # Используем start(1) для группы с ключевым словом
         name_part = product_string[:form_start].strip()
         form_part = product_string[form_start:].strip()
         form_part = re.sub(r"^[\s\.,]+", "", form_part)
         return (name_part if name_part else "-", form_part)
+
+    # Если не нашли форму как отдельное слово, проверяем специальные случаи
+    # Для "ЭССЕНЦИКАПС КАПС., №50" - "КАПС.," это форма
+    if "КАПС.," in product_string:
+        # Разделяем по "КАПС.,"
+        parts = product_string.split("КАПС.,", 1)
+        if len(parts) == 2:
+            name_part = parts[0].strip()
+            form_part = "КАПС., " + parts[1].strip()
+            return (name_part if name_part else "-", form_part)
+
+    # Также проверяем другие варианты с "КАПС"
+    if re.search(r"\bКАПС[\.\,]", product_string, re.IGNORECASE):
+        # Находим позицию "КАПС" с точкой или запятой
+        match = re.search(r"\b(КАПС[\.\,])", product_string, re.IGNORECASE)
+        if match:
+            form_start = match.start()
+            name_part = product_string[:form_start].strip()
+            form_part = product_string[form_start:].strip()
+            return (name_part if name_part else "-", form_part)
 
     return (product_string, "-")
 
