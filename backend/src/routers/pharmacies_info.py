@@ -242,6 +242,31 @@ async def clear_all_data(db: AsyncSession = Depends(get_db)):
             detail=f"Ошибка при удалении данных: {str(e)}",
         )
 
+@router.delete("/clear-all-products/")
+async def clear_all_products(db: AsyncSession = Depends(get_db)):
+    """Очистка всех данных (продукты и аптеки)"""
+    try:
+        # Отключаем проверку внешних ключей для PostgreSQL
+        await db.execute(text("SET session_replication_role = 'replica';"))
+
+        # Удаляем все продукты
+        await db.execute(text("DELETE FROM products;"))
+
+
+        # Включаем проверку внешних ключей обратно
+        await db.execute(text("SET session_replication_role = 'origin';"))
+
+        await db.commit()
+
+        return {"status": "success", "message": "Все  продукты успешно удалены"}
+
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при удалении данных: {str(e)}",
+        )
+
 
 CORRECT_USERNAME = os.getenv('CORRECT_USERNAME')
 CORRECT_PASSWORD = os.getenv('CORRECT_PASSWORD')
