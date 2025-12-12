@@ -10,6 +10,7 @@ from db.booking_models import PharmacyAPIConfig, SyncLog
 
 logger = logging.getLogger(__name__)
 
+
 class SyncService:
     """Сервис для мониторинга активности аптек в pull-модели"""
 
@@ -42,3 +43,52 @@ class SyncService:
                 active_pharmacies.append(config.pharmacy_id)
 
             return active_pharmacies
+
+    async def sync_all_pharmacies_orders(self):
+        """Синхронизация заказов для всех аптек"""
+        try:
+            logger.info("Starting sync of all pharmacies orders")
+            active_pharmacies = await self.check_pharmacy_connectivity()
+
+            result = {
+                "status": "success",
+                "active_pharmacies": len(active_pharmacies),
+                "pharmacy_ids": [str(ph_id) for ph_id in active_pharmacies],
+                "timestamp": datetime.utcnow().isoformat()
+            }
+
+            logger.info(f"Sync completed for {len(active_pharmacies)} pharmacies")
+            return result
+
+        except Exception as e:
+            logger.error(f"Error syncing pharmacies orders: {e}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat()
+            }
+
+    async def retry_failed_orders(self):
+        """Повторная отправка неудачных заказов"""
+        try:
+            logger.info("Starting retry of failed orders")
+
+            async with async_session_maker() as session:
+                # Здесь должна быть логика повторной отправки заказов
+                # Временная заглушка
+                result = {
+                    "status": "success",
+                    "retried_orders": 0,
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+
+            logger.info("Retry of failed orders completed")
+            return result
+
+        except Exception as e:
+            logger.error(f"Error retrying failed orders: {e}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat()
+            }

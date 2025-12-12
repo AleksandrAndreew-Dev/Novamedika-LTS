@@ -1,4 +1,3 @@
-import tasks.celery_worker_init
 # celery_app.py
 import os
 from celery import Celery
@@ -39,7 +38,15 @@ celery.conf.update(
     # Настройки для избежания конфликтов с БД
     broker_pool_limit=None,
     result_backend_always_retry=True,
+
+    # Настройки для периодических задач
+    beat_schedule_filename='celerybeat-schedule',
+    beat_scheduler='celery.beat.PersistentScheduler',
 )
 
 # КРИТИЧЕСКИ ВАЖНО: Импортируем все задачи для регистрации
 from tasks import tasks_increment
+from tasks import celery_worker_init
+
+# Регистрируем задачи
+celery.autodiscover_tasks(['tasks'])

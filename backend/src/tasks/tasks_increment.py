@@ -35,10 +35,6 @@ _models_initialized = False
 # Импортируем общий celery app
 from tasks.celery_app import celery
 
-# tasks_increment.py - УЛУЧШЕННАЯ ИНИЦИАЛИЗАЦИЯ
-
-# tasks_increment.py - ЗАМЕНИТЕ initialize_task_models
-
 
 async def initialize_task_models():
     """Потокобезопасная инициализация с очисткой connection pool"""
@@ -85,9 +81,6 @@ async def initialize_task_models():
                     logger.error("All attempts to initialize models failed")
                     raise
                 await asyncio.sleep(2**attempt)
-
-
-# tasks_increment.py - ДОБАВЬТЕ ЭТУ ФУНКЦИЮ
 
 
 async def get_asyncpg_connection():
@@ -179,36 +172,17 @@ def process_csv_incremental(
         raise self.retry(exc=e, countdown=60)
 
 
-async def process_csv_incremental_async_wrapper(
-    file_content: str, pharmacy_name: str, pharmacy_number: str
-):
-    """Обертка для правильной инициализации и выполнения асинхронного кода"""
-    # Используем нашу безопасную инициализацию
-    await initialize_task_models()
-
-    # Выполняем основную логику
-    return await process_csv_incremental_async(
-        file_content, pharmacy_name, pharmacy_number
-    )
-
-
-# tasks_increment.py - КРИТИЧЕСКИЕ ИСПРАВЛЕНИЯ
-
-
 async def process_csv_incremental_async(
     file_content: str, pharmacy_name: str, pharmacy_number: str
 ):
     try:
-        # НЕ инициализируем модели здесь - они уже инициализированы в worker_init
-        # await initialize_task_models()
+        # Инициализируем модели в каждом вызове для безопасности
+        await initialize_task_models()
 
         pharmacy_map = {"novamedika": "Новамедика", "ekliniya": "ЭКЛИНИЯ"}
         normalized_name = pharmacy_map.get(pharmacy_name.lower())
         if not normalized_name:
             raise ValueError(f"Invalid pharmacy: {pharmacy_name}")
-
-        # Используем существующий event loop
-        loop = asyncio.get_event_loop()
 
         # СОЗДАЕМ ОТДЕЛЬНУЮ СЕССИЮ ДЛЯ КАЖДОЙ ОПЕРАЦИИ
         async with async_session_maker() as session:
@@ -245,7 +219,9 @@ async def process_csv_incremental_async(
             logger.info(f"Using pharmacy: {pharmacy.uuid}")
 
         # Обрабатываем CSV для найденной/созданной аптеки
-        csv_data, csv_hashes = process_csv_data_with_hashes(file_content, pharmacy.uuid)
+        csv_data, csv_hashes, processing_errors = process_csv_data_with_hashes(
+            file_content, pharmacy.uuid
+        )
 
         # Получаем существующие продукты с НОВОЙ сессией
         async with async_session_maker() as session:
@@ -272,11 +248,12 @@ async def process_csv_incremental_async(
             "pharmacy_id": str(pharmacy.uuid),
             "stats": stats,
             "processed_rows": len(csv_data),
+            "processing_errors": processing_errors,
             "pharmacy_created": not pharmacy,
         }
 
     except Exception as e:
-        logger.error(f"Error in process_csv_incremental_async: {str(e)}")
+        logger.error(f"Error in process_csv_incremental_async: {str(e)}", exc_info=True)
         raise
 
 
@@ -322,6 +299,13 @@ def normalize_file_content(file_content: str) -> str:
     """Нормализация всего содержимого файла с определением кодировки"""
     if not file_content:
         return file_content
+
+    # Если пришли байты, декодируем их
+    if isinstance(file_content, bytes):
+        try:
+            file_content = file_content.decode('latin-1')
+        except UnicodeDecodeError:
+            file_content = file_content.decode('latin-1', errors='replace')
 
     # Попробуем определить кодировку по BOM (Byte Order Mark)
     bom_map = {
@@ -429,7 +413,7 @@ def convert_date_format(date_string: str) -> Optional[date]:
 
 def process_csv_data_with_hashes(
     file_content: str, pharmacy_uuid: uuid.UUID
-) -> Tuple[List[dict], Dict[str, dict]]:
+) -> Tuple[List[dict], Dict[str, dict], List[Tuple[int, str]]]:
     """Обрабатывает CSV данные и генерирует хеши для сравнения"""
     fieldnames = [
         "name",
@@ -462,6 +446,7 @@ def process_csv_data_with_hashes(
     processed_data = []
     hashes = {}
     processed_products = set()
+    processing_errors = []
 
     for row_num, line in enumerate(lines, 1):
         try:
@@ -474,9 +459,9 @@ def process_csv_data_with_hashes(
 
             # Должно быть 15 полей (без pharmacy_number)
             if len(fields) < 15:
-                logger.warning(
-                    f"Row {row_num} has only {len(fields)} fields, expected 15"
-                )
+                error_msg = f"Row {row_num} has only {len(fields)} fields, expected 15"
+                logger.warning(error_msg)
+                processing_errors.append((row_num, error_msg))
                 continue
 
             # Пропускаем заголовок
@@ -486,8 +471,8 @@ def process_csv_data_with_hashes(
             # Создаем словарь с полями
             row = {}
             for i, field_name in enumerate(
-                fieldnames[:15]
-            ):  # Берем только первые 15 полей из CSV
+                fieldnames[:15]  # Берем только первые 15 полей из CSV
+            ):
                 if i < len(fields):
                     row[field_name] = fields[i].strip()
                 else:
@@ -622,11 +607,15 @@ def process_csv_data_with_hashes(
             )
 
         except Exception as e:
-            logger.error(f"Error processing row {row_num}: {e}", exc_info=True)
+            error_msg = f"Error processing row {row_num}: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            processing_errors.append((row_num, error_msg))
             continue
 
-    logger.info(f"Processed {len(processed_data)} valid rows from CSV")
-    return processed_data, hashes
+    logger.info(
+        f"Processed {len(processed_data)} valid rows from CSV with {len(processing_errors)} errors"
+    )
+    return processed_data, hashes, processing_errors
 
 
 async def get_existing_products_with_hashes(
@@ -696,9 +685,6 @@ def compare_products(
     return to_add, to_update, to_remove
 
 
-# tasks_increment.py - ИСПРАВЛЕННАЯ ФУНКЦИЯ
-
-
 async def execute_incremental_changes_async(
     to_add: List[dict],
     to_update: List[dict],
@@ -754,7 +740,6 @@ async def execute_incremental_changes_async(
             )
 
             # 2. Отменяем активные заказы на удаляемые продукты
-            # Исправлено: убрано RETURNING COUNT(*), используем отдельный запрос
             await conn.execute(
                 """
                 UPDATE booking_orders
@@ -781,7 +766,6 @@ async def execute_incremental_changes_async(
             logger.info(f"Cancelled {cancelled_orders} active orders")
 
             # 3. Мягкое удаление продуктов
-            # Исправлено: убрано RETURNING COUNT(*), используем отдельный запрос
             await conn.execute(
                 """
                 UPDATE products
@@ -936,7 +920,7 @@ async def execute_incremental_changes_async(
 
     except Exception as e:
         await conn.execute("ROLLBACK")
-        logger.error(f"Error executing incremental changes: {str(e)}")
+        logger.error(f"Error executing incremental changes: {str(e)}", exc_info=True)
         raise
     finally:
         await conn.close()
@@ -1040,47 +1024,60 @@ def parse_product_details(product_string: str) -> Tuple[str, str]:
     return (product_string, "-")
 
 
-@celery.task
-def sync_pharmacy_orders_task():
+def run_async_in_loop(coro):
+    """Вспомогательная функция для запуска асинхронного кода в задачах Celery"""
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    if loop.is_closed():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    return loop.run_until_complete(coro)
+
+
+@celery.task(bind=True, max_retries=3)
+def sync_pharmacy_orders_task(self):
     """Периодическая задача для синхронизации заказов"""
-    # Импортируем здесь чтобы избежать циклических импортов
-    from backend.src.tasks.sync_service import SyncService
+    try:
+        async def _sync():
+            await initialize_task_models()
+            from tasks.sync_service import SyncService
+            sync_service = SyncService()
+            return await sync_service.sync_all_pharmacies_orders()
 
-    sync_service = SyncService()
-
-    # Запускаем в event loop для async функций
-    loop = asyncio.get_event_loop()
-    if loop.is_closed():
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-    loop.run_until_complete(sync_service.sync_all_pharmacies_orders())
+        return run_async_in_loop(_sync())
+    except Exception as e:
+        logger.error(f"Error in sync_pharmacy_orders_task: {e}")
+        raise self.retry(exc=e, countdown=60)
 
 
-@celery.task
-def retry_failed_orders_task():
+@celery.task(bind=True, max_retries=3)
+def retry_failed_orders_task(self):
     """Повторная отправка неудачных заказов"""
-    # Импортируем здесь чтобы избежать циклических импортов
-    from backend.src.tasks.sync_service import SyncService
+    try:
+        async def _retry():
+            await initialize_task_models()
+            from tasks.sync_service import SyncService
+            sync_service = SyncService()
+            return await sync_service.retry_failed_orders()
 
-    sync_service = SyncService()
-
-    # Запускаем в event loop для async функций
-    loop = asyncio.get_event_loop()
-    if loop.is_closed():
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-    loop.run_until_complete(sync_service.retry_failed_orders())
+        return run_async_in_loop(_retry())
+    except Exception as e:
+        logger.error(f"Error in retry_failed_orders_task: {e}")
+        raise self.retry(exc=e, countdown=60)
 
 
 celery.conf.beat_schedule = {
     "sync-orders-every-10-min": {
-        "task": "celery_app.sync_pharmacy_orders_task",
+        "task": "tasks.tasks_increment.sync_pharmacy_orders_task",
         "schedule": 600.0,
     },
     "retry-failed-orders-every-5-min": {
-        "task": "celery_app.retry_failed_orders_task",
+        "task": "tasks.tasks_increment.retry_failed_orders_task",
         "schedule": 300.0,
     },
 }
