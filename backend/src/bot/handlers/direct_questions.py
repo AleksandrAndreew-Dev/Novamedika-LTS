@@ -2,6 +2,7 @@ from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select  # ДОБАВИТЬ
 import logging
 
 from db.qa_models import User, Question
@@ -9,7 +10,7 @@ from utils.time_utils import get_utc_now_naive
 from bot.services.notification_service import notify_pharmacists_about_new_question
 from bot.handlers.qa_states import UserQAStates
 from bot.services.dialog_service import DialogService
-from sqlalchemy import select
+from bot.handlers.user_questions import process_dialog_message  # ДОБАВИТЬ
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -68,7 +69,7 @@ async def handle_direct_text(
             .where(
                 Question.user_id == user.uuid,
                 Question.status.in_(["in_progress", "answered"]),
-                Question.taken_by.is_not(None)
+                Question.taken_by.is_not(None),
             )
             .order_by(Question.answered_at.desc())
             .limit(1)
@@ -91,7 +92,7 @@ async def handle_direct_text(
             UserQAStates.waiting_for_prescription_photo,
             UserQAStates.waiting_for_clarification,
             UserQAStates.in_dialog,
-            UserQAStates.waiting_for_question
+            UserQAStates.waiting_for_question,
         ]:
             return
 
@@ -119,14 +120,18 @@ async def handle_direct_text(
         await db.refresh(question)
 
         # ✅ ЛОГИРОВАНИЕ: Отслеживаем создание вопроса
-        logger.info(f"Direct question created: ID={question.uuid}, text='{message.text[:50]}...'")
+        logger.info(
+            f"Direct question created: ID={question.uuid}, text='{message.text[:50]}...'"
+        )
 
         # СОЗДАЕМ ПЕРВОЕ СООБЩЕНИЕ В ИСТОРИИ ДИАЛОГА
         dialog_message = await DialogService.create_question_message(question, db)
         await db.commit()  # Фиксируем создание сообщения
 
         # ✅ ЛОГИРОВАНИЕ: Отслеживаем создание сообщения в диалоге
-        logger.info(f"Dialog message created: question_id={dialog_message.question_id}, type={dialog_message.message_type}")
+        logger.info(
+            f"Dialog message created: question_id={dialog_message.question_id}, type={dialog_message.message_type}"
+        )
 
         # Проверяем, есть ли сообщения в истории
         history = await DialogService.get_dialog_history(question.uuid, db, limit=10)
