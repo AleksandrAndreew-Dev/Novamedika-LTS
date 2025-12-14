@@ -86,10 +86,7 @@ def get_user_keyboard():
             [
                 InlineKeyboardButton(
                     text="📖 Мои вопросы", callback_data="my_questions"
-                ),
-                InlineKeyboardButton(
-                    text="✍️ Уточнить вопрос", callback_data="clarify_question"
-                ),
+                )
             ],
             [
                 InlineKeyboardButton(
