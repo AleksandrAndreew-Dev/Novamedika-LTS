@@ -427,60 +427,61 @@ async def view_full_history_callback(
             f"{history_text}"
         )
 
-        # Создаем клавиатуру с действиями
-        keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    (
-                        InlineKeyboardButton(
-                            text="✍️ Уточнить вопрос",
-                            callback_data=f"quick_clarify_{question.uuid}",
-                        )
-                        if question.status == "answered"
-                        else None
-                    ),
-                    (
-                        InlineKeyboardButton(
-                            text="📸 Отправить фото",
-                            callback_data=f"send_prescription_photo_{question.uuid}",
-                        )
-                        if question.context_data
-                        and question.context_data.get("photo_requested")
-                        else None
-                    ),
-                ],
-                [
-                    (
-                        InlineKeyboardButton(
-                            text="✅ Завершить консультацию",
-                            callback_data=f"end_dialog_{question.uuid}",
-                        )
-                        if question.status in ["answered", "in_progress"]
-                        else None
-                    ),
-                    (
-                        InlineKeyboardButton(
-                            text="🔄 Продолжить общение",
-                            callback_data=f"continue_dialog_{question.uuid}",
-                        )
-                        if question.status == "in_progress"
-                        else None
-                    ),
-                ],
-                [
-                    InlineKeyboardButton(
-                        text="🔙 К списку вопросов", callback_data="back_to_questions"
-                    ),
-                    InlineKeyboardButton(
-                        text="📋 Скопировать историю",
-                        callback_data=f"export_history_{question.uuid}",
-                    ),
-                ],
+        # Создаем клавиатуру с действиями - ИСПРАВЛЕННАЯ ВЕРСИЯ
+        inline_keyboard = []
+
+        # Первый ряд - только существующие кнопки
+        first_row = []
+        if question.status == "answered":
+            first_row.append(
+                InlineKeyboardButton(
+                    text="✍️ Уточнить вопрос",
+                    callback_data=f"quick_clarify_{question.uuid}",
+                )
+            )
+        if question.context_data and question.context_data.get("photo_requested"):
+            first_row.append(
+                InlineKeyboardButton(
+                    text="📸 Отправить фото",
+                    callback_data=f"send_prescription_photo_{question.uuid}",
+                )
+            )
+        if first_row:
+            inline_keyboard.append(first_row)
+
+        # Второй ряд - только существующие кнопки
+        second_row = []
+        if question.status in ["answered", "in_progress"]:
+            second_row.append(
+                InlineKeyboardButton(
+                    text="✅ Завершить консультацию",
+                    callback_data=f"end_dialog_{question.uuid}",
+                )
+            )
+        if question.status == "in_progress":
+            second_row.append(
+                InlineKeyboardButton(
+                    text="🔄 Продолжить общение",
+                    callback_data=f"continue_dialog_{question.uuid}",
+                )
+            )
+        if second_row:
+            inline_keyboard.append(second_row)
+
+        # Третий ряд - всегда существующие кнопки
+        inline_keyboard.append(
+            [
+                InlineKeyboardButton(
+                    text="🔙 К списку вопросов", callback_data="back_to_questions"
+                ),
+                InlineKeyboardButton(
+                    text="📋 Скопировать историю",
+                    callback_data=f"export_history_{question.uuid}",
+                ),
             ]
         )
 
-        # Удаляем пустые кнопки
-        keyboard.inline_keyboard = [row for row in keyboard.inline_keyboard if any(row)]
+        keyboard = InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
 
         # Отправляем сообщение
         if len(full_message) > 4096:
