@@ -9,6 +9,7 @@ from utils.time_utils import get_utc_now_naive
 from bot.services.notification_service import notify_pharmacists_about_new_question
 from bot.handlers.qa_states import UserQAStates
 from bot.services.dialog_service import DialogService
+from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -59,7 +60,31 @@ async def handle_direct_text(
 
     current_state = await state.get_state()
 
-    # Если есть активное состояние - не обрабатываем как прямой вопрос
+    # Проверяем, есть ли активные диалоги у пользователя
+    if current_state is None:
+        # Проверяем есть ли активные вопросы (in_progress или answered)
+        result = await db.execute(
+            select(Question)
+            .where(
+                Question.user_id == user.uuid,
+                Question.status.in_(["in_progress", "answered"]),
+                Question.taken_by.is_not(None)
+            )
+            .order_by(Question.answered_at.desc())
+            .limit(1)
+        )
+        active_question = result.scalar_one_or_none()
+
+        if active_question:
+            # Автоматически продолжаем диалог
+            await state.update_data(active_dialog_question_id=str(active_question.uuid))
+            await state.set_state(UserQAStates.in_dialog)
+
+            # Пересылаем сообщение как продолжение диалога
+            await process_dialog_message(message, state, db, user, is_pharmacist)
+            return
+
+    # Остальной код оставить без изменений...
     if current_state is not None:
         # Для этих состояний пропускаем обработку (уже есть другие обработчики)
         if current_state in [

@@ -842,7 +842,6 @@ async def continue_dialog_callback(
         await callback.answer("❌ Ошибка при продолжении диалога", show_alert=True)
 
 
-
 @router.message(UserQAStates.waiting_for_question)
 async def process_user_question(
     message: Message,
@@ -924,21 +923,155 @@ async def process_user_question(
 
 @router.message(UserQAStates.in_dialog)
 async def process_dialog_message(
-    message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool
+    message: Message,
+    state: FSMContext,
+    db: AsyncSession,
+    user: User,
+    is_pharmacist: bool,
 ):
-    """Обработка сообщений в режиме диалога"""
-    logger.info(f"Processing dialog message from user {message.from_user.id}")
-
+    """Обработка сообщений пользователя в активном диалоге"""
     if is_pharmacist:
-        await message.answer(
-            "ℹ️ Вы фармацевт. Используйте /questions для ответов на вопросы."
-        )
+        await message.answer("👨‍⚕️ Вы фармацевт. Используйте /questions для ответов.")
         return
 
-    await message.answer(
-        "💬 Сообщение отправлено фармацевту.\n\n"
-        "Используйте /done чтобы завершить диалог."
-    )
+    try:
+        state_data = await state.get_data()
+        question_uuid = state_data.get("active_dialog_question_id")
+
+        if not question_uuid:
+            await message.answer(
+                "❌ Не найден активный диалог. "
+                "Используйте /my_questions для продолжения."
+            )
+            await state.clear()
+            return
+
+        # Получаем вопрос
+        result = await db.execute(
+            select(Question).where(Question.uuid == question_uuid)
+        )
+        question = result.scalar_one_or_none()
+
+        if not question or question.user_id != user.uuid:
+            await message.answer("❌ Диалог не найден или недоступен.")
+            await state.clear()
+            return
+
+        # Получаем фармацевта, который ведет диалог
+        if not question.taken_by:
+            await message.answer("❌ Фармацевт не назначен для этого диалога.")
+            return
+
+        pharmacist_result = await db.execute(
+            select(Pharmacist)
+            .options(selectinload(Pharmacist.user))
+            .where(Pharmacist.uuid == question.taken_by)
+        )
+        pharmacist = pharmacist_result.scalar_one_or_none()
+
+        if not pharmacist or not pharmacist.user:
+            await message.answer("❌ Фармацевт не найден.")
+            return
+
+        # Добавляем сообщение в историю диалога
+        await DialogService.add_message(
+            db=db,
+            question_id=question.uuid,
+            sender_type="user",
+            sender_id=user.uuid,
+            message_type="message",
+            text=message.text,
+        )
+        await db.commit()
+
+        # Получаем историю диалога для контекста
+        history_text, _ = await DialogService.format_dialog_history_for_display(
+            question.uuid, db, limit=10
+        )
+
+        # Формируем ФИО пользователя
+        user_name = user.first_name or "Пользователь"
+        if user.last_name:
+            user_name = f"{user.first_name} {user.last_name}"
+
+        # Формируем ФИО фармацевта
+        pharmacist_name = "Фармацевт"
+        if pharmacist.pharmacy_info:
+            first_name = pharmacist.pharmacy_info.get("first_name", "")
+            last_name = pharmacist.pharmacy_info.get("last_name", "")
+            patronymic = pharmacist.pharmacy_info.get("patronymic", "")
+
+            name_parts = []
+            if last_name:
+                name_parts.append(last_name)
+            if first_name:
+                name_parts.append(first_name)
+            if patronymic:
+                name_parts.append(patronymic)
+
+            pharmacist_name = " ".join(name_parts) if name_parts else "Фармацевт"
+
+        # Создаем клавиатуру для фармацевта
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+        pharmacist_keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="💬 Ответить пользователю",
+                        callback_data=f"answer_{question.uuid}",
+                    ),
+                    InlineKeyboardButton(
+                        text="📸 Запросить фото",
+                        callback_data=f"request_photo_{question.uuid}",
+                    ),
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="✅ Завершить диалог",
+                        callback_data=f"end_dialog_{question.uuid}",
+                    )
+                ],
+            ]
+        )
+
+        # Отправляем сообщение фармацевту
+        await message.bot.send_message(
+            chat_id=pharmacist.user.telegram_id,
+            text=f"💬 <b>СООБЩЕНИЕ ОТ ПОЛЬЗОВАТЕЛЯ</b>\n\n"
+            f"👤 <b>Пользователь:</b> {user_name}\n"
+            f"❓ <b>По вопросу:</b>\n{question.text[:150]}...\n\n"
+            f"💭 <b>Сообщение:</b>\n{message.text}\n\n"
+            f"{history_text}",
+            parse_mode="HTML",
+            reply_markup=pharmacist_keyboard,
+        )
+
+        # Подтверждаем пользователю
+        await message.answer(
+            f"✅ Сообщение отправлено фармацевту {pharmacist_name}.\n\n"
+            "Вы можете продолжить общение или завершить диалог.",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="💬 Продолжить общение",
+                            callback_data=f"continue_user_dialog_{question.uuid}",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text="✅ Завершить консультацию",
+                            callback_data=f"end_dialog_{question.uuid}",
+                        )
+                    ],
+                ]
+            ),
+        )
+
+    except Exception as e:
+        logger.error(f"Error in process_dialog_message: {e}", exc_info=True)
+        await message.answer("❌ Ошибка при отправке сообщения. Попробуйте еще раз.")
 
 
 # bot/handlers/user_questions.py - ДОБАВИТЬ НОВЫЙ ОБРАБОТЧИК

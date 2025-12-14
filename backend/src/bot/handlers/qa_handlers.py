@@ -30,6 +30,7 @@ from bot.keyboards.qa_keyboard import (
     make_question_keyboard,
 )
 
+
 # Инициализация
 logger = logging.getLogger(__name__)
 router = Router()
@@ -1105,6 +1106,35 @@ async def process_answer_text(
 
         # НЕ очищаем состояние фармацевта - оставляем в диалоге
         await state.set_state(QAStates.in_dialog_with_user)
+        user_dialog_keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✍️ Ответить фармацевту",
+                    callback_data=f"continue_user_dialog_{question.uuid}"
+                ),
+                InlineKeyboardButton(
+                    text="📸 Отправить фото",
+                    callback_data=f"send_prescription_photo_{question.uuid}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✅ Завершить консультацию",
+                    callback_data=f"end_dialog_{question.uuid}"
+                )
+            ]
+        ]
+    )
+
+        # Отправляем пользователю уведомление о возможности продолжить диалог
+        await message.bot.send_message(
+            chat_id=user.telegram_id,
+            text="💬 <b>Вы можете продолжить общение с фармацевтом</b>\n\n"
+                "Напишите ваше сообщение в чат или используйте кнопки ниже.",
+            parse_mode="HTML",
+            reply_markup=user_dialog_keyboard
+        )
 
     except Exception as e:
         logger.error(

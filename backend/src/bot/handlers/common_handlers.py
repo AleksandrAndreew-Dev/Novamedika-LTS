@@ -266,6 +266,83 @@ async def show_search_webapp(
         await update.answer(message_text, parse_mode="HTML", reply_markup=reply_kb)
 
 
+# В common_handlers.py добавляем:
+@router.message(Command("continue"))
+async def cmd_continue(
+    message: Message,
+    state: FSMContext,
+    db: AsyncSession,
+    user: User,
+    is_pharmacist: bool
+):
+    """Продолжить активный диалог"""
+    if is_pharmacist:
+        await message.answer(
+            "👨‍⚕️ Вы фармацевт. Используйте /questions для работы с вопросами."
+        )
+        return
+
+    try:
+        # Ищем последний активный диалог
+        result = await db.execute(
+            select(Question)
+            .where(
+                Question.user_id == user.uuid,
+                Question.status.in_(["in_progress", "answered"]),
+                Question.taken_by.is_not(None)
+            )
+            .order_by(Question.answered_at.desc())
+            .limit(1)
+        )
+        question = result.scalar_one_or_none()
+
+        if not question:
+            await message.answer(
+                "📭 У вас нет активных диалогов.\n\n"
+                "Сначала задайте вопрос или дождитесь ответа фармацевта."
+            )
+            return
+
+        # Устанавливаем состояние
+        await state.update_data(active_dialog_question_id=str(question.uuid))
+        await state.set_state(UserQAStates.in_dialog)
+
+        # Получаем информацию о фармацевте
+        pharmacist_result = await db.execute(
+            select(Pharmacist)
+            .where(Pharmacist.uuid == question.taken_by)
+        )
+        pharmacist = pharmacist_result.scalar_one_or_none()
+
+        pharmacist_name = "Фармацевт"
+        if pharmacist and pharmacist.pharmacy_info:
+            first_name = pharmacist.pharmacy_info.get("first_name", "")
+            last_name = pharmacist.pharmacy_info.get("last_name", "")
+            patronymic = pharmacist.pharmacy_info.get("patronymic", "")
+
+            name_parts = []
+            if last_name:
+                name_parts.append(last_name)
+            if first_name:
+                name_parts.append(first_name)
+            if patronymic:
+                name_parts.append(patronymic)
+
+            pharmacist_name = " ".join(name_parts) if name_parts else "Фармацевт"
+
+        await message.answer(
+            f"💬 <b>ПРОДОЛЖЕНИЕ ДИАЛОГА</b>\n\n"
+            f"👨‍⚕️ <b>Фармацевт:</b> {pharmacist_name}\n"
+            f"❓ <b>Ваш вопрос:</b>\n{question.text[:200]}...\n\n"
+            "Напишите ваше сообщение фармацевту:\n"
+            "(или /cancel для отмены)",
+            parse_mode="HTML"
+        )
+
+    except Exception as e:
+        logger.error(f"Error in cmd_continue: {e}")
+        await message.answer("❌ Ошибка при продолжении диалога")
+
 @router.message(Command("help"))
 async def cmd_help(message: Message, is_pharmacist: bool):
     """Подробная справка с кнопками"""
@@ -557,10 +634,63 @@ async def go_offline_callback(
         await callback.answer("❌ Ошибка при переходе в офлайн", show_alert=True)
 
 
-# В common_handlers.py обновляем view_questions_callback
 
 
-# Обновляем view_questions_callback для использования новой клавиатуры
+# Добавить в common_handlers.py или user_questions.py:
+
+@router.callback_query(F.data.startswith("continue_user_dialog_"))
+async def continue_user_dialog_callback(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db: AsyncSession,
+    user: User,
+    is_pharmacist: bool
+):
+    """Продолжение диалога пользователем после ответа фармацевта"""
+    if is_pharmacist:
+        await callback.answer(
+            "👨‍⚕️ Вы фармацевт. Используйте /questions для ответов.",
+            show_alert=True
+        )
+        return
+
+    question_uuid = callback.data.replace("continue_user_dialog_", "")
+
+    try:
+        # Получаем вопрос
+        result = await db.execute(
+            select(Question).where(Question.uuid == question_uuid)
+        )
+        question = result.scalar_one_or_none()
+
+        if not question or question.user_id != user.uuid:
+            await callback.answer(
+                "❌ Вопрос не найден или не принадлежит вам",
+                show_alert=True
+            )
+            return
+
+        # Устанавливаем состояние для продолжения диалога
+        await state.update_data(active_dialog_question_id=question_uuid)
+        await state.set_state(UserQAStates.in_dialog)
+
+        await callback.message.answer(
+            "💬 <b>ПРОДОЛЖЕНИЕ ДИАЛОГА</b>\n\n"
+            f"❓ <b>Ваш вопрос:</b>\n{question.text[:200]}...\n\n"
+            "Напишите ваше сообщение фармацевту:\n"
+            "(или /cancel для отмены)",
+            parse_mode="HTML"
+        )
+
+        await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Error in continue_user_dialog_callback: {e}")
+        await callback.answer(
+            "❌ Ошибка при продолжении диалога",
+            show_alert=True
+        )
+
 @router.callback_query(F.data == "view_questions")
 async def view_questions_callback(
     callback: CallbackQuery, db: AsyncSession, is_pharmacist: bool, pharmacist: object
