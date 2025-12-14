@@ -13,11 +13,10 @@ from aiogram.types import (
 )
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-# Внутренние модули проекта
 from utils.time_utils import get_utc_now_naive
 from db.qa_models import User, Pharmacist, Question, Answer, DialogMessage
 from bot.handlers.qa_states import QAStates

@@ -1,4 +1,4 @@
-
+from sqlalchemy import select, func
 from aiogram.types import Message as AiogramMessage
 from typing import Optional
 from aiogram.types import WebAppInfo
@@ -12,12 +12,10 @@ from aiogram.types import (
 )
 
 
-
-# Остальной код остается без изменений...
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
-from db.qa_models import User
+from db.qa_models import User, Question
 from utils.time_utils import get_utc_now_naive
 from bot.handlers.qa_states import UserQAStates
 from bot.services.notification_service import (
@@ -117,12 +115,10 @@ async def hide_keyboard(message: Message):
 
 # В common_handlers.py добавляем:
 
+
 @router.message(Command("history"))
 async def cmd_history(
-    message: Message,
-    db: AsyncSession,
-    user: User,
-    is_pharmacist: bool
+    message: Message, db: AsyncSession, user: User, is_pharmacist: bool
 ):
     """Показать историю всех диалогов"""
     try:
@@ -186,18 +182,21 @@ async def cmd_history(
             message_text,
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[[
-                    InlineKeyboardButton(
-                        text="📋 Посмотреть все диалоги",
-                        callback_data="view_all_dialogs"
-                    )
-                ]]
-            )
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="📋 Посмотреть все диалоги",
+                            callback_data="view_all_dialogs",
+                        )
+                    ]
+                ]
+            ),
         )
 
     except Exception as e:
         logger.error(f"Error in cmd_history: {e}")
         await message.answer("❌ Ошибка при загрузке истории диалогов")
+
 
 @router.message(Command("start"))
 async def cmd_start(
@@ -280,7 +279,6 @@ async def cmd_help(message: Message, is_pharmacist: bool):
             "• /my_questions - ваши ответы\n"
             "• /status - ваш текущий статус\n"
             "• /end_dialog - завершить активный диалог\n\n"
-
             "💡 <b>Как работать с вопросами:</b>\n"
             "1. Перейдите в онлайн (/online)\n"
             "2. Получайте уведомления о новых вопросах\n"
@@ -291,7 +289,6 @@ async def cmd_help(message: Message, is_pharmacist: bool):
             "   • Запросить фото рецепта\n"
             "   • Завершить диалог (кнопка внизу)\n"
             "6. Пользователь получит ответ с вашими данными\n\n"
-
             "💬 <b>Завершение диалога:</b>\n"
             "• Используйте кнопку «Завершить диалог» в диалоге\n"
             "• Или команду /end_dialog\n"
@@ -310,7 +307,6 @@ async def cmd_help(message: Message, is_pharmacist: bool):
             "• /clarify - уточнить предыдущий вопрос\n"
             "• /end_dialog - завершить активный диалог\n"
             "• /help - эта справка\n\n"
-
             "⏱️ <b>Как это работает:</b>\n"
             "1. Напишите вопрос в чат\n"
             "2. Фармацевты получат уведомление\n"
@@ -319,17 +315,136 @@ async def cmd_help(message: Message, is_pharmacist: bool):
             "   • Уточнить вопрос (кнопка «Уточнить»)\n"
             "   • Отправить фото рецепта (если запрошено)\n"
             "   • Завершить диалог (кнопка «Завершить»)\n\n"
-
             "💬 <b>Завершение диалога:</b>\n"
             "• Нажмите кнопку «Завершить диалог» в сообщении с ответом\n"
             "• Или используйте команду /end_dialog\n"
             "• После завершения фармацевт получит уведомление\n"
             "• Вы можете задать новый вопрос в любое время\n\n"
-
             "👨‍⚕️ <b>Если вы фармацевт</b> - нажмите «Я фарм специалист» в меню",
             parse_mode="HTML",
             reply_markup=get_user_keyboard(),
         )
+
+
+# common_handlers.py - ДОБАВЛЯЕМ НОВЫЕ ОБРАБОТЧИКИ
+
+
+@router.callback_query(F.data == "back_to_main")
+async def back_to_main_callback(
+    callback: CallbackQuery, state: FSMContext, is_pharmacist: bool, user: User
+):
+    """Возврат в главное меню"""
+    await state.clear()
+
+    if is_pharmacist:
+        await callback.message.answer(
+            "👨‍⚕️ <b>Панель фармацевта</b>\n\n" "Выберите действие:",
+            parse_mode="HTML",
+            reply_markup=get_pharmacist_keyboard(),
+        )
+    else:
+        await callback.message.answer(
+            "👋 <b>Главное меню</b>\n\n" "Выберите действие:",
+            parse_mode="HTML",
+            reply_markup=get_user_keyboard(),
+        )
+
+    await callback.answer()
+
+
+@router.callback_query(F.data == "questions_stats")
+async def questions_stats_callback(
+    callback: CallbackQuery, db: AsyncSession, user: User, is_pharmacist: bool
+):
+    """Показать статистику по вопросам"""
+    if is_pharmacist:
+        await callback.answer(
+            "❌ Эта функция доступна только пользователям", show_alert=True
+        )
+        return
+
+    try:
+        from sqlalchemy import func
+
+        # Получаем статистику
+        total_result = await db.execute(
+            select(func.count(Question.uuid)).where(Question.user_id == user.uuid)
+        )
+        total = total_result.scalar() or 0
+
+        pending_result = await db.execute(
+            select(func.count(Question.uuid)).where(
+                Question.user_id == user.uuid, Question.status == "pending"
+            )
+        )
+        pending = pending_result.scalar() or 0
+
+        answered_result = await db.execute(
+            select(func.count(Question.uuid)).where(
+                Question.user_id == user.uuid, Question.status == "answered"
+            )
+        )
+        answered = answered_result.scalar() or 0
+
+        completed_result = await db.execute(
+            select(func.count(Question.uuid)).where(
+                Question.user_id == user.uuid, Question.status == "completed"
+            )
+        )
+        completed = completed_result.scalar() or 0
+
+        # Получаем последнюю активность
+        last_result = await db.execute(
+            select(Question.created_at)
+            .where(Question.user_id == user.uuid)
+            .order_by(Question.created_at.desc())
+            .limit(1)
+        )
+        last_activity = last_result.scalar_one_or_none()
+
+        stats_text = (
+            "📊 <b>СТАТИСТИКА ВОПРОСОВ</b>\n\n"
+            f"📋 Всего вопросов: {total}\n"
+            f"⏳ Ожидают ответа: {pending}\n"
+            f"💬 Получены ответы: {answered}\n"
+            f"✅ Завершено: {completed}\n\n"
+        )
+
+        if last_activity:
+            stats_text += (
+                f"🕒 Последняя активность: {last_activity.strftime('%d.%m.%Y %H:%M')}\n"
+            )
+
+        if total > 0:
+            stats_text += (
+                f"📈 Процент ответов: {int((answered + completed) / total * 100)}%\n"
+            )
+
+        await callback.message.answer(
+            stats_text,
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="📋 К списку вопросов",
+                            callback_data="my_questions_callback",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text="🏠 В меню", callback_data="back_to_main"
+                        )
+                    ],
+                ]
+            ),
+        )
+
+        await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Error in questions_stats_callback: {e}", exc_info=True)
+        await callback.answer("❌ Ошибка при получении статистики", show_alert=True)
 
 
 # bot/handlers/common_handlers.py - ИСПРАВЛЕННЫЙ i_am_pharmacist_callback
@@ -444,6 +559,7 @@ async def go_offline_callback(
 
 # В common_handlers.py обновляем view_questions_callback
 
+
 # Обновляем view_questions_callback для использования новой клавиатуры
 @router.callback_query(F.data == "view_questions")
 async def view_questions_callback(
@@ -501,6 +617,7 @@ async def view_questions_callback(
 
             # Для всех вопросов в списке - простая кнопка "Ответить"
             from bot.keyboards.qa_keyboard import make_question_list_keyboard
+
             reply_markup = make_question_list_keyboard(question.uuid)
 
             # Получаем пользователя
@@ -555,6 +672,7 @@ async def my_questions_callback(
     """Быстрый просмотр своих вопросов через кнопку"""
     # Вместо модификации message.from_user, передаем callback напрямую
     from bot.handlers.user_questions import cmd_my_questions
+
     await cmd_my_questions(callback, db, user, is_pharmacist)
 
 
@@ -570,12 +688,10 @@ async def user_help_callback(callback: CallbackQuery):
         "3. После ответа вы увидите кнопки:\n"
         "   • Уточнить вопрос\n"
         "   • Завершить диалог\n\n"
-
         "📋 <b>Дополнительные возможности:</b>\n"
         "• /my_questions - история ваших вопросов\n"
         "• /clarify - уточнить предыдущий вопрос\n"
         "• /end_dialog - завершить активный диалог\n\n"
-
         "💬 <b>Завершение диалога:</b>\n"
         "Нажмите кнопку «Завершить диалог» в сообщении с ответом,\n"
         "чтобы завершить консультацию по текущему вопросу.",
@@ -596,19 +712,16 @@ async def pharmacist_help_callback(callback: CallbackQuery):
         "3. Нажмите «Ответить» под вопросом\n"
         "4. Ведите диалог с пользователем\n"
         "5. Завершите диалог когда консультация завершена\n\n"
-
         "📋 <b>Доступные команды:</b>\n"
         "• /online - начать принимать вопросы\n"
         "• /offline - остановить прием вопросов\n"
         "• /questions - список ожидающих вопросов\n"
         "• /status - ваш текущий статус\n"
         "• /end_dialog - завершить активный диалог\n\n"
-
         "💬 <b>В диалоге вы можете:</b>\n"
         "• Отправлять ответы пользователю\n"
         "• Запрашивать фото рецепта (кнопка «Запросить фото»)\n"
         "• Завершать диалог (кнопка «Завершить диалог»)\n\n"
-
         "Для подробной справки используйте /help",
         parse_mode="HTML",
     )
@@ -621,9 +734,8 @@ async def system_status_callback(
     """Статус системы через кнопку"""
     # Используем существующую функцию debug_status напрямую
     from bot.handlers.qa_handlers import debug_status
+
     await debug_status(callback, db, is_pharmacist)
-
-
 
 
 @router.callback_query(F.data == "clarify_question")
@@ -633,6 +745,7 @@ async def clarify_question_callback(
     """Уточнение вопроса через кнопку"""
     # Используем существующую функцию напрямую
     from bot.handlers.clarify_handlers import clarify_command_handler
+
     await clarify_command_handler(callback, state, db, user)
 
 
@@ -643,21 +756,20 @@ async def cmd_complete(
     state: FSMContext,
     db: AsyncSession,
     user: User,
-    is_pharmacist: bool
+    is_pharmacist: bool,
 ):
     """Команда для завершения консультации пользователем"""
     if is_pharmacist:
-        await message.answer("👨‍⚕️ Вы фармацевт. Используйте /end_dialog для завершения диалогов.")
+        await message.answer(
+            "👨‍⚕️ Вы фармацевт. Используйте /end_dialog для завершения диалогов."
+        )
         return
 
     try:
         # Получаем последнюю отвеченную консультацию пользователя
         result = await db.execute(
             select(Question)
-            .where(
-                Question.user_id == user.uuid,
-                Question.status == "answered"
-            )
+            .where(Question.user_id == user.uuid, Question.status == "answered")
             .order_by(Question.answered_at.desc())
             .limit(5)
         )
@@ -673,25 +785,30 @@ async def cmd_complete(
         # Создаем клавиатуру с консультациями для завершения
         keyboard = InlineKeyboardMarkup(inline_keyboard=[])
         for question in questions:
-            question_preview = question.text[:50] + "..." if len(question.text) > 50 else question.text
-            keyboard.inline_keyboard.append([
-                InlineKeyboardButton(
-                    text=f"❓ {question_preview}",
-                    callback_data=f"complete_consultation_{question.uuid}"
-                )
-            ])
+            question_preview = (
+                question.text[:50] + "..." if len(question.text) > 50 else question.text
+            )
+            keyboard.inline_keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        text=f"❓ {question_preview}",
+                        callback_data=f"complete_consultation_{question.uuid}",
+                    )
+                ]
+            )
 
         await message.answer(
             "📋 <b>Выберите консультацию для завершения:</b>\n\n"
             "Нажмите на консультацию, которую хотите завершить.\n\n"
             "💡 <i>Завершать можно только те консультации, на которые вы уже получили ответ.</i>",
             parse_mode="HTML",
-            reply_markup=keyboard
+            reply_markup=keyboard,
         )
 
     except Exception as e:
         logger.error(f"Error in cmd_complete: {e}")
         await message.answer("❌ Ошибка при получении консультаций")
+
 
 @router.message(Command("cancel"))
 async def universal_cancel(message: Message, state: FSMContext):
@@ -711,7 +828,6 @@ async def universal_cancel(message: Message, state: FSMContext):
     await message.answer("✅ Текущее действие отменено.")
 
 
-
 @router.callback_query(F.data == "ask_new_question")
 async def ask_new_question_callback(callback: CallbackQuery, state: FSMContext):
     """Обработка кнопки 'Задать новый вопрос'"""
@@ -726,6 +842,7 @@ async def ask_new_question_callback(callback: CallbackQuery, state: FSMContext):
         parse_mode="HTML",
     )
 
+
 @router.callback_query(F.data == "search_drugs")
 async def search_drugs_from_completed_callback(
     callback: CallbackQuery, state: FSMContext, is_pharmacist: bool
@@ -734,14 +851,18 @@ async def search_drugs_from_completed_callback(
     await state.clear()
 
     if is_pharmacist:
-        await callback.answer("🔍 Используйте /questions для работы с вопросами", show_alert=True)
+        await callback.answer(
+            "🔍 Используйте /questions для работы с вопросами", show_alert=True
+        )
         return
 
     await callback.answer()
 
     # Используем существующую функцию из common_handlers
     from bot.handlers.common_handlers import show_search_webapp
+
     await show_search_webapp(callback, state, is_pharmacist)
+
 
 @router.callback_query(F.data == "my_questions")
 async def my_questions_from_completed_callback(
@@ -752,7 +873,9 @@ async def my_questions_from_completed_callback(
 
     # Используем существующую функцию
     from bot.handlers.user_questions import cmd_my_questions
+
     await cmd_my_questions(callback, db, user, is_pharmacist)
+
 
 @router.message(F.command)
 async def unknown_command(message: Message):
@@ -766,9 +889,7 @@ async def unknown_command(message: Message):
 
 @router.callback_query(F.data == "start_registration")
 async def start_registration_callback(
-    callback: CallbackQuery,
-    state: FSMContext,
-    is_pharmacist: bool
+    callback: CallbackQuery, state: FSMContext, is_pharmacist: bool
 ):
     """Запуск регистрации через кнопку - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
     if is_pharmacist:
@@ -781,18 +902,18 @@ async def start_registration_callback(
 
     # НЕ создаем фиктивный Message, а напрямую переходим к регистрации
     cancel_keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]],
-        resize_keyboard=True
+        keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]], resize_keyboard=True
     )
 
     await callback.message.answer(
         "🔐 Регистрация фармацевта\n\n"
         "Для начала регистрации введите секретное слово:",
-        reply_markup=cancel_keyboard
+        reply_markup=cancel_keyboard,
     )
 
     # Устанавливаем состояние регистрации
     from bot.handlers.registration import RegistrationStates
+
     await state.set_state(RegistrationStates.waiting_secret_word)
 
 

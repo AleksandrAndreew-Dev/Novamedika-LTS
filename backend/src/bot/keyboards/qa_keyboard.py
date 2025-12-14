@@ -246,3 +246,98 @@ def make_completed_dialog_history_keyboard() -> InlineKeyboardMarkup:
             ]
         ]
     )
+
+
+# qa_keyboard.py - ДОБАВЛЯЕМ НОВЫЕ ФУНКЦИИ
+
+def make_full_history_keyboard(question_uuid: str, can_clarify: bool = True, has_photo_request: bool = False) -> InlineKeyboardMarkup:
+    """Клавиатура для полной истории консультации"""
+    buttons = []
+
+    # Основные действия
+    if can_clarify:
+        buttons.append([
+            InlineKeyboardButton(
+                text="✍️ Уточнить вопрос",
+                callback_data=f"quick_clarify_{question_uuid}"
+            )
+        ])
+
+    if has_photo_request:
+        buttons.append([
+            InlineKeyboardButton(
+                text="📸 Отправить фото рецепта",
+                callback_data=f"send_prescription_photo_{question_uuid}"
+            )
+        ])
+
+    # Дополнительные действия
+    buttons.append([
+        InlineKeyboardButton(
+            text="📋 Скопировать историю",
+            callback_data=f"export_history_{question_uuid}"
+        ),
+        InlineKeyboardButton(
+            text="✅ Завершить",
+            callback_data=f"end_dialog_{question_uuid}"
+        )
+    ])
+
+    # Навигация
+    buttons.append([
+        InlineKeyboardButton(
+            text="🔙 К списку вопросов",
+            callback_data="back_to_questions"
+        ),
+        InlineKeyboardButton(
+            text="🏠 В меню",
+            callback_data="back_to_main"
+        )
+    ])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def make_questions_main_keyboard() -> InlineKeyboardMarkup:
+    """Главная клавиатура для работы с вопросами"""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📋 Все мои вопросы",
+                    callback_data="my_questions_callback"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🎯 Активные вопросы",
+                    callback_data="filter_active"
+                ),
+                InlineKeyboardButton(
+                    text="✅ Завершенные",
+                    callback_data="filter_completed"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📊 Статистика",
+                    callback_data="questions_stats"
+                ),
+                InlineKeyboardButton(
+                    text="📤 Экспорт всех",
+                    callback_data="export_all_questions"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔍 Поиск по вопросам",
+                    callback_data="search_questions"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🏠 В главное меню",
+                    callback_data="back_to_main"
+                )
+            ]
+        ]
+    )
