@@ -121,7 +121,7 @@ async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncS
             chat_id=question.user.telegram_id,
             text=message_text,
             parse_mode="HTML",
-            reply_markup=make_user_consultation_keyboard(question.uuid)
+            
         )
 
         logger.info(f"Answer sent to user {question.user.telegram_id} with full history")

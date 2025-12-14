@@ -1087,7 +1087,7 @@ async def process_answer_text(
                     chat_id=user.telegram_id,
                     text=full_message,
                     parse_mode="HTML",
-                    reply_markup=make_user_consultation_keyboard(question.uuid)
+                    
                 )
 
                 logger.info(f"Message sent to user {user.telegram_id}")
