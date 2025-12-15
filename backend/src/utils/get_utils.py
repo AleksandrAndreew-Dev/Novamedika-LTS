@@ -1,3 +1,13 @@
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
+
+
+from db.qa_models import Question, Pharmacist
+
+
 async def get_all_pharmacist_questions(
     db: AsyncSession, pharmacist: Pharmacist, limit: int = 50
 ) -> List[Question]:
