@@ -19,7 +19,7 @@ from sqlalchemy.orm import selectinload
 
 from utils.time_utils import get_utc_now_naive
 from db.qa_models import User, Pharmacist, Question, Answer, DialogMessage
-from bot.handlers.qa_states import QAStates
+from bot.handlers.qa_states import QAStates, UserQAStates
 from bot.handlers.common_handlers import get_pharmacist_keyboard
 from bot.services.dialog_service import DialogService
 from bot.services.assignment_service import QuestionAssignmentService
@@ -935,11 +935,34 @@ async def handle_pharmacist_text_in_dialog(
             await state.clear()
             return
 
+        # Получаем вопрос
+        result = await db.execute(
+            select(Question).where(Question.uuid == question_uuid)
+        )
+        question = result.scalar_one_or_none()
+
+        if not question:
+            await message.answer("❌ Вопрос не найден")
+            await state.clear()
+            return
+
+        # ✅ ВАЖНО: ПРОВЕРЯЕМ, ЧТО ДИАЛОГ НЕ ЗАВЕРШЕН
+        if question.status == "completed":
+            await message.answer(
+                "❌ Этот диалог уже завершен. Вы не можете отправлять сообщения.\n"
+                "Используйте /questions для работы с новыми вопросами."
+            )
+            await state.clear()
+            return
+        # Конец проверки
+
         # Автоматически переводим фармацевта в онлайн при активности
         if not pharmacist.is_online:
             pharmacist.is_online = True
             pharmacist.last_seen = get_utc_now_naive()
             await db.commit()
+
+        # ... остальной код без изменений ...
 
         # Получаем вопрос
         result = await db.execute(
@@ -1129,7 +1152,15 @@ async def process_answer_text(
             await state.clear()
             return
 
-        # Автоматически переводим фармацевта в онлайн при активности
+        # ✅ ВАЖНО: ПРОВЕРЯЕМ, ЧТО ДИАЛОГ НЕ ЗАВЕРШЕН
+        if question.status == "completed":
+            await message.answer(
+                "❌ Этот диалог уже завершен. Вы не можете отправлять сообщения.\n"
+                "Используйте /questions для работы с новыми вопросами."
+            )
+            await state.clear()
+            return
+
         if not pharmacist.is_online:
             pharmacist.is_online = True
             pharmacist.last_seen = get_utc_now_naive()

@@ -809,7 +809,7 @@ async def continue_dialog_callback(
             )
             return
 
-        
+
         await state.update_data(continue_question_id=question_uuid)
         await state.set_state(UserQAStates.in_dialog)
 
@@ -942,6 +942,19 @@ async def process_dialog_message(
             await message.answer("❌ Диалог не найден или недоступен.")
             await state.clear()
             return
+
+        # ✅ ВАЖНО: ПРОВЕРЯЕМ, ЧТО ДИАЛОГ НЕ ЗАВЕРШЕН
+        if question.status == "completed":
+            await message.answer(
+                "❌ Эта консультация уже завершена.\n"
+                "Вы не можете отправлять сообщения в завершенную консультацию.\n"
+                "Используйте /ask для нового вопроса."
+            )
+            await state.clear()
+            return
+        # Конец проверки
+
+        # ... остальной код без изменений ...
 
         # Получаем фармацевта, который ведет диалог
         if not question.taken_by:
