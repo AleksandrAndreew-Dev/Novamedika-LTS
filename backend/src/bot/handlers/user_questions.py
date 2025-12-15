@@ -22,6 +22,7 @@ import logging
 from datetime import datetime, timedelta
 from utils.time_utils import get_utc_now_naive
 from utils.get_utils import get_all_pharmacist_questions
+from utils.pharm_format_questions import format_pharmacist_questions_list
 from bot.services.dialog_service import DialogService
 from bot.keyboards.pagiantion_keyboard import make_questions_pagination_keyboard
 
@@ -147,7 +148,7 @@ async def cmd_my_questions(
             questions = await get_all_pharmacist_questions(db, pharmacist, limit=50)
             page = 0  # Начинаем с первой страницы
 
-            message_text = await format_questions_list(questions, page)
+            message_text = await format_pharmacist_questions_list(questions, page)
             reply_markup = make_questions_pagination_keyboard(
                 questions,
                 page,
@@ -458,24 +459,25 @@ async def questions_page_callback(
                 return
 
             questions = await get_all_pharmacist_questions(db, pharmacist, limit=50)
-            is_pharm = True
-            pharmacist_id = str(pharmacist.uuid)
+
+            # Используем функцию для фармацевтов
+            message_text = await format_pharmacist_questions_list(questions, page)
         else:
             # Для пользователей
             questions = await get_all_user_questions(db, user, limit=50)
-            is_pharm = False
-            pharmacist_id = None
+            # Используем функцию для пользователей
+            message_text = await format_questions_list(questions, page)
 
         if not questions:
             await callback.answer("📭 У вас пока нет вопросов", show_alert=True)
             return
 
-        message_text = await format_questions_list(questions, page)
+        # Создаем клавиатуру с учетом типа пользователя
         reply_markup = make_questions_pagination_keyboard(
             questions,
             page,
-            is_pharmacist=is_pharm,
-            pharmacist_id=pharmacist_id
+            is_pharmacist=is_pharmacist,
+            pharmacist_id=str(pharmacist.uuid) if is_pharmacist and pharmacist else None
         )
 
         await callback.message.edit_text(
@@ -508,21 +510,21 @@ async def back_to_questions_callback(
                 return
 
             questions = await get_all_pharmacist_questions(db, pharmacist, limit=50)
-            is_pharm = True
-            pharmacist_id = str(pharmacist.uuid)
+
+            # Используем функцию для фармацевтов
+            message_text = await format_pharmacist_questions_list(questions, page=0)
         else:
             # Для пользователей
             questions = await get_all_user_questions(db, user, limit=50)
-            is_pharm = False
-            pharmacist_id = None
+            # Используем функцию для пользователей
+            message_text = await format_questions_list(questions, page=0)
 
-        page = 0
-        message_text = await format_questions_list(questions, page)
+        # Создаем клавиатуру с учетом типа пользователя
         reply_markup = make_questions_pagination_keyboard(
             questions,
-            page,
-            is_pharmacist=is_pharm,
-            pharmacist_id=pharmacist_id
+            page=0,
+            is_pharmacist=is_pharmacist,
+            pharmacist_id=str(pharmacist.uuid) if is_pharmacist and pharmacist else None
         )
 
         await callback.message.edit_text(

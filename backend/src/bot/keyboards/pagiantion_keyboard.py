@@ -1,7 +1,6 @@
 from typing import List
-from db.qa_models import User, Question, Answer, Pharmacist
+from db.qa_models import Question
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from bot.handlers.common_handlers import get_user_keyboard, get_pharmacist_keyboard
 
 
 
