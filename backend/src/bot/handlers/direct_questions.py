@@ -10,7 +10,8 @@ from utils.time_utils import get_utc_now_naive
 from bot.services.notification_service import notify_pharmacists_about_new_question
 from bot.handlers.qa_states import UserQAStates
 from bot.services.dialog_service import DialogService
-from bot.handlers.user_questions import process_dialog_message  # ДОБАВИТЬ
+from bot.handlers.user_questions import process_dialog_message  
+from bot.keyboards.qa_keyboard import make_completed_dialog_keyboard
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -54,7 +55,7 @@ async def handle_direct_text(
     is_pharmacist: bool,
     state: FSMContext,
 ):
-    """Обработка прямых текстовых сообщений как вопросов"""
+    """Обработка прямых текстовых сообщений как вопросов С ПРОВЕРКАМИ"""
 
     if is_pharmacist:
         return
@@ -77,6 +78,18 @@ async def handle_direct_text(
         active_question = result.scalar_one_or_none()
 
         if active_question:
+            # ✅ ПРОВЕРКА: Не завершен ли диалог
+            if active_question.status == "completed":
+                await message.answer(
+                    "🎯 <b>Ваша предыдущая консультация завершена</b>\n\n"
+                    f"❓ Вопрос: {active_question.text[:200]}...\n\n"
+                    "Чтобы задать новый вопрос, просто напишите его в чат.\n"
+                    "Или используйте кнопки ниже:",
+                    parse_mode="HTML",
+                    reply_markup=make_completed_dialog_keyboard(active_question.uuid)
+                )
+                return
+
             # Автоматически продолжаем диалог
             await state.update_data(active_dialog_question_id=str(active_question.uuid))
             await state.set_state(UserQAStates.in_dialog)
@@ -84,6 +97,8 @@ async def handle_direct_text(
             # Пересылаем сообщение как продолжение диалога
             await process_dialog_message(message, state, db, user, is_pharmacist)
             return
+
+    # ... остальной код без изменений
 
     # Остальной код оставить без изменений...
     if current_state is not None:

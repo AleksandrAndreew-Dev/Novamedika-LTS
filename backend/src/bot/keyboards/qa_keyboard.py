@@ -4,7 +4,37 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-# qa_keyboard.py - НОВЫЕ КЛАВИАТУРЫ
+
+def make_completed_dialog_keyboard(question_uuid: str = None):
+    """Клавиатура для завершенного диалога"""
+    inline_keyboard = [
+        [
+            InlineKeyboardButton(
+                text="📝 Задать новый вопрос",
+                callback_data="ask_new_question"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="📋 Мои вопросы",
+                callback_data="my_questions_callback"
+            ),
+            InlineKeyboardButton(
+                text="🔍 Поиск лекарств",
+                callback_data="search_drugs"
+            )
+        ]
+    ]
+
+    if question_uuid:
+        inline_keyboard.append([
+            InlineKeyboardButton(
+                text="📚 История консультации",
+                callback_data=f"view_full_history_{question_uuid}"
+            )
+        ])
+
+    return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
 
 def make_user_consultation_keyboard(question_uuid: str) -> InlineKeyboardMarkup:
     """Клавиатура для пользователя после ответа фармацевта"""

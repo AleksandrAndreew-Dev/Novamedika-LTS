@@ -748,7 +748,7 @@ async def continue_dialog_callback(
     user: User,
     is_pharmacist: bool,
 ):
-    """Продолжить общение по существующему вопросу"""
+    """Продолжить общение по существующему вопросу С ПРОВЕРКОЙ"""
     if is_pharmacist:
         await callback.answer(
             "❌ Эта функция доступна только пользователям", show_alert=True
@@ -768,13 +768,48 @@ async def continue_dialog_callback(
             await callback.answer("❌ Вопрос не найден", show_alert=True)
             return
 
+        # ✅ ПРОВЕРКА: Если диалог уже завершен
+        if question.status == "completed":
+            await callback.answer(
+                "❌ Эта консультация уже завершена.\n"
+                "Вы можете задать новый вопрос или посмотреть историю.",
+                show_alert=True
+            )
+
+            # Показываем завершенный диалог с кнопками для новых действий
+            await callback.message.answer(
+                f"🎯 <b>КОНСУЛЬТАЦИЯ ЗАВЕРШЕНА</b>\n\n"
+                f"❓ Ваш вопрос: {question.text[:200]}...\n\n"
+                f"⏰ Завершена: {question.answered_at.strftime('%d.%m.%Y %H:%M') if question.answered_at else 'Дата не указана'}\n\n"
+                f"<i>Эта консультация была завершена и больше не доступна для общения.</i>\n\n"
+                f"<b>Что вы можете сделать:</b>",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="📝 Задать новый вопрос",
+                                callback_data="ask_new_question"
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                text="📋 Посмотреть историю",
+                                callback_data=f"view_full_history_{question.uuid}"
+                            )
+                        ]
+                    ]
+                )
+            )
+            return
+
         if question.status != "in_progress":
             await callback.answer(
                 "❌ Этот диалог уже завершен или ожидает ответа", show_alert=True
             )
             return
 
-        # Устанавливаем состояние для продолжения диалога
+        
         await state.update_data(continue_question_id=question_uuid)
         await state.set_state(UserQAStates.in_dialog)
 

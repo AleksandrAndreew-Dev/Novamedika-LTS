@@ -23,12 +23,12 @@ router = Router()
 async def complete_dialog_service(
     question_uuid: str,
     db: AsyncSession,
-    initiator_type: str,  # "pharmacist" или "user"
+    initiator_type: str,
     initiator: User,
     callback: CallbackQuery = None,
     message: Message = None
 ) -> bool:
-    """Сервис завершения диалога - универсальный для всех типов пользователей"""
+    """Сервис завершения диалога - УЛУЧШЕННАЯ ВЕРСИЯ"""
     try:
         # Получаем вопрос с информацией о фармацевте
         result = await db.execute(
@@ -45,26 +45,53 @@ async def complete_dialog_service(
                 await message.answer("❌ Вопрос не найден")
             return False
 
-        # Проверяем, не завершен ли уже диалог
+        # ✅ УВЕДОМЛЕНИЕ: Если диалог уже завершен
         if question.status == "completed":
             if callback:
-                await callback.answer("✅ Этот диалог уже завершен", show_alert=True)
+                await callback.answer(
+                    "✅ Этот диалог уже завершен ранее",
+                    show_alert=True
+                )
+
+                # Показываем информацию о завершении
+                if initiator_type == "pharmacist":
+                    await callback.message.answer(
+                        f"🎯 <b>ДИАЛОГ УЖЕ ЗАВЕРШЕН</b>\n\n"
+                        f"❓ Вопрос: {question.text[:200]}...\n\n"
+                        f"⏰ Завершен: {question.answered_at.strftime('%d.%m.%Y %H:%M') if question.answered_at else 'Дата не указана'}\n\n"
+                        f"📋 Используйте /questions для новых вопросов",
+                        parse_mode="HTML"
+                    )
+                else:
+                    await callback.message.answer(
+                        f"🎯 <b>ВАША КОНСУЛЬТАЦИЯ УЖЕ ЗАВЕРШЕНА</b>\n\n"
+                        f"❓ Вопрос: {question.text[:200]}...\n\n"
+                        f"⏰ Завершена: {question.answered_at.strftime('%d.%m.%Y %H:%М') if question.answered_at else 'Дата не указана'}\n\n"
+                        f"✨ Вы можете задать новый вопрос:",
+                        parse_mode="HTML",
+                        reply_markup=make_completed_dialog_keyboard()
+                    )
             return False
 
-        # Обновляем статус вопроса
+        # ✅ БЛОКИРОВКА: Запрещаем дальнейшие изменения после завершения
         question.status = "completed"
         question.answered_at = get_utc_now_naive()
 
+        # ✅ ОЧИСТКА: Убираем фармацевта из взятых вопросов
+        question.taken_by = None
+        question.taken_at = None
+
+        # ✅ ФЛАГ: Устанавливаем флаг полного завершения
         if not question.context_data:
             question.context_data = {}
 
-        # Записываем кто завершил диалог
         question.context_data["completed_by"] = initiator_type
         question.context_data["completed_at"] = get_utc_now_naive().isoformat()
+        question.context_data["is_final"] = True  # Флаг окончательного завершения
 
         await db.commit()
 
-        # Определяем фармацевта для уведомления
+
         pharmacist_to_notify = None
         if initiator_type == "user":
             # Если завершает пользователь, уведомляем фармацевта

@@ -815,8 +815,7 @@ async def debug_status(
         await message.answer("❌ Ошибка при получении статуса системы")
 
 
-# bot/handlers/qa_handlers.py - обновляем answer_question_callback
-# В функции answer_question_callback добавляем сохранение фармацевта
+
 @router.callback_query(F.data.startswith("answer_"))
 async def answer_question_callback(
     callback: CallbackQuery,
@@ -825,7 +824,7 @@ async def answer_question_callback(
     is_pharmacist: bool,
     pharmacist: Pharmacist,
 ):
-    """Обработка нажатия на кнопку ответа на вопрос"""
+    """Обработка нажатия на кнопку ответа на вопрос С ПРОВЕРКОЙ ЗАВЕРШЕНИЯ"""
     question_uuid = callback.data.replace("answer_", "")
 
     if not is_pharmacist or not pharmacist:
@@ -843,6 +842,24 @@ async def answer_question_callback(
 
         if not question:
             await callback.answer("❌ Вопрос не найден", show_alert=True)
+            return
+
+        # ✅ ПРОВЕРКА: Если диалог уже завершен
+        if question.status == "completed":
+            await callback.answer(
+                "❌ Этот диалог уже завершен. Вы не можете продолжать общение.\n"
+                "Если нужно, создайте новый вопрос или откройте другой диалог.",
+                show_alert=True
+            )
+
+            # Показываем информацию о завершенном диалоге
+            await callback.message.answer(
+                f"🎯 <b>ЗАВЕРШЕННЫЙ ДИАЛОГ</b>\n\n"
+                f"❓ Вопрос: {question.text[:200]}...\n\n"
+                f"⏰ Завершен: {question.answered_at.strftime('%d.%m.%Y %H:%M') if question.answered_at else 'Дата не указана'}\n\n"
+                f"<i>Этот диалог был завершен и больше не доступен для общения.</i>",
+                parse_mode="HTML"
+            )
             return
 
         # Если вопрос еще не взят, берем его
@@ -1269,6 +1286,37 @@ async def process_answer_text(
         )
         await message.answer("❌ Ошибка при отправке сообщения")
         await state.clear()
+
+@router.callback_query(F.data == "ask_new_question")
+async def ask_new_question_callback(
+    callback: CallbackQuery,
+    state: FSMContext,
+    is_pharmacist: bool
+):
+    """Начать новый вопрос после завершенного диалога"""
+    if is_pharmacist:
+        await callback.answer(
+            "👨‍⚕️ Вы фармацевт. Используйте /questions для ответов.",
+            show_alert=True
+        )
+        return
+
+    await state.clear()
+    await state.set_state(UserQAStates.waiting_for_question)
+
+    await callback.message.answer(
+        "📝 <b>ЗАДАТЬ НОВЫЙ ВОПРОС</b>\n\n"
+        "Просто напишите ваш вопрос в чат:\n\n"
+        "<i>Опишите вашу проблему подробно, чтобы фармацевт мог дать точный ответ.</i>\n\n"
+        "💡 <b>Примеры вопросов:</b>\n"
+        "• Что можно принимать от головной боли?\n"
+        "• Нужна консультация по детским витаминам\n"
+        "• Помогите подобрать аналоги лекарства\n\n"
+        "Для отмены используйте /cancel",
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
 
 @router.callback_query(F.data.startswith("clarification_answer_"))
 async def answer_clarification_callback(
