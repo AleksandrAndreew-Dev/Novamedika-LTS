@@ -56,7 +56,7 @@ def get_pharmacist_keyboard():
             ],
             [
                 InlineKeyboardButton(
-                    text="📋 Смотреть вопросы", callback_data="view_questions"
+                    text="📋 Мои вопросы", callback_data="my_questions"
                 )
             ],
             [
