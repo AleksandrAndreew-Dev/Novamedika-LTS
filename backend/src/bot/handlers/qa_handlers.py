@@ -895,15 +895,15 @@ async def answer_question_callback(
         await callback.answer("❌ Ошибка при обработке запроса", show_alert=True)
 
 
-@router.message(QAStates.in_dialog_with_user)
-async def continue_dialog_message(
+@router.message(QAStates.in_dialog_with_user, F.text)
+async def handle_pharmacist_text_in_dialog(
     message: Message,
     state: FSMContext,
     db: AsyncSession,
     is_pharmacist: bool,
     pharmacist: Pharmacist,
 ):
-    """Продолжение диалога - показываем историю и кнопки"""
+    """Обработка текстовых сообщений фармацевта в диалоге - просто отправляет как ответ"""
     if not is_pharmacist or not pharmacist:
         await message.answer("❌ Эта функция доступна только фармацевтам")
         await state.clear()
@@ -918,6 +918,13 @@ async def continue_dialog_message(
             await state.clear()
             return
 
+        # Автоматически переводим фармацевта в онлайн при активности
+        if not pharmacist.is_online:
+            pharmacist.is_online = True
+            pharmacist.last_seen = get_utc_now_naive()
+            await db.commit()
+
+        # Получаем вопрос
         result = await db.execute(
             select(Question).where(Question.uuid == question_uuid)
         )
@@ -928,27 +935,146 @@ async def continue_dialog_message(
             await state.clear()
             return
 
-        # Получаем полную историю диалога
-        history_text, _ = await DialogService.format_dialog_history_for_display(
-            question.uuid, db
+        # Создаем ответ/сообщение
+        answer = Answer(
+            text=message.text,
+            question_id=question.uuid,
+            pharmacist_id=pharmacist.uuid,
+            created_at=get_utc_now_naive(),
         )
 
-        # Показываем историю С КНОПКАМИ
+        db.add(answer)
+
+        if question.status != "completed":
+            question.status = "answered"
+        question.answered_at = get_utc_now_naive()
+        question.answered_by = pharmacist.uuid
+
+        # ✅ Добавляем сообщение в историю диалога
+        dialog_message = await DialogService.add_message(
+            db=db,
+            question_id=question.uuid,
+            sender_type="pharmacist",
+            sender_id=pharmacist.uuid,
+            message_type="answer",
+            text=message.text,
+        )
+
+        await db.commit()
+
+        # ✅ Получаем полную историю диалога для отправки
+        history_text, file_ids = await DialogService.format_dialog_history_for_display(
+            question.uuid, db, limit=20
+        )
+
+        # Уведомляем пользователя
+        user_result = await db.execute(
+            select(User).where(User.uuid == question.user_id)
+        )
+        user = user_result.scalar_one_or_none()
+
+        if user and user.telegram_id:
+            try:
+                # Формируем информацию о фармацевте с ФИО
+                pharmacy_info = pharmacist.pharmacy_info or {}
+                chain = pharmacy_info.get("chain", "Не указана")
+                number = pharmacy_info.get("number", "Не указан")
+                role = pharmacy_info.get("role", "Фармацевт")
+
+                # Получаем ФИО фармацевта
+                first_name = pharmacy_info.get("first_name", "")
+                last_name = pharmacy_info.get("last_name", "")
+                patronymic = pharmacy_info.get("patronymic", "")
+
+                # Формируем строку с ФИО
+                pharmacist_name_parts = []
+                if last_name:
+                    pharmacist_name_parts.append(last_name)
+                if first_name:
+                    pharmacist_name_parts.append(first_name)
+                if patronymic:
+                    pharmacist_name_parts.append(patronymic)
+
+                pharmacist_name = (
+                    " ".join(pharmacist_name_parts)
+                    if pharmacist_name_parts
+                    else "Фармацевт"
+                )
+
+                pharmacist_info_text = f"{pharmacist_name}"
+                if chain and number:
+                    pharmacist_info_text += f", {chain}, аптека №{number}"
+                if role and role != "Фармацевт":
+                    pharmacist_info_text += f" ({role})"
+
+                # Формируем полное сообщение с историей
+                full_message = (
+                    f"💬 <b>ОТВЕТ ФАРМАЦЕВТА</b>\n\n"
+                    f"{history_text}\n\n"
+                    f"👨‍⚕️ <b>Фармацевт:</b> {pharmacist_info_text}"
+                )
+
+                # Отправляем сообщение пользователю С КНОПКАМИ
+                await message.bot.send_message(
+                    chat_id=user.telegram_id,
+                    text=full_message,
+                    parse_mode="HTML",
+                )
+
+                logger.info(f"Message sent to user {user.telegram_id}")
+
+            except Exception as e:
+                logger.error(f"Failed to send message to user {user.telegram_id}: {e}", exc_info=True)
+
+        # ✅ Показываем фармацевту полную историю диалога С КНОПКАМИ
         await message.answer(
-            f"💬 <b>ТЕКУЩИЙ ДИАЛОГ</b>\n\n"
+            f"💬 <b>ВЫ ОТПРАВИЛИ ОТВЕТ</b>\n\n"
             f"{history_text}\n\n"
-            f"✍️ <b>Напишите ваш следующий ответ:</b>",
+            f"<b>Доступные действия:</b>",
             parse_mode="HTML",
             reply_markup=make_pharmacist_dialog_keyboard(question.uuid)
         )
 
-        # Сохраняем текст для ответа
-        await state.update_data(answer_text=message.text)
-        await state.set_state(QAStates.waiting_for_answer)
+        # Оставляем фармацевта в диалоге
+        await state.set_state(QAStates.in_dialog_with_user)
+
+        # Отправляем пользователю уведомление о возможности продолжить диалог
+        user_dialog_keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="✍️ Ответить фармацевту",
+                        callback_data=f"continue_user_dialog_{question.uuid}"
+                    ),
+                    InlineKeyboardButton(
+                        text="📸 Отправить фото",
+                        callback_data=f"send_prescription_photo_{question.uuid}"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="✅ Завершить консультацию",
+                        callback_data=f"end_dialog_{question.uuid}"
+                    )
+                ]
+            ]
+        )
+
+        if user and user.telegram_id:
+            await message.bot.send_message(
+                chat_id=user.telegram_id,
+                text="💬 <b>Вы можете продолжить общение с фармацевтом</b>\n\n"
+                    "Напишите ваше сообщение в чат или используйте кнопки ниже.",
+                parse_mode="HTML",
+                reply_markup=user_dialog_keyboard
+            )
 
     except Exception as e:
-        logger.error(f"Error continuing dialog: {e}")
-        await message.answer("❌ Ошибка при получении истории диалога")
+        logger.error(
+            f"Error in handle_pharmacist_text_in_dialog for pharmacist {message.from_user.id}: {e}",
+            exc_info=True,
+        )
+        await message.answer("❌ Ошибка при отправке сообщения")
         await state.clear()
 
 @router.message(QAStates.waiting_for_answer)
@@ -1087,7 +1213,7 @@ async def process_answer_text(
                     chat_id=user.telegram_id,
                     text=full_message,
                     parse_mode="HTML",
-                    
+
                 )
 
                 logger.info(f"Message sent to user {user.telegram_id}")
