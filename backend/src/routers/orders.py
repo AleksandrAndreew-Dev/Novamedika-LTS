@@ -228,7 +228,6 @@ async def get_orders(
 ):
     """Получение списка заказов с фильтрацией и информацией о продукте"""
     try:
-        # ПРОСТОЙ ЗАПРОС - данные уже кэшированы в booking_orders
         query = select(BookingOrder)
 
         if pharmacy_id:
@@ -241,7 +240,37 @@ async def get_orders(
         result = await db.execute(query)
         orders = result.scalars().all()
 
-        return orders  # BookingOrderResponse автоматически сериализует кэшированные поля
+        # Получаем информацию об аптеках
+        response_orders = []
+        for order in orders:
+            # Получаем информацию об аптеке
+            pharmacy_result = await db.execute(
+                select(Pharmacy).where(Pharmacy.uuid == order.pharmacy_id)
+            )
+            pharmacy = pharmacy_result.scalar_one_or_none()
+
+            order_dict = {
+                "uuid": str(order.uuid),
+                "status": order.status,
+                "created_at": order.created_at.isoformat() if order.created_at else None,
+                "customer_name": order.customer_name,
+                "customer_phone": order.customer_phone,
+                "telegram_id": order.telegram_id,
+                "product_name": order.product_name,
+                "product_form": order.product_form,
+                "product_manufacturer": order.product_manufacturer,
+                "product_country": order.product_country,
+                "product_price": order.product_price,
+                "product_serial": order.product_serial,
+                "quantity": order.quantity,
+                # Добавляем информацию об аптеке
+                "pharmacy_opening_hours": pharmacy.opening_hours if pharmacy else None,
+                "pharmacy_address": pharmacy.address if pharmacy else None,
+                "pharmacy_phone": pharmacy.phone if pharmacy else None,
+            }
+            response_orders.append(order_dict)
+
+        return response_orders
 
     except Exception as e:
         logger.exception("Error fetching orders")
@@ -549,7 +578,7 @@ async def get_pharmacy_orders(
         if not pharmacy:
             raise HTTPException(status_code=404, detail="Pharmacy not found")
 
-        # Получаем заказы - данные уже кэшированы
+        # Получаем заказы
         query = select(BookingOrder).where(BookingOrder.pharmacy_id == pharmacy_id)
 
         if status:
@@ -560,7 +589,31 @@ async def get_pharmacy_orders(
         result = await db.execute(query)
         orders = result.scalars().all()
 
-        return orders  # Все кэшированные данные уже в модели
+        # Создаем модифицированный ответ с информацией об аптеке
+        response_orders = []
+        for order in orders:
+            order_dict = {
+                "uuid": str(order.uuid),
+                "status": order.status,
+                "created_at": order.created_at.isoformat() if order.created_at else None,
+                "customer_name": order.customer_name,
+                "customer_phone": order.customer_phone,
+                "telegram_id": order.telegram_id,
+                "product_name": order.product_name,
+                "product_form": order.product_form,
+                "product_manufacturer": order.product_manufacturer,
+                "product_country": order.product_country,
+                "product_price": order.product_price,
+                "product_serial": order.product_serial,
+                "quantity": order.quantity,
+                # Добавляем информацию об аптеке
+                "pharmacy_opening_hours": pharmacy.opening_hours if pharmacy else None,
+                "pharmacy_address": pharmacy.address if pharmacy else None,
+                "pharmacy_phone": pharmacy.phone if pharmacy else None,
+            }
+            response_orders.append(order_dict)
+
+        return response_orders
 
     except HTTPException:
         raise
