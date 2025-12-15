@@ -28,7 +28,7 @@ async def complete_dialog_service(
     callback: CallbackQuery = None,
     message: Message = None
 ) -> bool:
-    """Сервис завершения диалога - УЛУЧШЕННАЯ ВЕРСИЯ"""
+    """Сервис завершения диалога - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
     try:
         # Получаем вопрос с информацией о фармацевте
         result = await db.execute(
@@ -45,6 +45,17 @@ async def complete_dialog_service(
                 await message.answer("❌ Вопрос не найден")
             return False
 
+        # ✅ ВАЖНО: Сохраняем фармацевта ДО обнуления
+        pharmacist_to_notify = None
+        if initiator_type == "user" and question.taken_by:
+            # Получаем фармацевта ПЕРЕД обнулением
+            pharmacist_result = await db.execute(
+                select(Pharmacist)
+                .options(selectinload(Pharmacist.user))
+                .where(Pharmacist.uuid == question.taken_by)
+            )
+            pharmacist_to_notify = pharmacist_result.scalar_one_or_none()
+
         # ✅ УВЕДОМЛЕНИЕ: Если диалог уже завершен
         if question.status == "completed":
             if callback:
@@ -52,25 +63,6 @@ async def complete_dialog_service(
                     "✅ Этот диалог уже завершен ранее",
                     show_alert=True
                 )
-
-                # Показываем информацию о завершении
-                if initiator_type == "pharmacist":
-                    await callback.message.answer(
-                        f"🎯 <b>ДИАЛОГ УЖЕ ЗАВЕРШЕН</b>\n\n"
-                        f"❓ Вопрос: {question.text[:200]}...\n\n"
-                        f"⏰ Завершен: {question.answered_at.strftime('%d.%m.%Y %H:%M') if question.answered_at else 'Дата не указана'}\n\n"
-                        f"📋 Используйте /questions для новых вопросов",
-                        parse_mode="HTML"
-                    )
-                else:
-                    await callback.message.answer(
-                        f"🎯 <b>ВАША КОНСУЛЬТАЦИЯ УЖЕ ЗАВЕРШЕНА</b>\n\n"
-                        f"❓ Вопрос: {question.text[:200]}...\n\n"
-                        f"⏰ Завершена: {question.answered_at.strftime('%d.%m.%Y %H:%М') if question.answered_at else 'Дата не указана'}\n\n"
-                        f"✨ Вы можете задать новый вопрос:",
-                        parse_mode="HTML",
-                        reply_markup=make_completed_dialog_keyboard()
-                    )
             return False
 
         # ✅ БЛОКИРОВКА: Запрещаем дальнейшие изменения после завершения
@@ -91,76 +83,49 @@ async def complete_dialog_service(
 
         await db.commit()
 
+        # ✅ Теперь уведомляем фармацевта (если есть)
+        if initiator_type == "user" and pharmacist_to_notify and pharmacist_to_notify.user:
+            try:
+                # Формируем имя пользователя
+                user_name = initiator.first_name or "Пользователь"
+                if initiator.last_name:
+                    user_name = f"{initiator.first_name} {initiator.last_name}"
 
-        pharmacist_to_notify = None
-        if initiator_type == "user":
-            # Если завершает пользователь, уведомляем фармацевта
-            if question.taken_by:
-                pharmacist_result = await db.execute(
-                    select(Pharmacist)
-                    .options(selectinload(Pharmacist.user))
-                    .where(Pharmacist.uuid == question.taken_by)
+                # Формируем имя фармацевта
+                pharmacist_name = "Фармацевт"
+                if pharmacist_to_notify.pharmacy_info:
+                    first_name = pharmacist_to_notify.pharmacy_info.get("first_name", "")
+                    last_name = pharmacist_to_notify.pharmacy_info.get("last_name", "")
+                    patronymic = pharmacist_to_notify.pharmacy_info.get("patronymic", "")
+
+                    name_parts = []
+                    if last_name:
+                        name_parts.append(last_name)
+                    if first_name:
+                        name_parts.append(first_name)
+                    if patronymic:
+                        name_parts.append(patronymic)
+
+                    pharmacist_name = " ".join(name_parts) if name_parts else "Фармацевт"
+
+                # Отправляем уведомление фармацевту
+                await message.bot.send_message(
+                    chat_id=pharmacist_to_notify.user.telegram_id,
+                    text=(
+                        f"🎯 <b>ПОЛЬЗОВАТЕЛЬ ЗАВЕРШИЛ КОНСУЛЬТАЦИЮ</b>\n\n"
+                        f"👤 <b>Пользователь:</b> {user_name}\n"
+                        f"📅 <b>Время:</b> {get_utc_now_naive().strftime('%d.%m.%Y %H:%M')}\n"
+                        f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"❓ <b>Вопрос:</b>\n"
+                        f"<i>{question.text[:200]}{'...' if len(question.text) > 200 else ''}</i>\n\n"
+                        f"✅ <b>Диалог завершен по инициативе пользователя</b>\n\n"
+                        f"📋 Используйте /questions для новых вопросов"
+                    ),
+                    parse_mode="HTML"
                 )
-                pharmacist_to_notify = pharmacist_result.scalar_one_or_none()
-
-        # Формируем имя фармацевта для сообщений
-        pharmacist_name = "Фармацевт"
-        if question.taken_by:
-            pharmacist_result = await db.execute(
-                select(Pharmacist)
-                .where(Pharmacist.uuid == question.taken_by)
-            )
-            pharmacist = pharmacist_result.scalar_one_or_none()
-            if pharmacist and pharmacist.pharmacy_info:
-                first_name = pharmacist.pharmacy_info.get("first_name", "")
-                last_name = pharmacist.pharmacy_info.get("last_name", "")
-                patronymic = pharmacist.pharmacy_info.get("patronymic", "")
-
-                name_parts = []
-                if last_name:
-                    name_parts.append(last_name)
-                if first_name:
-                    name_parts.append(first_name)
-                if patronymic:
-                    name_parts.append(patronymic)
-
-                pharmacist_name = " ".join(name_parts) if name_parts else "Фармацевт"
-
-        # Уведомляем другую сторону
-        if initiator_type == "pharmacist" and question.user:
-            # Фармацевт завершил - уведомляем пользователя
-            await message.bot.send_message(
-                chat_id=question.user.telegram_id,
-                text=(
-                    "🎯 <b>КОНСУЛЬТАЦИЯ ЗАВЕРШЕНА</b>\n\n"
-                    f"👨‍⚕️ <b>Фармацевт:</b> {pharmacist_name}\n"
-                    f"📅 <b>Время:</b> {get_utc_now_naive().strftime('%d.%m.%Y %H:%M')}\n"
-                    "━━━━━━━━━━━━━━━━━━━━\n\n"
-                    f"❓ <b>Ваш вопрос:</b>\n"
-                    f"<i>{question.text[:200]}{'...' if len(question.text) > 200 else ''}</i>\n\n"
-                    "✅ <b>Консультация успешно завершена!</b>\n\n"
-                    "✨ <b>Есть еще вопросы?</b> Используйте кнопки ниже:"
-                ),
-                parse_mode="HTML",
-                reply_markup=make_completed_dialog_keyboard()
-            )
-
-        elif initiator_type == "user" and pharmacist_to_notify and pharmacist_to_notify.user:
-            # Пользователь завершил - уведомляем фармацевта
-            await message.bot.send_message(
-                chat_id=pharmacist_to_notify.user.telegram_id,
-                text=(
-                    "🎯 <b>ПОЛЬЗОВАТЕЛЬ ЗАВЕРШИЛ ДИАЛОГ</b>\n\n"
-                    f"👤 <b>Пользователь:</b> {initiator.first_name or 'Пользователь'}\n"
-                    f"📅 <b>Время:</b> {get_utc_now_naive().strftime('%d.%m.%Y %H:%M')}\n"
-                    "━━━━━━━━━━━━━━━━━━━━\n\n"
-                    f"❓ <b>Вопрос:</b>\n"
-                    f"<i>{question.text[:200]}{'...' if len(question.text) > 200 else ''}</i>\n\n"
-                    "✅ <b>Диалог завершен по инициативе пользователя</b>\n\n"
-                    "📋 Используйте /questions для новых вопросов"
-                ),
-                parse_mode="HTML"
-            )
+                logger.info(f"Уведомление о завершении отправлено фармацевту {pharmacist_to_notify.user.telegram_id}")
+            except Exception as e:
+                logger.error(f"Ошибка при отправке уведомления фармацевту: {e}")
 
         return True
 
