@@ -528,6 +528,8 @@ async def update_pharmacy_config(request: Request, db: AsyncSession = Depends(ge
     return {"status": "updated"}
 
 
+# orders.py - исправленный код функции get_pharmacy_orders
+
 @router.get("/pharmacies/{pharmacy_id}/orders", response_model=List[BookingOrderResponse])
 async def get_pharmacy_orders(
     pharmacy_id: uuid.UUID,
@@ -578,7 +580,9 @@ async def get_pharmacy_orders(
         if not pharmacy:
             raise HTTPException(status_code=404, detail="Pharmacy not found")
 
-        # Получаем заказы
+        # Получаем заказы с загрузкой отношений
+        from sqlalchemy.orm import selectinload
+
         query = select(BookingOrder).where(BookingOrder.pharmacy_id == pharmacy_id)
 
         if status:
@@ -589,24 +593,40 @@ async def get_pharmacy_orders(
         result = await db.execute(query)
         orders = result.scalars().all()
 
-        # Создаем модифицированный ответ с информацией об аптеке
+        # Создаем правильный ответ с ВСЕМИ полями, которые ожидает схема
         response_orders = []
         for order in orders:
+            # Используем стандартную сериализацию через Pydantic
+            # Преобразуем order в словарь с ВСЕМИ полями
             order_dict = {
-                "uuid": str(order.uuid),
+                # Обязательные поля из схемы
+                "uuid": order.uuid,
+                "external_order_id": order.external_order_id,  # Может быть None
+                "pharmacy_id": order.pharmacy_id,
+                "product_id": order.product_id,  # Может быть None
                 "status": order.status,
-                "created_at": order.created_at.isoformat() if order.created_at else None,
+                "created_at": order.created_at,
+                "updated_at": order.updated_at,
+
+                # Поля из BookingOrderBase
+                "quantity": order.quantity,
                 "customer_name": order.customer_name,
                 "customer_phone": order.customer_phone,
                 "telegram_id": order.telegram_id,
+
+                # Кэшированные данные продукта
                 "product_name": order.product_name,
                 "product_form": order.product_form,
                 "product_manufacturer": order.product_manufacturer,
                 "product_country": order.product_country,
-                "product_price": order.product_price,
+                "product_price": float(order.product_price) if order.product_price else None,
                 "product_serial": order.product_serial,
-                "quantity": order.quantity,
-                # Добавляем информацию об аптеке
+
+                # Поля для отмены
+                "cancelled_at": order.cancelled_at,
+                "cancellation_reason": order.cancellation_reason,
+
+                # Дополнительные поля для аптеки (для C++ клиента)
                 "pharmacy_opening_hours": pharmacy.opening_hours if pharmacy else None,
                 "pharmacy_address": pharmacy.address if pharmacy else None,
                 "pharmacy_phone": pharmacy.phone if pharmacy else None,
