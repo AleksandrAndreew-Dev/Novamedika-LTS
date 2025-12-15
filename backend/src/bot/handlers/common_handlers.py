@@ -426,6 +426,35 @@ async def back_to_main_callback(
     await callback.answer()
 
 
+@router.callback_query(F.data == "back_to_pharmacist_main")
+async def back_to_pharmacist_main_callback(
+    callback: CallbackQuery,
+    state: FSMContext,
+    is_pharmacist: bool,
+    user: User,
+    pharmacist: object
+):
+    """Возврат в панель фармацевта"""
+    await state.clear()
+
+    if not is_pharmacist or not pharmacist:
+        await callback.answer("❌ Вы не фармацевт", show_alert=True)
+        return
+
+    status_text = "🟢 Онлайн" if pharmacist.is_online else "🔴 Офлайн"
+    pharmacy_name = pharmacist.pharmacy_info.get("name", "Не указана")
+
+    await callback.message.answer(
+        f"👨‍⚕️ <b>Панель фармацевта</b>\n\n"
+        f"🏥 {pharmacy_name}\n"
+        f"📊 Статус: {status_text}\n\n"
+        "Выберите действие:",
+        parse_mode="HTML",
+        reply_markup=get_pharmacist_keyboard(),
+    )
+    await callback.answer()
+
+
 @router.callback_query(F.data == "questions_stats")
 async def questions_stats_callback(
     callback: CallbackQuery, db: AsyncSession, user: User, is_pharmacist: bool

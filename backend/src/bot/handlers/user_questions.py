@@ -21,7 +21,9 @@ from bot.services.notification_service import notify_about_clarification
 import logging
 from datetime import datetime, timedelta
 from utils.time_utils import get_utc_now_naive
+from utils.get_utils import get_all_pharmacist_questions
 from bot.services.dialog_service import DialogService
+from bot.keyboards.pagiantion_keyboard import make_questions_pagination_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -89,82 +91,7 @@ async def format_questions_list(
     return message_text
 
 
-def make_questions_pagination_keyboard(
-    questions: List[Question],
-    page: int = 0,
-    per_page: int = 10,
-    include_back: bool = True,
-) -> InlineKeyboardMarkup:
-    """Создать клавиатуру пагинации для списка вопросов"""
-    total = len(questions)
-    total_pages = (total + per_page - 1) // per_page
-    start_idx = page * per_page
-    end_idx = min(start_idx + per_page, total)
 
-    keyboard = []
-
-    # Кнопки для вопросов на текущей странице
-    for i, question in enumerate(questions[start_idx:end_idx], start_idx):
-        question_preview = (
-            question.text[:40] + "..." if len(question.text) > 40 else question.text
-        )
-
-        keyboard.append(
-            [
-                InlineKeyboardButton(
-                    text=f"📋 Вопрос #{i+1}: {question_preview}",
-                    callback_data=f"view_full_history_{question.uuid}",
-                )
-            ]
-        )
-
-    # Кнопки пагинации
-    pagination_buttons = []
-
-    if page > 0:
-        pagination_buttons.append(
-            InlineKeyboardButton(
-                text="◀️ Назад", callback_data=f"questions_page_{page-1}"
-            )
-        )
-
-    pagination_buttons.append(
-        InlineKeyboardButton(
-            text=f"{page+1}/{total_pages}", callback_data="current_page"
-        )
-    )
-
-    if page < total_pages - 1:
-        pagination_buttons.append(
-            InlineKeyboardButton(
-                text="Вперед ▶️", callback_data=f"questions_page_{page+1}"
-            )
-        )
-
-    if pagination_buttons:
-        keyboard.append(pagination_buttons)
-
-    # Кнопки фильтрации
-    filter_buttons = []
-    filter_buttons.append(
-        InlineKeyboardButton(text="🎯 Активные", callback_data="filter_active")
-    )
-    filter_buttons.append(
-        InlineKeyboardButton(text="✅ Завершенные", callback_data="filter_completed")
-    )
-    keyboard.append(filter_buttons)
-
-    # Кнопка возврата
-    if include_back:
-        keyboard.append(
-            [
-                InlineKeyboardButton(
-                    text="🔙 В главное меню", callback_data="back_to_main"
-                )
-            ]
-        )
-
-    return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
 @router.message(Command("ask"))
@@ -189,7 +116,7 @@ async def cmd_my_questions(
     user: User,
     is_pharmacist: bool,
 ):
-    """Показать все вопросы пользователя с пагинацией"""
+    """Показать все вопросы пользователя или фармацевта с пагинацией"""
     if isinstance(update, CallbackQuery):
         message = update.message
         from_user = update.from_user
@@ -201,58 +128,41 @@ async def cmd_my_questions(
 
     try:
         if is_pharmacist:
-            # Для фармацевтов - активные диалоги (оставляем старую логику)
-            result = await db.execute(
-                select(Question)
-                .where(
-                    Question.taken_by == user.uuid,
-                    Question.status.in_(["in_progress", "answered"]),
-                )
-                .order_by(Question.taken_at.desc())
-            )
-            questions = result.scalars().all()
+            # Для фармацевтов - все вопросы, которые они взяли
+            from bot.handlers.common_handlers import get_pharmacist_keyboard
+            from db.qa_models import Pharmacist
 
-            if not questions:
-                await message.answer(
-                    "📭 У вас нет активных диалогов.\n\n"
-                    "Используйте /questions для просмотра новых вопросов."
-                )
+            # Получаем объект фармацевта
+            result = await db.execute(
+                select(Pharmacist).where(Pharmacist.user_id == user.uuid)
+            )
+            pharmacist = result.scalar_one_or_none()
+
+            if not pharmacist:
+                await message.answer("❌ Вы не найдены как фармацевт")
                 if is_callback:
                     await update.answer()
                 return
 
-            # Показываем фармацевтам только активные диалоги
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[])
+            questions = await get_all_pharmacist_questions(db, pharmacist, limit=50)
+            page = 0  # Начинаем с первой страницы
 
-            for i, question in enumerate(questions[:10], 1):
-                status_icon = "💬" if question.status == "answered" else "🔄"
-                question_preview = (
-                    question.text[:50] + "..."
-                    if len(question.text) > 50
-                    else question.text
-                )
-
-                keyboard.inline_keyboard.append(
-                    [
-                        InlineKeyboardButton(
-                            text=f"{status_icon} Диалог #{i}: {question_preview}",
-                            callback_data=f"view_dialog_{question.uuid}",
-                        )
-                    ]
-                )
+            message_text = await format_questions_list(questions, page)
+            reply_markup = make_questions_pagination_keyboard(
+                questions,
+                page,
+                is_pharmacist=True,  # Указываем что это фармацевт
+                pharmacist_id=str(pharmacist.uuid)
+            )
 
             await message.answer(
-                f"💬 <b>ВАШИ АКТИВНЫЕ ДИАЛОГИ</b>\n\n"
-                f"Всего активных диалогов: {len(questions)}\n\n"
-                f"Выберите диалог для просмотра:",
-                parse_mode="HTML",
-                reply_markup=keyboard,
+                message_text, parse_mode="HTML", reply_markup=reply_markup
             )
 
         else:
-            # ДЛЯ ПОЛЬЗОВАТЕЛЕЙ - НОВАЯ ЛОГИКА
+            # ДЛЯ ПОЛЬЗОВАТЕЛЕЙ - существующая логика
             questions = await get_all_user_questions(db, user, limit=50)
-            page = 0  # Начинаем с первой страницы
+            page = 0
 
             message_text = await format_questions_list(questions, page)
             reply_markup = make_questions_pagination_keyboard(questions, page)
@@ -524,29 +434,49 @@ async def view_full_history_callback(
         await callback.answer("❌ Ошибка при загрузке истории", show_alert=True)
 
 
-# ДОБАВЛЯЕМ ОБРАБОТЧИКИ ПАГИНАЦИИ И ФИЛЬТРАЦИИ
 @router.callback_query(F.data.startswith("questions_page_"))
 async def questions_page_callback(
-    callback: CallbackQuery, db: AsyncSession, user: User, is_pharmacist: bool
+    callback: CallbackQuery,
+    db: AsyncSession,
+    user: User,
+    is_pharmacist: bool
 ):
     """Обработка переключения страниц"""
-    if is_pharmacist:
-        await callback.answer(
-            "❌ Эта функция доступна только пользователям", show_alert=True
-        )
-        return
-
     page = int(callback.data.replace("questions_page_", ""))
 
     try:
-        questions = await get_all_user_questions(db, user, limit=50)
+        if is_pharmacist:
+            # Для фармацевтов
+            from db.qa_models import Pharmacist
+            result = await db.execute(
+                select(Pharmacist).where(Pharmacist.user_id == user.uuid)
+            )
+            pharmacist = result.scalar_one_or_none()
+
+            if not pharmacist:
+                await callback.answer("❌ Вы не найдены как фармацевт", show_alert=True)
+                return
+
+            questions = await get_all_pharmacist_questions(db, pharmacist, limit=50)
+            is_pharm = True
+            pharmacist_id = str(pharmacist.uuid)
+        else:
+            # Для пользователей
+            questions = await get_all_user_questions(db, user, limit=50)
+            is_pharm = False
+            pharmacist_id = None
 
         if not questions:
             await callback.answer("📭 У вас пока нет вопросов", show_alert=True)
             return
 
         message_text = await format_questions_list(questions, page)
-        reply_markup = make_questions_pagination_keyboard(questions, page)
+        reply_markup = make_questions_pagination_keyboard(
+            questions,
+            page,
+            is_pharmacist=is_pharm,
+            pharmacist_id=pharmacist_id
+        )
 
         await callback.message.edit_text(
             message_text, parse_mode="HTML", reply_markup=reply_markup
@@ -564,18 +494,36 @@ async def back_to_questions_callback(
     callback: CallbackQuery, db: AsyncSession, user: User, is_pharmacist: bool
 ):
     """Возврат к списку вопросов"""
-    if is_pharmacist:
-        await callback.answer(
-            "❌ Эта функция доступна только пользователям", show_alert=True
-        )
-        return
-
     try:
-        questions = await get_all_user_questions(db, user, limit=50)
-        page = 0
+        if is_pharmacist:
+            # Для фармацевтов
+            from db.qa_models import Pharmacist
+            result = await db.execute(
+                select(Pharmacist).where(Pharmacist.user_id == user.uuid)
+            )
+            pharmacist = result.scalar_one_or_none()
 
+            if not pharmacist:
+                await callback.answer("❌ Вы не найдены как фармацевт", show_alert=True)
+                return
+
+            questions = await get_all_pharmacist_questions(db, pharmacist, limit=50)
+            is_pharm = True
+            pharmacist_id = str(pharmacist.uuid)
+        else:
+            # Для пользователей
+            questions = await get_all_user_questions(db, user, limit=50)
+            is_pharm = False
+            pharmacist_id = None
+
+        page = 0
         message_text = await format_questions_list(questions, page)
-        reply_markup = make_questions_pagination_keyboard(questions, page)
+        reply_markup = make_questions_pagination_keyboard(
+            questions,
+            page,
+            is_pharmacist=is_pharm,
+            pharmacist_id=pharmacist_id
+        )
 
         await callback.message.edit_text(
             message_text, parse_mode="HTML", reply_markup=reply_markup
