@@ -83,6 +83,29 @@ async def complete_dialog_service(
 
         await db.commit()
 
+        # Минимальное исправление для уведомления пользователя
+        if initiator_type == "pharmacist" and question.user and question.user.telegram_id:
+            try:
+                bot = None
+                if message:
+                    bot = message.bot
+                elif callback:
+                    bot = callback.bot
+
+                if bot:
+                    await bot.send_message(
+                        chat_id=question.user.telegram_id,
+                        text=(
+                            f"✅ <b>Ваша консультация завершена</b>\n\n"
+                            f"❓ Ваш вопрос: {question.text[:150]}...\n\n"
+                            f"👨‍⚕️ Фармацевт завершил консультацию.\n\n"
+                            f"💡 Если у вас есть новые вопросы, просто напишите их в чат."
+                        ),
+                        parse_mode="HTML"
+                    )
+            except Exception as e:
+                logger.error(f"Ошибка уведомления пользователя: {e}")
+
         # ✅ Теперь уведомляем фармацевта (если есть)
         if initiator_type == "user" and pharmacist_to_notify and pharmacist_to_notify.user:
             try:
