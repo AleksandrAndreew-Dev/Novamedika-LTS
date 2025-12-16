@@ -2,9 +2,8 @@
 
 import uuid
 import logging
-
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta  # Добавлен timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
@@ -356,7 +355,8 @@ async def update_order_status(
 
 @router.post("/pharmacies/register")
 async def register_pharmacy(
-    config_data: PharmacyAPIConfigCreate, db: AsyncSession = Depends(get_db)
+    config_data: PharmacyAPIConfigCreate,
+    db: AsyncSession = Depends(get_db)
 ):
     """Регистрация новой аптеки - только токен для pull-модели"""
     try:
@@ -821,6 +821,10 @@ async def send_order_status_notification(
 
         # Форматируем сообщение в зависимости от статуса
         if new_status == "confirmed":
+            # Вычисляем следующий день
+            tomorrow = datetime.now() + timedelta(days=1)
+            tomorrow_str = tomorrow.strftime("%d.%m.%Y")
+
             message_text = (
                 "✅ **Ваш заказ подтвержден!**\n\n"
                 f"📦 Номер заказа: `{order.uuid}`\n"
@@ -841,7 +845,8 @@ async def send_order_status_notification(
             else:
                 message_text += "\n"
 
-            message_text += "Можете забирать ваш заказ! 🎉"
+            # Заменяем строку с информацией о времени получения
+            message_text += f"Вы можете забрать заказ до 12:00 {tomorrow_str}. 🎉"
 
         elif new_status == "cancelled":
             message_text = (
