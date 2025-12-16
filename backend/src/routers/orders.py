@@ -764,6 +764,16 @@ async def get_pharmacy_number(pharmacy_id: uuid.UUID, db: AsyncSession) -> str:
         logger.error(f"Error getting pharmacy number for {pharmacy_id}: {e}")
         return ""
 
+async def get_pharmacy_opening_hours(pharmacy_id: uuid.UUID, db: AsyncSession) -> str:
+    """Получить время работы аптеки - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+    try:
+        result = await db.execute(select(Pharmacy.opening_hours).where(Pharmacy.uuid == pharmacy_id))
+        opening_hours = result.scalar_one_or_none()
+        return opening_hours if opening_hours else "Не указано"
+    except Exception as e:
+        logger.error(f"Error getting pharmacy opening hours for {pharmacy_id}: {e}")
+        return "Не указано"
+
 async def send_order_status_notification(
     order: BookingOrder, old_status: str, new_status: str, db: AsyncSession, comment: str = ""
 ):
@@ -790,6 +800,7 @@ async def send_order_status_notification(
         pharmacy_number = await get_pharmacy_number(order.pharmacy_id, db)
         pharmacy_phone = await get_pharmacy_phone(order.pharmacy_id, db)
         pharmacy_address = await get_pharmacy_address(order.pharmacy_id, db)
+        pharmacy_opening_hours = await get_pharmacy_opening_hours(order.pharmacy_id, db)  # НОВАЯ СТРОКА
         product_name = await get_product_name(order.product_id, db)
 
         # Получаем форму и цену товара из заказа
@@ -821,6 +832,7 @@ async def send_order_status_notification(
                 f"🏪 Аптека: {pharmacy_full_name}\n"
                 f"📍 Адрес: {pharmacy_address}\n"
                 f"📞 Телефон: {pharmacy_phone}\n"
+                f"🕐 Время работы: {pharmacy_opening_hours}\n"  # НОВАЯ СТРОКА
             )
 
             # Добавляем комментарий от аптеки, если есть
