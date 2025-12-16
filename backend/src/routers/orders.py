@@ -141,7 +141,7 @@ async def external_order_callback(request: Request, db: AsyncSession = Depends(g
     external_order_id = payload.get("external_order_id")
     local_order_id = payload.get("local_order_id")
     new_status = payload.get("status")
-    reason = payload.get("reason", "")
+    reason = payload.get("comment", "")
 
     if not new_status:
         raise HTTPException(status_code=400, detail="status field is required")
