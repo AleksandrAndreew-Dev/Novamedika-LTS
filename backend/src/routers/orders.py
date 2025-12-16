@@ -1,18 +1,19 @@
-# orders.py - исправленная версия импортов
+# orders.py - исправленная версия с передачей комментариев
 
 import uuid
 import logging
 import secrets
-from datetime import datetime, timedelta  # Добавлен timedelta
+from datetime import datetime, timedelta
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select
 
-from db.database import get_db, async_session_maker
+
+from db.database import get_db
 from db.models import Pharmacy, Product
-from db.booking_models import BookingOrder, PharmacyAPIConfig, SyncLog
+from db.booking_models import BookingOrder, PharmacyAPIConfig
 from db.booking_schemas import (
     BookingOrderCreate,
     BookingOrderResponse,
@@ -20,14 +21,17 @@ from db.booking_schemas import (
 )
 
 from db.qa_models import User
-from sqlalchemy import func
+from db.booking_schemas import OrderCancelRequest, OrderStatusUpdate
+
 
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-# orders.py (функция create_booking_order)
+
+
+
 
 @router.post("/orders", response_model=BookingOrderResponse)
 async def create_booking_order(
@@ -188,6 +192,13 @@ async def external_order_callback(request: Request, db: AsyncSession = Depends(g
         old_status = order.status
         order.status = new_status
 
+        # Сохраняем причину отмены, если статус cancelled и есть комментарий
+        if new_status == "cancelled" and reason:
+            order.cancellation_reason = reason
+            order.cancelled_at = datetime.utcnow()
+        elif new_status == "failed" and reason:
+            order.cancellation_reason = reason
+
         # Сохраняем external_order_id если его ранее не было
         if external_order_id and not order.external_order_id:
             order.external_order_id = external_order_id
@@ -209,6 +220,7 @@ async def external_order_callback(request: Request, db: AsyncSession = Depends(g
             "order_id": str(order.uuid),
             "previous_status": old_status,
             "new_status": new_status,
+            "comment": reason,
         }
 
     except Exception as e:
@@ -276,8 +288,6 @@ async def get_orders(
         raise HTTPException(status_code=500, detail="Error fetching orders")
 
 
-# orders.py (функция get_order_by_id)
-
 @router.get("/orders/{order_id}", response_model=BookingOrderResponse)
 async def get_order_by_id(
     order_id: uuid.UUID,
@@ -304,10 +314,15 @@ async def get_order_by_id(
 
 @router.patch("/orders/{order_id}")
 async def update_order_status(
-    order_id: uuid.UUID, status: str, db: AsyncSession = Depends(get_db)
+    order_id: uuid.UUID,
+    update_data: OrderStatusUpdate,
+    db: AsyncSession = Depends(get_db)
 ):
-    """Обновление статуса заказа"""
+    """Обновление статуса заказа с комментарием"""
     try:
+        status = update_data.status
+        comment = update_data.comment or ""
+
         # Валидация статуса
         valid_statuses = ["pending", "submitted", "confirmed", "cancelled", "failed"]
         if status not in valid_statuses:
@@ -326,16 +341,24 @@ async def update_order_status(
 
         old_status = order.status
         order.status = status
+
+        # Сохраняем комментарий в соответствующих полях
+        if status == "cancelled" and comment:
+            order.cancellation_reason = comment
+            order.cancelled_at = datetime.utcnow()
+        elif status == "failed" and comment:
+            order.cancellation_reason = comment
+
         order.updated_at = datetime.utcnow()
 
         await db.commit()
 
-        # Отправляем уведомление без комментария (пустая строка)
-        if old_status != status and status in ["confirmed", "cancelled", "failed"]:
-            await send_order_status_notification(order, old_status, status, db, "")
+        # Отправляем уведомление с комментарием
+        if old_status != status:
+            await send_order_status_notification(order, old_status, status, db, comment)
 
         logger.info(
-            f"Order {order_id} status manually updated from {old_status} to {status}"
+            f"Order {order_id} status manually updated from {old_status} to {status}. Comment: {comment}"
         )
 
         return {
@@ -343,6 +366,7 @@ async def update_order_status(
             "order_id": str(order_id),
             "previous_status": old_status,
             "new_status": status,
+            "comment": comment,
         }
 
     except HTTPException:
@@ -528,8 +552,6 @@ async def update_pharmacy_config(request: Request, db: AsyncSession = Depends(ge
     return {"status": "updated"}
 
 
-# orders.py - исправленный код функции get_pharmacy_orders
-
 @router.get("/pharmacies/{pharmacy_id}/orders", response_model=List[BookingOrderResponse])
 async def get_pharmacy_orders(
     pharmacy_id: uuid.UUID,
@@ -645,9 +667,10 @@ async def get_pharmacy_orders(
 @router.delete("/orders/{order_id}")
 async def cancel_order(
     order_id: uuid.UUID,
+    cancel_request: OrderCancelRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Отмена заказа"""
+    """Отмена заказа с причиной"""
     try:
         result = await db.execute(
             select(BookingOrder).where(BookingOrder.uuid == order_id)
@@ -662,20 +685,22 @@ async def cancel_order(
                 status_code=400, detail=f"Order is already {order.status}"
             )
 
-        # Если заказ уже подтвержден, может потребоваться дополнительная логика
-        if order.status == "confirmed":
-            # TODO: Уведомить внешнюю систему об отмене
-            pass
-
+        old_status = order.status
         order.status = "cancelled"
+        order.cancelled_at = datetime.utcnow()
+        order.cancellation_reason = cancel_request.reason if cancel_request.reason else "Отменено пользователем"
         order.updated_at = datetime.utcnow()
 
         await db.commit()
+
+        # Отправляем уведомление с причиной отмены
+        await send_order_status_notification(order, old_status, "cancelled", db, cancel_request.reason or "")
 
         return {
             "status": "cancelled",
             "order_id": str(order_id),
             "message": "Order successfully cancelled",
+            "reason": cancel_request.reason,
         }
 
     except HTTPException:
@@ -724,6 +749,7 @@ async def get_pharmacy_name(pharmacy_id: uuid.UUID, db: AsyncSession) -> str:
         logger.error(f"Error getting pharmacy name for {pharmacy_id}: {e}")
         return "Неизвестная аптека"
 
+
 async def get_pharmacy_phone(pharmacy_id: uuid.UUID, db: AsyncSession) -> str:
     """Получить телефон аптеки - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
     try:
@@ -733,6 +759,7 @@ async def get_pharmacy_phone(pharmacy_id: uuid.UUID, db: AsyncSession) -> str:
     except Exception as e:
         logger.error(f"Error getting pharmacy phone for {pharmacy_id}: {e}")
         return "Не указан"
+
 
 async def get_pharmacy_address(pharmacy_id: uuid.UUID, db: AsyncSession) -> str:
     """Получить адрес аптеки - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
@@ -744,6 +771,7 @@ async def get_pharmacy_address(pharmacy_id: uuid.UUID, db: AsyncSession) -> str:
         logger.error(f"Error getting pharmacy address for {pharmacy_id}: {e}")
         return "Адрес не указан"
 
+
 async def get_product_name(product_id: uuid.UUID, db: AsyncSession) -> str:
     """Получить название товара"""
     try:
@@ -753,6 +781,7 @@ async def get_product_name(product_id: uuid.UUID, db: AsyncSession) -> str:
     except Exception as e:
         logger.error(f"Error getting product name for {product_id}: {e}")
         return "Неизвестный товар"
+
 
 async def get_pharmacy_number(pharmacy_id: uuid.UUID, db: AsyncSession) -> str:
     """Получить номер аптеки"""
@@ -764,6 +793,7 @@ async def get_pharmacy_number(pharmacy_id: uuid.UUID, db: AsyncSession) -> str:
         logger.error(f"Error getting pharmacy number for {pharmacy_id}: {e}")
         return ""
 
+
 async def get_pharmacy_opening_hours(pharmacy_id: uuid.UUID, db: AsyncSession) -> str:
     """Получить время работы аптеки - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
     try:
@@ -773,6 +803,7 @@ async def get_pharmacy_opening_hours(pharmacy_id: uuid.UUID, db: AsyncSession) -
     except Exception as e:
         logger.error(f"Error getting pharmacy opening hours for {pharmacy_id}: {e}")
         return "Не указано"
+
 
 async def send_order_status_notification(
     order: BookingOrder, old_status: str, new_status: str, db: AsyncSession, comment: str = ""
@@ -836,7 +867,7 @@ async def send_order_status_notification(
                 f"🏪 Аптека: {pharmacy_full_name}\n"
                 f"📍 Адрес: {pharmacy_address}\n"
                 f"📞 Телефон: {pharmacy_phone}\n"
-                f"🕐 Время работы: {pharmacy_opening_hours}\n"  # НОВАЯ СТРОКА
+                f"🕐 Время работы: {pharmacy_opening_hours}\n"
             )
 
             # Добавляем комментарий от аптеки, если есть
@@ -858,7 +889,9 @@ async def send_order_status_notification(
                 f"📊 Количество: {order.quantity}\n"
                 f"💵 Общая стоимость: {total_formatted} руб.\n"
                 f"🏪 Аптека: {pharmacy_full_name}\n"
+                f"📍 Адрес: {pharmacy_address}\n"
                 f"📞 Телефон: {pharmacy_phone}\n"
+                f"🕐 Время работы: {pharmacy_opening_hours}\n"
             )
 
             # Добавляем комментарий от аптеки, если есть
@@ -879,7 +912,9 @@ async def send_order_status_notification(
                 f"📊 Количество: {order.quantity}\n"
                 f"💵 Общая стоимость: {total_formatted} руб.\n"
                 f"🏪 Аптека: {pharmacy_full_name}\n"
+                f"📍 Адрес: {pharmacy_address}\n"
                 f"📞 Телефон: {pharmacy_phone}\n"
+                f"🕐 Время работы: {pharmacy_opening_hours}\n"
             )
 
             # Добавляем комментарий от аптеки, если есть

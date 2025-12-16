@@ -5,6 +5,16 @@ from datetime import datetime
 import uuid
 
 
+
+
+
+class OrderCancelRequest(BaseModel):
+    reason: Optional[str] = None
+
+class OrderStatusUpdate(BaseModel):
+    status: str
+    comment: Optional[str] = None
+
 class BookingOrderBase(BaseModel):
     product_id: uuid.UUID
     quantity: int
