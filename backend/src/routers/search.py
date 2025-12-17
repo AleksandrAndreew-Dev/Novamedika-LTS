@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func, or_, text, case, and_
+from sqlalchemy import select, func, or_, text, case, and_, 
 from sqlalchemy.orm import selectinload, joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 
 from db.database import get_db
 from db.models import Pharmacy, Product
+
+from sqlalchemy.dialects.postgresql import TSVECTOR
 
 router = APIRouter()
 
@@ -43,9 +45,10 @@ async def search_two_step(
 
     # Нормализуем поисковый запрос
     search_name = name.strip()
+    search_query = q.strip()
 
     # Полнотекстовый поиск
-    ts_query = func.plainto_tsquery("russian", search_name)
+    ts_query = func.plainto_tsquery("russian_simple", search_query)
 
     # Базовый запрос с полнотекстовым поиском
     base_query = (
@@ -636,9 +639,8 @@ async def search_advanced(
     }
 
 
-# search.py - добавляем новый эндпоинт
-from sqlalchemy import select, func, or_, text, case, and_
-from sqlalchemy.dialects.postgresql import TSVECTOR
+
+
 
 
 @router.get("/search-fts/", response_model=dict)
@@ -661,7 +663,7 @@ async def search_full_text(
     use_fuzzy = False  # Флаг для отслеживания использования нечеткого поиска
 
     # Создаем TS_QUERY для полнотекстового поиска
-    ts_query = func.plainto_tsquery("russian", search_query)
+    ts_query = func.plainto_tsquery("russian_simple", search_query)
 
     # БАЗОВЫЕ УСЛОВИЯ ПОИСКА
     base_conditions = []
