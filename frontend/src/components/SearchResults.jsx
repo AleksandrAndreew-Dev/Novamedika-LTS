@@ -59,7 +59,7 @@ export default function SearchResults({
 
     try {
       const bookingData = {
-        product_id: bookingState.modal.product.uuid,
+        product_id: bookingState.modal.product.product_uuid, // Изменено с uuid
         pharmacy_id: bookingState.modal.product.pharmacy_id,
         quantity: bookingState.modal.quantity,
         customer_name: bookingState.form.customer_name.trim(),
@@ -182,19 +182,33 @@ export default function SearchResults({
     const grouped = {};
 
     results.forEach((item) => {
-      const key = `${item.pharmacy_number}-${item.name}-${item.form}-${item.manufacturer}`;
+      // Уникальный ключ для КАЖДОЙ аптеки отдельно
+      const key = `${item.pharmacy_id || item.pharmacy_number}-${item.name}-${
+        item.form
+      }-${item.manufacturer}`;
 
       if (!grouped[key]) {
         grouped[key] = {
           ...item,
-          quantity: parseFloat(item.quantity) || 0,
+          // Сохраняем все уникальные количества
+          quantities: [parseFloat(item.quantity) || 0],
+          // Сохраняем все уникальные цены
+          prices: [parseFloat(item.price) || 0],
           working_hours:
             item.working_hours || item.opening_hours || "9:00-21:00",
-          pharmacy_id: item.pharmacy_id,
+          pharmacy_id: item.pharmacy_id || item.pharmacy_number,
+          // Сохраняем UUID продукта для бронирования
+          product_uuid: item.uuid || item.id,
         };
       } else {
-        grouped[key].quantity += parseFloat(item.quantity) || 0;
+        // Добавляем новое количество (не суммируем!)
+        grouped[key].quantities.push(parseFloat(item.quantity) || 0);
+        // Добавляем новую цену
+        if (!grouped[key].prices.includes(parseFloat(item.price) || 0)) {
+          grouped[key].prices.push(parseFloat(item.price) || 0);
+        }
 
+        // Обновляем время, если запись новее
         const currentDate = new Date(grouped[key].updated_at);
         const newDate = new Date(item.updated_at);
         if (newDate > currentDate) {
@@ -207,15 +221,29 @@ export default function SearchResults({
       }
     });
 
-    return Object.values(grouped);
+    // Преобразуем обратно в массив с рассчитанными суммами
+    return Object.values(grouped).map((item) => ({
+      ...item,
+      // Общее количество (сумма всех позиций)
+      quantity: item.quantities.reduce((sum, q) => sum + q, 0),
+      // Минимальная цена из всех вариантов
+      price: Math.min(...item.prices),
+      // Дополнительная информация о наличии нескольких цен
+      hasMultiplePrices: item.prices.length > 1,
+      originalPrices: item.prices,
+    }));
   };
 
   const formatQuantity = (quantity) => {
     const num = parseFloat(quantity);
     if (isNaN(num)) return "0";
 
-    const formatted = Math.round(num * 1000) / 1000;
-    return formatted.toString().replace(/\.?0+$/, "");
+    if (num % 1 === 0) {
+      return num.toString();
+    }
+
+    // Для дробных значений показываем с точностью до 3 знаков
+    return num.toFixed(3).replace(/\.?0+$/, "");
   };
 
   const groupedResults = getGroupedResults();
