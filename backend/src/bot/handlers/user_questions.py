@@ -1,3 +1,20 @@
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+import logging
+
+from db.qa_models import User, Question, Answer, Pharmacist
+from bot.handlers.qa_states import UserQAStates
+from bot.handlers.common_handlers import get_user_keyboard
+from bot.services.notification_service import notify_pharmacists_about_new_question
+from utils.time_utils import get_utc_now_naive
+
+# УДАЛИТЬ или закомментировать проблемные импорты:
+# from utils.get_utils import get_all_pharmacist_questions  # УДАЛИТЬ
+# from utils.pharm_format_questions import format_pharmacist_questions_list  # УДАЛИТЬ
+from bot.keyboards.pagiantion_keyboard import make_questions_pagination_keyboard
+from bot.services.dialog_service import DialogService
+
+
 from typing import Union, List
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -7,28 +24,13 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 
 
-from db.qa_models import User, Question, Answer, Pharmacist
-
-from bot.handlers.qa_states import UserQAStates
-from bot.handlers.common_handlers import get_user_keyboard
 
 
-from bot.services.notification_service import (
-    notify_pharmacists_about_new_question,
-)
+from src.utils.get_utils import get_all_pharmacist_questions
+from src.utils.pharm_format_questions import format_pharmacist_questions_list
 
-
-import logging
-
-from utils.time_utils import get_utc_now_naive
-from utils.get_utils import get_all_pharmacist_questions
-from utils.pharm_format_questions import format_pharmacist_questions_list
-from bot.services.dialog_service import DialogService
-from bot.keyboards.pagiantion_keyboard import make_questions_pagination_keyboard
 
 logger = logging.getLogger(__name__)
 

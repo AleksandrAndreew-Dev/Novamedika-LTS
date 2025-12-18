@@ -20,3 +20,5 @@ async def get_all_pharmacist_questions(
         .limit(limit)
     )
     return result.scalars().all()
+
+
