@@ -739,7 +739,6 @@ async def view_questions_callback(
         if not questions:
             await callback.message.answer(
                 "📝 На данный момент нет новых вопросов.\n\n"
-                "Пользователи задают вопросы через команду /ask"
             )
             return
 
