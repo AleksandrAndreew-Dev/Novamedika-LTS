@@ -1,6 +1,7 @@
 from typing import Union, List
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
+
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
@@ -11,10 +12,14 @@ from sqlalchemy.orm import selectinload
 
 
 from db.qa_models import User, Question, Answer, Pharmacist
+
 from bot.handlers.qa_states import UserQAStates
 from bot.handlers.common_handlers import get_user_keyboard
 
 
+from bot.services.notification_service import (
+    notify_pharmacists_about_new_question,
+)
 
 
 import logging
@@ -91,9 +96,6 @@ async def format_questions_list(
     return message_text
 
 
-
-
-
 @router.message(Command("ask"))
 async def cmd_ask(message: Message):
     """Быстрая команда для вопроса"""
@@ -103,9 +105,6 @@ async def cmd_ask(message: Message):
         "<i>Пишите прямо здесь ↓</i>",
         parse_mode="HTML",
     )
-
-
-# В user_questions.py обновляем cmd_my_questions:
 
 
 @router.message(Command("my_questions"))
@@ -129,8 +128,6 @@ async def cmd_my_questions(
     try:
         if is_pharmacist:
             # Для фармацевтов - все вопросы, которые они взяли
-            from bot.handlers.common_handlers import get_pharmacist_keyboard
-            from db.qa_models import Pharmacist
 
             # Получаем объект фармацевта
             result = await db.execute(
@@ -152,7 +149,7 @@ async def cmd_my_questions(
                 questions,
                 page,
                 is_pharmacist=True,  # Указываем что это фармацевт
-                pharmacist_id=str(pharmacist.uuid)
+                pharmacist_id=str(pharmacist.uuid),
             )
 
             await message.answer(
@@ -382,10 +379,7 @@ async def view_full_history_callback(
 
 @router.callback_query(F.data.startswith("questions_page_"))
 async def questions_page_callback(
-    callback: CallbackQuery,
-    db: AsyncSession,
-    user: User,
-    is_pharmacist: bool
+    callback: CallbackQuery, db: AsyncSession, user: User, is_pharmacist: bool
 ):
     """Обработка переключения страниц"""
     page = int(callback.data.replace("questions_page_", ""))
@@ -394,6 +388,7 @@ async def questions_page_callback(
         if is_pharmacist:
             # Для фармацевтов
             from db.qa_models import Pharmacist
+
             result = await db.execute(
                 select(Pharmacist).where(Pharmacist.user_id == user.uuid)
             )
@@ -422,7 +417,9 @@ async def questions_page_callback(
             questions,
             page,
             is_pharmacist=is_pharmacist,
-            pharmacist_id=str(pharmacist.uuid) if is_pharmacist and pharmacist else None
+            pharmacist_id=(
+                str(pharmacist.uuid) if is_pharmacist and pharmacist else None
+            ),
         )
 
         await callback.message.edit_text(
@@ -444,7 +441,7 @@ async def back_to_questions_callback(
     try:
         if is_pharmacist:
             # Для фармацевтов
-            from db.qa_models import Pharmacist
+
             result = await db.execute(
                 select(Pharmacist).where(Pharmacist.user_id == user.uuid)
             )
@@ -469,7 +466,9 @@ async def back_to_questions_callback(
             questions,
             page=0,
             is_pharmacist=is_pharmacist,
-            pharmacist_id=str(pharmacist.uuid) if is_pharmacist and pharmacist else None
+            pharmacist_id=(
+                str(pharmacist.uuid) if is_pharmacist and pharmacist else None
+            ),
         )
 
         await callback.message.edit_text(
@@ -718,7 +717,7 @@ async def continue_dialog_callback(
             await callback.answer(
                 "❌ Эта консультация уже завершена.\n"
                 "Вы можете задать новый вопрос или посмотреть историю.",
-                show_alert=True
+                show_alert=True,
             )
 
             # Показываем завершенный диалог с кнопками для новых действий
@@ -734,17 +733,17 @@ async def continue_dialog_callback(
                         [
                             InlineKeyboardButton(
                                 text="📝 Задать новый вопрос",
-                                callback_data="ask_new_question"
+                                callback_data="ask_new_question",
                             )
                         ],
                         [
                             InlineKeyboardButton(
                                 text="📋 Посмотреть историю",
-                                callback_data=f"view_full_history_{question.uuid}"
+                                callback_data=f"view_full_history_{question.uuid}",
                             )
-                        ]
+                        ],
                     ]
-                )
+                ),
             )
             return
 
@@ -753,7 +752,6 @@ async def continue_dialog_callback(
                 "❌ Этот диалог уже завершен или ожидает ответа", show_alert=True
             )
             return
-
 
         await state.update_data(continue_question_id=question_uuid)
         await state.set_state(UserQAStates.in_dialog)
@@ -820,9 +818,6 @@ async def process_user_question(
 
         # Уведомляем фармацевтов
         try:
-            from bot.services.notification_service import (
-                notify_pharmacists_about_new_question,
-            )
 
             await DialogService.create_question_message(question, db)
             await notify_pharmacists_about_new_question(question, db)
@@ -888,7 +883,6 @@ async def process_dialog_message(
             await state.clear()
             return
 
-        # ✅ ВАЖНО: ПРОВЕРЯЕМ, ЧТО ДИАЛОГ НЕ ЗАВЕРШЕН
         if question.status == "completed":
             await message.answer(
                 "❌ Эта консультация уже завершена.\n"
@@ -897,9 +891,6 @@ async def process_dialog_message(
             )
             await state.clear()
             return
-        # Конец проверки
-
-        # ... остальной код без изменений ...
 
         # Получаем фармацевта, который ведет диалог
         if not question.taken_by:
@@ -956,7 +947,6 @@ async def process_dialog_message(
             pharmacist_name = " ".join(name_parts) if name_parts else "Фармацевт"
 
         # Создаем клавиатуру для фармацевта
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
         pharmacist_keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
@@ -1018,7 +1008,6 @@ async def process_dialog_message(
         await message.answer("❌ Ошибка при отправке сообщения. Попробуйте еще раз.")
 
 
-# bot/handlers/user_questions.py - ДОБАВИТЬ НОВЫЙ ОБРАБОТЧИК
 @router.callback_query(F.data.startswith("quick_clarify_"))
 async def quick_clarify_callback(
     callback: CallbackQuery,
@@ -1052,8 +1041,6 @@ async def quick_clarify_callback(
             await callback.answer("❌ Этот вопрос не принадлежит вам", show_alert=True)
             return
 
-        # ✅ ОБНОВЛЕНО: Разрешаем уточнение для вопросов с ответами
-        # Проверяем, есть ли ответы на этот вопрос
         answer_result = await db.execute(
             select(Answer)
             .where(Answer.question_id == question.uuid)
@@ -1251,7 +1238,6 @@ async def process_prescription_photo(
         )
 
         # Создаем клавиатуру для фармацевта
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
         pharmacist_keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
@@ -1371,9 +1357,6 @@ async def process_prescription_document(
                 name_parts.append(patronymic)
 
             pharmacist_name = " ".join(name_parts) if name_parts else "Фармацевт"
-
-        # Создаем клавиатуру с кнопками для фармацевта (исправлено)
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
         pharmacist_keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
