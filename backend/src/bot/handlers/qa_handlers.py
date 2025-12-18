@@ -16,6 +16,7 @@ from aiogram.fsm.context import FSMContext
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy import select, func
 
 from utils.time_utils import get_utc_now_naive
 from db.qa_models import User, Pharmacist, Question, Answer
@@ -27,6 +28,8 @@ from bot.keyboards.qa_keyboard import (
     make_pharmacist_dialog_keyboard,
     make_question_keyboard,
 )
+
+
 
 
 # Инициализация
@@ -59,7 +62,7 @@ async def set_online(
         logger.info(f"Pharmacist {message.from_user.id} successfully set online status")
 
         # Проверяем есть ли ожидающие вопросы
-        from sqlalchemy import select, func
+
 
         result = await db.execute(
             select(func.count(Question.uuid)).where(Question.status == "pending")
@@ -224,9 +227,6 @@ async def cmd_status(
     )
 
 
-# В qa_handlers.py обновляем cmd_questions
-
-
 @router.message(Command("questions"))
 async def cmd_questions(
     message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist
@@ -381,7 +381,6 @@ async def cmd_questions(
         await message.answer("❌ Ошибка при получении вопросов")
 
 
-# bot/handlers/qa_handlers.py - добавляем новую команду
 @router.message(Command("release_question"))
 async def cmd_release_question(
     message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist
@@ -428,10 +427,6 @@ async def cmd_release_question(
     except Exception as e:
         logger.error(f"Error in cmd_release_question: {e}")
         await message.answer("❌ Ошибка при получении вопросов")
-
-
-# В файл qa_handlers.py добавляем новые обработчики:
-
 
 @router.callback_query(F.data.startswith("show_history_"))
 async def show_dialog_history_callback(
@@ -551,7 +546,7 @@ async def view_dialog_callback(
             message_text += "<b>Последние сообщения:</b>\n"
             message_text += "─" * 20 + "\n"
 
-            for msg in reversed(messages[-3:]):  # Последние 3 сообщения
+            for msg in reversed(messages[-3:]):
                 if msg.sender_type == "user":
                     sender = "👤 Вы" if not is_pharmacist else "👤 Пользователь"
                 else:
@@ -587,9 +582,6 @@ async def view_dialog_callback(
                     )
 
                 message_text += f"{sender} [{time_str}]: {preview}\n"
-
-        # Создаем клавиатуру
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
@@ -958,17 +950,13 @@ async def handle_pharmacist_text_in_dialog(
             )
             await state.clear()
             return
-        # Конец проверки
 
-        # Автоматически переводим фармацевта в онлайн при активности
+
         if not pharmacist.is_online:
             pharmacist.is_online = True
             pharmacist.last_seen = get_utc_now_naive()
             await db.commit()
 
-        # ... остальной код без изменений ...
-
-        # Получаем вопрос
         result = await db.execute(
             select(Question).where(Question.uuid == question_uuid)
         )
@@ -979,7 +967,6 @@ async def handle_pharmacist_text_in_dialog(
             await state.clear()
             return
 
-        # Создаем ответ/сообщение
         answer = Answer(
             text=message.text,
             question_id=question.uuid,
@@ -994,7 +981,6 @@ async def handle_pharmacist_text_in_dialog(
         question.answered_at = get_utc_now_naive()
         question.answered_by = pharmacist.uuid
 
-        # ✅ Добавляем сообщение в историю диалога
         dialog_message = await DialogService.add_message(
             db=db,
             question_id=question.uuid,
@@ -1006,12 +992,12 @@ async def handle_pharmacist_text_in_dialog(
 
         await db.commit()
 
-        # ✅ Получаем полную историю диалога для отправки
+
         history_text, file_ids = await DialogService.format_dialog_history_for_display(
             question.uuid, db, limit=20
         )
 
-        # Уведомляем пользователя
+
         user_result = await db.execute(
             select(User).where(User.uuid == question.user_id)
         )
@@ -1160,7 +1146,7 @@ async def process_answer_text(
             await state.clear()
             return
 
-        # ✅ ВАЖНО: ПРОВЕРЯЕМ, ЧТО ДИАЛОГ НЕ ЗАВЕРШЕН
+
         if question.status == "completed":
             await message.answer(
                 "❌ Этот диалог уже завершен. Вы не можете отправлять сообщения.\n"
@@ -1174,13 +1160,13 @@ async def process_answer_text(
             pharmacist.last_seen = get_utc_now_naive()
             await db.commit()
 
-        # ✅ ЛОГИРОВАНИЕ: Отслеживаем создание ответа
+
         logger.info(
             f"Creating answer for question {question.uuid} by pharmacist {pharmacist.uuid}"
         )
         logger.info(f"Answer text: '{message.text}'")
 
-        # Создаем ответ/сообщение
+
         answer = Answer(
             text=message.text,
             question_id=question.uuid,
@@ -1195,7 +1181,7 @@ async def process_answer_text(
         question.answered_at = get_utc_now_naive()
         question.answered_by = pharmacist.uuid
 
-        # ✅ ВАЖНО: Добавляем сообщение в историю диалога
+
         dialog_message = await DialogService.add_message(
             db=db,
             question_id=question.uuid,
@@ -1205,23 +1191,23 @@ async def process_answer_text(
             text=message.text,
         )
 
-        # ✅ ЛОГИРОВАНИЕ: Отслеживаем создание сообщения в диалоге
+
         logger.info(
             f"Dialog message created: {dialog_message.uuid}, type={dialog_message.message_type}"
         )
 
         await db.commit()
 
-        # ✅ Получаем полную историю диалога для отправки
+
         history_text, file_ids = await DialogService.format_dialog_history_for_display(
             question.uuid, db, limit=20
         )
 
-        # ✅ ЛОГИРОВАНИЕ: Отслеживаем сформированную историю
+
         logger.info(f"History text length: {len(history_text)}")
         logger.info(f"History text preview: {history_text[:200]}...")
 
-        # Уведомляем пользователя
+
         user_result = await db.execute(
             select(User).where(User.uuid == question.user_id)
         )
@@ -1283,7 +1269,7 @@ async def process_answer_text(
                     exc_info=True,
                 )
 
-        # ✅ Показываем фармацевту полную историю диалога С КНОПКАМИ
+
         await message.answer(
             f"💬 <b>ВЫ ОТПРАВИЛИ ОТВЕТ</b>\n\n"
             f"{history_text}\n\n"
@@ -1292,7 +1278,7 @@ async def process_answer_text(
             reply_markup=make_pharmacist_dialog_keyboard(question.uuid),
         )
 
-        # НЕ очищаем состояние фармацевта - оставляем в диалоге
+
         await state.set_state(QAStates.in_dialog_with_user)
         user_dialog_keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
@@ -1315,7 +1301,7 @@ async def process_answer_text(
             ]
         )
 
-        # Отправляем пользователю уведомление о возможности продолжить диалог
+
         await message.bot.send_message(
             chat_id=user.telegram_id,
             text="💬 <b>Вы можете продолжить общение с фармацевтом</b>\n\n"
@@ -1393,8 +1379,7 @@ async def answer_clarification_callback(
             await callback.answer("❌ Вопрос не найден", show_alert=True)
             return
 
-        # ✅ ОБНОВЛЕНО: Проверяем, есть ли у этого вопроса уточнения или он был отвечен
-        # Получаем последний ответ для контекста
+
         answer_result = await db.execute(
             select(Answer)
             .where(Answer.question_id == question.uuid)
@@ -1433,10 +1418,6 @@ async def answer_clarification_callback(
         await callback.answer("❌ Ошибка при обработке запроса", show_alert=True)
 
 
-# В файл qa_handlers.py добавить
-
-
-# В файл qa_handlers.py, в функцию request_photo_callback добавить:
 @router.callback_query(F.data.startswith("request_photo_"))
 async def request_photo_callback(
     callback: CallbackQuery,
@@ -1659,7 +1640,6 @@ async def process_photo_request_message(
                     original_question.context_data["photo_requested"] = True
                 await db.commit()
 
-        # ... остальной код функции остается без изменений ...
 
         # Формируем сообщение с ФИО фармацевта
         pharmacy_info = pharmacist.pharmacy_info or {}
