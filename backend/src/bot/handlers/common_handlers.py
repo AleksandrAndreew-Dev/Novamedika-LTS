@@ -1,8 +1,6 @@
-from sqlalchemy import select, func
-from aiogram.types import Message as AiogramMessage
-from typing import Optional
+from sqlalchemy import select
 from aiogram.types import WebAppInfo
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram import Router, F
 from aiogram.types import (
     Message,
@@ -18,10 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db.qa_models import User, Question
 from utils.time_utils import get_utc_now_naive
 from bot.handlers.qa_states import UserQAStates
-from bot.services.notification_service import (
-    notify_pharmacists_about_new_question,
-    notify_about_clarification,
-)
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -224,7 +219,7 @@ async def cmd_start(
         reply_kb = get_reply_keyboard_with_webapp()
 
         await message.answer(
-            "👋 <b>Novamedika Q&A Bot</b>\n\n"
+            "👋 <b>Лучше спросите в аптеке!</b>\n\n"
             "💊 <b>Консультация профессионального фармацевта</b>\n\n"
             "📝 <b>Просто напишите ваш вопрос в чат!</b>\n\n"
             "Или используйте кнопки ниже:",
@@ -983,20 +978,6 @@ async def universal_cancel(message: Message, state: FSMContext):
     # Уведомляем пользователя
     await message.answer("✅ Текущее действие отменено.")
 
-
-@router.callback_query(F.data == "ask_new_question")
-async def ask_new_question_callback(callback: CallbackQuery, state: FSMContext):
-    """Обработка кнопки 'Задать новый вопрос'"""
-    await callback.answer()
-
-    await state.set_state(UserQAStates.waiting_for_question)
-    await callback.message.answer(
-        "📝 <b>Задайте ваш новый вопрос:</b>\n\n"
-        "Опишите вашу проблему подробно, чтобы фармацевт мог дать точный ответ.\n\n"
-        "<i>Просто напишите ваш вопрос в чат ↓</i>\n"
-        "<i>Для отмены используйте /cancel</i>",
-        parse_mode="HTML",
-    )
 
 
 @router.callback_query(F.data == "search_drugs")

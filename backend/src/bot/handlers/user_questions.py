@@ -1,13 +1,12 @@
-from aiogram.types import Message as AiogramMessage
 from typing import Union, List
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
-from aiogram.filters import Command, CommandObject
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 
@@ -15,11 +14,11 @@ from db.qa_models import User, Question, Answer, Pharmacist
 from bot.handlers.qa_states import UserQAStates
 from bot.handlers.common_handlers import get_user_keyboard
 
-from bot.services.notification_service import notify_about_clarification
+
 
 
 import logging
-from datetime import datetime, timedelta
+
 from utils.time_utils import get_utc_now_naive
 from utils.get_utils import get_all_pharmacist_questions
 from utils.pharm_format_questions import format_pharmacist_questions_list
@@ -198,60 +197,6 @@ async def cmd_done(
         )
     else:
         await message.answer("ℹ️ В данный момент у вас нет активного диалога.")
-
-
-# bot/handlers/user_questions.py - ИСПРАВЛЕННАЯ ВЕРСИЯ cmd_clarify
-@router.message(Command("clarify"))
-async def cmd_clarify(
-    message: Message, state: FSMContext, db: AsyncSession, user: User
-):
-    """Уточнение к предыдущему вопросу - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
-    try:
-        # Получаем последний отвеченный вопрос пользователя
-        result = await db.execute(
-            select(Question)
-            .where(Question.user_id == user.uuid)
-            .where(Question.status == "answered")
-            .order_by(Question.answered_at.desc())
-            .limit(1)
-        )
-        last_question = result.scalar_one_or_none()
-
-        if not last_question:
-            await message.answer(
-                "❌ У вас нет отвеченных вопросов для уточнения.\n\n"
-                "Сначала задайте вопрос через /ask и дождитесь ответа."
-            )
-            return
-
-        # Сохраняем ID вопроса в состоянии
-        await state.update_data(clarify_question_id=str(last_question.uuid))
-        await state.set_state(UserQAStates.waiting_for_clarification)
-
-        # Показываем оригинальный вопрос и ответ
-        # Получаем последний ответ на этот вопрос
-        answer_result = await db.execute(
-            select(Answer)
-            .where(Answer.question_id == last_question.uuid)
-            .order_by(Answer.created_at.desc())
-            .limit(1)
-        )
-        last_answer = answer_result.scalar_one_or_none()
-
-        message_text = f"💬 <b>Уточнение к вопросу:</b>\n\n"
-        message_text += f"❓ <b>Ваш вопрос:</b>\n{last_question.text}\n\n"
-
-        if last_answer:
-            message_text += f"💬 <b>Полученный ответ:</b>\n{last_answer.text}\n\n"
-
-        message_text += "✍️ <b>Напишите ваше уточнение ниже:</b>\n"
-        message_text += "(или /cancel для отмены)"
-
-        await message.answer(message_text, parse_mode="HTML")
-
-    except Exception as e:
-        logger.error(f"Error in cmd_clarify: {e}", exc_info=True)
-        await message.answer("❌ Ошибка при создании уточнения.")
 
 
 @router.callback_query(F.data.startswith("view_full_history_"))

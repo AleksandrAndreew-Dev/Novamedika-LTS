@@ -1,6 +1,6 @@
 # Стандартная библиотека
 import logging
-from datetime import datetime, timedelta
+
 from typing import Union
 
 # Сторонние пакеты
@@ -13,20 +13,18 @@ from aiogram.types import (
 )
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from sqlalchemy import select, and_, func
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from utils.time_utils import get_utc_now_naive
-from db.qa_models import User, Pharmacist, Question, Answer, DialogMessage
+from db.qa_models import User, Pharmacist, Question, Answer
 from bot.handlers.qa_states import QAStates, UserQAStates
 from bot.handlers.common_handlers import get_pharmacist_keyboard
 from bot.services.dialog_service import DialogService
 from bot.services.assignment_service import QuestionAssignmentService
 from bot.keyboards.qa_keyboard import (
-    make_question_list_keyboard,
     make_pharmacist_dialog_keyboard,
-    make_user_consultation_keyboard,
     make_question_keyboard,
 )
 
@@ -150,10 +148,7 @@ async def set_offline(
 
 @router.message(Command("export_history"))
 async def cmd_export_history(
-    message: Message,
-    db: AsyncSession,
-    user: User,
-    is_pharmacist: bool
+    message: Message, db: AsyncSession, user: User, is_pharmacist: bool
 ):
     """Экспорт истории диалогов"""
     try:
@@ -179,19 +174,19 @@ async def cmd_export_history(
             return
 
         await message.answer(
-            "📤 <b>Экспорт истории диалогов</b>\n\n"
-            "Выберите диалог для экспорта:",
+            "📤 <b>Экспорт истории диалогов</b>\n\n" "Выберите диалог для экспорта:",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
                         InlineKeyboardButton(
                             text=f"Диалог #{i+1}: {q.text[:30]}...",
-                            callback_data=f"export_dialog_{q.uuid}"
+                            callback_data=f"export_dialog_{q.uuid}",
                         )
-                    ] for i, q in enumerate(questions[:5])
+                    ]
+                    for i, q in enumerate(questions[:5])
                 ]
-            )
+            ),
         )
 
     except Exception as e:
@@ -266,8 +261,7 @@ async def cmd_questions(
             if is_taken and not is_taken_by_me:
                 # Получаем информацию о фармацевте
                 pharmacist_result = await db.execute(
-                    select(Pharmacist)
-                    .where(Pharmacist.uuid == question.taken_by)
+                    select(Pharmacist).where(Pharmacist.uuid == question.taken_by)
                 )
                 taken_pharmacist = pharmacist_result.scalar_one_or_none()
 
@@ -285,7 +279,9 @@ async def cmd_questions(
                     if patronymic:
                         name_parts.append(patronymic)
 
-                    pharmacist_name = " ".join(name_parts) if name_parts else "Фармацевт"
+                    pharmacist_name = (
+                        " ".join(name_parts) if name_parts else "Фармацевт"
+                    )
                     chain = taken_pharmacist.pharmacy_info.get("chain", "")
                     number = taken_pharmacist.pharmacy_info.get("number", "")
 
@@ -340,15 +336,15 @@ async def cmd_questions(
                         [
                             InlineKeyboardButton(
                                 text="💬 Ответить",
-                                callback_data=f"answer_{question.uuid}"
+                                callback_data=f"answer_{question.uuid}",
                             )
                         ],
                         [
                             InlineKeyboardButton(
                                 text="🔄 Освободить вопрос",
-                                callback_data=f"release_{question.uuid}"
+                                callback_data=f"release_{question.uuid}",
                             )
-                        ]
+                        ],
                     ]
                 )
             elif not is_taken:
@@ -358,7 +354,7 @@ async def cmd_questions(
                         [
                             InlineKeyboardButton(
                                 text="💬 Взять и ответить",
-                                callback_data=f"answer_{question.uuid}"
+                                callback_data=f"answer_{question.uuid}",
                             )
                         ]
                     ]
@@ -370,16 +366,14 @@ async def cmd_questions(
                         [
                             InlineKeyboardButton(
                                 text="👀 Только просмотр",
-                                callback_data=f"view_only_{question.uuid}"
+                                callback_data=f"view_only_{question.uuid}",
                             )
                         ]
                     ]
                 )
 
             await message.answer(
-                question_text,
-                parse_mode="HTML",
-                reply_markup=reply_markup
+                question_text, parse_mode="HTML", reply_markup=reply_markup
             )
 
     except Exception as e:
@@ -438,13 +432,14 @@ async def cmd_release_question(
 
 # В файл qa_handlers.py добавляем новые обработчики:
 
+
 @router.callback_query(F.data.startswith("show_history_"))
 async def show_dialog_history_callback(
     callback: CallbackQuery,
     db: AsyncSession,
     is_pharmacist: bool,
     pharmacist: Pharmacist,
-    user: User
+    user: User,
 ):
     """Показать полную историю диалога"""
     question_uuid = callback.data.replace("show_history_", "")
@@ -452,8 +447,7 @@ async def show_dialog_history_callback(
     try:
         # Получаем вопрос
         result = await db.execute(
-            select(Question)
-            .where(Question.uuid == question_uuid)
+            select(Question).where(Question.uuid == question_uuid)
         )
         question = result.scalar_one_or_none()
 
@@ -477,18 +471,14 @@ async def show_dialog_history_callback(
         )
 
         # Отправляем историю
-        await callback.message.answer(
-            history_text,
-            parse_mode="HTML"
-        )
+        await callback.message.answer(history_text, parse_mode="HTML")
 
         # Если есть фото, отправляем их
         if file_ids:
             for file_id in file_ids:
                 try:
                     await callback.message.answer_photo(
-                        file_id,
-                        caption="📸 Фото из истории диалога"
+                        file_id, caption="📸 Фото из истории диалога"
                     )
                 except Exception as e:
                     logger.error(f"Error sending photo: {e}")
@@ -509,7 +499,7 @@ async def view_dialog_callback(
     db: AsyncSession,
     is_pharmacist: bool,
     pharmacist: Pharmacist,
-    user: User
+    user: User,
 ):
     """Просмотр диалога с историей"""
     question_uuid = callback.data.replace("view_dialog_", "")
@@ -570,49 +560,69 @@ async def view_dialog_callback(
                 time_str = msg.created_at.strftime("%H:%M")
 
                 if msg.message_type == "question":
-                    preview = f"❓ {msg.text[:80]}..." if len(msg.text) > 80 else f"❓ {msg.text}"
+                    preview = (
+                        f"❓ {msg.text[:80]}..."
+                        if len(msg.text) > 80
+                        else f"❓ {msg.text}"
+                    )
                 elif msg.message_type == "answer":
-                    preview = f"💬 {msg.text[:80]}..." if len(msg.text) > 80 else f"💬 {msg.text}"
+                    preview = (
+                        f"💬 {msg.text[:80]}..."
+                        if len(msg.text) > 80
+                        else f"💬 {msg.text}"
+                    )
                 elif msg.message_type == "clarification":
-                    preview = f"🔍 {msg.text[:80]}..." if len(msg.text) > 80 else f"🔍 {msg.text}"
+                    preview = (
+                        f"🔍 {msg.text[:80]}..."
+                        if len(msg.text) > 80
+                        else f"🔍 {msg.text}"
+                    )
                 elif msg.message_type == "photo":
                     preview = "📸 Фото рецепта"
                 else:
-                    preview = f"💭 {msg.text[:80]}..." if len(msg.text) > 80 else f"💭 {msg.text}"
+                    preview = (
+                        f"💭 {msg.text[:80]}..."
+                        if len(msg.text) > 80
+                        else f"💭 {msg.text}"
+                    )
 
                 message_text += f"{sender} [{time_str}]: {preview}\n"
 
         # Создаем клавиатуру
         from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="📋 Полная история диалога",
-                    callback_data=f"show_history_{question.uuid}"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="💬 Продолжить общение",
-                    callback_data=f"answer_{question.uuid}"
-                ) if is_pharmacist else InlineKeyboardButton(
-                    text="✍️ Уточнить",
-                    callback_data=f"quick_clarify_{question.uuid}"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="✅ Завершить диалог",
-                    callback_data=f"end_dialog_{question.uuid}"
-                )
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="📋 Полная история диалога",
+                        callback_data=f"show_history_{question.uuid}",
+                    )
+                ],
+                [
+                    (
+                        InlineKeyboardButton(
+                            text="💬 Продолжить общение",
+                            callback_data=f"answer_{question.uuid}",
+                        )
+                        if is_pharmacist
+                        else InlineKeyboardButton(
+                            text="✍️ Уточнить",
+                            callback_data=f"quick_clarify_{question.uuid}",
+                        )
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="✅ Завершить диалог",
+                        callback_data=f"end_dialog_{question.uuid}",
+                    )
+                ],
             ]
-        ])
+        )
 
         await callback.message.answer(
-            message_text,
-            parse_mode="HTML",
-            reply_markup=keyboard
+            message_text, parse_mode="HTML", reply_markup=keyboard
         )
 
         await callback.answer()
@@ -622,21 +632,19 @@ async def view_dialog_callback(
         await callback.answer("❌ Ошибка при просмотре диалога", show_alert=True)
 
 
-
 @router.callback_query(F.data.startswith("view_only_"))
 async def view_only_question_callback(
     callback: CallbackQuery,
     db: AsyncSession,
     is_pharmacist: bool,
-    pharmacist: Pharmacist
+    pharmacist: Pharmacist,
 ):
     """Просмотр вопроса, который уже взят другим фармацевтом"""
     question_uuid = callback.data.replace("view_only_", "")
 
     if not is_pharmacist or not pharmacist:
         await callback.answer(
-            "❌ Эта функция доступна только фармацевтам",
-            show_alert=True
+            "❌ Эта функция доступна только фармацевтам", show_alert=True
         )
         return
 
@@ -655,8 +663,7 @@ async def view_only_question_callback(
         pharmacist_info = ""
         if question.taken_by:
             pharmacist_result = await db.execute(
-                select(Pharmacist)
-                .where(Pharmacist.uuid == question.taken_by)
+                select(Pharmacist).where(Pharmacist.uuid == question.taken_by)
             )
             taken_pharmacist = pharmacist_result.scalar_one_or_none()
 
@@ -692,16 +699,14 @@ async def view_only_question_callback(
             f"📊 <b>Статус:</b> В работе другим фармацевтом"
         )
 
-        await callback.message.answer(
-            message_text,
-            parse_mode="HTML"
-        )
+        await callback.message.answer(message_text, parse_mode="HTML")
 
         await callback.answer("Этот вопрос уже взят другим фармацевтом")
 
     except Exception as e:
         logger.error(f"Error in view_only_question_callback: {e}")
         await callback.answer("❌ Ошибка при просмотре вопроса", show_alert=True)
+
 
 @router.callback_query(F.data.startswith("release_"))
 async def release_question_callback(
@@ -815,7 +820,6 @@ async def debug_status(
         await message.answer("❌ Ошибка при получении статуса системы")
 
 
-
 @router.callback_query(F.data.startswith("answer_"))
 async def answer_question_callback(
     callback: CallbackQuery,
@@ -849,7 +853,7 @@ async def answer_question_callback(
             await callback.answer(
                 "❌ Этот диалог уже завершен. Вы не можете продолжать общение.\n"
                 "Если нужно, создайте новый вопрос или откройте другой диалог.",
-                show_alert=True
+                show_alert=True,
             )
 
             # Показываем информацию о завершенном диалоге
@@ -858,7 +862,7 @@ async def answer_question_callback(
                 f"❓ Вопрос: {question.text[:200]}...\n\n"
                 f"⏰ Завершен: {question.answered_at.strftime('%d.%m.%Y %H:%M') if question.answered_at else 'Дата не указана'}\n\n"
                 f"<i>Этот диалог был завершен и больше не доступен для общения.</i>",
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
             return
 
@@ -1064,7 +1068,10 @@ async def handle_pharmacist_text_in_dialog(
                 logger.info(f"Message sent to user {user.telegram_id}")
 
             except Exception as e:
-                logger.error(f"Failed to send message to user {user.telegram_id}: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to send message to user {user.telegram_id}: {e}",
+                    exc_info=True,
+                )
 
         # ✅ Показываем фармацевту полную историю диалога С КНОПКАМИ
         await message.answer(
@@ -1072,7 +1079,7 @@ async def handle_pharmacist_text_in_dialog(
             f"{history_text}\n\n"
             f"<b>Доступные действия:</b>",
             parse_mode="HTML",
-            reply_markup=make_pharmacist_dialog_keyboard(question.uuid)
+            reply_markup=make_pharmacist_dialog_keyboard(question.uuid),
         )
 
         # Оставляем фармацевта в диалоге
@@ -1084,19 +1091,19 @@ async def handle_pharmacist_text_in_dialog(
                 [
                     InlineKeyboardButton(
                         text="✍️ Ответить фармацевту",
-                        callback_data=f"continue_user_dialog_{question.uuid}"
+                        callback_data=f"continue_user_dialog_{question.uuid}",
                     ),
                     InlineKeyboardButton(
                         text="📸 Отправить фото",
-                        callback_data=f"send_prescription_photo_{question.uuid}"
-                    )
+                        callback_data=f"send_prescription_photo_{question.uuid}",
+                    ),
                 ],
                 [
                     InlineKeyboardButton(
                         text="✅ Завершить консультацию",
-                        callback_data=f"end_dialog_{question.uuid}"
+                        callback_data=f"end_dialog_{question.uuid}",
                     )
-                ]
+                ],
             ]
         )
 
@@ -1104,9 +1111,9 @@ async def handle_pharmacist_text_in_dialog(
             await message.bot.send_message(
                 chat_id=user.telegram_id,
                 text="💬 <b>Вы можете продолжить общение с фармацевтом</b>\n\n"
-                    "Напишите ваше сообщение в чат или используйте кнопки ниже.",
+                "Напишите ваше сообщение в чат или используйте кнопки ниже.",
                 parse_mode="HTML",
-                reply_markup=user_dialog_keyboard
+                reply_markup=user_dialog_keyboard,
             )
 
     except Exception as e:
@@ -1116,6 +1123,7 @@ async def handle_pharmacist_text_in_dialog(
         )
         await message.answer("❌ Ошибка при отправке сообщения")
         await state.clear()
+
 
 @router.message(QAStates.waiting_for_answer)
 async def process_answer_text(
@@ -1167,7 +1175,9 @@ async def process_answer_text(
             await db.commit()
 
         # ✅ ЛОГИРОВАНИЕ: Отслеживаем создание ответа
-        logger.info(f"Creating answer for question {question.uuid} by pharmacist {pharmacist.uuid}")
+        logger.info(
+            f"Creating answer for question {question.uuid} by pharmacist {pharmacist.uuid}"
+        )
         logger.info(f"Answer text: '{message.text}'")
 
         # Создаем ответ/сообщение
@@ -1196,7 +1206,9 @@ async def process_answer_text(
         )
 
         # ✅ ЛОГИРОВАНИЕ: Отслеживаем создание сообщения в диалоге
-        logger.info(f"Dialog message created: {dialog_message.uuid}, type={dialog_message.message_type}")
+        logger.info(
+            f"Dialog message created: {dialog_message.uuid}, type={dialog_message.message_type}"
+        )
 
         await db.commit()
 
@@ -1261,13 +1273,15 @@ async def process_answer_text(
                     chat_id=user.telegram_id,
                     text=full_message,
                     parse_mode="HTML",
-
                 )
 
                 logger.info(f"Message sent to user {user.telegram_id}")
 
             except Exception as e:
-                logger.error(f"Failed to send message to user {user.telegram_id}: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to send message to user {user.telegram_id}: {e}",
+                    exc_info=True,
+                )
 
         # ✅ Показываем фармацевту полную историю диалога С КНОПКАМИ
         await message.answer(
@@ -1275,39 +1289,39 @@ async def process_answer_text(
             f"{history_text}\n\n"
             f"<b>Доступные действия:</b>",
             parse_mode="HTML",
-            reply_markup=make_pharmacist_dialog_keyboard(question.uuid)
+            reply_markup=make_pharmacist_dialog_keyboard(question.uuid),
         )
 
         # НЕ очищаем состояние фармацевта - оставляем в диалоге
         await state.set_state(QAStates.in_dialog_with_user)
         user_dialog_keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="✍️ Ответить фармацевту",
-                    callback_data=f"continue_user_dialog_{question.uuid}"
-                ),
-                InlineKeyboardButton(
-                    text="📸 Отправить фото",
-                    callback_data=f"send_prescription_photo_{question.uuid}"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="✅ Завершить консультацию",
-                    callback_data=f"end_dialog_{question.uuid}"
-                )
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="✍️ Ответить фармацевту",
+                        callback_data=f"continue_user_dialog_{question.uuid}",
+                    ),
+                    InlineKeyboardButton(
+                        text="📸 Отправить фото",
+                        callback_data=f"send_prescription_photo_{question.uuid}",
+                    ),
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="✅ Завершить консультацию",
+                        callback_data=f"end_dialog_{question.uuid}",
+                    )
+                ],
             ]
-        ]
-    )
+        )
 
         # Отправляем пользователю уведомление о возможности продолжить диалог
         await message.bot.send_message(
             chat_id=user.telegram_id,
             text="💬 <b>Вы можете продолжить общение с фармацевтом</b>\n\n"
-                "Напишите ваше сообщение в чат или используйте кнопки ниже.",
+            "Напишите ваше сообщение в чат или используйте кнопки ниже.",
             parse_mode="HTML",
-            reply_markup=user_dialog_keyboard
+            reply_markup=user_dialog_keyboard,
         )
 
     except Exception as e:
@@ -1318,17 +1332,15 @@ async def process_answer_text(
         await message.answer("❌ Ошибка при отправке сообщения")
         await state.clear()
 
+
 @router.callback_query(F.data == "ask_new_question")
 async def ask_new_question_callback(
-    callback: CallbackQuery,
-    state: FSMContext,
-    is_pharmacist: bool
+    callback: CallbackQuery, state: FSMContext, is_pharmacist: bool
 ):
     """Начать новый вопрос после завершенного диалога"""
     if is_pharmacist:
         await callback.answer(
-            "👨‍⚕️ Вы фармацевт. Используйте /questions для ответов.",
-            show_alert=True
+            "👨‍⚕️ Вы фармацевт. Используйте /questions для ответов.", show_alert=True
         )
         return
 
@@ -1344,7 +1356,7 @@ async def ask_new_question_callback(
         "• Нужна консультация по детским витаминам\n"
         "• Помогите подобрать аналоги лекарства\n\n"
         "Для отмены используйте /cancel",
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
     await callback.answer()
 
@@ -1567,7 +1579,9 @@ async def request_more_photos_callback(
             reply_markup=photo_keyboard,
         )
 
-        await callback.answer("✅ Запрос на дополнительное фото отправлен пользователю!")
+        await callback.answer(
+            "✅ Запрос на дополнительное фото отправлен пользователю!"
+        )
 
         # Продолжаем диалог
         await callback.message.answer(
@@ -1579,6 +1593,7 @@ async def request_more_photos_callback(
     except Exception as e:
         logger.error(f"Error in request_more_photos_callback: {e}", exc_info=True)
         await callback.answer("❌ Ошибка при обработке запроса", show_alert=True)
+
 
 @router.message(QAStates.waiting_for_photo_request)
 async def process_photo_request_message(
