@@ -255,7 +255,7 @@ async def process_last_name(message: Message, state: FSMContext):
     )
 
     await message.answer(
-        "👤 Введите ваше отчество (если есть, или отправьте '-' чтобы пропустить):",
+        "👤 Введите ваше отчество (или отправьте '-' чтобы пропустить):",
         reply_markup=cancel_keyboard
     )
     await state.set_state(RegistrationStates.waiting_patronymic)

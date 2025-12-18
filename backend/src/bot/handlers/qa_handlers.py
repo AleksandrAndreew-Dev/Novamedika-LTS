@@ -1480,6 +1480,48 @@ async def request_photo_callback(
         # Уведомляем фармацевта
         await callback.answer("✅ Запрос фото отправлен пользователю!")
 
+        
+        if question.user and question.user.telegram_id:
+            # Формируем ФИО фармацевта
+            pharmacist_name = "Фармацевт"
+            if pharmacist.pharmacy_info:
+                first_name = pharmacist.pharmacy_info.get("first_name", "")
+                last_name = pharmacist.pharmacy_info.get("last_name", "")
+                patronymic = pharmacist.pharmacy_info.get("patronymic", "")
+
+                name_parts = []
+                if last_name:
+                    name_parts.append(last_name)
+                if first_name:
+                    name_parts.append(first_name)
+                if patronymic:
+                    name_parts.append(patronymic)
+
+                pharmacist_name = " ".join(name_parts) if name_parts else "Фармацевт"
+
+            # Создаем клавиатуру для отправки фото
+            photo_keyboard = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="📸 Отправить фото рецепта",
+                            callback_data=f"send_prescription_photo_{question.uuid}",
+                        )
+                    ]
+                ]
+            )
+
+            # Отправляем запрос пользователю
+            await callback.bot.send_message(
+                chat_id=question.user.telegram_id,
+                text=f"📸 <b>Фармацевт запросил фото рецепта</b>\n\n"
+                     f"👨‍⚕️ <b>Фармацевт:</b> {pharmacist_name}\n\n"
+                     f"❓ <b>По вопросу:</b>\n{question.text[:200]}...\n\n"
+                     f"Пожалуйста, отправьте фото рецепта, нажав на кнопку ниже:",
+                parse_mode="HTML",
+                reply_markup=photo_keyboard,
+            )
+
         await callback.message.answer(
             f"📸 <b>Запрос фото рецепта отправлен</b>\n\n"
             f"Пользователь получил уведомление о необходимости отправить фото.\n\n"
