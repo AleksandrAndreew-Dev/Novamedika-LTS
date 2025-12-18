@@ -4,8 +4,6 @@ from db.qa_models import Question
 
 
 
-
-
 async def format_pharmacist_questions_list(
     questions: List[Question], page: int = 0, per_page: int = 10
 ) -> str:

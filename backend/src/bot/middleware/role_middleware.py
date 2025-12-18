@@ -1,11 +1,11 @@
-from aiogram import Router, BaseMiddleware
+from aiogram import BaseMiddleware
 from aiogram.types import Message, CallbackQuery, Update, Poll
 from typing import Callable, Dict, Any, Awaitable, Union, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 import logging
-from sqlalchemy.exc import IntegrityError
+
 
 from db.qa_models import Pharmacist, User
 import uuid
@@ -26,7 +26,7 @@ async def get_or_create_user(telegram_id: int, db: AsyncSession) -> User:
             first_name=None,
             last_name=None,
             telegram_username=None,
-            user_type="customer"
+            user_type="customer",
         )
         db.add(new_user)
         try:
@@ -65,9 +65,12 @@ async def get_pharmacist_by_telegram_id(
 class RoleMiddleware(BaseMiddleware):
     async def __call__(
         self,
-        handler: Callable[[Union[Update, Message, CallbackQuery, Poll], Dict[str, Any]], Awaitable[Any]],
+        handler: Callable[
+            [Union[Update, Message, CallbackQuery, Poll], Dict[str, Any]],
+            Awaitable[Any],
+        ],
         event: Union[Update, Message, CallbackQuery, Poll],
-        data: Dict[str, Any]
+        data: Dict[str, Any],
     ) -> Any:
         """Основной обработчик middleware"""
         db = data.get("db")
@@ -112,7 +115,9 @@ class RoleMiddleware(BaseMiddleware):
             pharmacist = None
             user = None
 
-        logger.info(f"RoleMiddleware: User {user_id} - is_pharmacist: {pharmacist is not None}")
+        logger.info(
+            f"RoleMiddleware: User {user_id} - is_pharmacist: {pharmacist is not None}"
+        )
 
         # Добавляем данные в контекст
         data["user"] = user

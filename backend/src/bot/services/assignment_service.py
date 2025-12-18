@@ -2,10 +2,9 @@
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from sqlalchemy.orm import selectinload  # Добавьте эту строку
+from sqlalchemy.orm import selectinload 
 from db.qa_models import Pharmacist, Question
 
-from datetime import datetime
 from utils.time_utils import get_utc_now_naive
 
 logger = logging.getLogger(__name__)

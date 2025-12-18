@@ -1,40 +1,10 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-
-def make_completed_dialog_keyboard(question_uuid: str = None):
-    """Клавиатура для завершенного диалога"""
-    inline_keyboard = [
-        [
-            InlineKeyboardButton(
-                text="📝 Задать новый вопрос",
-                callback_data="ask_new_question"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="📋 Мои вопросы",
-                callback_data="my_questions_callback"
-            ),
-            InlineKeyboardButton(
-                text="🔍 Поиск лекарств",
-                callback_data="search_drugs"
-            )
-        ]
-    ]
-
-    if question_uuid:
-        inline_keyboard.append([
-            InlineKeyboardButton(
-                text="📚 История консультации",
-                callback_data=f"view_full_history_{question_uuid}"
-            )
-        ])
-
-    return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
 
 def make_user_consultation_keyboard(question_uuid: str) -> InlineKeyboardMarkup:
     """Клавиатура для пользователя после ответа фармацевта"""
@@ -124,11 +94,6 @@ def make_question_keyboard(question_uuid: str) -> InlineKeyboardMarkup:
         # Возвращаем пустую клавиатуру в случае ошибки
         return InlineKeyboardMarkup(inline_keyboard=[])
 
-
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-
-
-# В qa_keyboard.py добавить/обновить функции:
 
 
 def make_pharmacist_dialog_keyboard(question_uuid: str):
@@ -277,8 +242,6 @@ def make_completed_dialog_history_keyboard() -> InlineKeyboardMarkup:
         ]
     )
 
-
-# qa_keyboard.py - ДОБАВЛЯЕМ НОВЫЕ ФУНКЦИИ
 
 def make_full_history_keyboard(question_uuid: str, can_clarify: bool = True, has_photo_request: bool = False) -> InlineKeyboardMarkup:
     """Клавиатура для полной истории консультации"""
