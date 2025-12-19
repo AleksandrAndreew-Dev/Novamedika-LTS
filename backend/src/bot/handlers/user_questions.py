@@ -848,7 +848,7 @@ async def process_dialog_message(
     user: User,
     is_pharmacist: bool,
 ):
-    """Обработка сообщений пользователя в активном диалоге"""
+    """Обработка сообщений пользователя в активном диалоге - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
     if is_pharmacist:
         await message.answer("👨‍⚕️ Вы фармацевт. Используйте /questions для ответов.")
         return
@@ -876,6 +876,7 @@ async def process_dialog_message(
             await state.clear()
             return
 
+        # ✅ ПРОВЕРКА: Если диалог уже завершен
         if question.status == "completed":
             await message.answer(
                 "❌ Эта консультация уже завершена.\n"
@@ -901,7 +902,7 @@ async def process_dialog_message(
             await message.answer("❌ Фармацевт не найден.")
             return
 
-        # Добавляем сообщение в историю диалога
+        # ✅ ДОБАВЛЯЕМ СООБЩЕНИЕ В ИСТОРИЮ ДИАЛОГА
         await DialogService.add_message(
             db=db,
             question_id=question.uuid,
@@ -912,17 +913,17 @@ async def process_dialog_message(
         )
         await db.commit()
 
-        # Получаем историю диалога для контекста
+        # ✅ ПОЛУЧАЕМ ПОЛНУЮ ИСТОРИЮ ДИАЛОГА
         history_text, _ = await DialogService.format_dialog_history_for_display(
             question.uuid, db, limit=10
         )
 
-        # Формируем ФИО пользователя
+        # ✅ ФОРМИРУЕМ ИНФОРМАЦИЮ О ПОЛЬЗОВАТЕЛЕ
         user_name = user.first_name or "Пользователь"
         if user.last_name:
             user_name = f"{user.first_name} {user.last_name}"
 
-        # Формируем ФИО фармацевта
+        # ✅ ФОРМИРУЕМ ИНФОРМАЦИЮ О ФАРМАЦЕВТЕ
         pharmacist_name = "Фармацевт"
         if pharmacist.pharmacy_info:
             first_name = pharmacist.pharmacy_info.get("first_name", "")
@@ -939,8 +940,7 @@ async def process_dialog_message(
 
             pharmacist_name = " ".join(name_parts) if name_parts else "Фармацевт"
 
-        # Создаем клавиатуру для фармацевта
-
+        # ✅ СОЗДАЕМ КЛАВИАТУРУ ДЛЯ ФАРМАЦЕВТА
         pharmacist_keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
@@ -962,22 +962,24 @@ async def process_dialog_message(
             ]
         )
 
-        # Отправляем сообщение фармацевту
+        # ✅ ОТПРАВЛЯЕМ СООБЩЕНИЕ ФАРМАЦЕВТУ С ИСТОРИЕЙ ДИАЛОГА
         await message.bot.send_message(
             chat_id=pharmacist.user.telegram_id,
             text=f"💬 <b>СООБЩЕНИЕ ОТ ПОЛЬЗОВАТЕЛЯ</b>\n\n"
-            f"👤 <b>Пользователь:</b> {user_name}\n"
-            f"❓ <b>По вопросу:</b>\n{question.text[:150]}...\n\n"
-            f"💭 <b>Сообщение:</b>\n{message.text}\n\n"
-            f"{history_text}",
+                 f"👤 <b>Пользователь:</b> {user_name}\n"
+                 f"❓ <b>По вопросу:</b>\n{question.text[:150]}...\n\n"
+                 f"💭 <b>Сообщение:</b>\n{message.text}\n\n"
+                 f"{history_text}",
             parse_mode="HTML",
             reply_markup=pharmacist_keyboard,
         )
 
-        # Подтверждаем пользователю
+        # ✅ ПОКАЗЫВАЕМ ПОЛЬЗОВАТЕЛЮ ПОДТВЕРЖДЕНИЕ С ИСТОРИЕЙ ДИАЛОГА
         await message.answer(
             f"✅ Сообщение отправлено фармацевту {pharmacist_name}.\n\n"
-            "Вы можете продолжить общение или завершить диалог.",
+            f"📋 <b>Текущая история диалога:</b>\n\n"
+            f"{history_text}",
+            parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
@@ -999,7 +1001,6 @@ async def process_dialog_message(
     except Exception as e:
         logger.error(f"Error in process_dialog_message: {e}", exc_info=True)
         await message.answer("❌ Ошибка при отправке сообщения. Попробуйте еще раз.")
-
 
 @router.callback_query(F.data.startswith("quick_clarify_"))
 async def quick_clarify_callback(
