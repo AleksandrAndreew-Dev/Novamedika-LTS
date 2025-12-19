@@ -26,8 +26,6 @@ from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
-
-
 from src.utils.get_utils import get_all_pharmacist_questions
 from src.utils.pharm_format_questions import format_pharmacist_questions_list
 
@@ -102,9 +100,9 @@ async def format_questions_list(
 async def cmd_ask(message: Message):
     """Быстрая команда для вопроса"""
     await message.answer(
-        "📝 <b>Просто напишите ваш вопрос в чат!</b>\n\n"
-        "Не нужно нажимать кнопки или писать команды — просто опишите вашу проблему.\n\n"
-        "<i>Пишите прямо здесь ↓</i>",
+        "💬 <b>Напишите ваш вопрос:</b>\n\n"
+        "Пример:\n"
+        '<i>"Нужны витамины для ребенка 5 лет"</i>',
         parse_mode="HTML",
     )
 
@@ -146,11 +144,13 @@ async def cmd_my_questions(
             questions = await get_all_pharmacist_questions(db, pharmacist, limit=50)
             page = 0  # Начинаем с первой страницы
 
-            message_text = await format_pharmacist_questions_list(questions, page)
+            header = "📋 <b>Ваши вопросы</b>\n\nВыберите вопрос для просмотра:\n\n"
+            formatted = await format_pharmacist_questions_list(questions, page)
+            message_text = header + formatted
             reply_markup = make_questions_pagination_keyboard(
                 questions,
                 page,
-                is_pharmacist=True,  # Указываем что это фармацевт
+                is_pharmacist=True,
                 pharmacist_id=str(pharmacist.uuid),
             )
 
@@ -163,7 +163,9 @@ async def cmd_my_questions(
             questions = await get_all_user_questions(db, user, limit=50)
             page = 0
 
-            message_text = await format_questions_list(questions, page)
+            header = "📋 <b>Ваши вопросы</b>\n\nВыберите вопрос для просмотра:\n\n"
+            formatted = await format_questions_list(questions, page)
+            message_text = header + formatted
             reply_markup = make_questions_pagination_keyboard(questions, page)
 
             await message.answer(
@@ -717,31 +719,21 @@ async def continue_dialog_callback(
         # ✅ ПРОВЕРКА: Если диалог уже завершен
         if question.status == "completed":
             await callback.answer(
-                "❌ Эта консультация уже завершена.\n"
-                "Вы можете задать новый вопрос или посмотреть историю.",
+                "❌ Консультация уже завершена",
                 show_alert=True,
             )
 
-            # Показываем завершенный диалог с кнопками для новых действий
             await callback.message.answer(
-                f"🎯 <b>КОНСУЛЬТАЦИЯ ЗАВЕРШЕНА</b>\n\n"
-                f"❓ Ваш вопрос: {question.text[:200]}...\n\n"
-                f"⏰ Завершена: {question.answered_at.strftime('%d.%m.%Y %H:%M') if question.answered_at else 'Дата не указана'}\n\n"
-                f"<i>Эта консультация была завершена и больше не доступна для общения.</i>\n\n"
-                f"<b>Что вы можете сделать:</b>",
+                f"✅ <b>Консультация завершена</b>\n\n"
+                f"Вопрос: {question.text[:200]}...\n\n"
+                "Что вы можете сделать:",
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[
                         [
                             InlineKeyboardButton(
-                                text="📝 Задать новый вопрос",
+                                text="📝 Новый вопрос",
                                 callback_data="ask_new_question",
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                text="📋 Посмотреть историю",
-                                callback_data=f"view_full_history_{question.uuid}",
                             )
                         ],
                     ]
@@ -827,9 +819,8 @@ async def process_user_question(
             logger.error(f"Error in notification service: {e}")
 
         await message.answer(
-            "✅ <b>Ваш вопрос отправлен!</b>\n\n"
-            "Фармацевты уже изучают ваш запрос. Вы получите ответ в ближайшее время.\n\n"
-            "💡 <i>Используйте /my_questions чтобы отслеживать статус</i>",
+            "✅ <b>Вопрос отправлен</b>\n\n"
+            "Фармацевт ответит как только освободится.",
             parse_mode="HTML",
             reply_markup=get_user_keyboard(),
         )

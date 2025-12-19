@@ -49,11 +49,7 @@ def get_pharmacist_keyboard():
                     text="🔴 Перейти в офлайн", callback_data="go_offline"
                 ),
             ],
-            [
-                InlineKeyboardButton(
-                    text="📋 Мои вопросы", callback_data="my_questions"
-                )
-            ],
+            [InlineKeyboardButton(text="📋 Мои вопросы", callback_data="my_questions")],
             [
                 InlineKeyboardButton(
                     text="📊 Статус системы", callback_data="system_status"
@@ -62,10 +58,6 @@ def get_pharmacist_keyboard():
             ],
         ]
     )
-
-
-# bot/handlers/common_handlers.py - ОБНОВИТЬ get_user_keyboard
-# Обновите функцию get_user_keyboard():
 
 
 def get_user_keyboard():
@@ -78,11 +70,7 @@ def get_user_keyboard():
                     callback_data="search_drugs",
                 )
             ],
-            [
-                InlineKeyboardButton(
-                    text="📖 Мои вопросы", callback_data="my_questions"
-                )
-            ],
+            [InlineKeyboardButton(text="📖 Мои вопросы", callback_data="my_questions")],
             [
                 InlineKeyboardButton(
                     text="👨‍⚕️ Я фармацевт / Регистрация",
@@ -140,7 +128,7 @@ async def cmd_history(
             )
             return
 
-        message_text = f"📚 <b>ИСТОРИЯ ДИАЛОГОВ</b>\n\n"
+        message_text = f"📚 <b>Ваши диалоги</b>\n\n"
         message_text += f"Всего диалогов: {len(questions)}\n\n"
 
         # Группируем по статусу
@@ -221,14 +209,14 @@ async def cmd_start(
         await message.answer(
             "👋 <b>Лучше спросите в аптеке!</b>\n\n"
             "💊 <b>Консультация профессионального фармацевта</b>\n\n"
-            "📝 <b>Просто напишите ваш вопрос в чат!</b>\n\n"
-            "Или используйте кнопки ниже:",
+            "Просто напишите в чат, например:\n"
+            '<i>"Что можно принять от головной боли?"</i>',
             parse_mode="HTML",
             reply_markup=reply_kb,
         )
 
         # Дополнительно показываем inline-кнопки для других действий
-        await message.answer("Другие действия:", reply_markup=get_user_keyboard())
+        await message.answer("Или выберите действие:", reply_markup=get_user_keyboard())
 
 
 @router.message(Command("search"))
@@ -239,6 +227,16 @@ async def show_search_webapp(
     """Показать Web App для поиска лекарств"""
     # Очищаем состояние
     await state.clear()
+
+    # ✅ Добавляем проверку на фармацевта
+    if is_pharmacist:
+        if isinstance(update, CallbackQuery):
+            await update.answer(
+                "🔍 Используйте /questions для работы с вопросами", show_alert=True
+            )
+        else:
+            await update.answer("🔍 Используйте /questions для работы с вопросами")
+        return
 
     # Создаем клавиатуру с Web App
     reply_kb = get_reply_keyboard_with_webapp()
@@ -265,7 +263,7 @@ async def cmd_continue(
     state: FSMContext,
     db: AsyncSession,
     user: User,
-    is_pharmacist: bool
+    is_pharmacist: bool,
 ):
     """Продолжить активный диалог"""
     if is_pharmacist:
@@ -281,7 +279,7 @@ async def cmd_continue(
             .where(
                 Question.user_id == user.uuid,
                 Question.status.in_(["in_progress", "answered"]),
-                Question.taken_by.is_not(None)
+                Question.taken_by.is_not(None),
             )
             .order_by(Question.answered_at.desc())
             .limit(1)
@@ -290,8 +288,8 @@ async def cmd_continue(
 
         if not question:
             await message.answer(
-                "📭 У вас нет активных диалогов.\n\n"
-                "Сначала задайте вопрос или дождитесь ответа фармацевта."
+                "📭 <b>Нет активных диалогов</b>\n\n" "Задайте вопрос в чат.",
+                parse_mode="HTML",
             )
             return
 
@@ -301,8 +299,7 @@ async def cmd_continue(
 
         # Получаем информацию о фармацевте
         pharmacist_result = await db.execute(
-            select(Pharmacist)
-            .where(Pharmacist.uuid == question.taken_by)
+            select(Pharmacist).where(Pharmacist.uuid == question.taken_by)
         )
         pharmacist = pharmacist_result.scalar_one_or_none()
 
@@ -328,61 +325,37 @@ async def cmd_continue(
             f"❓ <b>Ваш вопрос:</b>\n{question.text[:200]}...\n\n"
             "Напишите ваше сообщение фармацевту:\n"
             "(или /cancel для отмены)",
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
 
     except Exception as e:
         logger.error(f"Error in cmd_continue: {e}")
         await message.answer("❌ Ошибка при продолжении диалога")
 
+
 @router.message(Command("help"))
 async def cmd_help(message: Message, is_pharmacist: bool):
     """Подробная справка с кнопками"""
     if is_pharmacist:
         await message.answer(
-            "👨‍⚕️ <b>Подробная справка для фармацевта</b>\n\n"
-            "💡 <b>Как работать с вопросами:</b>\n"
-            "1. Перейдите в онлайн (/online)\n"
-            "2. Получайте уведомления о новых вопросах\n"
-            "3. Просматривайте вопросы, которые еще без ответа (/questions)\n"
-            "4. Просматривайте вопросы которые вы взяли (/my_questions)\n"
-            "5. Нажимайте «Ответить» под вопросом\n"
-            "6. В диалоге можно:\n"
-            "   • Отправить ответ\n"
-            "   • Запросить фото рецепта\n"
-            "   • Завершить диалог (кнопка внизу)\n"
-            "6. Пользователь получит ответ с вашими данными\n\n"
-            "💬 <b>Завершение диалога:</b>\n"
-            "• Используйте кнопку «Завершить диалог» в диалоге\n"
-            "• После завершения пользователь получит уведомление\n"
-            "• Вопрос переместится в архив",
+            "👨‍⚕️ <b>Как отвечать на вопросы?</b>\n\n"
+            "1. Нажмите «🟢 Перейти в онлайн»\n"
+            "2. Как придет уведомление — нажмите «💬 Ответить»\n"
+            "3. Напишите ответ пользователю",
             parse_mode="HTML",
             reply_markup=get_pharmacist_keyboard(),
         )
     else:
         await message.answer(
-            "👋 <b>Помощь по боту</b>\n\n"
-            "💊 <b>Просто напишите вопрос в чат!</b>\n"
-            "Никаких кнопок не нужно — бот автоматически отправит ваш вопрос фармацевтам.\n\n"
-            "⏱️ <b>Как это работает:</b>\n"
-            "1. Напишите вопрос в чат\n"
-            "2. Фармацевты получат уведомление\n"
-            "3. Вы получите ответ в ближайшее время\n"
-            "4. После получения ответа вы можете:\n"
-            "   • Уточнить вопрос (кнопка «Уточнить»)\n"
-            "   • Отправить фото рецепта (если запрошено)\n"
-            "   • Завершить диалог (кнопка «Завершить»)\n\n"
-            "💬 <b>Завершение диалога:</b>\n"
-            "• Нажмите кнопку «Завершить диалог» в сообщении с ответом\n"
-            "• После завершения фармацевт получит уведомление\n"
-            "• Вы можете задать новый вопрос в любое время\n\n"
+            "💬 <b>Как задать вопрос?</b>\n\n"
+            "Просто напишите в чат, например:\n"
+            '<i>"Что можно принять от температуры?"</i>\n\n'
+            "⏳ <b>Что дальше?</b>\n"
+            "Фармацевт ответит, как только освободится.",
             "👨‍⚕️ <b>Если вы фармацевт</b> - нажмите «Я фарм специалист» в меню",
             parse_mode="HTML",
             reply_markup=get_user_keyboard(),
         )
-
-
-# common_handlers.py - ДОБАВЛЯЕМ НОВЫЕ ОБРАБОТЧИКИ
 
 
 @router.callback_query(F.data == "back_to_main")
@@ -400,7 +373,8 @@ async def back_to_main_callback(
         )
     else:
         await callback.message.answer(
-            "👋 <b>Главное меню</b>\n\n"  " Напишите ваш вопрос фармацевтическомуу специалисту в чат  или Выберите действие:",
+            "👋 <b>Главное меню</b>\n\n"
+            " Напишите ваш вопрос фармацевтическомуу специалисту в чат  или Выберите действие:",
             parse_mode="HTML",
             reply_markup=get_user_keyboard(),
         )
@@ -414,7 +388,7 @@ async def back_to_pharmacist_main_callback(
     state: FSMContext,
     is_pharmacist: bool,
     user: User,
-    pharmacist: object
+    pharmacist: object,
 ):
     """Возврат в панель фармацевта"""
     await state.clear()
@@ -642,9 +616,8 @@ async def go_offline_callback(
         await callback.answer("❌ Ошибка при переходе в офлайн", show_alert=True)
 
 
-
-
 # Добавить в common_handlers.py или user_questions.py:
+
 
 @router.callback_query(F.data.startswith("continue_user_dialog_"))
 async def continue_user_dialog_callback(
@@ -652,13 +625,12 @@ async def continue_user_dialog_callback(
     state: FSMContext,
     db: AsyncSession,
     user: User,
-    is_pharmacist: bool
+    is_pharmacist: bool,
 ):
     """Продолжение диалога пользователем после ответа фармацевта"""
     if is_pharmacist:
         await callback.answer(
-            "👨‍⚕️ Вы фармацевт. Используйте /questions для ответов.",
-            show_alert=True
+            "👨‍⚕️ Вы фармацевт. Используйте /questions для ответов.", show_alert=True
         )
         return
 
@@ -673,8 +645,7 @@ async def continue_user_dialog_callback(
 
         if not question or question.user_id != user.uuid:
             await callback.answer(
-                "❌ Вопрос не найден или не принадлежит вам",
-                show_alert=True
+                "❌ Вопрос не найден или не принадлежит вам", show_alert=True
             )
             return
 
@@ -687,17 +658,15 @@ async def continue_user_dialog_callback(
             f"❓ <b>Ваш вопрос:</b>\n{question.text[:200]}...\n\n"
             "Напишите ваше сообщение фармацевту:\n"
             "(или /cancel для отмены)",
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
 
         await callback.answer()
 
     except Exception as e:
         logger.error(f"Error in continue_user_dialog_callback: {e}")
-        await callback.answer(
-            "❌ Ошибка при продолжении диалога",
-            show_alert=True
-        )
+        await callback.answer("❌ Ошибка при продолжении диалога", show_alert=True)
+
 
 @router.callback_query(F.data == "view_questions")
 async def view_questions_callback(
@@ -724,9 +693,7 @@ async def view_questions_callback(
         questions = result.scalars().all()
 
         if not questions:
-            await callback.message.answer(
-                "📝 На данный момент нет новых вопросов.\n\n"
-            )
+            await callback.message.answer("📝 На данный момент нет новых вопросов.\n\n")
             return
 
         for i, question in enumerate(questions, 1):
@@ -925,9 +892,7 @@ async def cmd_complete(
             )
 
         await message.answer(
-            "📋 <b>Выберите консультацию для завершения:</b>\n\n"
-            "Нажмите на консультацию, которую хотите завершить.\n\n"
-            "💡 <i>Завершать можно только те консультации, на которые вы уже получили ответ.</i>",
+            "✅ <b>Завершить консультацию</b>\n\n" "Выберите консультацию:",
             parse_mode="HTML",
             reply_markup=keyboard,
         )
@@ -952,29 +917,11 @@ async def universal_cancel(message: Message, state: FSMContext):
     await state.clear()
 
     # Уведомляем пользователя
-    await message.answer("✅ Текущее действие отменено.")
-
-
-
-@router.callback_query(F.data == "search_drugs")
-async def search_drugs_from_completed_callback(
-    callback: CallbackQuery, state: FSMContext, is_pharmacist: bool
-):
-    """Обработка кнопки 'Поиск лекарств' из завершенного диалога"""
-    await state.clear()
-
-    if is_pharmacist:
-        await callback.answer(
-            "🔍 Используйте /questions для работы с вопросами", show_alert=True
-        )
-        return
-
-    await callback.answer()
-
-    # Используем существующую функцию из common_handlers
-    from bot.handlers.common_handlers import show_search_webapp
-
-    await show_search_webapp(callback, state, is_pharmacist)
+    await message.answer(
+    "❌ <b>Отмена</b>\n\n"
+    "Задайте новый вопрос или выберите действие.",
+    parse_mode="HTML",
+)
 
 
 @router.callback_query(F.data == "my_questions")

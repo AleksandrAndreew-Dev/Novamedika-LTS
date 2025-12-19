@@ -2,7 +2,12 @@
 from typing import Optional
 
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import (
+    Message,
+    CallbackQuery,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+)
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,7 +31,7 @@ async def complete_dialog_service(
     initiator_type: str,
     initiator: User,
     callback: CallbackQuery = None,
-    message: Message = None
+    message: Message = None,
 ) -> bool:
     """Сервис завершения диалога - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
     try:
@@ -60,8 +65,7 @@ async def complete_dialog_service(
         if question.status == "completed":
             if callback:
                 await callback.answer(
-                    "✅ Этот диалог уже завершен ранее",
-                    show_alert=True
+                    "✅ Этот диалог уже завершен ранее", show_alert=True
                 )
             return False
 
@@ -84,7 +88,11 @@ async def complete_dialog_service(
         await db.commit()
 
         # Минимальное исправление для уведомления пользователя
-        if initiator_type == "pharmacist" and question.user and question.user.telegram_id:
+        if (
+            initiator_type == "pharmacist"
+            and question.user
+            and question.user.telegram_id
+        ):
             try:
                 bot = None
                 if message:
@@ -96,18 +104,21 @@ async def complete_dialog_service(
                     await bot.send_message(
                         chat_id=question.user.telegram_id,
                         text=(
-                            f"✅ <b>Ваша консультация завершена</b>\n\n"
-                            f"❓ Ваш вопрос: {question.text[:150]}...\n\n"
-                            f"👨‍⚕️ Фармацевт завершил консультацию.\n\n"
-                            f"💡 Если у вас есть новые вопросы, просто напишите их в чат."
+                            f"✅ <b>Консультация завершена</b>\n\n"
+                            f"Ваш вопрос: {question.text[:150]}...\n\n"
+                            "Задайте новый вопрос, если нужно."
                         ),
-                        parse_mode="HTML"
+                        parse_mode="HTML",
                     )
             except Exception as e:
                 logger.error(f"Ошибка уведомления пользователя: {e}")
 
         # ✅ Теперь уведомляем фармацевта (если есть)
-        if initiator_type == "user" and pharmacist_to_notify and pharmacist_to_notify.user:
+        if (
+            initiator_type == "user"
+            and pharmacist_to_notify
+            and pharmacist_to_notify.user
+        ):
             try:
                 # Формируем имя пользователя
                 user_name = initiator.first_name or "Пользователь"
@@ -117,9 +128,13 @@ async def complete_dialog_service(
                 # Формируем имя фармацевта
                 pharmacist_name = "Фармацевт"
                 if pharmacist_to_notify.pharmacy_info:
-                    first_name = pharmacist_to_notify.pharmacy_info.get("first_name", "")
+                    first_name = pharmacist_to_notify.pharmacy_info.get(
+                        "first_name", ""
+                    )
                     last_name = pharmacist_to_notify.pharmacy_info.get("last_name", "")
-                    patronymic = pharmacist_to_notify.pharmacy_info.get("patronymic", "")
+                    patronymic = pharmacist_to_notify.pharmacy_info.get(
+                        "patronymic", ""
+                    )
 
                     name_parts = []
                     if last_name:
@@ -129,24 +144,23 @@ async def complete_dialog_service(
                     if patronymic:
                         name_parts.append(patronymic)
 
-                    pharmacist_name = " ".join(name_parts) if name_parts else "Фармацевт"
+                    pharmacist_name = (
+                        " ".join(name_parts) if name_parts else "Фармацевт"
+                    )
 
                 # Отправляем уведомление фармацевту
                 await message.bot.send_message(
                     chat_id=pharmacist_to_notify.user.telegram_id,
                     text=(
-                        f"🎯 <b>ПОЛЬЗОВАТЕЛЬ ЗАВЕРШИЛ КОНСУЛЬТАЦИЮ</b>\n\n"
-                        f"👤 <b>Пользователь:</b> {user_name}\n"
-                        f"📅 <b>Время:</b> {get_utc_now_naive().strftime('%d.%m.%Y %H:%M')}\n"
-                        f"━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"❓ <b>Вопрос:</b>\n"
-                        f"<i>{question.text[:200]}{'...' if len(question.text) > 200 else ''}</i>\n\n"
-                        f"✅ <b>Диалог завершен по инициативе пользователя</b>\n\n"
-                        f"📋 Используйте /questions для новых вопросов"
+                        f"🎯 <b>Пользователь завершил консультацию</b>\n\n"
+                        f"Вопрос: {question.text[:200]}...\n\n"
+                        f"Используйте /questions для новых вопросов"
                     ),
-                    parse_mode="HTML"
+                    parse_mode="HTML",
                 )
-                logger.info(f"Уведомление о завершении отправлено фармацевту {pharmacist_to_notify.user.telegram_id}")
+                logger.info(
+                    f"Уведомление о завершении отправлено фармацевту {pharmacist_to_notify.user.telegram_id}"
+                )
             except Exception as e:
                 logger.error(f"Ошибка при отправке уведомления фармацевту: {e}")
 
@@ -163,7 +177,7 @@ async def end_dialog_callback(
     db: AsyncSession,
     is_pharmacist: bool,
     pharmacist: Pharmacist,
-    user: User
+    user: User,
 ):
     """Обработка нажатия кнопки завершения диалога - универсальный"""
     question_uuid = callback.data.replace("end_dialog_", "")
@@ -185,25 +199,24 @@ async def end_dialog_callback(
                 return
 
             await callback.message.answer(
-                f"⚠️ <b>Завершение диалога</b>\n\n"
-                f"Вы уверены, что хотите завершить диалог?\n\n"
-                f"❓ Вопрос: {question.text[:200]}...\n\n"
-                f"После завершения пользователь получит уведомление.",
+                f"⚠️ <b>Завершить диалог?</b>\n\n"
+                f"Вопрос: {question.text[:200]}...\n\n"
+                "Пользователь получит уведомление.",
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[
                         [
                             InlineKeyboardButton(
                                 text="✅ Завершить",
-                                callback_data=f"confirm_end_{question_uuid}_pharmacist"
+                                callback_data=f"confirm_end_{question_uuid}_pharmacist",
                             ),
                             InlineKeyboardButton(
-                                text="❌ Отмена",
-                                callback_data=f"cancel_end_{question_uuid}"
-                            )
+                                text="❌ Нет",
+                                callback_data=f"cancel_end_{question_uuid}",
+                            ),
                         ]
                     ]
-                )
+                ),
             )
         else:
             # Для пользователя
@@ -222,15 +235,15 @@ async def end_dialog_callback(
                         [
                             InlineKeyboardButton(
                                 text="✅ Завершить",
-                                callback_data=f"confirm_end_{question_uuid}_user"
+                                callback_data=f"confirm_end_{question_uuid}_user",
                             ),
                             InlineKeyboardButton(
                                 text="❌ Отмена",
-                                callback_data=f"cancel_end_{question_uuid}"
-                            )
+                                callback_data=f"cancel_end_{question_uuid}",
+                            ),
                         ]
                     ]
-                )
+                ),
             )
 
         await callback.answer()
@@ -240,21 +253,19 @@ async def end_dialog_callback(
         await callback.answer("❌ Ошибка", show_alert=True)
 
 
-
-
 @router.callback_query(F.data.startswith("complete_consultation_"))
 async def complete_consultation_callback(
     callback: CallbackQuery,
     db: AsyncSession,
     user: User,
     is_pharmacist: bool,
-    state: FSMContext
+    state: FSMContext,
 ):
     """Обработка завершения консультации через кнопку в /complete"""
     if is_pharmacist:
         await callback.answer(
             "👨‍⚕️ Вы фармацевт. Используйте /end_dialog для завершения диалогов.",
-            show_alert=True
+            show_alert=True,
         )
         return
 
@@ -268,7 +279,9 @@ async def complete_consultation_callback(
         question = result.scalar_one_or_none()
 
         if not question or question.user_id != user.uuid:
-            await callback.answer("❌ Вопрос не найден или не принадлежит вам", show_alert=True)
+            await callback.answer(
+                "❌ Вопрос не найден или не принадлежит вам", show_alert=True
+            )
             return
 
         if question.status == "completed":
@@ -282,7 +295,7 @@ async def complete_consultation_callback(
             initiator_type="user",
             initiator=user,
             callback=callback,
-            message=callback.message
+            message=callback.message,
         )
 
         if success:
@@ -292,15 +305,18 @@ async def complete_consultation_callback(
                 f"❓ Вопрос: {question.text[:100]}...\n\n"
                 f"Теперь вы можете задать новый вопрос или посмотреть другие консультации.",
                 parse_mode="HTML",
-                reply_markup=make_completed_dialog_keyboard()
+                reply_markup=make_completed_dialog_keyboard(),
             )
             await callback.answer()
         else:
-            await callback.answer("❌ Ошибка при завершении консультации", show_alert=True)
+            await callback.answer(
+                "❌ Ошибка при завершении консультации", show_alert=True
+            )
 
     except Exception as e:
         logger.error(f"Error in complete_consultation_callback: {e}")
         await callback.answer("❌ Ошибка при обработке запроса", show_alert=True)
+
 
 @router.callback_query(F.data.startswith("confirm_end_"))
 async def confirm_end_dialog_callback(
@@ -309,7 +325,7 @@ async def confirm_end_dialog_callback(
     is_pharmacist: bool,
     pharmacist: Pharmacist,
     user: User,
-    state: FSMContext
+    state: FSMContext,
 ):
     """Подтверждение завершения диалога"""
     data = callback.data.replace("confirm_end_", "")
@@ -330,17 +346,17 @@ async def confirm_end_dialog_callback(
             initiator_type=initiator_type,
             initiator=pharmacist if is_pharmacist else user,
             callback=callback,
-            message=callback.message
+            message=callback.message,
         )
 
         if success:
             # Отправляем сообщение инициатору
             if initiator_type == "pharmacist":
                 await callback.message.answer(
-                    "🎯 <b>ДИАЛОГ ЗАВЕРШЕН</b>\n\n"
-                    "✅ Пользователь уведомлен о завершении диалога.\n\n"
-                    "📋 Используйте /questions для новых вопросов",
-                    parse_mode="HTML"
+                    "✅ <b>Диалог завершен</b>\n\n"
+                    "Пользователь уведомлен.\n"
+                    "Используйте /questions для новых вопросов",
+                    parse_mode="HTML",
                 )
             else:
                 await callback.message.answer(
@@ -348,13 +364,17 @@ async def confirm_end_dialog_callback(
                     "✅ Фармацевт уведомлен о завершении диалога.\n\n"
                     "✨ Вы можете задать новый вопрос:",
                     parse_mode="HTML",
-                    reply_markup=make_completed_dialog_keyboard()
+                    reply_markup=make_completed_dialog_keyboard(),
                 )
 
             # Очищаем состояние если нужно
             current_state = await state.get_state()
-            if current_state in [QAStates.waiting_for_answer, QAStates.in_dialog_with_user,
-                               UserQAStates.waiting_for_clarification, UserQAStates.in_dialog]:
+            if current_state in [
+                QAStates.waiting_for_answer,
+                QAStates.in_dialog_with_user,
+                UserQAStates.waiting_for_clarification,
+                UserQAStates.in_dialog,
+            ]:
                 await state.clear()
 
             await callback.answer("✅ Диалог завершен")
@@ -370,8 +390,7 @@ async def cancel_end_dialog_callback(callback: CallbackQuery):
     await callback.answer("❌ Завершение отменено")
 
     await callback.message.answer(
-        "🔄 Диалог продолжается.\n"
-        "Вы можете продолжить общение."
+        "🔄 Диалог продолжается.\n" "Вы можете продолжить общение."
     )
 
 
@@ -382,7 +401,7 @@ async def cmd_end_dialog(
     db: AsyncSession,
     is_pharmacist: bool,
     pharmacist: Pharmacist,
-    user: User
+    user: User,
 ):
     """Команда завершения диалога через меню"""
     try:
@@ -392,7 +411,7 @@ async def cmd_end_dialog(
                 select(Question)
                 .where(
                     Question.taken_by == pharmacist.uuid,
-                    Question.status.in_(["in_progress", "answered"])
+                    Question.status.in_(["in_progress", "answered"]),
                 )
                 .order_by(Question.taken_at.desc())
             )
@@ -403,7 +422,7 @@ async def cmd_end_dialog(
                 select(Question)
                 .where(
                     Question.user_id == user.uuid,
-                    Question.status.in_(["in_progress", "answered"])
+                    Question.status.in_(["in_progress", "answered"]),
                 )
                 .order_by(Question.created_at.desc())
             )
@@ -411,25 +430,30 @@ async def cmd_end_dialog(
 
         if not questions:
             await message.answer(
-                "📭 У вас нет активных диалогов для завершения."
+                "📭 У вас нет активных диалогов для завершения.",
+                parse_mode="HTML",
             )
             return
 
         # Создаем клавиатуру с вопросами
         keyboard = InlineKeyboardMarkup(inline_keyboard=[])
         for question in questions[:5]:
-            question_preview = question.text[:50] + "..." if len(question.text) > 50 else question.text
-            keyboard.inline_keyboard.append([
-                InlineKeyboardButton(
-                    text=f"❓ {question_preview}",
-                    callback_data=f"end_dialog_{question.uuid}"
-                )
-            ])
+            question_preview = (
+                question.text[:50] + "..." if len(question.text) > 50 else question.text
+            )
+            keyboard.inline_keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        text=f"❓ {question_preview}",
+                        callback_data=f"end_dialog_{question.uuid}",
+                    )
+                ]
+            )
 
         await message.answer(
             "📋 <b>Выберите диалог для завершения:</b>",
             parse_mode="HTML",
-            reply_markup=keyboard
+            reply_markup=keyboard,
         )
 
     except Exception as e:

@@ -30,8 +30,6 @@ from bot.keyboards.qa_keyboard import (
 )
 
 
-
-
 # Инициализация
 logger = logging.getLogger(__name__)
 router = Router()
@@ -63,7 +61,6 @@ async def set_online(
 
         # Проверяем есть ли ожидающие вопросы
 
-
         result = await db.execute(
             select(func.count(Question.uuid)).where(Question.status == "pending")
         )
@@ -71,11 +68,11 @@ async def set_online(
 
         if pending_count > 0:
             await message.answer(
-                f"✅ Вы теперь онлайн и готовы принимать вопросы!\n\n"
-                f"📝 <b>Ожидающих вопросов:</b> {pending_count}\n"
-                f"Используйте /questions чтобы просмотреть вопросы.",
+                f"🟢 <b>Вы теперь онлайн!</b>\n\n"
+                f"Ожидающих вопросов: {pending_count}\n"
+                "Как придет уведомление — нажмите «💬 Ответить»",
                 parse_mode="HTML",
-                reply_markup=get_pharmacist_keyboard(),  # Добавляем клавиатуру
+                reply_markup=get_pharmacist_keyboard(),
             )
 
             # Показываем первые 3 вопроса
@@ -99,9 +96,8 @@ async def set_online(
                 )
         else:
             await message.answer(
-                "✅ Вы теперь онлайн и готовы принимать вопросы!\n\n"
-                "На данный момент новых вопросов нет. "
-                "Вы получите уведомление, когда появится новый вопрос.",
+                "🟢 <b>Вы теперь онлайн!</b>\n\n"
+                "Как только пользователь задаст вопрос — вы получите уведомление.",
                 reply_markup=get_pharmacist_keyboard(),
             )
 
@@ -139,7 +135,11 @@ async def set_offline(
             f"Pharmacist {message.from_user.id} successfully set offline status"  # вместо pharmacist.telegram_id
         )
 
-        await message.answer("✅ Вы теперь офлайн.")
+        await message.answer(
+            "✅ Вы теперь офлайн.",
+            parse_mode="HTML",
+            reply_markup=get_pharmacist_keyboard(),
+        )
 
     except Exception as e:
         logger.error(
@@ -246,8 +246,9 @@ async def cmd_questions(
 
         if not questions:
             await message.answer(
-                "📝 На данный момент нет новых вопросов.\n\n"
-                "Пользователи задают вопросы через команду /ask"
+                "📝 <b>Нет новых вопросов</b>\n\n"
+                "Как только пользователь задаст вопрос — вы получите уведомление.",
+                parse_mode="HTML",
             )
             return
 
@@ -427,6 +428,7 @@ async def cmd_release_question(
     except Exception as e:
         logger.error(f"Error in cmd_release_question: {e}")
         await message.answer("❌ Ошибка при получении вопросов")
+
 
 @router.callback_query(F.data.startswith("show_history_"))
 async def show_dialog_history_callback(
@@ -951,7 +953,6 @@ async def handle_pharmacist_text_in_dialog(
             await state.clear()
             return
 
-
         if not pharmacist.is_online:
             pharmacist.is_online = True
             pharmacist.last_seen = get_utc_now_naive()
@@ -992,11 +993,9 @@ async def handle_pharmacist_text_in_dialog(
 
         await db.commit()
 
-
         history_text, file_ids = await DialogService.format_dialog_history_for_display(
             question.uuid, db, limit=20
         )
-
 
         user_result = await db.execute(
             select(User).where(User.uuid == question.user_id)
@@ -1146,7 +1145,6 @@ async def process_answer_text(
             await state.clear()
             return
 
-
         if question.status == "completed":
             await message.answer(
                 "❌ Этот диалог уже завершен. Вы не можете отправлять сообщения.\n"
@@ -1160,12 +1158,10 @@ async def process_answer_text(
             pharmacist.last_seen = get_utc_now_naive()
             await db.commit()
 
-
         logger.info(
             f"Creating answer for question {question.uuid} by pharmacist {pharmacist.uuid}"
         )
         logger.info(f"Answer text: '{message.text}'")
-
 
         answer = Answer(
             text=message.text,
@@ -1181,7 +1177,6 @@ async def process_answer_text(
         question.answered_at = get_utc_now_naive()
         question.answered_by = pharmacist.uuid
 
-
         dialog_message = await DialogService.add_message(
             db=db,
             question_id=question.uuid,
@@ -1191,22 +1186,18 @@ async def process_answer_text(
             text=message.text,
         )
 
-
         logger.info(
             f"Dialog message created: {dialog_message.uuid}, type={dialog_message.message_type}"
         )
 
         await db.commit()
 
-
         history_text, file_ids = await DialogService.format_dialog_history_for_display(
             question.uuid, db, limit=20
         )
 
-
         logger.info(f"History text length: {len(history_text)}")
         logger.info(f"History text preview: {history_text[:200]}...")
-
 
         user_result = await db.execute(
             select(User).where(User.uuid == question.user_id)
@@ -1214,61 +1205,28 @@ async def process_answer_text(
         user = user_result.scalar_one_or_none()
 
         if user and user.telegram_id:
-            try:
-                # Формируем информацию о фармацевте с ФИО
-                pharmacy_info = pharmacist.pharmacy_info or {}
-                chain = pharmacy_info.get("chain", "Не указана")
-                number = pharmacy_info.get("number", "Не указан")
-                role = pharmacy_info.get("role", "Фармацевт")
 
-                # Получаем ФИО фармацевта
-                first_name = pharmacy_info.get("first_name", "")
-                last_name = pharmacy_info.get("last_name", "")
-                patronymic = pharmacy_info.get("patronymic", "")
+            await message.bot.send_message(
+                chat_id=user.telegram_id,
+                text="💬 <b>Ответ фармацевта</b>\n\n" "Что вы хотите сделать?",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="✍️ Уточнить",
+                                callback_data=f"quick_clarify_{question.uuid}",
+                            ),
+                            InlineKeyboardButton(
+                                text="✅ Завершить",
+                                callback_data=f"end_dialog_{question.uuid}",
+                            ),
+                        ],
+                    ]
+                ),
+            )
 
-                # Формируем строку с ФИО
-                pharmacist_name_parts = []
-                if last_name:
-                    pharmacist_name_parts.append(last_name)
-                if first_name:
-                    pharmacist_name_parts.append(first_name)
-                if patronymic:
-                    pharmacist_name_parts.append(patronymic)
-
-                pharmacist_name = (
-                    " ".join(pharmacist_name_parts)
-                    if pharmacist_name_parts
-                    else "Фармацевт"
-                )
-
-                pharmacist_info_text = f"{pharmacist_name}"
-                if chain and number:
-                    pharmacist_info_text += f", {chain}, аптека №{number}"
-                if role and role != "Фармацевт":
-                    pharmacist_info_text += f" ({role})"
-
-                # Формируем полное сообщение с историей
-                full_message = (
-                    f"💬 <b>ОТВЕТ ФАРМАЦЕВТА</b>\n\n"
-                    f"{history_text}\n\n"
-                    f"👨‍⚕️ <b>Фармацевт:</b> {pharmacist_info_text}"
-                )
-
-                # Отправляем сообщение пользователю С КНОПКАМИ
-                await message.bot.send_message(
-                    chat_id=user.telegram_id,
-                    text=full_message,
-                    parse_mode="HTML",
-                )
-
-                logger.info(f"Message sent to user {user.telegram_id}")
-
-            except Exception as e:
-                logger.error(
-                    f"Failed to send message to user {user.telegram_id}: {e}",
-                    exc_info=True,
-                )
-
+            logger.info(f"Message sent to user {user.telegram_id}")
 
         await message.answer(
             f"💬 <b>ВЫ ОТПРАВИЛИ ОТВЕТ</b>\n\n"
@@ -1277,7 +1235,6 @@ async def process_answer_text(
             parse_mode="HTML",
             reply_markup=make_pharmacist_dialog_keyboard(question.uuid),
         )
-
 
         await state.set_state(QAStates.in_dialog_with_user)
         user_dialog_keyboard = InlineKeyboardMarkup(
@@ -1300,7 +1257,6 @@ async def process_answer_text(
                 ],
             ]
         )
-
 
         await message.bot.send_message(
             chat_id=user.telegram_id,
@@ -1378,7 +1334,6 @@ async def answer_clarification_callback(
         if not question:
             await callback.answer("❌ Вопрос не найден", show_alert=True)
             return
-
 
         answer_result = await db.execute(
             select(Answer)
@@ -1480,7 +1435,6 @@ async def request_photo_callback(
         # Уведомляем фармацевта
         await callback.answer("✅ Запрос фото отправлен пользователю!")
 
-        
         if question.user and question.user.telegram_id:
             # Формируем ФИО фармацевта
             pharmacist_name = "Фармацевт"
@@ -1514,12 +1468,20 @@ async def request_photo_callback(
             # Отправляем запрос пользователю
             await callback.bot.send_message(
                 chat_id=question.user.telegram_id,
-                text=f"📸 <b>Фармацевт запросил фото рецепта</b>\n\n"
-                     f"👨‍⚕️ <b>Фармацевт:</b> {pharmacist_name}\n\n"
-                     f"❓ <b>По вопросу:</b>\n{question.text[:200]}...\n\n"
-                     f"Пожалуйста, отправьте фото рецепта, нажав на кнопку ниже:",
+                text=f"📸 <b>Фармацевту запросил фото рецепта</b>\n\n"
+                f"Вопрос: {question.text[:200]}...\n\n"
+                "Нажмите кнопку ниже:",
                 parse_mode="HTML",
-                reply_markup=photo_keyboard,
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="📸 Отправить фото",
+                                callback_data=f"send_prescription_photo_{question.uuid}",
+                            )
+                        ]
+                    ]
+                ),
             )
 
         await callback.message.answer(
@@ -1681,7 +1643,6 @@ async def process_photo_request_message(
                     }
                     original_question.context_data["photo_requested"] = True
                 await db.commit()
-
 
         # Формируем сообщение с ФИО фармацевта
         pharmacy_info = pharmacist.pharmacy_info or {}
