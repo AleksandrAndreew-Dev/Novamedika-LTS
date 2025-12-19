@@ -119,11 +119,6 @@ async def process_clarification(
         )
         await db.commit()
 
-        # ✅ Получаем полную историю диалога
-        history_text, file_ids = await DialogService.format_dialog_history_for_display(
-            original_question.uuid, db, limit=20
-        )
-
         # ✅ Уведомляем о новом уточнении
         await notify_about_clarification(
             original_question=original_question,
@@ -131,21 +126,17 @@ async def process_clarification(
             db=db
         )
 
-        # ✅ Уведомляем пользователя с полной историей
-        await message.answer(
-            f"💬 <b>ВАШЕ УТОЧНЕНИЕ ОТПРАВЛЕНО</b>\n\n"
-            f"{history_text}",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text="✅ Завершить консультацию",
-                            callback_data=f"end_dialog_{original_question.uuid}"
-                        )
-                    ]
-                ]
-            )
+        # ✅ ОТПРАВЛЯЕМ ПОЛЬЗОВАТЕЛЮ ИСТОРИЮ С УТОЧНЕНИЕМ
+        await DialogService.send_unified_dialog_history(
+            bot=message.bot,
+            chat_id=message.chat.id,
+            question_uuid=original_question.uuid,
+            db=db,
+            title="ВАШЕ УТОЧНЕНИЕ ОТПРАВЛЕНО",
+            pre_text="💬 <b>ВАШЕ УТОЧНЕНИЕ ОТПРАВЛЕНО</b>\n\n",
+            post_text=None,
+            is_pharmacist=False,
+            show_buttons=True
         )
 
         await state.clear()

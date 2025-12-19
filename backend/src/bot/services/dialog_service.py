@@ -6,6 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+
 
 from db.qa_models import DialogMessage, Question
 from utils.time_utils import get_utc_now_naive
@@ -189,3 +192,111 @@ class DialogService:
             return "📋 <b>ИСТОРИЯ ДИАЛОГА</b>\n\n" \
                    "❌ Не удалось загрузить историю диалога.\n\n" \
                    "━" * 30, []
+
+    @staticmethod
+    async def send_unified_dialog_history(
+        bot,
+        chat_id: int,
+        question_uuid: str,
+        db: AsyncSession,
+        title: str = "ПОЛНАЯ ИСТОРИЯ ДИАЛОГА",
+        pre_text: Optional[str] = None,
+        post_text: Optional[str] = None,
+        is_pharmacist: bool = False,
+        show_buttons: bool = True,
+        custom_buttons: Optional[List[List[InlineKeyboardButton]]] = None
+    ) -> str:
+        """Универсальная функция отправки полной истории диалога - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+        try:
+            # Получаем полную историю диалога
+            history_text, file_ids = await DialogService.format_dialog_history_for_display(
+                question_uuid, db, limit=20
+            )
+
+            # Формируем сообщение
+            message_parts = []
+            if pre_text:
+                message_parts.append(pre_text)
+
+            message_parts.append(f"📋 <b>{title}</b>\n\n{history_text}")
+
+            if post_text:
+                message_parts.append(post_text)
+
+            message_text = "\n\n".join(message_parts)
+
+            # Создаем клавиатуру
+            reply_markup = None
+            if show_buttons:
+                if custom_buttons:
+                    # Используем кастомные кнопки
+                    reply_markup = InlineKeyboardMarkup(inline_keyboard=custom_buttons)
+                elif is_pharmacist:
+                    # Стандартные кнопки для фармацевта
+                    reply_markup = InlineKeyboardMarkup(
+                        inline_keyboard=[
+                            [
+                                InlineKeyboardButton(
+                                    text="💬 Ответить",
+                                    callback_data=f"answer_{question_uuid}",
+                                ),
+                                InlineKeyboardButton(
+                                    text="📸 Запросить фото",
+                                    callback_data=f"request_photo_{question_uuid}",
+                                ),
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    text="✅ Завершить диалог",
+                                    callback_data=f"end_dialog_{question_uuid}",
+                                )
+                            ],
+                        ]
+                    )
+                else:
+                    # Стандартные кнопки для пользователя
+                    reply_markup = InlineKeyboardMarkup(
+                        inline_keyboard=[
+                            [
+                                InlineKeyboardButton(
+                                    text="✍️ Ответить",
+                                    callback_data=f"continue_user_dialog_{question_uuid}",
+                                ),
+                                InlineKeyboardButton(
+                                    text="✅ Завершить",
+                                    callback_data=f"end_dialog_{question_uuid}",
+                                ),
+                            ],
+                        ]
+                    )
+
+            # Отправляем сообщение
+            await bot.send_message(
+                chat_id=chat_id,
+                text=message_text,
+                parse_mode="HTML",
+                reply_markup=reply_markup
+            )
+
+            # Отправляем фото, если есть
+            for file_id in file_ids[:3]:  # Ограничиваем 3 фото
+                try:
+                    await bot.send_photo(
+                        chat_id=chat_id,
+                        photo=file_id,
+                        caption="📸 Фото из истории диалога"
+                    )
+                except Exception as e:
+                    logger.error(f"Error sending photo: {e}")
+
+            return history_text
+
+        except Exception as e:
+            logger.error(f"Error in send_unified_dialog_history: {e}", exc_info=True)
+            error_msg = f"📋 <b>{title}</b>\n\n❌ Не удалось загрузить историю диалога."
+            await bot.send_message(
+                chat_id=chat_id,
+                text=error_msg,
+                parse_mode="HTML"
+            )
+            return error_msg

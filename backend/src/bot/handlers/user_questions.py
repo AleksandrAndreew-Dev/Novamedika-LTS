@@ -913,11 +913,6 @@ async def process_dialog_message(
         )
         await db.commit()
 
-        # ✅ ПОЛУЧАЕМ ПОЛНУЮ ИСТОРИЮ ДИАЛОГА
-        history_text, _ = await DialogService.format_dialog_history_for_display(
-            question.uuid, db, limit=10
-        )
-
         # ✅ ФОРМИРУЕМ ИНФОРМАЦИЮ О ПОЛЬЗОВАТЕЛЕ
         user_name = user.first_name or "Пользователь"
         if user.last_name:
@@ -940,67 +935,41 @@ async def process_dialog_message(
 
             pharmacist_name = " ".join(name_parts) if name_parts else "Фармацевт"
 
-        # ✅ СОЗДАЕМ КЛАВИАТУРУ ДЛЯ ФАРМАЦЕВТА
-        pharmacist_keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="💬 Ответить пользователю",
-                        callback_data=f"answer_{question.uuid}",
-                    ),
-                    InlineKeyboardButton(
-                        text="📸 Запросить фото",
-                        callback_data=f"request_photo_{question.uuid}",
-                    ),
-                ],
-                [
-                    InlineKeyboardButton(
-                        text="✅ Завершить диалог",
-                        callback_data=f"end_dialog_{question.uuid}",
-                    )
-                ],
-            ]
-        )
-
-        # ✅ ОТПРАВЛЯЕМ СООБЩЕНИЕ ФАРМАЦЕВТУ С ИСТОРИЕЙ ДИАЛОГА
-        await message.bot.send_message(
+        # ✅ ОТПРАВЛЯЕМ ФАРМАЦЕВТУ СООБЩЕНИЕ С ИСТОРИЕЙ
+        await DialogService.send_unified_dialog_history(
+            bot=message.bot,
             chat_id=pharmacist.user.telegram_id,
-            text=f"💬 <b>СООБЩЕНИЕ ОТ ПОЛЬЗОВАТЕЛЯ</b>\n\n"
-                 f"👤 <b>Пользователь:</b> {user_name}\n"
-                 f"❓ <b>По вопросу:</b>\n{question.text[:150]}...\n\n"
-                 f"💭 <b>Сообщение:</b>\n{message.text}\n\n"
-                 f"{history_text}",
-            parse_mode="HTML",
-            reply_markup=pharmacist_keyboard,
+            question_uuid=question.uuid,
+            db=db,
+            title="СООБЩЕНИЕ ОТ ПОЛЬЗОВАТЕЛЯ",
+            pre_text=(
+                f"💬 <b>СООБЩЕНИЕ ОТ ПОЛЬЗОВАТЕЛЯ</b>\n\n"
+                f"👤 <b>Пользователь:</b> {user_name}\n"
+                f"❓ <b>По вопросу:</b>\n{question.text[:150]}...\n\n"
+                f"💭 <b>Сообщение:</b>\n{message.text}\n\n"
+            ),
+            post_text=None,
+            is_pharmacist=True,
+            show_buttons=True,
         )
 
-        # ✅ ПОКАЗЫВАЕМ ПОЛЬЗОВАТЕЛЮ ПОДТВЕРЖДЕНИЕ С ИСТОРИЕЙ ДИАЛОГА
-        await message.answer(
-            f"✅ Сообщение отправлено фармацевту {pharmacist_name}.\n\n"
-            f"📋 <b>Текущая история диалога:</b>\n\n"
-            f"{history_text}",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text="💬 Продолжить общение",
-                            callback_data=f"continue_user_dialog_{question.uuid}",
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            text="✅ Завершить консультацию",
-                            callback_data=f"end_dialog_{question.uuid}",
-                        )
-                    ],
-                ]
-            ),
+        # ✅ ОТПРАВЛЯЕМ ПОЛЬЗОВАТЕЛЮ ПОДТВЕРЖДЕНИЕ С ИСТОРИЕЙ
+        await DialogService.send_unified_dialog_history(
+            bot=message.bot,
+            chat_id=message.chat.id,
+            question_uuid=question.uuid,
+            db=db,
+            title="ВАШЕ СООБЩЕНИЕ ОТПРАВЛЕНО",
+            pre_text=f"✅ Сообщение отправлено фармацевту {pharmacist_name}.\n\n",
+            post_text=None,
+            is_pharmacist=False,
+            show_buttons=True,
         )
 
     except Exception as e:
         logger.error(f"Error in process_dialog_message: {e}", exc_info=True)
         await message.answer("❌ Ошибка при отправке сообщения. Попробуйте еще раз.")
+
 
 @router.callback_query(F.data.startswith("quick_clarify_"))
 async def quick_clarify_callback(

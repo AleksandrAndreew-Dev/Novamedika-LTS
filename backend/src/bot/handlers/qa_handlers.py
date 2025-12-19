@@ -985,18 +985,13 @@ async def handle_pharmacist_text_in_dialog(
         )
         await db.commit()
 
-        # ✅ ПОЛУЧАЕМ ПОЛНУЮ ИСТОРИЮ ДИАЛОГА
-        history_text, file_ids = await DialogService.format_dialog_history_for_display(
-            question.uuid, db, limit=20
-        )
-
         # ✅ ПОЛУЧАЕМ ИНФОРМАЦИЮ О ПОЛЬЗОВАТЕЛЕ
         user_result = await db.execute(
             select(User).where(User.uuid == question.user_id)
         )
         user = user_result.scalar_one_or_none()
 
-        # ✅ ОТПРАВЛЯЕМ ПОЛЬЗОВАТЕЛЮ ПОЛНУЮ ИСТОРИЮ С КНОПКАМИ
+        # ✅ ОТПРАВЛЯЕМ ПОЛЬЗОВАТЕЛЮ ИСТОРИЮ С ПОМОЩЬЮ УНИВЕРСАЛЬНОЙ ФУНКЦИИ
         if user and user.telegram_id:
             try:
                 # Формируем информацию о фармацевте
@@ -1026,32 +1021,17 @@ async def handle_pharmacist_text_in_dialog(
                 if role and role != "Фармацевт":
                     pharmacist_info_text += f" ({role})"
 
-                # Формируем полное сообщение с историей
-                full_message = (
-                    f"💬 <b>ОТВЕТ ФАРМАЦЕВТА</b>\n\n"
-                    f"{history_text}\n\n"
-                    f"👨‍⚕️ <b>Фармацевт:</b> {pharmacist_info_text}"
-                )
-
-                # Отправляем пользователю с кнопками
-                await message.bot.send_message(
+                # ✅ Используем универсальную функцию
+                await DialogService.send_unified_dialog_history(
+                    bot=message.bot,
                     chat_id=user.telegram_id,
-                    text=full_message,
-                    parse_mode="HTML",
-                    reply_markup=InlineKeyboardMarkup(
-                        inline_keyboard=[
-                            [
-                                InlineKeyboardButton(
-                                    text="✍️ Ответить",
-                                    callback_data=f"continue_user_dialog_{question.uuid}",
-                                ),
-                                InlineKeyboardButton(
-                                    text="✅ Завершить",
-                                    callback_data=f"end_dialog_{question.uuid}",
-                                ),
-                            ],
-                        ]
-                    ),
+                    question_uuid=question.uuid,
+                    db=db,
+                    title="ОТВЕТ ФАРМАЦЕВТА",
+                    pre_text="💬 <b>ОТВЕТ ФАРМАЦЕВТА</b>\n\n",
+                    post_text=f"\n\n👨‍⚕️ <b>Фармацевт:</b> {pharmacist_info_text}",
+                    is_pharmacist=False,
+                    show_buttons=True
                 )
 
                 logger.info(f"Message sent to user {user.telegram_id}")
@@ -1059,13 +1039,18 @@ async def handle_pharmacist_text_in_dialog(
             except Exception as e:
                 logger.error(f"Failed to send message to user {user.telegram_id}: {e}", exc_info=True)
 
-        # ✅ ПОКАЗЫВАЕМ ФАРМАЦЕВТУ ПОЛНУЮ ИСТОРИЮ С КНОПКАМИ
-        await message.answer(
-            f"💬 <b>ВЫ ОТПРАВИЛИ ОТВЕТ</b>\n\n"
-            f"{history_text}\n\n"
-            f"<b>Доступные действия:</b>",
-            parse_mode="HTML",
-            reply_markup=make_pharmacist_dialog_keyboard(question.uuid),
+        # ✅ ОТПРАВЛЯЕМ ФАРМАЦЕВТУ ИСТОРИЮ С КНОПКАМИ
+        await DialogService.send_unified_dialog_history(
+            bot=message.bot,
+            chat_id=message.chat.id,
+            question_uuid=question.uuid,
+            db=db,
+            title="ВЫ ОТПРАВИЛИ ОТВЕТ",
+            pre_text="💬 <b>ВЫ ОТПРАВИЛИ ОТВЕТ</b>\n\n",
+            post_text="\n\n<b>Доступные действия:</b>",
+            is_pharmacist=True,
+            show_buttons=True,
+            custom_buttons=make_pharmacist_dialog_keyboard(question.uuid).inline_keyboard
         )
 
         # ✅ ОСТАВЛЯЕМ ФАРМАЦЕВТА В ДИАЛОГЕ
@@ -1079,7 +1064,7 @@ async def handle_pharmacist_text_in_dialog(
         await message.answer("❌ Ошибка при отправке сообщения")
         await state.clear()
 
-        
+
 @router.message(QAStates.waiting_for_answer)
 async def process_answer_text(
     message: Message,
@@ -1129,10 +1114,6 @@ async def process_answer_text(
             pharmacist.last_seen = get_utc_now_naive()
             await db.commit()
 
-        logger.info(
-            f"Creating answer for question {question.uuid} by pharmacist {pharmacist.uuid}"
-        )
-
         # ✅ СОХРАНЯЕМ ОТВЕТ В БАЗЕ
         answer = Answer(
             text=message.text,
@@ -1159,20 +1140,13 @@ async def process_answer_text(
         )
         await db.commit()
 
-        # ✅ ПОЛУЧАЕМ ПОЛНУЮ ИСТОРИЮ ДИАЛОГА
-        history_text, file_ids = await DialogService.format_dialog_history_for_display(
-            question.uuid, db, limit=20
-        )
-
-        logger.info(f"History text length: {len(history_text)} chars")
-
         # ✅ ПОЛУЧАЕМ ИНФОРМАЦИЮ О ПОЛЬЗОВАТЕЛЕ
         user_result = await db.execute(
             select(User).where(User.uuid == question.user_id)
         )
         user = user_result.scalar_one_or_none()
 
-        # ✅ ОТПРАВЛЯЕМ ИСТОРИЮ ПОЛЬЗОВАТЕЛЮ С КНОПКАМИ
+        # ✅ ОТПРАВЛЯЕМ ИСТОРИЮ ПОЛЬЗОВАТЕЛЮ С ПОМОЩЬЮ УНИВЕРСАЛЬНОЙ ФУНКЦИИ
         if user and user.telegram_id:
             try:
                 # Формируем информацию о фармацевте
@@ -1202,81 +1176,70 @@ async def process_answer_text(
                 if role and role != "Фармацевт":
                     pharmacist_info_text += f" ({role})"
 
-                # Формируем полное сообщение с историей
-                full_message = (
-                    f"💬 <b>ОТВЕТ ФАРМАЦЕВТА</b>\n\n"
-                    f"{history_text}\n\n"
-                    f"👨‍⚕️ <b>Фармацевт:</b> {pharmacist_info_text}"
-                )
-
-                # ✅ Отправляем пользователю полную историю с кнопками
-                await message.bot.send_message(
+                # ✅ Используем универсальную функцию для отправки истории пользователю
+                await DialogService.send_unified_dialog_history(
+                    bot=message.bot,
                     chat_id=user.telegram_id,
-                    text=full_message,
-                    parse_mode="HTML",
-                    reply_markup=InlineKeyboardMarkup(
-                        inline_keyboard=[
-                            [
-                                InlineKeyboardButton(
-                                    text="✍️ Уточнить",
-                                    callback_data=f"quick_clarify_{question.uuid}",
-                                ),
-                                InlineKeyboardButton(
-                                    text="✅ Завершить",
-                                    callback_data=f"end_dialog_{question.uuid}",
-                                ),
-                            ],
-                        ]
-                    ),
+                    question_uuid=question.uuid,
+                    db=db,
+                    title="ОТВЕТ ФАРМАЦЕВТА",
+                    pre_text="💬 <b>ОТВЕТ ФАРМАЦЕВТА</b>\n\n",
+                    post_text=f"\n\n👨‍⚕️ <b>Фармацевт:</b> {pharmacist_info_text}",
+                    is_pharmacist=False,
+                    show_buttons=True
                 )
 
                 logger.info(f"Full history sent to user {user.telegram_id}")
 
+                # ✅ ОТПРАВЛЯЕМ ПОЛЬЗОВАТЕЛЮ КНОПКИ ДЛЯ ПРОДОЛЖЕНИЯ
+                user_dialog_keyboard = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="✍️ Ответить фармацевту",
+                                callback_data=f"continue_user_dialog_{question.uuid}",
+                            ),
+                            InlineKeyboardButton(
+                                text="📸 Отправить фото",
+                                callback_data=f"send_prescription_photo_{question.uuid}",
+                            ),
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                text="✅ Завершить консультацию",
+                                callback_data=f"end_dialog_{question.uuid}",
+                            )
+                        ],
+                    ]
+                )
+
+                await message.bot.send_message(
+                    chat_id=user.telegram_id,
+                    text="💬 <b>Вы можете продолжить общение с фармацевтом</b>\n\n"
+                         "Напишите ваше сообщение в чат или используйте кнопки ниже.",
+                    parse_mode="HTML",
+                    reply_markup=user_dialog_keyboard,
+                )
+
             except Exception as e:
                 logger.error(f"Failed to send history to user {user.telegram_id}: {e}", exc_info=True)
 
-        # ✅ ПОКАЗЫВАЕМ ФАРМАЦЕВТУ ПОЛНУЮ ИСТОРИЮ С КНОПКАМИ
-        await message.answer(
-            f"💬 <b>ВЫ ОТПРАВИЛИ ОТВЕТ</b>\n\n"
-            f"{history_text}\n\n"
-            f"<b>Доступные действия:</b>",
-            parse_mode="HTML",
-            reply_markup=make_pharmacist_dialog_keyboard(question.uuid),
+        # ✅ ОТПРАВЛЯЕМ ФАРМАЦЕВТУ ИСТОРИЮ С КНОПКАМИ
+        await DialogService.send_unified_dialog_history(
+            bot=message.bot,
+            chat_id=message.chat.id,
+            question_uuid=question.uuid,
+            db=db,
+            title="ВЫ ОТПРАВИЛИ ОТВЕТ",
+            pre_text="💬 <b>ВЫ ОТПРАВИЛИ ОТВЕТ</b>\n\n",
+            post_text="\n\n<b>Доступные действия:</b>",
+            is_pharmacist=True,
+            show_buttons=True,
+            custom_buttons=make_pharmacist_dialog_keyboard(question.uuid).inline_keyboard
         )
 
         # ✅ ОСТАВЛЯЕМ ФАРМАЦЕВТА В ДИАЛОГЕ
         await state.set_state(QAStates.in_dialog_with_user)
-
-        # ✅ ОТПРАВЛЯЕМ ПОЛЬЗОВАТЕЛЮ КНОПКИ ДЛЯ ПРОДОЛЖЕНИЯ
-        if user and user.telegram_id:
-            user_dialog_keyboard = InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text="✍️ Ответить фармацевту",
-                            callback_data=f"continue_user_dialog_{question.uuid}",
-                        ),
-                        InlineKeyboardButton(
-                            text="📸 Отправить фото",
-                            callback_data=f"send_prescription_photo_{question.uuid}",
-                        ),
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            text="✅ Завершить консультацию",
-                            callback_data=f"end_dialog_{question.uuid}",
-                        )
-                    ],
-                ]
-            )
-
-            await message.bot.send_message(
-                chat_id=user.telegram_id,
-                text="💬 <b>Вы можете продолжить общение с фармацевтом</b>\n\n"
-                     "Напишите ваше сообщение в чат или используйте кнопки ниже.",
-                parse_mode="HTML",
-                reply_markup=user_dialog_keyboard,
-            )
 
     except Exception as e:
         logger.error(
