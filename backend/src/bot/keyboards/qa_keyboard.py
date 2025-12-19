@@ -5,6 +5,33 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def get_post_consultation_keyboard():
+    """Клавиатура после завершения консультации"""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📝 Новый вопрос",
+                    callback_data="ask_new_question"
+                ),
+                InlineKeyboardButton(
+                    text="📋 Мои вопросы",
+                    callback_data="my_questions"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔍 Поиск лекарств",
+                    callback_data="search_drugs"
+                ),
+                InlineKeyboardButton(
+                    text="ℹ️ Помощь",
+                    callback_data="user_help"
+                )
+            ]
+        ]
+    )
+
 
 def make_user_consultation_keyboard(question_uuid: str) -> InlineKeyboardMarkup:
     """Клавиатура для пользователя после ответа фармацевта"""

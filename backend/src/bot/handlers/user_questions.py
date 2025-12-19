@@ -8,9 +8,7 @@ from bot.handlers.common_handlers import get_user_keyboard
 from bot.services.notification_service import notify_pharmacists_about_new_question
 from utils.time_utils import get_utc_now_naive
 
-# УДАЛИТЬ или закомментировать проблемные импорты:
-# from utils.get_utils import get_all_pharmacist_questions  # УДАЛИТЬ
-# from utils.pharm_format_questions import format_pharmacist_questions_list  # УДАЛИТЬ
+from bot.keyboards.qa_keyboard import get_post_consultation_keyboard
 from bot.keyboards.pagiantion_keyboard import make_questions_pagination_keyboard
 from bot.services.dialog_service import DialogService
 
@@ -719,25 +717,16 @@ async def continue_dialog_callback(
         # ✅ ПРОВЕРКА: Если диалог уже завершен
         if question.status == "completed":
             await callback.answer(
-                "❌ Консультация уже завершена",
+                "❌ Консультация завершена",
                 show_alert=True,
             )
 
             await callback.message.answer(
-                f"✅ <b>Консультация завершена</b>\n\n"
+                f"🎯 <b>Консультация завершена</b>\n\n"
                 f"Вопрос: {question.text[:200]}...\n\n"
-                "Что вы можете сделать:",
+                "Вы можете:",
                 parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [
-                            InlineKeyboardButton(
-                                text="📝 Новый вопрос",
-                                callback_data="ask_new_question",
-                            )
-                        ],
-                    ]
-                ),
+                reply_markup=get_post_consultation_keyboard()
             )
             return
 

@@ -845,17 +845,15 @@ async def answer_question_callback(
         # ✅ ПРОВЕРКА: Если диалог уже завершен
         if question.status == "completed":
             await callback.answer(
-                "❌ Этот диалог уже завершен. Вы не можете продолжать общение.\n"
-                "Если нужно, создайте новый вопрос или откройте другой диалог.",
+                "✅ Этот диалог уже завершен",
                 show_alert=True,
             )
 
-            # Показываем информацию о завершенном диалоге
             await callback.message.answer(
                 f"🎯 <b>ЗАВЕРШЕННЫЙ ДИАЛОГ</b>\n\n"
                 f"❓ Вопрос: {question.text[:200]}...\n\n"
                 f"⏰ Завершен: {question.answered_at.strftime('%d.%m.%Y %H:%M') if question.answered_at else 'Дата не указана'}\n\n"
-                f"<i>Этот диалог был завершен и больше не доступен для общения.</i>",
+                "<i>Этот диалог был завершен и больше не доступен для общения.</i>",
                 parse_mode="HTML",
             )
             return
@@ -1013,7 +1011,11 @@ async def handle_pharmacist_text_in_dialog(
                 if patronymic:
                     pharmacist_name_parts.append(patronymic)
 
-                pharmacist_name = " ".join(pharmacist_name_parts) if pharmacist_name_parts else "Фармацевт"
+                pharmacist_name = (
+                    " ".join(pharmacist_name_parts)
+                    if pharmacist_name_parts
+                    else "Фармацевт"
+                )
                 pharmacist_info_text = f"{pharmacist_name}"
 
                 if chain and number:
@@ -1031,13 +1033,16 @@ async def handle_pharmacist_text_in_dialog(
                     pre_text="💬 <b>ОТВЕТ ФАРМАЦЕВТА</b>\n\n",
                     post_text=f"\n\n👨‍⚕️ <b>Фармацевт:</b> {pharmacist_info_text}",
                     is_pharmacist=False,
-                    show_buttons=True
+                    show_buttons=True,
                 )
 
                 logger.info(f"Message sent to user {user.telegram_id}")
 
             except Exception as e:
-                logger.error(f"Failed to send message to user {user.telegram_id}: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to send message to user {user.telegram_id}: {e}",
+                    exc_info=True,
+                )
 
         # ✅ ОТПРАВЛЯЕМ ФАРМАЦЕВТУ ИСТОРИЮ С КНОПКАМИ
         await DialogService.send_unified_dialog_history(
@@ -1050,7 +1055,9 @@ async def handle_pharmacist_text_in_dialog(
             post_text="\n\n<b>Доступные действия:</b>",
             is_pharmacist=True,
             show_buttons=True,
-            custom_buttons=make_pharmacist_dialog_keyboard(question.uuid).inline_keyboard
+            custom_buttons=make_pharmacist_dialog_keyboard(
+                question.uuid
+            ).inline_keyboard,
         )
 
         # ✅ ОСТАВЛЯЕМ ФАРМАЦЕВТА В ДИАЛОГЕ
@@ -1103,8 +1110,8 @@ async def process_answer_text(
         # ✅ ПРОВЕРКА: Если диалог уже завершен
         if question.status == "completed":
             await message.answer(
-                "❌ Этот диалог уже завершен. Вы не можете отправлять сообщения.\n"
-                "Используйте /questions для работы с новыми вопросами."
+                "✅ Этот диалог уже завершен",
+                show_alert=True,
             )
             await state.clear()
             return
@@ -1168,7 +1175,11 @@ async def process_answer_text(
                 if patronymic:
                     pharmacist_name_parts.append(patronymic)
 
-                pharmacist_name = " ".join(pharmacist_name_parts) if pharmacist_name_parts else "Фармацевт"
+                pharmacist_name = (
+                    " ".join(pharmacist_name_parts)
+                    if pharmacist_name_parts
+                    else "Фармацевт"
+                )
                 pharmacist_info_text = f"{pharmacist_name}"
 
                 if chain and number:
@@ -1186,7 +1197,7 @@ async def process_answer_text(
                     pre_text="💬 <b>ОТВЕТ ФАРМАЦЕВТА</b>\n\n",
                     post_text=f"\n\n👨‍⚕️ <b>Фармацевт:</b> {pharmacist_info_text}",
                     is_pharmacist=False,
-                    show_buttons=True
+                    show_buttons=True,
                 )
 
                 logger.info(f"Full history sent to user {user.telegram_id}")
@@ -1216,13 +1227,16 @@ async def process_answer_text(
                 await message.bot.send_message(
                     chat_id=user.telegram_id,
                     text="💬 <b>Вы можете продолжить общение с фармацевтом</b>\n\n"
-                         "Напишите ваше сообщение в чат или используйте кнопки ниже.",
+                    "Напишите ваше сообщение в чат или используйте кнопки ниже.",
                     parse_mode="HTML",
                     reply_markup=user_dialog_keyboard,
                 )
 
             except Exception as e:
-                logger.error(f"Failed to send history to user {user.telegram_id}: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to send history to user {user.telegram_id}: {e}",
+                    exc_info=True,
+                )
 
         # ✅ ОТПРАВЛЯЕМ ФАРМАЦЕВТУ ИСТОРИЮ С КНОПКАМИ
         await DialogService.send_unified_dialog_history(
@@ -1235,7 +1249,9 @@ async def process_answer_text(
             post_text="\n\n<b>Доступные действия:</b>",
             is_pharmacist=True,
             show_buttons=True,
-            custom_buttons=make_pharmacist_dialog_keyboard(question.uuid).inline_keyboard
+            custom_buttons=make_pharmacist_dialog_keyboard(
+                question.uuid
+            ).inline_keyboard,
         )
 
         # ✅ ОСТАВЛЯЕМ ФАРМАЦЕВТА В ДИАЛОГЕ

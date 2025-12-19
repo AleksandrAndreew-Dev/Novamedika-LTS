@@ -18,7 +18,7 @@ from utils.time_utils import get_utc_now_naive
 
 from db.qa_models import Question, User, Pharmacist
 from bot.handlers.qa_states import QAStates, UserQAStates
-from bot.keyboards.qa_keyboard import make_completed_dialog_keyboard
+from bot.keyboards.qa_keyboard import make_completed_dialog_keyboard, get_post_consultation_keyboard
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -109,6 +109,7 @@ async def complete_dialog_service(
                             "Задайте новый вопрос, если нужно."
                         ),
                         parse_mode="HTML",
+                        reply_markup=get_post_consultation_keyboard()
                     )
             except Exception as e:
                 logger.error(f"Ошибка уведомления пользователя: {e}")
