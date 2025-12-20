@@ -726,7 +726,7 @@ async def continue_dialog_callback(
                 f"Вопрос: {question.text[:200]}...\n\n"
                 "Вы можете:",
                 parse_mode="HTML",
-                reply_markup=get_post_consultation_keyboard()
+                reply_markup=get_post_consultation_keyboard(),
             )
             return
 
@@ -1232,8 +1232,8 @@ async def process_prescription_photo(
                 inline_keyboard=[
                     [
                         InlineKeyboardButton(
-                            text="✍️ Уточнить вопрос",
-                            callback_data=f"quick_clarify_{question_uuid}",
+                            text="💬 Ответить",
+                            callback_data=f"continue_dialog_{question_uuid}",
                         ),
                         InlineKeyboardButton(
                             text="✅ Завершить консультацию",
