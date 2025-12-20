@@ -300,6 +300,9 @@ async def complete_consultation_callback(
         )
 
         if success:
+            # ✅ ОЧИЩАЕМ СОСТОЯНИЕ ПОСЛЕ ЗАВЕРШЕНИЯ
+            await state.clear()
+
             # Обновляем сообщение
             await callback.message.edit_text(
                 f"✅ Консультация успешно завершена!\n\n"
@@ -351,6 +354,9 @@ async def confirm_end_dialog_callback(
         )
 
         if success:
+            # ✅ ОЧИЩАЕМ СОСТОЯНИЕ В ЛЮБОМ СЛУЧАЕ
+            await state.clear()
+
             # Отправляем сообщение инициатору
             if initiator_type == "pharmacist":
                 await callback.message.answer(
@@ -367,16 +373,6 @@ async def confirm_end_dialog_callback(
                     parse_mode="HTML",
                     reply_markup=make_completed_dialog_keyboard(),
                 )
-
-            # Очищаем состояние если нужно
-            current_state = await state.get_state()
-            if current_state in [
-                QAStates.waiting_for_answer,
-                QAStates.in_dialog_with_user,
-                UserQAStates.waiting_for_clarification,
-                UserQAStates.in_dialog,
-            ]:
-                await state.clear()
 
             await callback.answer("✅ Диалог завершен")
 

@@ -62,7 +62,7 @@ async def handle_direct_text(
 
     current_state = await state.get_state()
 
-    # Проверяем, есть ли активные диалоги у пользователя
+    # ✅ ПРОВЕРКА: Если у пользователя есть активные консультации
     if current_state is None:
         # Проверяем есть ли активные вопросы (in_progress или answered)
         result = await db.execute(
@@ -80,24 +80,36 @@ async def handle_direct_text(
         if active_question:
             # ✅ ПРОВЕРКА: Не завершен ли диалог
             if active_question.status == "completed":
-                await message.answer(
-                    "🎯 <b>Ваша предыдущая консультация завершена</b>\n\n"
-                    f"❓ Вопрос: {active_question.text[:200]}...\n\n"
-                    "Чтобы задать новый вопрос, просто напишите его в чат.\n"
-                    "Или используйте кнопки ниже:",
-                    parse_mode="HTML",
-                    reply_markup=get_post_consultation_keyboard()
+                # Очищаем состояние и создаем новый вопрос
+                await state.clear()
+                # Пропускаем автоматическое продолжение
+            else:
+                # Автоматически продолжаем диалог
+                await state.update_data(
+                    active_dialog_question_id=str(active_question.uuid)
                 )
+                await state.set_state(UserQAStates.in_dialog)
+
+                # Пересылаем сообщение как продолжение диалога
+                await process_dialog_message(message, state, db, user, is_pharmacist)
                 return
 
-            # Автоматически продолжаем диалог
-            await state.update_data(active_dialog_question_id=str(active_question.uuid))
-            await state.set_state(UserQAStates.in_dialog)
+    # ✅ ПРОВЕРКА: Если состояние указывает на завершенный диалог
+    if current_state == UserQAStates.in_dialog:
+        state_data = await state.get_data()
+        question_uuid = state_data.get("active_dialog_question_id")
 
-            # Пересылаем сообщение как продолжение диалога
-            await process_dialog_message(message, state, db, user, is_pharmacist)
-            return
+        if question_uuid:
+            result = await db.execute(
+                select(Question).where(Question.uuid == question_uuid)
+            )
+            question = result.scalar_one_or_none()
 
+            # Если диалог завершен, очищаем состояние
+            if question and question.status == "completed":
+                await state.clear()
+                # Продолжаем обработку как новый вопрос
+                current_state = None
 
     if current_state is not None:
         # Для этих состояний пропускаем обработку (уже есть другие обработчики)
@@ -132,7 +144,6 @@ async def handle_direct_text(
         await db.commit()
         await db.refresh(question)
 
-
         logger.info(
             f"Direct question created: ID={question.uuid}, text='{message.text[:50]}...'"
         )
@@ -141,11 +152,9 @@ async def handle_direct_text(
         dialog_message = await DialogService.create_question_message(question, db)
         await db.commit()
 
-
         logger.info(
             f"Dialog message created: question_id={dialog_message.question_id}, type={dialog_message.message_type}"
         )
-
 
         history = await DialogService.get_dialog_history(question.uuid, db, limit=10)
         logger.info(f"Dialog history after creation: {len(history)} messages")
