@@ -765,14 +765,12 @@ async def process_user_question(
     """Упрощенная обработка вопроса от пользователя"""
     logger.info(f"Processing question from user {message.from_user.id}")
 
-    # === ДОБАВИТЬ ПРОВЕРКУ ===
     if not message.text or not message.text.strip():
         await message.answer(
             "❌ Вопрос не может быть пустым. Пожалуйста, напишите текст вопроса."
         )
         await state.clear()
         return
-    # =========================
 
     if is_pharmacist:
         await message.answer(
@@ -793,6 +791,8 @@ async def process_user_question(
         db.add(question)
         await db.commit()
         await db.refresh(question)
+
+        # ✅ ТОЛЬКО ОДИН РАЗ создаем сообщение
         await DialogService.create_question_message(question, db)
 
         logger.info(
@@ -801,8 +801,7 @@ async def process_user_question(
 
         # Уведомляем фармацевтов
         try:
-
-            await DialogService.create_question_message(question, db)
+            # ✅ УДАЛЕН повторный вызов create_question_message
             await notify_pharmacists_about_new_question(question, db)
         except Exception as e:
             logger.error(f"Error in notification service: {e}")
