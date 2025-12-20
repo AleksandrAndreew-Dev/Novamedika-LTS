@@ -1023,7 +1023,29 @@ async def handle_pharmacist_text_in_dialog(
                 if role and role != "Фармацевт":
                     pharmacist_info_text += f" ({role})"
 
-                # ✅ Используем универсальную функцию
+                # ✅ Создаем клавиатуру для пользователя
+                user_dialog_keyboard = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="✍️ Ответить фармацевту",
+                                callback_data=f"continue_user_dialog_{question.uuid}",
+                            ),
+                            InlineKeyboardButton(
+                                text="📸 Отправить фото",
+                                callback_data=f"send_prescription_photo_{question.uuid}",
+                            ),
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                text="✅ Завершить консультацию",
+                                callback_data=f"end_dialog_{question.uuid}",
+                            )
+                        ],
+                    ]
+                )
+
+                # ✅ Используем универсальную функцию с кастомными кнопками
                 await DialogService.send_unified_dialog_history(
                     bot=message.bot,
                     chat_id=user.telegram_id,
@@ -1034,6 +1056,7 @@ async def handle_pharmacist_text_in_dialog(
                     post_text=f"\n\n👨‍⚕️ <b>Фармацевт:</b> {pharmacist_info_text}",
                     is_pharmacist=False,
                     show_buttons=True,
+                    custom_buttons=user_dialog_keyboard.inline_keyboard,  # Используем кастомные кнопки
                 )
 
                 logger.info(f"Message sent to user {user.telegram_id}")
@@ -1187,22 +1210,7 @@ async def process_answer_text(
                 if role and role != "Фармацевт":
                     pharmacist_info_text += f" ({role})"
 
-                # ✅ Используем универсальную функцию для отправки истории пользователю
-                await DialogService.send_unified_dialog_history(
-                    bot=message.bot,
-                    chat_id=user.telegram_id,
-                    question_uuid=question.uuid,
-                    db=db,
-                    title="ОТВЕТ ФАРМАЦЕВТА",
-                    pre_text="💬 <b>ОТВЕТ ФАРМАЦЕВТА</b>\n\n",
-                    post_text=f"\n\n👨‍⚕️ <b>Фармацевт:</b> {pharmacist_info_text}",
-                    is_pharmacist=False,
-                    show_buttons=True,
-                )
-
-                logger.info(f"Full history sent to user {user.telegram_id}")
-
-                # ✅ ОТПРАВЛЯЕМ ПОЛЬЗОВАТЕЛЮ КНОПКИ ДЛЯ ПРОДОЛЖЕНИЯ
+                # ✅ Создаем клавиатуру для пользователя
                 user_dialog_keyboard = InlineKeyboardMarkup(
                     inline_keyboard=[
                         [
@@ -1224,13 +1232,21 @@ async def process_answer_text(
                     ]
                 )
 
-                await message.bot.send_message(
+                # ✅ Используем универсальную функцию с кастомными кнопками
+                await DialogService.send_unified_dialog_history(
+                    bot=message.bot,
                     chat_id=user.telegram_id,
-                    text="💬 <b>Вы можете продолжить общение с фармацевтом</b>\n\n"
-                    "Напишите ваше сообщение в чат или используйте кнопки ниже.",
-                    parse_mode="HTML",
-                    reply_markup=user_dialog_keyboard,
+                    question_uuid=question.uuid,
+                    db=db,
+                    title="ОТВЕТ ФАРМАЦЕВТА",
+                    pre_text="💬 <b>ОТВЕТ ФАРМАЦЕВТА</b>\n\n",
+                    post_text=f"\n\n👨‍⚕️ <b>Фармацевт:</b> {pharmacist_info_text}",
+                    is_pharmacist=False,
+                    show_buttons=True,
+                    custom_buttons=user_dialog_keyboard.inline_keyboard,  # Используем кастомные кнопки
                 )
+
+                logger.info(f"Full history sent to user {user.telegram_id}")
 
             except Exception as e:
                 logger.error(
