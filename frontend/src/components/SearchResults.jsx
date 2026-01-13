@@ -659,7 +659,7 @@ export default function SearchResults({
                       </svg>
                       <span>
                         {item.pharmacy_name} №{item.pharmacy_number},{" "}
-                        {item.pharmacy_city} {" "} {item.pharmacy_address}
+                        {item.pharmacy_city}, {" "} {item.pharmacy_address}
                       </span>
                     </div>
                     <div className="flex items-center">
