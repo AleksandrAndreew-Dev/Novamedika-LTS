@@ -638,7 +638,6 @@ async def search_advanced(
         "total_found": sum(combo["count"] for combo in available_combinations),
     }
 
-
 @router.get("/search-fts/", response_model=dict)
 async def search_full_text(
     q: str = Query(..., description="Поисковый запрос"),
@@ -654,44 +653,110 @@ async def search_full_text(
 ):
     search_query = q.strip().lower()
 
-    # РАСШИРЕННЫЙ ПОИСК: комбинируем полнотекстовый и триграммный
+    # РАСШИРЕННЫЙ ПОИСК: многоуровневый с приоритетами
     words = search_query.split()
+
+    # Создаем полнотекстовый запрос
     fts_query_str = " & ".join([f"{word}:*" for word in words if len(word) > 1])
     if not fts_query_str:
         fts_query_str = f"{search_query}:*"
 
     ts_query = func.to_tsquery("russian_simple", fts_query_str)
 
-    # Триграммный поиск (похожесть слов)
+    # Триграммное сходство для опечаток
     trigram_similarity = func.similarity(Product.name, search_query)
 
-    # Расширенные условия поиска:
-    # 1. Полнотекстовый поиск
-    # 2. Точное совпадение
-    # 3. Триграммное сходство (для опечаток)
-    # 4. Частичное совпадение
-    base_conditions = [
-        or_(
-            # 1. Полнотекстовый поиск
-            func.to_tsvector("russian_simple", Product.name).op("@@")(ts_query),
-            # 2. Точное совпадение (высший приоритет)
-            Product.name.ilike(f"{search_query}"),
-            # 3. Триграммное сходство (порог 0.3 - находит "парацетамол" при "пороцетамол")
-            and_(trigram_similarity > 0.3, Product.name.ilike('%' + search_query[:3] + '%')),
-            # 4. Частичное совпадение
-            Product.name.ilike(f"{search_query}%"),
-            Product.name.ilike(f"% {search_query}%"),
-            # 5. Поиск по отдельным словам
-            or_(*[Product.name.ilike(f"%{word}%") for word in words if len(word) > 2])
-        )
-    ]
+    # МНОГОУРОВНЕВЫЕ УСЛОВИЯ ПОИСКА
+    all_conditions = []
+
+    # УРОВЕНЬ 1: ТОЧНЫЕ СОВПАДЕНИЯ (высший приоритет)
+    exact_match_conditions = []
+
+    # 1.1. Точное совпадение (регистронезависимое)
+    exact_match_conditions.append(Product.name.ilike(f"{search_query}"))
+
+    # 1.2. Совпадение с начала строки
+    exact_match_conditions.append(Product.name.ilike(f"{search_query}%"))
+
+    # 1.3. Слово в середине с пробелами
+    exact_match_conditions.append(Product.name.ilike(f"% {search_query} %"))
+
+    # 1.4. Слово в конце
+    exact_match_conditions.append(Product.name.ilike(f"% {search_query}"))
+
+    # 1.5. Слово в начале
+    exact_match_conditions.append(Product.name.ilike(f"{search_query} %"))
+
+    if exact_match_conditions:
+        all_conditions.append(or_(*exact_match_conditions))
+
+    # УРОВЕНЬ 2: ПОЛНОТЕКСТОВЫЙ ПОИСК (средний приоритет)
+    fts_conditions = []
+
+    # 2.1. Стандартный полнотекстовый поиск
+    fts_conditions.append(
+        func.to_tsvector("russian_simple", Product.name).op("@@")(ts_query)
+    )
+
+    # 2.2. Поиск по каждому слову отдельно
+    if len(words) > 1:
+        word_conditions = []
+        for word in words:
+            if len(word) >= 3:
+                word_conditions.append(Product.name.ilike(f"%{word}%"))
+        if word_conditions:
+            fts_conditions.append(or_(*word_conditions))
+
+    if fts_conditions:
+        all_conditions.append(or_(*fts_conditions))
+
+    # УРОВЕНЬ 3: НЕТОЧНЫЙ ПОИСК/ОПЕЧАТКИ (низкий приоритет)
+    fuzzy_conditions = []
+
+    # 3.1. Триграммное сходство со сниженным порогом
+    fuzzy_conditions.append(trigram_similarity > 0.1)  # Сниженный порог для опечаток
+
+    # 3.2. Частичное совпадение
+    fuzzy_conditions.append(Product.name.ilike(f"%{search_query}%"))
+
+    # 3.3. Поиск по корню слова (для опечаток вроде "пороцетамол" -> "парацетамол")
+    if len(search_query) >= 5:
+        # Ищем совпадения по первым 4-5 буквам
+        root_length = min(5, len(search_query) - 1)
+        search_root = search_query[:root_length]
+        fuzzy_conditions.append(Product.name.ilike(f"{search_root}%"))
+        fuzzy_conditions.append(Product.name.ilike(f"%{search_root}%"))
+
+    # 3.4. Поиск по первым буквам каждого слова
+    if len(words) > 1:
+        first_letters = "".join([word[0] for word in words if len(word) > 0])
+        if len(first_letters) >= 3:
+            fuzzy_conditions.append(Product.name.ilike(f"{first_letters}%"))
+
+    if fuzzy_conditions:
+        all_conditions.append(or_(*fuzzy_conditions))
+
+    # Базовое условие: объединяем все уровни через OR
+    if not all_conditions:
+        # Если нет условий, возвращаем пустой результат
+        return {
+            "items": [],
+            "total": 0,
+            "page": 1,
+            "size": size,
+            "total_pages": 1,
+            "available_combinations": [],
+            "total_found": 0,
+        }
+
+    base_condition = or_(*all_conditions)
 
     # Если форма выбрана, возвращаем пустой список комбинаций
     if form and form != "Все формы":
         available_combinations = []
         total_found = 0
     else:
-        # Запрос для комбинаций с учетом триграммного сходства
+        # Запрос для комбинаций с улучшенной сортировкой по приоритетам
         combinations_query = (
             select(
                 Product.name,
@@ -702,14 +767,15 @@ async def search_full_text(
                 func.min(Product.price).label("min_price"),
                 func.max(Product.price).label("max_price"),
                 func.count(Pharmacy.uuid.distinct()).label("pharmacy_count"),
-                # Счет релевантности: точное совпадение + полнотекст + триграмм
+                # Приоритеты для сортировки
                 case((Product.name.ilike(f"{search_query}"), 100), else_=0).label("exact_score"),
                 case((Product.name.ilike(f"{search_query}%"), 50), else_=0).label("starts_score"),
+                case((Product.name.ilike(f"% {search_query} %"), 30), else_=0).label("word_score"),
                 func.ts_rank(func.to_tsvector("russian_simple", Product.name), ts_query).label("fts_score"),
                 trigram_similarity.label("trigram_score")
             )
             .join(Pharmacy)
-            .where(and_(*base_conditions))
+            .where(base_condition)
         )
 
         if city and city != "Все города":
@@ -722,7 +788,14 @@ async def search_full_text(
         combinations_query = combinations_query.group_by(
             Product.name, Product.form, Product.manufacturer, Product.country
         ).order_by(
-            text("exact_score DESC, starts_score DESC, fts_score DESC, trigram_score DESC"),
+            text("""
+                exact_score DESC,
+                starts_score DESC,
+                word_score DESC,
+                fts_score DESC,
+                trigram_score DESC,
+                count DESC
+            """),
             Product.name.asc()
         )
 
@@ -743,12 +816,12 @@ async def search_full_text(
         ]
         total_found = sum(c.count for c in combinations_data)
 
-    # Основной запрос товаров с улучшенной сортировкой
+    # Основной запрос товаров с МНОГОУРОВНЕВОЙ СОРТИРОВКОЙ
     items_query = (
         select(Product)
         .options(joinedload(Product.pharmacy))
         .join(Pharmacy)
-        .where(and_(*base_conditions))
+        .where(base_condition)
     )
 
     # Применяем фильтры для товаров
@@ -765,15 +838,22 @@ async def search_full_text(
     if max_price is not None:
         items_query = items_query.where(Product.price <= max_price)
 
-    # Улучшенная сортировка с приоритетами:
+    # УЛУЧШЕННАЯ МНОГОУРОВНЕВАЯ СОРТИРОВКА:
     # 1. Точное совпадение названия
     # 2. Начинается с запроса
-    # 3. Полнотекстовая релевантность
-    # 4. Триграммное сходство (для опечаток)
-    # 5. Цена
+    # 3. Слово в середине
+    # 4. Полнотекстовая релевантность
+    # 5. Триграммное сходство (для опечаток)
+    # 6. Цена
     items_query = items_query.order_by(
-        case((Product.name.ilike(f"{search_query}"), 1), else_=0).desc(),
-        case((Product.name.ilike(f"{search_query}%"), 1), else_=0).desc(),
+        case(
+            (Product.name.ilike(f"{search_query}"), 6),
+            (Product.name.ilike(f"{search_query}%"), 5),
+            (Product.name.ilike(f"% {search_query} %"), 4),
+            (Product.name.ilike(f"% {search_query}"), 3),
+            (Product.name.ilike(f"{search_query} %"), 2),
+            else_=0
+        ).desc(),
         func.ts_rank(func.to_tsvector("russian_simple", Product.name), ts_query).desc(),
         trigram_similarity.desc(),
         Product.price.asc()
