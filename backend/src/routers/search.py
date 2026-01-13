@@ -640,7 +640,6 @@ async def search_advanced(
 
 
 
-
 @router.get("/search-fts/", response_model=dict)
 async def search_full_text(
     q: str = Query(..., description="Поисковый запрос"),
@@ -656,22 +655,23 @@ async def search_full_text(
 ):
     search_query = q.strip().lower()
 
-    # 1. Улучшаем FTS query
+    # 1. Создаем полнотекстовый запрос ТОЛЬКО для поля name
     fts_query_str = " & ".join([f"{word}:*" for word in search_query.split() if len(word) > 1])
     if not fts_query_str:
         fts_query_str = f"{search_query}:*"
 
     ts_query = func.to_tsquery("russian_simple", fts_query_str)
 
-    # 2. Определяем веса для сортировки
+    # 2. Определяем веса для сортировки (только по name)
     score_exact = case((Product.name.ilike(search_query), 100), else_=0)
     score_starts = case((Product.name.ilike(f"{search_query}%"), 50), else_=0)
     score_word = case((Product.name.op("~*")(f"\\m{search_query}\\M"), 30), else_=0)
 
-    # 3. Базовые условия
+    # 3. Базовые условия - ищем ТОЛЬКО в названии
     base_conditions = [
         or_(
-            Product.search_vector.op("@@")(ts_query),
+            # Полнотекстовый поиск по name (а не по всему search_vector)
+            func.to_tsvector("russian_simple", Product.name).op("@@")(ts_query),
             Product.name.ilike(f"%{search_query}%")
         )
     ]
@@ -752,7 +752,7 @@ async def search_full_text(
     # Сортировка
     items_query = items_query.order_by(
         (score_exact + score_starts + score_word).desc(),
-        func.ts_rank(Product.search_vector, ts_query).desc(),
+        func.ts_rank(func.to_tsvector("russian_simple", Product.name), ts_query).desc(),
         Product.price.asc()
     )
 
