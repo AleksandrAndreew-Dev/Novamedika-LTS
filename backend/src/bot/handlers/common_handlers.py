@@ -28,13 +28,10 @@ router = Router()
 def get_reply_keyboard_with_webapp():
     """Создает reply-клавиатуру с Web App кнопкой"""
     web_app = WebAppInfo(url="https://spravka.novamedika.com/")
-
-
-    return ReplyKeyboardMarkup(
-        keyboard=[[InlineKeyboardButton(text="🔍 Поиск лекарств", web_app=web_app)]],
-        resize_keyboard=True,
-        one_time_keyboard=False,  # Не скрывать после нажатия
-        input_field_placeholder="Спросите фармацевта, например: витамины для детей",
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[
+            InlineKeyboardButton(text="🔍 Поиск лекарств", web_app=web_app)
+        ]]
     )
 
 
