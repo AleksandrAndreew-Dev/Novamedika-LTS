@@ -179,9 +179,10 @@ export default function SearchResults({
   // УДАЛЕНО: функция getPackagingText больше не используется
 
   const getGroupedResults = () => {
-  const grouped = {};
+    const grouped = {};
 
-  results.forEach((item) => {
+  results.filter(item => (parseFloat(item.quantity) || 0) > 0)
+  .forEach((item) => {
     // Используем product_uuid для бронирования
     const productUuid = item.product_uuid || item.uuid || item.id;
     const pharmacyId = item.pharmacy_id || item.pharmacy_number;
