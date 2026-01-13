@@ -60,13 +60,17 @@ def get_pharmacist_keyboard():
 
 
 def get_user_keyboard():
-    """Клавиатура для пользователей"""
+    """Клавиатура для пользователей с прямой ссылкой на Web App"""
+    # Ссылка на ваше веб-приложение
+    web_app = WebAppInfo(url="https://spravka.novamedika.com/")
+
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
+                # Кнопка теперь сразу открывает WebApp
                 InlineKeyboardButton(
                     text="🔍 Поиск лекарств и бронирование",
-                    callback_data="search_drugs",
+                    web_app=web_app,
                 )
             ],
             [InlineKeyboardButton(text="📖 Мои вопросы", callback_data="my_questions")],
@@ -188,7 +192,7 @@ async def cmd_start(
     await state.clear()
 
     if is_pharmacist and pharmacist:
-        # Код для фармацевтов остается без изменений...
+        # Панель фармацевта
         status_text = "🟢 Онлайн" if pharmacist.is_online else "🔴 Офлайн"
         pharmacy_name = pharmacist.pharmacy_info.get("name", "Не указана")
 
@@ -201,9 +205,7 @@ async def cmd_start(
             reply_markup=get_pharmacist_keyboard(),
         )
     else:
-        # ДЛЯ ПОЛЬЗОВАТЕЛЕЙ: Объединяем текст и клавиатуры
-
-        # 1. Собираем единый текст
+        # ДЛЯ ПОЛЬЗОВАТЕЛЕЙ: Одно сообщение и одна клавиатура
         full_message_text = (
             "👋 <b>Лучше спросите в аптеке!</b>\n\n"
             "💊 <b>Консультация профессионального фармацевта</b>\n\n"
@@ -212,66 +214,25 @@ async def cmd_start(
             "Или выберите действие:"
         )
 
-        # 2. Объединяем кнопки из двух клавиатур
-        # Получаем кнопку WebApp
-        webapp_row = [
-            InlineKeyboardButton(
-                text="🔍 Поиск лекарств",
-                web_app=WebAppInfo(url="https://spravka.novamedika.com/")
-            )
-        ]
-
-        # Получаем остальные кнопки пользователя
-        user_kb = get_user_keyboard()
-
-        # Создаем новую клавиатуру, где первой строкой идет WebApp, а затем остальные
-        combined_markup = InlineKeyboardMarkup(
-            inline_keyboard=[webapp_row] + user_kb.inline_keyboard
-        )
-
-        # 3. Отправляем ОДНО сообщение
+        # Используем обновленную клавиатуру, где поиск — это WebApp кнопка
         await message.answer(
             full_message_text,
             parse_mode="HTML",
-            reply_markup=combined_markup,
+            reply_markup=get_user_keyboard(),
         )
-
 
 @router.message(Command("search"))
-@router.callback_query(F.data == "search_drugs")
-async def show_search_webapp(
-    update: Message | CallbackQuery, state: FSMContext, is_pharmacist: bool
-):
-    """Показать Web App для поиска лекарств"""
-    # Очищаем состояние
-    await state.clear()
-
-    # ✅ Добавляем проверку на фармацевта
+async def show_search_webapp_command(message: Message, is_pharmacist: bool):
+    """Обработка текстовой команды /search"""
     if is_pharmacist:
-        if isinstance(update, CallbackQuery):
-            await update.answer(
-                "🔍 Используйте /questions для работы с вопросами", show_alert=True
-            )
-        else:
-            await update.answer("🔍 Используйте /questions для работы с вопросами")
+        await message.answer("🔍 Используйте /questions для работы с вопросами")
         return
 
-    # Создаем клавиатуру с Web App
-    reply_kb = get_reply_keyboard_with_webapp()
-
-    message_text = (
-        "🔍 <b>Поиск и бронирование лекарств</b>\n\n"
-        "Нажмите на кнопку ниже, чтобы открыть справку по аптекам.\n"
-        "Узнайте цены, аналоги и забронируйте препарат заранее."
+    # Отправляем сообщение с кнопкой, которая открывает WebApp
+    await message.answer(
+        "🔍 Нажмите кнопку ниже для поиска лекарств:",
+        reply_markup=get_reply_keyboard_with_webapp()
     )
-
-    if isinstance(update, CallbackQuery):
-        await update.message.answer(
-            message_text, parse_mode="HTML", reply_markup=reply_kb
-        )
-        await update.answer()
-    else:
-        await update.answer(message_text, parse_mode="HTML", reply_markup=reply_kb)
 
 
 # В common_handlers.py добавляем:
