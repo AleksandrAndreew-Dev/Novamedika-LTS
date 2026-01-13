@@ -639,7 +639,6 @@ async def search_advanced(
     }
 
 
-
 @router.get("/search-fts/", response_model=dict)
 async def search_full_text(
     q: str = Query(..., description="Поисковый запрос"),
@@ -655,35 +654,44 @@ async def search_full_text(
 ):
     search_query = q.strip().lower()
 
-    # 1. Создаем полнотекстовый запрос ТОЛЬКО для поля name
-    fts_query_str = " & ".join([f"{word}:*" for word in search_query.split() if len(word) > 1])
+    # РАСШИРЕННЫЙ ПОИСК: комбинируем полнотекстовый и триграммный
+    words = search_query.split()
+    fts_query_str = " & ".join([f"{word}:*" for word in words if len(word) > 1])
     if not fts_query_str:
         fts_query_str = f"{search_query}:*"
 
     ts_query = func.to_tsquery("russian_simple", fts_query_str)
 
-    # 2. Определяем веса для сортировки (только по name)
-    score_exact = case((Product.name.ilike(search_query), 100), else_=0)
-    score_starts = case((Product.name.ilike(f"{search_query}%"), 50), else_=0)
-    score_word = case((Product.name.op("~*")(f"\\m{search_query}\\M"), 30), else_=0)
+    # Триграммный поиск (похожесть слов)
+    trigram_similarity = func.similarity(Product.name, search_query)
 
-    # 3. Базовые условия - ищем ТОЛЬКО в названии
+    # Расширенные условия поиска:
+    # 1. Полнотекстовый поиск
+    # 2. Точное совпадение
+    # 3. Триграммное сходство (для опечаток)
+    # 4. Частичное совпадение
     base_conditions = [
         or_(
-            # Полнотекстовый поиск по name (а не по всему search_vector)
+            # 1. Полнотекстовый поиск
             func.to_tsvector("russian_simple", Product.name).op("@@")(ts_query),
+            # 2. Точное совпадение (высший приоритет)
+            Product.name.ilike(f"{search_query}"),
+            # 3. Триграммное сходство (порог 0.3 - находит "парацетамол" при "пороцетамол")
+            and_(trigram_similarity > 0.3, Product.name.ilike('%' + search_query[:3] + '%')),
+            # 4. Частичное совпадение
             Product.name.ilike(f"{search_query}%"),
-        Product.name.ilike(f"% {search_query}%")
+            Product.name.ilike(f"% {search_query}%"),
+            # 5. Поиск по отдельным словам
+            or_(*[Product.name.ilike(f"%{word}%") for word in words if len(word) > 2])
         )
     ]
 
-    # 4. Запрос для комбинаций (используется на шаге 2)
+    # Если форма выбрана, возвращаем пустой список комбинаций
     if form and form != "Все формы":
-        # Если форма выбрана, возвращаем пустой список комбинаций
         available_combinations = []
         total_found = 0
     else:
-        # Иначе делаем запрос комбинаций
+        # Запрос для комбинаций с учетом триграммного сходства
         combinations_query = (
             select(
                 Product.name,
@@ -694,7 +702,11 @@ async def search_full_text(
                 func.min(Product.price).label("min_price"),
                 func.max(Product.price).label("max_price"),
                 func.count(Pharmacy.uuid.distinct()).label("pharmacy_count"),
-                (score_exact + score_starts + score_word).label("total_score")
+                # Счет релевантности: точное совпадение + полнотекст + триграмм
+                case((Product.name.ilike(f"{search_query}"), 100), else_=0).label("exact_score"),
+                case((Product.name.ilike(f"{search_query}%"), 50), else_=0).label("starts_score"),
+                func.ts_rank(func.to_tsvector("russian_simple", Product.name), ts_query).label("fts_score"),
+                trigram_similarity.label("trigram_score")
             )
             .join(Pharmacy)
             .where(and_(*base_conditions))
@@ -709,7 +721,10 @@ async def search_full_text(
 
         combinations_query = combinations_query.group_by(
             Product.name, Product.form, Product.manufacturer, Product.country
-        ).order_by(text("total_score DESC"), Product.name.asc())
+        ).order_by(
+            text("exact_score DESC, starts_score DESC, fts_score DESC, trigram_score DESC"),
+            Product.name.asc()
+        )
 
         combinations_result = await db.execute(combinations_query)
         combinations_data = combinations_result.all()
@@ -728,7 +743,7 @@ async def search_full_text(
         ]
         total_found = sum(c.count for c in combinations_data)
 
-    # 5. Основной запрос товаров (используется на шаге 3)
+    # Основной запрос товаров с улучшенной сортировкой
     items_query = (
         select(Product)
         .options(joinedload(Product.pharmacy))
@@ -750,10 +765,17 @@ async def search_full_text(
     if max_price is not None:
         items_query = items_query.where(Product.price <= max_price)
 
-    # Сортировка
+    # Улучшенная сортировка с приоритетами:
+    # 1. Точное совпадение названия
+    # 2. Начинается с запроса
+    # 3. Полнотекстовая релевантность
+    # 4. Триграммное сходство (для опечаток)
+    # 5. Цена
     items_query = items_query.order_by(
-        (score_exact + score_starts + score_word).desc(),
+        case((Product.name.ilike(f"{search_query}"), 1), else_=0).desc(),
+        case((Product.name.ilike(f"{search_query}%"), 1), else_=0).desc(),
         func.ts_rank(func.to_tsvector("russian_simple", Product.name), ts_query).desc(),
+        trigram_similarity.desc(),
         Product.price.asc()
     )
 
@@ -770,7 +792,7 @@ async def search_full_text(
     )
     products = items_result.unique().scalars().all()
 
-    # Форматирование результатов с ВСЕМИ полями, которые ожидает фронтенд
+    # Форматирование результатов
     items = []
     for p in products:
         items.append({
@@ -799,5 +821,5 @@ async def search_full_text(
         "size": size,
         "total_pages": total_pages,
         "available_combinations": available_combinations,
-        "total_found": total_found,  # Важно: возвращаем total_found для шага 2
+        "total_found": total_found,
     }
