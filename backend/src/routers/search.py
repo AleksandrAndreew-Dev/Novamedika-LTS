@@ -714,7 +714,7 @@ async def search_full_text(
     fuzzy_conditions = []
 
     # 3.1. Триграммное сходство со сниженным порогом
-    fuzzy_conditions.append(trigram_similarity > 0.1)  # Сниженный порог для опечаток
+    fuzzy_conditions.append(trigram_similarity > 0.3)  # Сниженный порог для опечаток
 
     # 3.2. Частичное совпадение
     fuzzy_conditions.append(Product.name.ilike(f"%{search_query}%"))
