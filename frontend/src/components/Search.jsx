@@ -137,6 +137,7 @@ export default function Search() {
         country,
       }));
 
+      // ВАЖНО: response.data.items уже содержит все необходимые поля
       setResults(response.data.items || []);
       setPagination((prev) => ({
         ...prev,

@@ -10,15 +10,16 @@ export default function FormSelection({
 }) {
   const [selectedCombination, setSelectedCombination] = useState("");
 
+  // В компоненте FormSelection, в функции handleCombinationClick:
   const handleCombinationClick = (combination) => {
     const combinationKey = `${combination.name}|${combination.form}|${combination.manufacturer}|${combination.country}`;
     setSelectedCombination(combinationKey);
 
     onFormSelect(
-      combination.name,
-      combination.form,
-      combination.manufacturer,
-      combination.country
+      combination.name, // name
+      combination.form, // form
+      combination.manufacturer, // manufacturer
+      combination.country // country
     );
   };
 

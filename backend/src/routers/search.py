@@ -641,8 +641,6 @@ async def search_advanced(
 
 
 
-
-
 @router.get("/search-fts/", response_model=dict)
 async def search_full_text(
     q: str = Query(..., description="Поисковый запрос"),
@@ -658,24 +656,19 @@ async def search_full_text(
 ):
     search_query = q.strip().lower()
 
-    # 1. Улучшаем FTS query: добавляем префиксный поиск к каждому слову (:*)
-    # Это позволит находить "Уголь" по запросу "Угол"
+    # 1. Улучшаем FTS query
     fts_query_str = " & ".join([f"{word}:*" for word in search_query.split() if len(word) > 1])
     if not fts_query_str:
         fts_query_str = f"{search_query}:*"
 
     ts_query = func.to_tsquery("russian_simple", fts_query_str)
 
-    # 2. ОПРЕДЕЛЯЕМ ВЕСА (Scoring) для сортировки
-    # Точное совпадение названия
+    # 2. Определяем веса для сортировки
     score_exact = case((Product.name.ilike(search_query), 100), else_=0)
-    # Название начинается с запроса (напр. "Уголь активированный")
     score_starts = case((Product.name.ilike(f"{search_query}%"), 50), else_=0)
-    # Слово встречается именно как отдельное слово (используем регулярное выражение POSIX)
-    # \m - начало слова, \M - конец слова. Это отсечет "Люголь" от "Уголь"
     score_word = case((Product.name.op("~*")(f"\\m{search_query}\\M"), 30), else_=0)
 
-    # 3. БАЗОВЫЕ УСЛОВИЯ
+    # 3. Базовые условия
     base_conditions = [
         or_(
             Product.search_vector.op("@@")(ts_query),
@@ -683,41 +676,58 @@ async def search_full_text(
         )
     ]
 
-    # Добавляем фильтры (общие для комбинаций и товаров)
-    def apply_filters(base_stmt):
-        if city and city != "Все города":
-            base_stmt = base_stmt.where(Pharmacy.city == city)
-        if min_price is not None:
-            base_stmt = base_stmt.where(Product.price >= min_price)
-        if max_price is not None:
-            base_stmt = base_stmt.where(Product.price <= max_price)
-        return base_stmt
-
-    # 4. ЗАПРОС ДЛЯ КОМБИНАЦИЙ
-    # Сортируем их так же по релевантности, чтобы в фильтрах первыми были нужные формы
-    combinations_query = (
-        select(
-            Product.name,
-            Product.form,
-            Product.manufacturer,
-            Product.country,
-            func.count(Product.uuid).label("count"),
-            func.min(Product.price).label("min_price"),
-            func.max(Product.price).label("max_price"),
-            func.count(Pharmacy.uuid.distinct()).label("pharmacy_count"),
-            (score_exact + score_starts + score_word).label("total_score")
+    # 4. Запрос для комбинаций (используется на шаге 2)
+    if form and form != "Все формы":
+        # Если форма выбрана, возвращаем пустой список комбинаций
+        available_combinations = []
+        total_found = 0
+    else:
+        # Иначе делаем запрос комбинаций
+        combinations_query = (
+            select(
+                Product.name,
+                Product.form,
+                Product.manufacturer,
+                Product.country,
+                func.count(Product.uuid).label("count"),
+                func.min(Product.price).label("min_price"),
+                func.max(Product.price).label("max_price"),
+                func.count(Pharmacy.uuid.distinct()).label("pharmacy_count"),
+                (score_exact + score_starts + score_word).label("total_score")
+            )
+            .join(Pharmacy)
+            .where(and_(*base_conditions))
         )
-        .join(Pharmacy)
-        .where(and_(*base_conditions))
-        .group_by(Product.name, Product.form, Product.manufacturer, Product.country)
-        .order_by(text("total_score DESC"), Product.name.asc())
-    )
 
-    combinations_query = apply_filters(combinations_query)
-    combinations_result = await db.execute(combinations_query)
-    combinations_data = combinations_result.all()
+        if city and city != "Все города":
+            combinations_query = combinations_query.where(Pharmacy.city == city)
+        if min_price is not None:
+            combinations_query = combinations_query.where(Product.price >= min_price)
+        if max_price is not None:
+            combinations_query = combinations_query.where(Product.price <= max_price)
 
-    # 5. ОСНОВНОЙ ЗАПРОС ТОВАРОВ
+        combinations_query = combinations_query.group_by(
+            Product.name, Product.form, Product.manufacturer, Product.country
+        ).order_by(text("total_score DESC"), Product.name.asc())
+
+        combinations_result = await db.execute(combinations_query)
+        combinations_data = combinations_result.all()
+
+        available_combinations = [
+            {
+                "name": c.name,
+                "form": c.form,
+                "manufacturer": c.manufacturer,
+                "country": c.country,
+                "count": c.count,
+                "min_price": float(c.min_price) if c.min_price else 0.0,
+                "max_price": float(c.max_price) if c.max_price else 0.0,
+                "pharmacy_count": c.pharmacy_count,
+            } for c in combinations_data
+        ]
+        total_found = sum(c.count for c in combinations_data)
+
+    # 5. Основной запрос товаров (используется на шаге 3)
     items_query = (
         select(Product)
         .options(joinedload(Product.pharmacy))
@@ -725,17 +735,21 @@ async def search_full_text(
         .where(and_(*base_conditions))
     )
 
-    # Применяем специфичные фильтры для товаров
+    # Применяем фильтры для товаров
+    if city and city != "Все города":
+        items_query = items_query.where(Pharmacy.city == city)
     if form and form != "Все формы":
         items_query = items_query.where(Product.form == form)
     if manufacturer and manufacturer != "Все производители":
         items_query = items_query.where(Product.manufacturer.ilike(f"%{manufacturer}%"))
     if country and country != "Все страны":
         items_query = items_query.where(Product.country.ilike(f"%{country}%"))
+    if min_price is not None:
+        items_query = items_query.where(Product.price >= min_price)
+    if max_price is not None:
+        items_query = items_query.where(Product.price <= max_price)
 
-    items_query = apply_filters(items_query)
-
-    # Применяем ту же логику сортировки: Сначала очки релевантности, потом ранк FTS, потом цена
+    # Сортировка
     items_query = items_query.order_by(
         (score_exact + score_starts + score_word).desc(),
         func.ts_rank(Product.search_vector, ts_query).desc(),
@@ -755,7 +769,7 @@ async def search_full_text(
     )
     products = items_result.unique().scalars().all()
 
-    # Форматирование (сохраняем вашу структуру)
+    # Форматирование результатов с ВСЕМИ полями, которые ожидает фронтенд
     items = []
     for p in products:
         items.append({
@@ -765,10 +779,16 @@ async def search_full_text(
             "manufacturer": p.manufacturer,
             "country": p.country,
             "price": float(p.price) if p.price else 0.0,
+            "quantity": float(p.quantity) if p.quantity else 0.0,
             "pharmacy_name": p.pharmacy.name if p.pharmacy else "Unknown",
             "pharmacy_city": p.pharmacy.city if p.pharmacy else "Unknown",
-            "relevance_level": "high" if p.name.lower().startswith(search_query) else "medium",
-            "updated_at": p.updated_at.isoformat() if p.updated_at else None
+            "pharmacy_address": p.pharmacy.address if p.pharmacy else "Unknown",
+            "pharmacy_phone": p.pharmacy.phone if p.pharmacy else "Unknown",
+            "pharmacy_number": p.pharmacy.pharmacy_number if p.pharmacy else "N/A",
+            "pharmacy_id": p.pharmacy.uuid if p.pharmacy else None,
+            "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+            "working_hours": getattr(p.pharmacy, 'working_hours', None) or
+                           getattr(p.pharmacy, 'opening_hours', "9:00-21:00"),
         })
 
     return {
@@ -777,11 +797,6 @@ async def search_full_text(
         "page": current_page,
         "size": size,
         "total_pages": total_pages,
-        "available_combinations": [
-            {
-                "name": c.name, "form": c.form, "manufacturer": c.manufacturer,
-                "count": c.count, "min_price": float(c.min_price)
-            } for c in combinations_data
-        ],
-        "search_metadata": {"search_type": "advanced_fts"}
+        "available_combinations": available_combinations,
+        "total_found": total_found,  # Важно: возвращаем total_found для шага 2
     }

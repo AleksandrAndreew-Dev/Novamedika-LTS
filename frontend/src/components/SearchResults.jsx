@@ -179,28 +179,26 @@ export default function SearchResults({
   // УДАЛЕНО: функция getPackagingText больше не используется
 
   const getGroupedResults = () => {
-    const grouped = {};
+  const grouped = {};
 
-    results.forEach((item) => {
-      // Уникальный ключ для КАЖДОЙ аптеки отдельно
-      const key = `${item.pharmacy_id || item.pharmacy_number}-${item.name}-${
-        item.form
-      }-${item.manufacturer}`;
+  results.forEach((item) => {
+    // Используем product_uuid для бронирования
+    const productUuid = item.product_uuid || item.uuid || item.id;
+    const pharmacyId = item.pharmacy_id || item.pharmacy_number;
 
-      if (!grouped[key]) {
-        grouped[key] = {
-          ...item,
-          // Сохраняем все уникальные количества
-          quantities: [parseFloat(item.quantity) || 0],
-          // Сохраняем все уникальные цены
-          prices: [parseFloat(item.price) || 0],
-          working_hours:
-            item.working_hours || item.opening_hours || "9:00-21:00",
-          pharmacy_id: item.pharmacy_id || item.pharmacy_number,
-          // Сохраняем UUID продукта для бронирования
-          product_uuid: item.uuid || item.id,
-        };
-      } else {
+    const key = `${pharmacyId}-${item.name}-${item.form}-${item.manufacturer}`;
+
+    if (!grouped[key]) {
+      grouped[key] = {
+        ...item,
+        // Сохраняем UUID продукта для бронирования
+        product_uuid: productUuid,
+        pharmacy_id: pharmacyId,
+        quantities: [parseFloat(item.quantity) || 0],
+        prices: [parseFloat(item.price) || 0],
+        working_hours: item.working_hours || item.opening_hours || "9:00-21:00",
+      };
+    } else {
         // Добавляем новое количество (не суммируем!)
         grouped[key].quantities.push(parseFloat(item.quantity) || 0);
         // Добавляем новую цену
@@ -222,17 +220,14 @@ export default function SearchResults({
     });
 
     // Преобразуем обратно в массив с рассчитанными суммами
-    return Object.values(grouped).map((item) => ({
-      ...item,
-      // Общее количество (сумма всех позиций)
-      quantity: item.quantities.reduce((sum, q) => sum + q, 0),
-      // Минимальная цена из всех вариантов
-      price: Math.min(...item.prices),
-      // Дополнительная информация о наличии нескольких цен
-      hasMultiplePrices: item.prices.length > 1,
-      originalPrices: item.prices,
-    }));
-  };
+     return Object.values(grouped).map((item) => ({
+    ...item,
+    quantity: item.quantities.reduce((sum, q) => sum + q, 0),
+    price: Math.min(...item.prices),
+    hasMultiplePrices: item.prices.length > 1,
+    originalPrices: item.prices,
+  }));
+};
 
   const formatQuantity = (quantity) => {
     const num = parseFloat(quantity);
