@@ -176,7 +176,6 @@ async def cmd_history(
         logger.error(f"Error in cmd_history: {e}")
         await message.answer("❌ Ошибка при загрузке истории диалогов")
 
-
 @router.message(Command("start"))
 async def cmd_start(
     message: Message,
@@ -189,7 +188,7 @@ async def cmd_start(
     await state.clear()
 
     if is_pharmacist and pharmacist:
-        # Существующий код для фармацевтов...
+        # Код для фармацевтов остается без изменений...
         status_text = "🟢 Онлайн" if pharmacist.is_online else "🔴 Офлайн"
         pharmacy_name = pharmacist.pharmacy_info.get("name", "Не указана")
 
@@ -202,20 +201,40 @@ async def cmd_start(
             reply_markup=get_pharmacist_keyboard(),
         )
     else:
-        # ДЛЯ ПОЛЬЗОВАТЕЛЕЙ: показываем Web App кнопку
-        reply_kb = get_reply_keyboard_with_webapp()
+        # ДЛЯ ПОЛЬЗОВАТЕЛЕЙ: Объединяем текст и клавиатуры
 
-        await message.answer(
+        # 1. Собираем единый текст
+        full_message_text = (
             "👋 <b>Лучше спросите в аптеке!</b>\n\n"
             "💊 <b>Консультация профессионального фармацевта</b>\n\n"
             "Просто напишите в чат, например:\n"
-            '<i>"Что можно принять от головной боли?"</i>',
-            parse_mode="HTML",
-            reply_markup=reply_kb,
+            '<i>"Что можно принять от головной боли?"</i>\n\n'
+            "Или выберите действие:"
         )
 
-        # Дополнительно показываем inline-кнопки для других действий
-        await message.answer("Или выберите действие:", reply_markup=get_user_keyboard())
+        # 2. Объединяем кнопки из двух клавиатур
+        # Получаем кнопку WebApp
+        webapp_row = [
+            InlineKeyboardButton(
+                text="🔍 Поиск лекарств",
+                web_app=WebAppInfo(url="https://spravka.novamedika.com/")
+            )
+        ]
+
+        # Получаем остальные кнопки пользователя
+        user_kb = get_user_keyboard()
+
+        # Создаем новую клавиатуру, где первой строкой идет WebApp, а затем остальные
+        combined_markup = InlineKeyboardMarkup(
+            inline_keyboard=[webapp_row] + user_kb.inline_keyboard
+        )
+
+        # 3. Отправляем ОДНО сообщение
+        await message.answer(
+            full_message_text,
+            parse_mode="HTML",
+            reply_markup=combined_markup,
+        )
 
 
 @router.message(Command("search"))
