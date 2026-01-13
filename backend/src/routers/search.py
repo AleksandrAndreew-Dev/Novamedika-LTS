@@ -672,7 +672,8 @@ async def search_full_text(
         or_(
             # Полнотекстовый поиск по name (а не по всему search_vector)
             func.to_tsvector("russian_simple", Product.name).op("@@")(ts_query),
-            Product.name.ilike(f"%{search_query}%")
+            Product.name.ilike(f"{search_query}%"),
+        Product.name.ilike(f"% {search_query}%")
         )
     ]
 
