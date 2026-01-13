@@ -222,8 +222,16 @@ async def search_products(
     # Улучшенная сортировка с учетом релевантности
     if search_name:
         query = query.order_by(
-            case((Product.name.ilike(f"%{search_name}%"), 1), else_=0).desc(),
-            Product.price.asc(),
+            case(
+                # Точное совпадение — самый высокий приоритет (вес 3)
+                (Product.name.ilike(f"{search_name}"), 3),
+                # Начинается с этого слова — приоритет ниже (вес 2)
+                (Product.name.ilike(f"{search_name}%"), 2),
+                # Содержит слово внутри — самый низкий приоритет (вес 1)
+                (Product.name.ilike(f"%{search_name}%"), 1),
+                else_=0
+            ).desc(),
+            Product.price.asc()  # При равной релевантности — по цене
         )
     else:
         query = query.order_by(Product.price.asc())
