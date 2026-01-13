@@ -1,4 +1,6 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import WebAppInfo
+
 
 import logging
 
@@ -21,9 +23,9 @@ def get_post_consultation_keyboard():
             ],
             [
                 InlineKeyboardButton(
-                    text="🔍 Поиск лекарств",
-                    callback_data="search_drugs"
-                ),
+    text="🔍 Поиск лекарств",
+    web_app = WebAppInfo(url="https://spravka.novamedika.com/")
+),
                 InlineKeyboardButton(
                     text="ℹ️ Помощь",
                     callback_data="user_help"
@@ -70,9 +72,9 @@ def make_completed_dialog_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="🔍 Поиск лекарств",
-                    callback_data="search_drugs"
-                ),
+    text="🔍 Поиск лекарств",
+    web_app = WebAppInfo(url="https://spravka.novamedika.com/")
+),
                 InlineKeyboardButton(
                     text="📖 Мои вопросы",
                     callback_data="my_questions"
@@ -262,9 +264,9 @@ def make_completed_dialog_history_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="🔍 Поиск лекарств",
-                    callback_data="search_drugs"
-                )
+    text="🔍 Поиск лекарств",
+    web_app = WebAppInfo(url="https://spravka.novamedika.com/")
+),
             ]
         ]
     )
