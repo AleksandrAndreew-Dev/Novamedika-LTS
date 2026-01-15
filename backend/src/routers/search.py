@@ -92,21 +92,16 @@ async def search_full_text(
         else_=0.0
     )
 
-    # Создаем список для всех условий
-    all_conditions_list = []
-
+    # Определяем условия для каждого уровня
     # УРОВЕНЬ 1: ТОЧНЫЕ СОВПАДЕНИЯ (высший приоритет)
-    exact_match_conditions = []
-    exact_match_conditions.append(Product.name.ilike(f"{search_query}"))
-    exact_match_conditions.append(Product.name.ilike(f"{search_query}%"))
-    exact_match_conditions.append(Product.name.ilike(f" {search_query} "))
-    exact_match_conditions.append(Product.name.ilike(f"{search_query} "))
-    exact_match_conditions.append(Product.name.ilike(f" {search_query}"))
-    exact_match_conditions.append(Product.name.ilike(f"% {search_query}"))
-    exact_match_conditions.append(Product.name.ilike(f"{search_query} %"))
-
-    if exact_match_conditions:
-        all_conditions_list.append(or_(*exact_match_conditions))
+    exact_conditions = []
+    exact_conditions.append(Product.name.ilike(f"{search_query}"))
+    exact_conditions.append(Product.name.ilike(f"{search_query}%"))
+    exact_conditions.append(Product.name.ilike(f" {search_query} "))
+    exact_conditions.append(Product.name.ilike(f"{search_query} "))
+    exact_conditions.append(Product.name.ilike(f" {search_query}"))
+    exact_conditions.append(Product.name.ilike(f"% {search_query}"))
+    exact_conditions.append(Product.name.ilike(f"{search_query} %"))
 
     # УРОВЕНЬ 2: ПОЛНОТЕКСТОВЫЙ ПОИСК (средний приоритет)
     fts_conditions = []
@@ -121,9 +116,6 @@ async def search_full_text(
                 word_conditions.append(Product.name.ilike(f"%{word}%"))
         if word_conditions:
             fts_conditions.append(or_(*word_conditions))
-
-    if fts_conditions:
-        all_conditions_list.append(or_(*fts_conditions))
 
     # УРОВЕНЬ 3: НЕТОЧНЫЙ ПОИСК/ОПЕЧАТКИ (низкий приоритет) - С ЛЕВЕНШТЕЙНОМ
     fuzzy_conditions = []
@@ -152,11 +144,50 @@ async def search_full_text(
         if len(first_letters) >= 3:
             fuzzy_conditions.append(Product.name.ilike(f"{first_letters}%"))
 
-    if fuzzy_conditions:
-        all_conditions_list.append(or_(*fuzzy_conditions))
+    # Определяем список условий по уровням (в порядке приоритета)
+    search_levels = [
+        ("exact", exact_conditions),
+        ("fts", fts_conditions),
+        ("fuzzy", fuzzy_conditions)
+    ]
 
-    # Базовое условие: объединяем все уровни через OR
-    if not all_conditions_list:
+    chosen_level_condition = None
+    chosen_level_name = None
+
+    # Поиск по уровням: если на текущем уровне есть результаты, останавливаемся
+    for level_name, conditions in search_levels:
+        if not conditions:
+            continue
+
+        base_condition = or_(*conditions)
+
+        # Проверяем, есть ли результаты с этим условием
+        count_query = select(func.count()).select_from(Product).join(Pharmacy).where(base_condition)
+
+        # Применяем фильтры к проверочному запросу
+        if city and city != "Все города":
+            count_query = count_query.where(Pharmacy.city == city)
+        if form and form != "Все формы":
+            count_query = count_query.where(Product.form == form)
+        if manufacturer and manufacturer != "Все производители":
+            count_query = count_query.where(Product.manufacturer.ilike(f"%{manufacturer}%"))
+        if country and country != "Все страны":
+            count_query = count_query.where(Product.country.ilike(f"%{country}%"))
+        if min_price is not None:
+            count_query = count_query.where(Product.price >= min_price)
+        if max_price is not None:
+            count_query = count_query.where(Product.price <= max_price)
+
+        total_result = await db.execute(count_query)
+        total = total_result.scalar() or 0
+
+        if total > 0:
+            chosen_level_condition = base_condition
+            chosen_level_name = level_name
+            break
+
+    # Если ни один уровень не дал результатов, возвращаем пустой ответ
+    if chosen_level_condition is None:
         return {
             "items": [],
             "total": 0,
@@ -165,11 +196,10 @@ async def search_full_text(
             "total_pages": 1,
             "available_combinations": [],
             "total_found": 0,
+            "search_level": "none"
         }
 
-    base_condition = or_(*all_conditions_list)
-
-    # Продолжение функции...
+    # Продолжение с выбранным условием...
     if form and form != "Все формы":
         available_combinations = []
         total_found = 0
@@ -190,10 +220,10 @@ async def search_full_text(
                 case((Product.name.ilike(f"% {search_query} %"), 30), else_=0).label("word_score"),
                 func.ts_rank(func.to_tsvector("russian_simple", Product.name), ts_query).label("fts_score"),
                 trigram_similarity.label("trigram_score"),
-                levenshtein_normalized.label("levenshtein_score")  # Добавляем оценку Левенштейна
+                levenshtein_normalized.label("levenshtein_score")
             )
             .join(Pharmacy)
-            .where(base_condition)
+            .where(chosen_level_condition)
         )
 
         if city and city != "Все города":
@@ -240,7 +270,7 @@ async def search_full_text(
         select(Product)
         .options(joinedload(Product.pharmacy))
         .join(Pharmacy)
-        .where(base_condition)
+        .where(chosen_level_condition)
     )
 
     # Применяем фильтры для товаров
@@ -317,4 +347,5 @@ async def search_full_text(
         "total_pages": total_pages,
         "available_combinations": available_combinations,
         "total_found": total_found,
+        "search_level": chosen_level_name  # Добавляем информацию об уровне поиска
     }
