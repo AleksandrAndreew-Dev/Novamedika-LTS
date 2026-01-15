@@ -127,7 +127,7 @@ async def search_full_text(
 
     # УРОВЕНЬ 3: НЕТОЧНЫЙ ПОИСК/ОПЕЧАТКИ (низкий приоритет) - С ЛЕВЕНШТЕЙНОМ
     fuzzy_conditions = []
-    fuzzy_conditions.append(trigram_similarity > 0.7)
+    fuzzy_conditions.append(trigram_similarity > 0.9)
     fuzzy_conditions.append(Product.name.ilike(f"{search_query}%"))
     fuzzy_conditions.append(Product.name.ilike(f" {search_query}%"))
 
