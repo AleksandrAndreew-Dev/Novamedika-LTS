@@ -618,21 +618,46 @@ async def search_full_text(
 ):
     search_query = q.strip().lower()
 
-    # РАСШИРЕННЫЙ ПОИСК: многоуровневый с приоритетами
+    # ИСПРАВЛЕНИЕ: Разделяем запрос на слова и используем полнотекстовый поиск
+    # с учетом границ слов
     words = search_query.split()
 
-    # Создаем полнотекстовый запрос
+    # Создаем полнотекстовый запрос с учетом границ слов
+    # Используем & для AND логики и :* для префиксного поиска
     fts_query_str = " & ".join([f"{word}:*" for word in words if len(word) > 1])
     if not fts_query_str:
         fts_query_str = f"{search_query}:*"
 
+    # Улучшенный ts_query с учетом границ слов
     ts_query = func.to_tsquery("russian_simple", fts_query_str)
 
-    # Триграммное сходство для опечаток
-    trigram_similarity = func.similarity(Product.name, search_query)
+    # Основное условие: полнотекстовый поиск
+    base_condition = func.to_tsvector("russian_simple", Product.name).op("@@")(ts_query)
 
-    # МНОГОУРОВНЕВЫЕ УСЛОВИЯ ПОИСКА
-    all_conditions = []
+    # Дополнительные условия для точных совпадений
+    exact_conditions = []
+
+    # 1. Точное совпадение (регистронезависимое)
+    exact_conditions.append(Product.name.ilike(f"{search_query}"))
+
+    # 2. Слово с пробелами вокруг (целое слово)
+    exact_conditions.append(Product.name.ilike(f"% {search_query} %"))
+
+    # 3. Слово в начале с пробелом после
+    exact_conditions.append(Product.name.ilike(f"{search_query} %"))
+
+    # 4. Слово в конце с пробелом перед
+    exact_conditions.append(Product.name.ilike(f"% {search_query}"))
+
+    # 5. Для каждого слова из запроса ищем как целое слово
+    for word in words:
+        if len(word) >= 3:
+            exact_conditions.append(Product.name.ilike(f"% {word} %"))
+            exact_conditions.append(Product.name.ilike(f"{word} %"))
+            exact_conditions.append(Product.name.ilike(f"% {word}"))
+
+    # Объединяем условия через OR
+    all_conditions = or_(base_condition, *exact_conditions)
 
     # УРОВЕНЬ 1: ТОЧНЫЕ СОВПАДЕНИЯ (высший приоритет)
     exact_match_conditions = []
