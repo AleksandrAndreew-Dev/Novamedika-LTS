@@ -28,8 +28,6 @@ def _clean_old_contexts():
     for search_id in expired_ids:
         del _search_context[search_id]
 
-
-# search.py - обновляем search-two-step для использования полнотекстового поиска
 @router.get("/search-two-step/", response_model=dict)
 async def search_two_step(
     name: Optional[str] = Query(None),
@@ -43,14 +41,13 @@ async def search_two_step(
 
     _clean_old_contexts()
 
-    # Нормализуем поисковый запрос
+    # Исправлено: замена q на name для работоспособности
     search_name = name.strip()
-    search_query = q.strip()
+    search_query = search_name
 
     # Полнотекстовый поиск
     ts_query = func.plainto_tsquery("russian_simple", search_query)
 
-    # Базовый запрос с полнотекстовым поиском
     base_query = (
         select(Product)
         .join(Pharmacy, Product.pharmacy_id == Pharmacy.uuid)
@@ -60,7 +57,6 @@ async def search_two_step(
     if city and city != "Все города" and city.strip():
         base_query = base_query.where(Pharmacy.city == city)
 
-    # Запрос для форм с релевантностью полнотекстового поиска
     forms_query = (
         select(
             Product.form,
@@ -96,7 +92,6 @@ async def search_two_step(
     available_forms = [form for form, count, relevance in forms_data if form]
     total_found = sum(count for form, count, relevance in forms_data)
 
-    # Улучшенный превью с релевантностью полнотекстового поиска
     preview_query = (
         base_query.options(joinedload(Product.pharmacy))
         .order_by(
@@ -111,6 +106,10 @@ async def search_two_step(
 
     preview_products = []
     for product in preview_products_data:
+        # Улучшенная логика релевантности (не находит "Уголь" внутри "Люголя")
+        is_relevant = product.name.lower().startswith(search_name.lower()) or \
+                      f" {search_name.lower()}" in product.name.lower()
+
         preview_products.append(
             {
                 "name": product.name,
@@ -121,15 +120,10 @@ async def search_two_step(
                 "pharmacy_city": (
                     product.pharmacy.city if product.pharmacy else "Unknown"
                 ),
-                "relevance": (
-                    "high"
-                    if product.name.lower().find(search_name.lower()) != -1
-                    else "medium"
-                ),
+                "relevance": "high" if is_relevant else "medium",
             }
         )
 
-    # Сохраняем нормализованный запрос
     search_id = str(uuid.uuid4())
     _search_context[search_id] = {
         "name": search_name,
@@ -147,7 +141,6 @@ async def search_two_step(
         "search_id": search_id,
     }
 
-
 @router.get("/search/", response_model=dict)
 async def search_products(
     search_id: Optional[str] = Query(None),
@@ -161,8 +154,6 @@ async def search_products(
     db: AsyncSession = Depends(get_db),
 ):
     _clean_old_contexts()
-
-    # Определяем параметры поиска
     search_name = name
     search_city = city
 
@@ -173,39 +164,23 @@ async def search_products(
         if not search_city:
             search_city = context["city"]
 
-    # Нормализуем поисковый запрос
     if search_name:
         search_name = search_name.strip().lower()
 
-    # Базовый запрос
     query = select(Product).options(joinedload(Product.pharmacy)).join(Pharmacy)
 
-    # Улучшенная фильтрация по названию
     if search_name:
         name_conditions = []
-
-        # 1. Точное совпадение (высший приоритет)
+        # ПРИМЕНЕНИЕ СТРОГОЙ ЛОГИКИ: начало строки или отдельное слово
         name_conditions.append(Product.name.ilike(f"{search_name}"))
-
-        # 2. Совпадение с начала строки
         name_conditions.append(Product.name.ilike(f"{search_name}%"))
+        name_conditions.append(Product.name.ilike(f"% {search_name}%"))
 
-        # 3. Полное вхождение поисковой фразы
-        name_conditions.append(Product.name.ilike(f"%{search_name}%"))
-
-        # 4. Поиск по отдельным словам (только для слов длиной > 2 символов)
         search_terms = search_name.split()
         for term in search_terms:
             if len(term) > 2:
-                name_conditions.append(Product.name.ilike(f"% {term} %"))
-                name_conditions.append(Product.name.ilike(f"{term} %"))
-                name_conditions.append(Product.name.ilike(f"% {term}"))
-
-        # 5. Частичное совпадение для коротких слов
-        if len(search_terms) > 0:
-            first_term = search_terms[0]
-            if len(first_term) >= 3:
-                name_conditions.append(Product.name.ilike(f"{first_term[:3]}%"))
+                name_conditions.append(Product.name.ilike(f"{term}%"))
+                name_conditions.append(Product.name.ilike(f"% {term}%"))
 
         if name_conditions:
             query = query.where(or_(*name_conditions))
@@ -219,10 +194,14 @@ async def search_products(
     if country:
         query = query.where(Product.country.ilike(f"%{country}%"))
 
-    # Улучшенная сортировка с учетом релевантности
+    # Сортировка также обновлена для точности
     if search_name:
         query = query.order_by(
-            case((Product.name.ilike(f"%{search_name}%"), 1), else_=0).desc(),
+            case(
+                (Product.name.ilike(f"{search_name}%"), 2),
+                (Product.name.ilike(f"% {search_name}%"), 1),
+                else_=0
+            ).desc(),
             Product.price.asc(),
         )
     else:
@@ -231,39 +210,32 @@ async def search_products(
     # Пагинация
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
-    total = total_result.scalar()
-
+    total = total_result.scalar() or 0
     total_pages = ceil(total / size) if total > 0 else 1
-    if page > total_pages:
-        page = total_pages
+    page = min(page, total_pages) if total > 0 else 1
 
     query = query.offset((page - 1) * size).limit(size)
-
     result = await db.execute(query)
     products = result.unique().scalars().all()
 
     items = []
     for product in products:
         pharmacy = product.pharmacy
-        items.append(
-            {
-                "uuid": str(product.uuid),
-                "name": product.name,
-                "form": product.form,
-                "manufacturer": product.manufacturer,
-                "country": product.country,
-                "price": float(product.price) if product.price else 0.0,
-                "quantity": float(product.quantity) if product.quantity else 0.0,
-                "pharmacy_name": pharmacy.name if pharmacy else "Unknown",
-                "pharmacy_city": pharmacy.city if pharmacy else "Unknown",
-                "pharmacy_address": pharmacy.address if pharmacy else "Unknown",
-                "pharmacy_phone": pharmacy.phone if pharmacy else "Unknown",
-                "pharmacy_number": pharmacy.pharmacy_number if pharmacy else "N/A",
-                "updated_at": (
-                    product.updated_at.isoformat() if product.updated_at else None
-                ),
-            }
-        )
+        items.append({
+            "uuid": str(product.uuid),
+            "name": product.name,
+            "form": product.form,
+            "manufacturer": product.manufacturer,
+            "country": product.country,
+            "price": float(product.price) if product.price else 0.0,
+            "quantity": float(product.quantity) if product.quantity else 0.0,
+            "pharmacy_name": pharmacy.name if pharmacy else "Unknown",
+            "pharmacy_city": pharmacy.city if pharmacy else "Unknown",
+            "pharmacy_address": pharmacy.address if pharmacy else "Unknown",
+            "pharmacy_phone": pharmacy.phone if pharmacy else "Unknown",
+            "pharmacy_number": pharmacy.pharmacy_number if pharmacy else "N/A",
+            "updated_at": product.updated_at.isoformat() if product.updated_at else None,
+        })
 
     return {
         "items": items,
@@ -271,16 +243,9 @@ async def search_products(
         "page": page,
         "size": size,
         "total_pages": total_pages,
-        "filters": {
-            "name": search_name,
-            "city": search_city,
-            "form": form,
-            "manufacturer": manufacturer,
-            "country": country,
-        },
+        "filters": {"name": search_name, "city": search_city},
         "search_id": search_id,
     }
-
 
 @router.get("/search-flexible/", response_model=dict)
 async def search_flexible(
