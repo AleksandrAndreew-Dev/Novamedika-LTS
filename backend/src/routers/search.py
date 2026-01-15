@@ -717,7 +717,8 @@ async def search_full_text(
     fuzzy_conditions.append(trigram_similarity > 0.3)  # Сниженный порог для опечаток
 
     # 3.2. Частичное совпадение
-    fuzzy_conditions.append(Product.name.ilike(f"%{search_query}%"))
+    fuzzy_conditions.append(Product.name.ilike(f"{search_query}%"))
+    fuzzy_conditions.append(Product.name.ilike(f"% {search_query}%"))
 
     # 3.3. Поиск по корню слова (для опечаток вроде "пороцетамол" -> "парацетамол")
     if len(search_query) >= 5:
@@ -725,7 +726,7 @@ async def search_full_text(
         root_length = min(5, len(search_query) - 1)
         search_root = search_query[:root_length]
         fuzzy_conditions.append(Product.name.ilike(f"{search_root}%"))
-        fuzzy_conditions.append(Product.name.ilike(f"%{search_root}%"))
+        fuzzy_conditions.append(Product.name.ilike(f"% {search_root}%"))
 
     # 3.4. Поиск по первым буквам каждого слова
     if len(words) > 1:
