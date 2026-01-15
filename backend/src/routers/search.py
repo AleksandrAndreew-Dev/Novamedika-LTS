@@ -15,7 +15,6 @@ from sqlalchemy.dialects.postgresql import TSVECTOR
 router = APIRouter()
 
 
-
 @router.get("/cities/")
 async def get_cities(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -40,6 +39,18 @@ async def get_forms(db: AsyncSession = Depends(get_db)):
     return forms
 
 
+def calculate_max_distance(search_query: str) -> int:
+    """Вычисляет максимальное расстояние Левенштейна в зависимости от длины запроса"""
+    length = len(search_query)
+    if length <= 3:
+        return 1
+    elif length <= 6:
+        return 2
+    elif length <= 10:
+        return 3
+    else:
+        return 4
+
 
 @router.get("/search-fts/", response_model=dict)
 async def search_full_text(
@@ -57,6 +68,9 @@ async def search_full_text(
     search_query = q.strip().lower()
     words = search_query.split()
 
+    # Вычисляем максимальное расстояние Левенштейна
+    max_distance = calculate_max_distance(search_query)
+
     # Создаем полнотекстовый запрос
     fts_query_str = " & ".join([f"{word}:*" for word in words if len(word) > 1])
     if not fts_query_str:
@@ -66,6 +80,17 @@ async def search_full_text(
 
     # Определяем триграммное сходство
     trigram_similarity = func.similarity(Product.name, search_query)
+
+    # Определяем расстояние Левенштейна
+    levenshtein_distance = func.levenshtein(func.lower(Product.name), search_query)
+    levenshtein_normalized = case(
+        (
+            func.length(Product.name) > 0,
+            1.0 - (func.levenshtein(func.lower(Product.name), search_query) /
+                  func.greatest(func.length(Product.name), len(search_query)))
+        ),
+        else_=0.0
+    )
 
     # Создаем список для всех условий
     all_conditions_list = []
@@ -100,11 +125,21 @@ async def search_full_text(
     if fts_conditions:
         all_conditions_list.append(or_(*fts_conditions))
 
-    # УРОВЕНЬ 3: НЕТОЧНЫЙ ПОИСК/ОПЕЧАТКИ (низкий приоритет)
+    # УРОВЕНЬ 3: НЕТОЧНЫЙ ПОИСК/ОПЕЧАТКИ (низкий приоритет) - С ЛЕВЕНШТЕЙНОМ
     fuzzy_conditions = []
     fuzzy_conditions.append(trigram_similarity > 0.7)
     fuzzy_conditions.append(Product.name.ilike(f"{search_query}%"))
     fuzzy_conditions.append(Product.name.ilike(f" {search_query}%"))
+
+    # Добавляем условие по Левенштейну
+    fuzzy_conditions.append(levenshtein_distance <= max_distance)
+
+    # Также учитываем расстояние для каждого слова отдельно
+    for word in words:
+        if len(word) >= 3:
+            fuzzy_conditions.append(
+                func.levenshtein(func.lower(Product.name), word) <= 2
+            )
 
     if len(search_query) >= 5:
         root_length = min(5, len(search_query) - 1)
@@ -134,8 +169,7 @@ async def search_full_text(
 
     base_condition = or_(*all_conditions_list)
 
-    # Продолжение функции остается без изменений...
-    # Если форма выбрана, возвращаем пустой список комбинаций
+    # Продолжение функции...
     if form and form != "Все формы":
         available_combinations = []
         total_found = 0
@@ -155,7 +189,8 @@ async def search_full_text(
                 case((Product.name.ilike(f"{search_query}%"), 50), else_=0).label("starts_score"),
                 case((Product.name.ilike(f"% {search_query} %"), 30), else_=0).label("word_score"),
                 func.ts_rank(func.to_tsvector("russian_simple", Product.name), ts_query).label("fts_score"),
-                trigram_similarity.label("trigram_score")
+                trigram_similarity.label("trigram_score"),
+                levenshtein_normalized.label("levenshtein_score")  # Добавляем оценку Левенштейна
             )
             .join(Pharmacy)
             .where(base_condition)
@@ -177,6 +212,7 @@ async def search_full_text(
                 word_score DESC,
                 fts_score DESC,
                 trigram_score DESC,
+                levenshtein_score DESC,
                 count DESC
             """),
             Product.name.asc()
@@ -221,7 +257,7 @@ async def search_full_text(
     if max_price is not None:
         items_query = items_query.where(Product.price <= max_price)
 
-    # УЛУЧШЕННАЯ МНОГОУРОВНЕВАЯ СОРТИРОВКА:
+    # УЛУЧШЕННАЯ МНОГОУРОВНЕВАЯ СОРТИРОВКА С ЛЕВЕНШТЕЙНОМ:
     items_query = items_query.order_by(
         case(
             (Product.name.ilike(f"{search_query}"), 6),
@@ -233,6 +269,8 @@ async def search_full_text(
         ).desc(),
         func.ts_rank(func.to_tsvector("russian_simple", Product.name), ts_query).desc(),
         trigram_similarity.desc(),
+        levenshtein_normalized.desc(),  # Добавляем нормализованное расстояние Левенштейна
+        levenshtein_distance.asc(),     # И прямое расстояние (меньше = лучше)
         Product.price.asc()
     )
 
