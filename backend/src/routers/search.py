@@ -617,78 +617,38 @@ async def search_full_text(
     db: AsyncSession = Depends(get_db),
 ):
     search_query = q.strip().lower()
-
-    # ИСПРАВЛЕНИЕ: Разделяем запрос на слова и используем полнотекстовый поиск
-    # с учетом границ слов
     words = search_query.split()
 
-    # Создаем полнотекстовый запрос с учетом границ слов
-    # Используем & для AND логики и :* для префиксного поиска
+    # Создаем полнотекстовый запрос
     fts_query_str = " & ".join([f"{word}:*" for word in words if len(word) > 1])
     if not fts_query_str:
         fts_query_str = f"{search_query}:*"
 
-    # Улучшенный ts_query с учетом границ слов
     ts_query = func.to_tsquery("russian_simple", fts_query_str)
 
-    # Основное условие: полнотекстовый поиск
-    base_condition = func.to_tsvector("russian_simple", Product.name).op("@@")(ts_query)
+    # Определяем триграммное сходство
+    trigram_similarity = func.similarity(Product.name, search_query)
 
-    # Дополнительные условия для точных совпадений
-    exact_conditions = []
-
-    # 1. Точное совпадение (регистронезависимое)
-    exact_conditions.append(Product.name.ilike(f"{search_query}"))
-
-    # 2. Слово с пробелами вокруг (целое слово)
-    exact_conditions.append(Product.name.ilike(f"% {search_query} %"))
-
-    # 3. Слово в начале с пробелом после
-    exact_conditions.append(Product.name.ilike(f"{search_query} %"))
-
-    # 4. Слово в конце с пробелом перед
-    exact_conditions.append(Product.name.ilike(f"% {search_query}"))
-
-    # 5. Для каждого слова из запроса ищем как целое слово
-    for word in words:
-        if len(word) >= 3:
-            exact_conditions.append(Product.name.ilike(f"% {word} %"))
-            exact_conditions.append(Product.name.ilike(f"{word} %"))
-            exact_conditions.append(Product.name.ilike(f"% {word}"))
-
-    # Объединяем условия через OR
-    all_conditions = or_(base_condition, *exact_conditions)
+    # Создаем список для всех условий
+    all_conditions_list = []
 
     # УРОВЕНЬ 1: ТОЧНЫЕ СОВПАДЕНИЯ (высший приоритет)
     exact_match_conditions = []
-
-    # 1.1. Точное совпадение (регистронезависимое)
     exact_match_conditions.append(Product.name.ilike(f"{search_query}"))
-
-    # 1.2. Совпадение с начала строки
     exact_match_conditions.append(Product.name.ilike(f"{search_query}%"))
-
-    # 1.3. Слово в середине с пробелами
     exact_match_conditions.append(Product.name.ilike(f"% {search_query} %"))
-
-    # 1.4. Слово в конце
     exact_match_conditions.append(Product.name.ilike(f"% {search_query}"))
-
-    # 1.5. Слово в начале
     exact_match_conditions.append(Product.name.ilike(f"{search_query} %"))
 
     if exact_match_conditions:
-        all_conditions.append(or_(*exact_match_conditions))
+        all_conditions_list.append(or_(*exact_match_conditions))
 
     # УРОВЕНЬ 2: ПОЛНОТЕКСТОВЫЙ ПОИСК (средний приоритет)
     fts_conditions = []
-
-    # 2.1. Стандартный полнотекстовый поиск
     fts_conditions.append(
         func.to_tsvector("russian_simple", Product.name).op("@@")(ts_query)
     )
 
-    # 2.2. Поиск по каждому слову отдельно
     if len(words) > 1:
         word_conditions = []
         for word in words:
@@ -698,38 +658,30 @@ async def search_full_text(
             fts_conditions.append(or_(*word_conditions))
 
     if fts_conditions:
-        all_conditions.append(or_(*fts_conditions))
+        all_conditions_list.append(or_(*fts_conditions))
 
     # УРОВЕНЬ 3: НЕТОЧНЫЙ ПОИСК/ОПЕЧАТКИ (низкий приоритет)
     fuzzy_conditions = []
-
-    # 3.1. Триграммное сходство со сниженным порогом
-    fuzzy_conditions.append(trigram_similarity > 0.3)  # Сниженный порог для опечаток
-
-    # 3.2. Частичное совпадение
+    fuzzy_conditions.append(trigram_similarity > 0.3)
     fuzzy_conditions.append(Product.name.ilike(f"{search_query}%"))
     fuzzy_conditions.append(Product.name.ilike(f"% {search_query}%"))
 
-    # 3.3. Поиск по корню слова (для опечаток вроде "пороцетамол" -> "парацетамол")
     if len(search_query) >= 5:
-        # Ищем совпадения по первым 4-5 буквам
         root_length = min(5, len(search_query) - 1)
         search_root = search_query[:root_length]
         fuzzy_conditions.append(Product.name.ilike(f"{search_root}%"))
         fuzzy_conditions.append(Product.name.ilike(f"% {search_root}%"))
 
-    # 3.4. Поиск по первым буквам каждого слова
     if len(words) > 1:
         first_letters = "".join([word[0] for word in words if len(word) > 0])
         if len(first_letters) >= 3:
             fuzzy_conditions.append(Product.name.ilike(f"{first_letters}%"))
 
     if fuzzy_conditions:
-        all_conditions.append(or_(*fuzzy_conditions))
+        all_conditions_list.append(or_(*fuzzy_conditions))
 
     # Базовое условие: объединяем все уровни через OR
-    if not all_conditions:
-        # Если нет условий, возвращаем пустой результат
+    if not all_conditions_list:
         return {
             "items": [],
             "total": 0,
@@ -740,8 +692,9 @@ async def search_full_text(
             "total_found": 0,
         }
 
-    base_condition = or_(*all_conditions)
+    base_condition = or_(*all_conditions_list)
 
+    # Продолжение функции остается без изменений...
     # Если форма выбрана, возвращаем пустой список комбинаций
     if form and form != "Все формы":
         available_combinations = []
@@ -758,7 +711,6 @@ async def search_full_text(
                 func.min(Product.price).label("min_price"),
                 func.max(Product.price).label("max_price"),
                 func.count(Pharmacy.uuid.distinct()).label("pharmacy_count"),
-                # Приоритеты для сортировки
                 case((Product.name.ilike(f"{search_query}"), 100), else_=0).label("exact_score"),
                 case((Product.name.ilike(f"{search_query}%"), 50), else_=0).label("starts_score"),
                 case((Product.name.ilike(f"% {search_query} %"), 30), else_=0).label("word_score"),
@@ -830,12 +782,6 @@ async def search_full_text(
         items_query = items_query.where(Product.price <= max_price)
 
     # УЛУЧШЕННАЯ МНОГОУРОВНЕВАЯ СОРТИРОВКА:
-    # 1. Точное совпадение названия
-    # 2. Начинается с запроса
-    # 3. Слово в середине
-    # 4. Полнотекстовая релевантность
-    # 5. Триграммное сходство (для опечаток)
-    # 6. Цена
     items_query = items_query.order_by(
         case(
             (Product.name.ilike(f"{search_query}"), 6),
