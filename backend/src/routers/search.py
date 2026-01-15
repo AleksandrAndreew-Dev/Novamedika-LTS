@@ -636,7 +636,9 @@ async def search_full_text(
     exact_match_conditions = []
     exact_match_conditions.append(Product.name.ilike(f"{search_query}"))
     exact_match_conditions.append(Product.name.ilike(f"{search_query}%"))
-    exact_match_conditions.append(Product.name.ilike(f"% {search_query} %"))
+    exact_match_conditions.append(Product.name.ilike(f" {search_query} "))
+    exact_match_conditions.append(Product.name.ilike(f"{search_query} "))
+    exact_match_conditions.append(Product.name.ilike(f" {search_query}"))
     exact_match_conditions.append(Product.name.ilike(f"% {search_query}"))
     exact_match_conditions.append(Product.name.ilike(f"{search_query} %"))
 
@@ -664,7 +666,7 @@ async def search_full_text(
     fuzzy_conditions = []
     fuzzy_conditions.append(trigram_similarity > 0.3)
     fuzzy_conditions.append(Product.name.ilike(f"{search_query}%"))
-    fuzzy_conditions.append(Product.name.ilike(f"% {search_query}%"))
+    fuzzy_conditions.append(Product.name.ilike(f" {search_query}%"))
 
     if len(search_query) >= 5:
         root_length = min(5, len(search_query) - 1)
