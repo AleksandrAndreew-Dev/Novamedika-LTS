@@ -886,7 +886,7 @@ async def send_order_status_notification(
 
             # Заменяем строку с информацией о времени получения
             message_text += f"Вы можете забрать заказ до 12:00 {tomorrow_str}. 🎉"
-            sms_text = f"Заказ {order.uuid} ПОДТВЕРЖДЕН. Ждем до 12:00 {tomorrow_str}. Адрес: {pharmacy_address}. Тел: {pharmacy_phone}"
+            sms_text = f"Заказ {product_name} {product_form} ПОДТВЕРЖДЕН. Ждем до 12:00 {tomorrow_str}. Адрес: {pharmacy_address}. Тел: {pharmacy_phone}"
 
         elif new_status == "cancelled":
             message_text = (
@@ -910,7 +910,7 @@ async def send_order_status_notification(
                 message_text += "\n"
 
             message_text += "Если это ошибка, свяжитесь с аптекой по телефону выше."
-            sms_text = f"Заказ {order.uuid} ОТМЕНЕН. Причина: {comment if comment else 'не указана'}"
+            sms_text = f"Заказ {product_name} {product_form} ОТМЕНЕН. Причина: {comment if comment else 'не указана'}"
 
         elif new_status == "failed":
             message_text = (
@@ -936,7 +936,7 @@ async def send_order_status_notification(
             message_text += (
                 "Техническая ошибка при обработке заказа. Мы уже работаем над решением."
             )
-            sms_text = f"Проблема с заказом {order.uuid}. Мы свяжемся с вами. Тел. аптеки: {pharmacy_phone}"
+            sms_text = f"Проблема с заказом. Мы свяжемся с вами. Тел. аптеки: {pharmacy_phone}"
         else:
             return  # Не отправляем уведомление для других статусов
 
