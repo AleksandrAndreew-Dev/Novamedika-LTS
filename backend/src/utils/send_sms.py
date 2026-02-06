@@ -21,7 +21,7 @@ async def send_a1_sms(phone: str, text: str):
         "apikey": os.getenv("a1apk"),  # Из настроек
         "msisdn": clean_phone,
         "text": text,
-        "sender": "Novamedika",
+        "sender": "Nvmdk.by",
     }
 
     try:
