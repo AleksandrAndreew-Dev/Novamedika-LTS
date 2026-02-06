@@ -889,6 +889,7 @@ async def send_order_status_notification(
             sms_text = f"Заказ подтвержден. {product_name} {product_form}. Ждем до 12:00 {tomorrow_str}. Адрес: {pharmacy_address}. Тел: {pharmacy_phone}"
 
         elif new_status == "cancelled":
+            cancellation_reason = comment or order.cancellation_reason or "не указана"
             message_text = (
                 "❌ **Ваш заказ отменен**\n\n"
                 f"📦 Номер заказа: `{order.uuid}`\n"
@@ -910,7 +911,7 @@ async def send_order_status_notification(
                 message_text += "\n"
 
             message_text += "Если это ошибка, свяжитесь с аптекой по телефону выше."
-            sms_text = f"Заказ отменен. {product_name} {product_form}  Причина: {comment if comment else 'не указана'}"
+            sms_text = f"Заказ отменен. {product_name} {product_form}  Причина: {cancellation_reason}"
 
         elif new_status == "failed":
             message_text = (
