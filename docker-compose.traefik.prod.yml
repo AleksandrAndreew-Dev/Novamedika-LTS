@@ -34,6 +34,7 @@ services:
 
   backend:
     image: ghcr.io/aleksandrandreew-dev/novamedika-lts/backend:latest
+    user: "999:999"  # UID:GID appuser (backend на Debian slim)
     container_name: backend-prod
     env_file:
       - .env
@@ -67,6 +68,7 @@ services:
 
   frontend:
     image: ghcr.io/aleksandrandreew-dev/novamedika-lts/frontend:latest
+    user: "100:102"  # UID:GID appuser (frontend на Alpine)
     container_name: frontend-prod
     environment:
       - VITE_API_URL=${VITE_API_URL}

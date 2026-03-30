@@ -11,6 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential curl gcc libpq-dev ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# Создаём непривилегированного пользователя
+RUN groupadd -r appgroup && useradd -r -g appgroup appuser
+
 # Copy dependency files
 COPY pyproject.toml uv.lock ./
 
@@ -18,9 +21,14 @@ COPY pyproject.toml uv.lock ./
 RUN pip install --upgrade pip && pip install uv
 RUN uv sync --frozen --no-cache
 
-
 # Copy source code
 COPY src/ ./src/
+
+# Передаём права на директорию приложения пользователю
+RUN chown -R appuser:appgroup /app
+
+# Переключаемся на непривилегированного пользователя
+USER appuser
 
 EXPOSE 8000
 
