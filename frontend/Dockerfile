@@ -4,7 +4,6 @@ WORKDIR /app
 
 # Аргументы сборки
 ARG VITE_API_URL
-ARG VITE_TELEGRAM_BOT_TOKEN
 
 # Копируем package files
 COPY package*.json ./
@@ -15,7 +14,7 @@ RUN npm ci
 COPY . .
 
 # Собираем приложение с переменными окружения
-RUN VITE_API_URL=${VITE_API_URL} VITE_TELEGRAM_BOT_TOKEN=${VITE_TELEGRAM_BOT_TOKEN} npm run build
+RUN VITE_API_URL=${VITE_API_URL} npm run build
 
 FROM nginx:alpine as prod
 
