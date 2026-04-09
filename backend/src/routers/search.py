@@ -186,7 +186,7 @@ async def search_full_text(
 
     # Применяем фильтры к подсчёту уровней
     if city and city != "Все города":
-        level_counts_query = level_counts_query.where(Pharmacy.city == city)
+        level_counts_query = level_counts_query.where(Pharmacy.city.ilike(city))
     if form and form != "Все формы":
         level_counts_query = level_counts_query.where(Product.form == form)
     if manufacturer and manufacturer != "Все производители":
@@ -249,7 +249,7 @@ async def search_full_text(
         )
 
         if city and city != "Все города":
-            items_query = items_query.where(Pharmacy.city == city)
+            items_query = items_query.where(Pharmacy.city.ilike(city))
         if form and form != "Все формы":
             items_query = items_query.where(Product.form == form)
         if manufacturer and manufacturer != "Все производители":
@@ -360,7 +360,7 @@ async def search_full_text(
         )
 
         if city and city != "Все города":
-            combinations_query = combinations_query.where(Pharmacy.city == city)
+            combinations_query = combinations_query.where(Pharmacy.city.ilike(city))
         if min_price is not None:
             combinations_query = combinations_query.where(Product.price >= min_price)
         if max_price is not None:
@@ -411,7 +411,7 @@ async def search_full_text(
 
     # Применяем фильтры для товаров
     if city and city != "Все города":
-        items_query = items_query.where(Pharmacy.city == city)
+        items_query = items_query.where(Pharmacy.city.ilike(city))
     if form and form != "Все формы":
         items_query = items_query.where(Product.form == form)
     if manufacturer and manufacturer != "Все производители":
