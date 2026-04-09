@@ -1,4 +1,5 @@
 import os
+import asyncio
 import logging
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -7,14 +8,17 @@ from aiogram.enums import ParseMode
 
 logger = logging.getLogger(__name__)
 
+
 class BotManager:
     _instance = None
     _bot = None
     _dp = None
+    _lock = None
 
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(BotManager, cls).__new__(cls)
+            cls._instance._lock = asyncio.Lock()
         return cls._instance
 
     async def is_initialized(self):
@@ -26,35 +30,35 @@ class BotManager:
         return self._bot, self._dp
 
     async def initialize(self):
-        """Инициализация бота один раз при старте приложения"""
-        if self._bot is not None:
-            return self._bot, self._dp
+        """Инициализация бота один раз при старте приложения — thread-safe."""
+        async with self._lock:
+            if self._bot is not None:
+                return self._bot, self._dp
 
-        token = os.getenv("TELEGRAM_BOT_TOKEN")
-        if not token:
-            logger.error("TELEGRAM_BOT_TOKEN not set")
-            return None, None
+            token = os.getenv("TELEGRAM_BOT_TOKEN")
+            if not token:
+                logger.error("TELEGRAM_BOT_TOKEN not set")
+                return None, None
 
-        try:
-            # Создаем бота с настройками для production
-            self._bot = Bot(
-                token=token,
-                default=DefaultBotProperties(parse_mode=ParseMode.HTML)
-            )
+            try:
+                # Создаем бота с настройками для production
+                self._bot = Bot(
+                    token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+                )
 
-            # Проверяем, что бот доступен
-            bot_info = await self._bot.get_me()
-            logger.info(f"Bot initialized successfully: @{bot_info.username}")
+                # Проверяем, что бот доступен
+                bot_info = await self._bot.get_me()
+                logger.info(f"Bot initialized successfully: @{bot_info.username}")
 
-            # Для production рекомендуется RedisStorage вместо MemoryStorage
-            storage = MemoryStorage()  # В будущем заменить на RedisStorage
-            self._dp = Dispatcher(storage=storage)
+                # Для production рекомендуется RedisStorage вместо MemoryStorage
+                storage = MemoryStorage()  # В будущем заменить на RedisStorage
+                self._dp = Dispatcher(storage=storage)
 
-            return self._bot, self._dp
+                return self._bot, self._dp
 
-        except Exception as e:
-            logger.error(f"Failed to initialize bot: {str(e)}")
-            return None, None
+            except Exception as e:
+                logger.error(f"Failed to initialize bot: {str(e)}")
+                return None, None
 
     def get_bot(self):
         return self._bot
@@ -69,7 +73,7 @@ class BotManager:
                 # Закрываем сессию бота
                 await self._bot.session.close()
                 # Также закрываем внутреннюю сессию aiohttp
-                if hasattr(self._bot, '_session') and self._bot._session:
+                if hasattr(self._bot, "_session") and self._bot._session:
                     await self._bot._session.close()
             except Exception as e:
                 logger.error(f"Error during bot shutdown: {e}")
@@ -77,6 +81,7 @@ class BotManager:
                 self._bot = None
                 self._dp = None
                 logger.info("Bot shutdown completed")
+
 
 # Глобальный экземпляр менеджера
 bot_manager = BotManager()
