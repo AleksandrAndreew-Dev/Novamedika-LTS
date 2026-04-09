@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import SearchBar from "./SearchBar";
 import FormSelection from "./FormSelection";
 import SearchResults from "./SearchResults";
-import { useTelegramWebApp } from "../telegram/TelegramWebApp";
+import { useTelegramWebApp } from "../telegram/TelegramContext";
 import { api } from "../api/client";
 
 export default function Search() {

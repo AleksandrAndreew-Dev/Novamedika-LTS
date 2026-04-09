@@ -1,6 +1,6 @@
 import React, { useReducer, useMemo } from "react";
 import { bookingApi } from "../api/client";
-import { useTelegramUser } from "../telegram/TelegramWebApp";
+import { useTelegramUser } from "../telegram/TelegramContext";
 import { bookingReducer, initialState } from "../hooks/useBookingReducer";
 import BookingModal from "./BookingModal";
 import ResultItemTelegram from "./ResultItemTelegram";

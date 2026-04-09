@@ -1,5 +1,5 @@
-import React from 'react';
-import { useTelegramWebApp } from './TelegramWebApp';
+import React from "react";
+import { useTelegramWebApp } from "./TelegramContext";
 
 export default function TelegramWrapper({ children }) {
   const { isReady } = useTelegramWebApp();
