@@ -1,4 +1,12 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
+/* eslint-disable react-refresh/only-export-components */
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+} from "react";
 
 const TelegramContext = createContext(null);
 
@@ -76,7 +84,7 @@ export function TelegramProvider({ children }) {
         alert(message);
       }
     },
-    [isTelegram, tg]
+    [isTelegram, tg],
   );
 
   const showConfirm = useCallback(
@@ -88,7 +96,7 @@ export function TelegramProvider({ children }) {
         callback(result);
       }
     },
-    [isTelegram, tg]
+    [isTelegram, tg],
   );
 
   const closeApp = useCallback(() => {
@@ -103,7 +111,7 @@ export function TelegramProvider({ children }) {
         tg.setBackgroundColor(color);
       }
     },
-    [isTelegram, tg]
+    [isTelegram, tg],
   );
 
   const setHeaderColor = useCallback(
@@ -112,7 +120,7 @@ export function TelegramProvider({ children }) {
         tg.setHeaderColor(color);
       }
     },
-    [isTelegram, tg]
+    [isTelegram, tg],
   );
 
   const value = useMemo(
@@ -137,10 +145,14 @@ export function TelegramProvider({ children }) {
       closeApp,
       setBackgroundColor,
       setHeaderColor,
-    ]
+    ],
   );
 
-  return <TelegramContext.Provider value={value}>{children}</TelegramContext.Provider>;
+  return (
+    <TelegramContext.Provider value={value}>
+      {children}
+    </TelegramContext.Provider>
+  );
 }
 
 export function useTelegramContext() {

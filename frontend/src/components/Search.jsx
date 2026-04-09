@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import SearchBar from "./SearchBar";
 import FormSelection from "./FormSelection";
 import SearchResults from "./SearchResults";
@@ -26,12 +26,14 @@ export default function Search() {
 
   const { tg, isTelegram } = useTelegramWebApp();
 
-  // Добавляем функцию навигации по шагам
-  const handleStepNavigation = (targetStep) => {
-    if (targetStep < step) {
-      setStep(targetStep);
-    }
-  };
+  const handleStepNavigation = useCallback(
+    (targetStep) => {
+      if (targetStep < step) {
+        setStep(targetStep);
+      }
+    },
+    [step],
+  );
 
   useEffect(() => {
     const fetchCities = async () => {

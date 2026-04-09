@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 // Реэкспорт из TelegramContext для обратной совместимости
 // Все хуки теперь используют единый Context
 export {
