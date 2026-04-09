@@ -2,7 +2,7 @@
 
 import logging
 
-from aiogram import F
+from aiogram import F, Router
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 
@@ -17,7 +17,7 @@ from bot.services.dialog_service import DialogService
 
 logger = logging.getLogger(__name__)
 
-router = __import__('aiogram').Router()
+router = Router()
 
 
 @router.message(QAStates.in_dialog_with_user, F.text)

@@ -2,7 +2,7 @@
 
 import logging
 
-from aiogram import F
+from aiogram import F, Router
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 
@@ -19,7 +19,7 @@ from utils.time_utils import get_utc_now_naive
 
 logger = logging.getLogger(__name__)
 
-router = __import__("aiogram").Router()
+router = Router()
 
 
 @router.message(UserQAStates.waiting_for_question)

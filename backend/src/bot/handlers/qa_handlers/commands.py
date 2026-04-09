@@ -2,7 +2,7 @@
 
 import logging
 
-from aiogram import F
+from aiogram import F, Router
 from aiogram.types import (
     Message,
     CallbackQuery,
@@ -24,7 +24,7 @@ from bot.services.notification_service import get_online_pharmacists
 
 logger = logging.getLogger(__name__)
 
-router = __import__("aiogram").Router()
+router = Router()
 
 
 @router.message(Command("online"))

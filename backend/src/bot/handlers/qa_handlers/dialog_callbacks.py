@@ -2,7 +2,7 @@
 
 import logging
 
-from aiogram import F
+from aiogram import F, Router
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 
@@ -19,7 +19,7 @@ from bot.services.assignment_service import QuestionAssignmentService
 
 logger = logging.getLogger(__name__)
 
-router = __import__('aiogram').Router()
+router = Router()
 
 
 @router.callback_query(F.data.startswith("show_history_"))
@@ -139,15 +139,31 @@ async def view_dialog_callback(
                 time_str = msg.created_at.strftime("%H:%M")
 
                 if msg.message_type == "question":
-                    preview = f"❓ {msg.text[:80]}..." if len(msg.text) > 80 else f"❓ {msg.text}"
+                    preview = (
+                        f"❓ {msg.text[:80]}..."
+                        if len(msg.text) > 80
+                        else f"❓ {msg.text}"
+                    )
                 elif msg.message_type == "answer":
-                    preview = f"💬 {msg.text[:80]}..." if len(msg.text) > 80 else f"💬 {msg.text}"
+                    preview = (
+                        f"💬 {msg.text[:80]}..."
+                        if len(msg.text) > 80
+                        else f"💬 {msg.text}"
+                    )
                 elif msg.message_type == "clarification":
-                    preview = f"🔍 {msg.text[:80]}..." if len(msg.text) > 80 else f"🔍 {msg.text}"
+                    preview = (
+                        f"🔍 {msg.text[:80]}..."
+                        if len(msg.text) > 80
+                        else f"🔍 {msg.text}"
+                    )
                 elif msg.message_type == "photo":
                     preview = "📸 Фото рецепта"
                 else:
-                    preview = f"💭 {msg.text[:80]}..." if len(msg.text) > 80 else f"💭 {msg.text}"
+                    preview = (
+                        f"💭 {msg.text[:80]}..."
+                        if len(msg.text) > 80
+                        else f"💭 {msg.text}"
+                    )
 
                 message_text += f"{sender} [{time_str}]: {preview}\n"
 

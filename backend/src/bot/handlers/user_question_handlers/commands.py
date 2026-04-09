@@ -4,7 +4,7 @@ import logging
 
 from typing import Union, List
 
-from aiogram import F
+from aiogram import F, Router
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -21,7 +21,7 @@ from src.utils.pharm_format_questions import format_pharmacist_questions_list
 
 logger = logging.getLogger(__name__)
 
-router = __import__("aiogram").Router()
+router = Router()
 
 
 async def get_all_user_questions(

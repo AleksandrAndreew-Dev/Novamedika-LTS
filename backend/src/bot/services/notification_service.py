@@ -6,10 +6,12 @@ from bot.core import bot_manager
 from db.qa_models import Pharmacist, User, Question
 from bot.keyboards.qa_keyboard import make_question_keyboard
 from bot.services.assignment_service import QuestionAssignmentService
+from bot.services.dialog_service import DialogService
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 
 logger = logging.getLogger(__name__)
+
 
 async def notify_pharmacists_about_new_question(question, db: AsyncSession):
     """Уведомление фармацевтов о новом вопросе"""
@@ -20,7 +22,9 @@ async def notify_pharmacists_about_new_question(question, db: AsyncSession):
             return
 
         # Проверяем, нужно ли уведомлять всех
-        if await QuestionAssignmentService.should_notify_all_pharmacists(question.uuid, db):
+        if await QuestionAssignmentService.should_notify_all_pharmacists(
+            question.uuid, db
+        ):
             # Уведомляем всех активных фармацевтов
             result = await db.execute(
                 select(Pharmacist)
@@ -31,14 +35,18 @@ async def notify_pharmacists_about_new_question(question, db: AsyncSession):
             pharmacists = result.scalars().all()
         else:
             # Уведомляем только назначенного фармацевта
-            taker = await QuestionAssignmentService.get_question_taker(question.uuid, db)
+            taker = await QuestionAssignmentService.get_question_taker(
+                question.uuid, db
+            )
             pharmacists = [taker] if taker else []
 
         if not pharmacists:
             logger.info("No pharmacists to notify")
             return
 
-        question_preview = question.text[:150] + "..." if len(question.text) > 150 else question.text
+        question_preview = (
+            question.text[:150] + "..." if len(question.text) > 150 else question.text
+        )
 
         for pharmacist in pharmacists:
             try:
@@ -62,9 +70,11 @@ async def notify_pharmacists_about_new_question(question, db: AsyncSession):
                     await bot.send_message(
                         chat_id=pharmacist.user.telegram_id,
                         text=message_text,
-                        reply_markup=reply_markup
+                        reply_markup=reply_markup,
                     )
-                    logger.info(f"Notification sent to pharmacist {pharmacist.user.telegram_id}")
+                    logger.info(
+                        f"Notification sent to pharmacist {pharmacist.user.telegram_id}"
+                    )
 
             except Exception as e:
                 logger.error(f"Failed to notify pharmacist: {e}")
@@ -73,11 +83,8 @@ async def notify_pharmacists_about_new_question(question, db: AsyncSession):
         logger.error(f"Error in notify_pharmacists_about_new_question: {e}")
 
 
-
 async def notify_about_clarification(
-    original_question: Question,
-    clarification_text: str,
-    db: AsyncSession
+    original_question: Question, clarification_text: str, db: AsyncSession
 ):
     """Уведомление об уточнении - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
     try:
@@ -99,8 +106,7 @@ async def notify_about_clarification(
 
         # Получаем фармацевта, который взял исходный вопрос
         taker = await QuestionAssignmentService.get_question_taker(
-            str(original_question.uuid),
-            db
+            str(original_question.uuid), db
         )
 
         pharmacists_to_notify = []
@@ -111,10 +117,7 @@ async def notify_about_clarification(
                 select(Pharmacist)
                 .join(User, Pharmacist.user_id == User.uuid)
                 .options(selectinload(Pharmacist.user))
-                .where(
-                    Pharmacist.is_active == True,
-                    Pharmacist.is_online == True
-                )
+                .where(Pharmacist.is_active == True, Pharmacist.is_online == True)
             )
             pharmacists_to_notify = result.scalars().all()
         else:
@@ -150,7 +153,7 @@ async def notify_about_clarification(
                             [
                                 InlineKeyboardButton(
                                     text="💬 Ответить на уточнение",
-                                    callback_data=f"answer_{original_question.uuid}"
+                                    callback_data=f"answer_{original_question.uuid}",
                                 )
                             ]
                         ]
@@ -163,12 +166,15 @@ async def notify_about_clarification(
                     chat_id=pharmacist.user.telegram_id,
                     text=message_text,
                     parse_mode="HTML",
-                    reply_markup=reply_markup
+                    reply_markup=reply_markup,
                 )
-                logger.info(f"Clarification notification sent to pharmacist {pharmacist.user.telegram_id}")
+                logger.info(
+                    f"Clarification notification sent to pharmacist {pharmacist.user.telegram_id}"
+                )
 
     except Exception as e:
         logger.error(f"Error in notify_about_clarification: {e}", exc_info=True)
+
 
 async def get_online_pharmacists(db: AsyncSession):
     """Получить список онлайн фармацевтов"""
@@ -190,4 +196,3 @@ async def get_online_pharmacists(db: AsyncSession):
     except Exception as e:
         logger.error(f"Error getting online pharmacists: {e}")
         return []
-

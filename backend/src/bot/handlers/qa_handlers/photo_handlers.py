@@ -2,8 +2,13 @@
 
 import logging
 
-from aiogram import F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram import F, Router
+from aiogram.types import (
+    Message,
+    CallbackQuery,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+)
 from aiogram.fsm.context import FSMContext
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +22,7 @@ from bot.keyboards.qa_keyboard import make_pharmacist_dialog_keyboard
 
 logger = logging.getLogger(__name__)
 
-router = __import__('aiogram').Router()
+router = Router()
 
 
 @router.callback_query(F.data.startswith("request_photo_"))

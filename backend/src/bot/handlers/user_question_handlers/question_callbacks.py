@@ -2,7 +2,7 @@
 
 import logging
 
-from aiogram import F
+from aiogram import F, Router
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 
@@ -24,7 +24,7 @@ from src.utils.pharm_format_questions import format_pharmacist_questions_list
 
 logger = logging.getLogger(__name__)
 
-router = __import__("aiogram").Router()
+router = Router()
 
 
 @router.callback_query(F.data.startswith("view_full_history_"))

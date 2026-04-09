@@ -2,7 +2,7 @@
 
 import logging
 
-from aiogram import F
+from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import (
     Message,
@@ -23,7 +23,7 @@ from utils.time_utils import get_utc_now_naive
 
 logger = logging.getLogger(__name__)
 
-router = __import__("aiogram").Router()
+router = Router()
 
 
 @router.callback_query(F.data.startswith("quick_clarify_"))

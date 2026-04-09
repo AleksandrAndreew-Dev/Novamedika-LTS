@@ -2,7 +2,7 @@
 
 import logging
 
-from aiogram import F
+from aiogram import F, Router
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
 
@@ -10,7 +10,7 @@ from bot.handlers.qa_states import UserQAStates
 
 logger = logging.getLogger(__name__)
 
-router = __import__('aiogram').Router()
+router = Router()
 
 
 @router.callback_query(F.data == "ask_new_question")
