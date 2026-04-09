@@ -17,13 +17,14 @@ from bot.handlers import (
     registration_router,
     user_questions_router,
     qa_handlers_router,
-    dialog_management_router
+    dialog_management_router,
 )
 from bot.middleware.role_middleware import RoleMiddleware
 from db.database import init_models, async_session_maker
 from bot.middleware.db import DbMiddleware
 
-from routers import orders as booking_router
+from routers import booking_orders
+from routers import pharmacy_api
 
 # Настройка логирования
 logging.basicConfig(
@@ -148,7 +149,8 @@ app.include_router(telegram_bot.router, tags=["bot"])
 app.include_router(search.router, tags=["search"])
 app.include_router(upload.router, tags=["upload"])
 app.include_router(pharmacies_info.router, tags=["pharmacies"])
-app.include_router(booking_router.router, tags=["booking"])
+app.include_router(booking_orders.router, tags=["booking"])
+app.include_router(pharmacy_api.router, tags=["pharmacy-api"])
 
 
 @app.get("/")
