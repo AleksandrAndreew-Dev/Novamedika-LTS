@@ -62,13 +62,16 @@ async def lifespan(app: FastAPI):
     dp.update.outer_middleware(DbMiddleware())
     dp.update.outer_middleware(RoleMiddleware())
 
+    # ВАЖНО: direct_questions_router ДО common_router, чтобы обработчик
+    # прямых сообщений пользователя успел создать вопрос до того,
+    # как unknown_command перехватит сообщение
+    dp.include_router(direct_questions_router)
+    dp.include_router(user_questions_router)
+    dp.include_router(clarify_router)
     dp.include_router(common_router)
     dp.include_router(dialog_management_router)
     dp.include_router(registration_router)
     dp.include_router(qa_handlers_router)
-    dp.include_router(user_questions_router)
-    dp.include_router(direct_questions_router)
-    dp.include_router(clarify_router)
 
     # УСТАНОВКА КОМАНД БОТА
     try:
