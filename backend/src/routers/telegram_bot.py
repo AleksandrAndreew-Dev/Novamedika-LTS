@@ -28,9 +28,7 @@ async def telegram_webhook(request: Request):
         if secret_token:
             received_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
             if received_secret != secret_token:
-                logger.warning(
-                    f"Invalid secret token. Received: {received_secret}, Expected: {secret_token}"
-                )
+                logger.warning("Invalid secret token")
                 return {"status": "error", "detail": "Unauthorized"}
 
         bot, dp = await bot_manager.initialize()
@@ -162,22 +160,28 @@ async def get_webhook_info():
         logger.error(f"Get webhook info error: {str(e)}")
         return {"status": "error", "detail": str(e)}
 
+
 from dotenv import load_dotenv
 from fastapi import Header
 
 from fastapi import Header, HTTPException, status
 
-ADMIN_API_KEYS = [k.strip() for k in os.getenv("ADMIN_API_KEYS", "").split(",") if k.strip()]
+ADMIN_API_KEYS = [
+    k.strip() for k in os.getenv("ADMIN_API_KEYS", "").split(",") if k.strip()
+]
+
 
 async def verify_admin_api_key(x_api_key: str = Header(..., alias="X-Api-Key")):
     if not ADMIN_API_KEYS:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail="Admin API keys not configured")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Admin API keys not configured",
+        )
     if x_api_key not in ADMIN_API_KEYS:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin API key")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin API key"
+        )
     return True
-
-
 
 
 @router.post("/qa/drop", summary="Очистка всей базы QA")
