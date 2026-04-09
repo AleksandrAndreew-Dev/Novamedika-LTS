@@ -13,6 +13,7 @@ from aiogram.types import (
 
 def get_pharmacist_inline_keyboard():
     """Inline-клавиатура фармацевта"""
+    webapp_url = os.getenv("FRONTEND_URL", "https://spravka.novamedika.com")
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -34,9 +35,7 @@ def get_pharmacist_inline_keyboard():
             [
                 InlineKeyboardButton(
                     text="🔍 Поиск лекарств",
-                    web_app=WebAppInfo(
-                        url=os.getenv("VITE_API_URL", "https://spravka.novamedika.com")
-                    ),
+                    web_app=WebAppInfo(url=webapp_url),
                 )
             ],
         ],
@@ -45,6 +44,7 @@ def get_pharmacist_inline_keyboard():
 
 def get_user_inline_keyboard():
     """Inline-клавиатура пользователя"""
+    webapp_url = os.getenv("FRONTEND_URL", "https://spravka.novamedika.com")
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -64,9 +64,7 @@ def get_user_inline_keyboard():
             [
                 InlineKeyboardButton(
                     text="🔍 Поиск лекарств",
-                    web_app=WebAppInfo(
-                        url=os.getenv("VITE_API_URL", "https://spravka.novamedika.com")
-                    ),
+                    web_app=WebAppInfo(url=webapp_url),
                 )
             ],
         ],
@@ -75,14 +73,13 @@ def get_user_inline_keyboard():
 
 def get_webapp_only_keyboard():
     """Reply-клавиатура только с WebApp (inline не поддерживает WebAppInfo)"""
+    webapp_url = os.getenv("FRONTEND_URL", "https://spravka.novamedika.com")
     return ReplyKeyboardMarkup(
         keyboard=[
             [
                 KeyboardButton(
                     text="🔍 Поиск лекарств",
-                    web_app=WebAppInfo(
-                        url=os.getenv("VITE_API_URL", "https://spravka.novamedika.com")
-                    ),
+                    web_app=WebAppInfo(url=webapp_url),
                 )
             ],
         ],
