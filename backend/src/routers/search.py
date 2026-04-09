@@ -167,45 +167,61 @@ async def search_full_text(
         ("fuzzy", [fuzzy_condition]),
     ]
 
+    # ОПТИМИЗАЦИЯ: вместо 3 отдельных COUNT-запросов — один запрос с CASE
+    level_counts_query = (
+        select(
+            func.count(case((or_(*exact_conditions), 1), else_=None)).label(
+                "exact_count"
+            ),
+            func.count(
+                case((or_(*[c for c in fts_conditions if c]), 1), else_=None)
+            ).label("fts_count"),
+            func.count(
+                case((fuzzy_condition if fuzzy_condition else False, 1), else_=None)
+            ).label("fuzzy_count"),
+        )
+        .select_from(Product)
+        .join(Pharmacy)
+    )
+
+    # Применяем фильтры к подсчёту уровней
+    if city and city != "Все города":
+        level_counts_query = level_counts_query.where(Pharmacy.city == city)
+    if form and form != "Все формы":
+        level_counts_query = level_counts_query.where(Product.form == form)
+    if manufacturer and manufacturer != "Все производители":
+        level_counts_query = level_counts_query.where(
+            Product.manufacturer.ilike(f"%{manufacturer}%")
+        )
+    if country and country != "Все страны":
+        level_counts_query = level_counts_query.where(
+            Product.country.ilike(f"%{country}%")
+        )
+    if min_price is not None:
+        level_counts_query = level_counts_query.where(Product.price >= min_price)
+    if max_price is not None:
+        level_counts_query = level_counts_query.where(Product.price <= max_price)
+
+    level_counts_result = await db.execute(level_counts_query)
+    row = level_counts_result.first()
+
+    exact_count = row.exact_count if row else 0
+    fts_count = row.fts_count if row else 0
+    fuzzy_count = row.fuzzy_count if row else 0
+
+    # Выбираем первый непустой уровень
     chosen_level_condition = None
     chosen_level_name = None
 
-    # Поиск по уровням: если на текущем уровне есть результаты, останавливаемся
-    for level_name, conditions in search_levels:
-        if not conditions:
-            continue
+    level_map = [
+        ("exact", exact_count, exact_conditions),
+        ("fts", fts_count, fts_conditions),
+        ("fuzzy", fuzzy_count, [fuzzy_condition]),
+    ]
 
-        base_condition = or_(*conditions)
-
-        # Проверяем, есть ли результаты с этим условием
-        count_query = (
-            select(func.count())
-            .select_from(Product)
-            .join(Pharmacy)
-            .where(base_condition)
-        )
-
-        # Применяем фильтры к проверочному запросу
-        if city and city != "Все города":
-            count_query = count_query.where(Pharmacy.city == city)
-        if form and form != "Все формы":
-            count_query = count_query.where(Product.form == form)
-        if manufacturer and manufacturer != "Все производители":
-            count_query = count_query.where(
-                Product.manufacturer.ilike(f"%{manufacturer}%")
-            )
-        if country and country != "Все страны":
-            count_query = count_query.where(Product.country.ilike(f"%{country}%"))
-        if min_price is not None:
-            count_query = count_query.where(Product.price >= min_price)
-        if max_price is not None:
-            count_query = count_query.where(Product.price <= max_price)
-
-        total_result = await db.execute(count_query)
-        total = total_result.scalar() or 0
-
-        if total > 0:
-            chosen_level_condition = base_condition
+    for level_name, count, conditions in level_map:
+        if count > 0 and conditions:
+            chosen_level_condition = or_(*conditions)
             chosen_level_name = level_name
             break
 
