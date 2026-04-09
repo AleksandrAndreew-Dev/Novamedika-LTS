@@ -12,7 +12,6 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from bot.core import bot_manager
 from bot.handlers.clarify_handlers import router as clarify_router
 from bot.handlers import (
-    direct_questions_router,
     common_router,
     registration_router,
     user_questions_router,
@@ -62,10 +61,7 @@ async def lifespan(app: FastAPI):
     dp.update.outer_middleware(DbMiddleware())
     dp.update.outer_middleware(RoleMiddleware())
 
-    # ВАЖНО: direct_questions_router ДО common_router, чтобы обработчик
-    # прямых сообщений пользователя успел создать вопрос до того,
-    # как unknown_command перехватит сообщение
-    dp.include_router(direct_questions_router)
+    # Порядок роутеров важен: специфичные handlers ДО общих
     dp.include_router(user_questions_router)
     dp.include_router(clarify_router)
     dp.include_router(common_router)

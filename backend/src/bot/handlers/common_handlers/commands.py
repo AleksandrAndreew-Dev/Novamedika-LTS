@@ -23,6 +23,7 @@ from bot.handlers.common_handlers.keyboards import (
     get_user_inline_keyboard,
     get_webapp_only_keyboard,
 )
+from bot.handlers.direct_questions import try_create_question
 from utils.time_utils import get_utc_now_naive
 
 logger = logging.getLogger(__name__)
@@ -344,9 +345,17 @@ async def universal_cancel(message: Message, state: FSMContext):
 
 
 @router.message(F.text & ~F.command)
-async def unknown_command(message: Message):
-    """Обработка текста, который не является известной командой"""
-    await message.answer(
-        "❓ Неизвестная команда.\n\n"
-        "Используйте /start для главного меню или /help для справки.",
-    )
+async def unknown_command(
+    message: Message,
+    db: AsyncSession,
+    user: User,
+    is_pharmacist: bool,
+    state: FSMContext,
+):
+    """Обработка текста — сначала пытаемся создать вопрос, иначе ошибка"""
+    handled = await try_create_question(message, db, user, is_pharmacist, state)
+    if not handled:
+        await message.answer(
+            "❓ Неизвестная команда.\n\n"
+            "Используйте /start для главного меню или /help для справки.",
+        )

@@ -1,7 +1,8 @@
-from aiogram import Router, F
+"""Utility functions for creating questions from direct text messages.
+No router handlers here — called from unknown_command as a fallback."""
+
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
-from aiogram.exceptions import SkipHandler
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import logging
@@ -12,25 +13,20 @@ from bot.services.notification_service import notify_pharmacists_about_new_quest
 from bot.handlers.qa_states import UserQAStates
 from bot.services.dialog_service import DialogService
 from bot.handlers.user_question_handlers.message_handlers import process_dialog_message
-from bot.keyboards.qa_keyboard import get_post_consultation_keyboard
 
 logger = logging.getLogger(__name__)
-router = Router()
 
 
 def should_create_question(text: str) -> bool:
     """Определяет, стоит ли создавать вопрос из текста"""
     text_lower = text.lower().strip()
 
-    # 0. Проверяем, является ли это командой (начинается с /)
     if text.startswith("/"):
         return False
 
-    # 2. Проверяем длину (минимально 2 символов)
     if len(text_lower) < 2:
         return False
 
-    # 3. Проверяем, что это не просто набор символов или цифр
     if (
         text_lower.replace("?", "")
         .replace("!", "")
@@ -41,36 +37,34 @@ def should_create_question(text: str) -> bool:
     ):
         return False
 
-    # 4. Проверяем на явные команды (даже без /)
     if text_lower.startswith(("список", "помощь", "команды", "меню", "старт")):
         return False
 
     return True
 
 
-@router.message(F.text & ~F.command)
-async def handle_direct_text(
+async def try_create_question(
     message: Message,
     db: AsyncSession,
     user: User,
     is_pharmacist: bool,
     state: FSMContext,
-):
-    """Обработка прямых текстовых сообщений как вопросов"""
+) -> bool:
+    """Попытка создать вопрос из текстового сообщения.
+    Возвращает True если вопрос создан/обработан, False если нет."""
 
     if is_pharmacist:
-        logger.debug("handle_direct_text: skipping pharmacist message")
-        raise SkipHandler()
+        return False
 
     current_state = await state.get_state()
     logger.debug(
-        "handle_direct_text: user=%s, state=%s, text='%s'",
+        "try_create_question: user=%s, state=%s, text='%s'",
         user.uuid,
         current_state,
         message.text[:50] if message.text else "None",
     )
 
-    # ✅ ПРОВЕРКА: Если у пользователя есть активные консультации
+    # Активные консультации — продолжаем диалог
     if current_state is None:
         result = await db.execute(
             select(Question)
@@ -93,13 +87,12 @@ async def handle_direct_text(
                 )
                 await state.set_state(UserQAStates.in_dialog)
                 await process_dialog_message(message, state, db, user, is_pharmacist)
-                return
+                return True
 
-    # ✅ ПРОВЕРКА: Если состояние указывает на завершенный диалог
+    # Завершённый диалог в состоянии
     if current_state == UserQAStates.in_dialog:
         state_data = await state.get_data()
         question_uuid = state_data.get("active_dialog_question_id")
-
         if question_uuid:
             result = await db.execute(
                 select(Question).where(Question.uuid == question_uuid)
@@ -109,7 +102,7 @@ async def handle_direct_text(
                 await state.clear()
                 current_state = None
 
-    # Если пользователь в состоянии, которое обрабатывается другим хендлером — пропускаем
+    # Состояния, обрабатываемые другими хендлерами — пропускаем
     if current_state is not None:
         if current_state in [
             UserQAStates.waiting_for_prescription_photo,
@@ -117,25 +110,16 @@ async def handle_direct_text(
             UserQAStates.in_dialog,
             UserQAStates.waiting_for_question,
         ]:
-            logger.debug(
-                "handle_direct_text: skipping, user in state %s", current_state
-            )
-            raise SkipHandler()
-
-        # Для других состояний сбрасываем
+            logger.debug("try_create_question: skip, state=%s", current_state)
+            return False
         await state.clear()
 
     # Проверяем текст
     if not message.text or not message.text.strip():
-        logger.debug("handle_direct_text: empty text, skipping")
-        raise SkipHandler()
+        return False
 
     if not should_create_question(message.text):
-        logger.debug(
-            "handle_direct_text: should_create_question=False for '%s'",
-            message.text[:50],
-        )
-        raise SkipHandler()
+        return False
 
     # Создаём вопрос
     try:
@@ -152,20 +136,10 @@ async def handle_direct_text(
         await db.commit()
         await db.refresh(question)
 
-        logger.info(
-            "Direct question created: ID=%s, text='%s...'",
-            question.uuid,
-            question.text[:50],
-        )
+        logger.info("Question created: ID=%s", question.uuid)
 
         dialog_message = await DialogService.create_question_message(question, db)
         await db.commit()
-
-        logger.info(
-            "Dialog message created: question_id=%s, type=%s",
-            dialog_message.question_id,
-            dialog_message.message_type,
-        )
 
         await notify_pharmacists_about_new_question(question, db)
 
@@ -175,10 +149,12 @@ async def handle_direct_text(
             "💡 <i>Используйте /my_questions чтобы отслеживать статус</i>",
             parse_mode="HTML",
         )
+        return True
 
     except Exception as e:
-        logger.error(f"Error in direct question: {e}", exc_info=True)
+        logger.error(f"Error creating question: {e}", exc_info=True)
         await message.answer(
-            "❌ Произошла ошибка при отправке вопроса. Пожалуйста, попробуйте еще раз.",
+            "❌ Произошла ошибка при отправке вопроса. Попробуйте ещё раз.",
             parse_mode="HTML",
         )
+        return True
