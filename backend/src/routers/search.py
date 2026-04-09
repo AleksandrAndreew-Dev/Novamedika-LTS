@@ -168,7 +168,8 @@ async def search_full_text(
     ]
 
     # ОПТИМИЗАЦИЯ: вместо 3 отдельных COUNT-запросов — один запрос с CASE
-    fts_conditions_list = [c for c in fts_conditions if c]
+    # Фильтруем None/пустые условия БЕЗ использования boolean evaluation SQLAlchemy clauses
+    fts_conditions_list = [c for c in fts_conditions if c is not None]
     fts_clause = or_(*fts_conditions_list) if fts_conditions_list else literal(False)
 
     level_counts_query = (
