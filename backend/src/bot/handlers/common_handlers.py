@@ -29,11 +29,10 @@ def get_reply_keyboard_with_webapp():
     """Создает reply-клавиатуру с Web App кнопкой"""
     web_app = WebAppInfo(url="https://spravka.novamedika.com/")
     return InlineKeyboardMarkup(
-        inline_keyboard=[[
-            InlineKeyboardButton(text="🔍 Поиск лекарств", web_app=web_app)
-        ]]
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔍 Поиск лекарств", web_app=web_app)]
+        ]
     )
-
 
 
 def get_pharmacist_keyboard():
@@ -180,6 +179,7 @@ async def cmd_history(
         logger.error(f"Error in cmd_history: {e}")
         await message.answer("❌ Ошибка при загрузке истории диалогов")
 
+
 @router.message(Command("start"))
 async def cmd_start(
     message: Message,
@@ -221,6 +221,7 @@ async def cmd_start(
             reply_markup=get_user_keyboard(),
         )
 
+
 @router.message(Command("search"))
 async def show_search_webapp_command(message: Message, is_pharmacist: bool):
     """Обработка текстовой команды /search"""
@@ -231,7 +232,7 @@ async def show_search_webapp_command(message: Message, is_pharmacist: bool):
     # Отправляем сообщение с кнопкой, которая открывает WebApp
     await message.answer(
         "🔍 Нажмите кнопку ниже для поиска лекарств:",
-        reply_markup=get_reply_keyboard_with_webapp()
+        reply_markup=get_reply_keyboard_with_webapp(),
     )
 
 
@@ -806,7 +807,7 @@ async def system_status_callback(
 ):
     """Статус системы через кнопку"""
     # Используем существующую функцию debug_status напрямую
-    from bot.handlers.qa_handlers import debug_status
+    from bot.handlers.qa_handlers.commands import debug_status
 
     await debug_status(callback, db, is_pharmacist)
 
@@ -897,10 +898,9 @@ async def universal_cancel(message: Message, state: FSMContext):
 
     # Уведомляем пользователя
     await message.answer(
-    "❌ <b>Отмена</b>\n\n"
-    "Задайте новый вопрос или выберите действие.",
-    parse_mode="HTML",
-)
+        "❌ <b>Отмена</b>\n\n" "Задайте новый вопрос или выберите действие.",
+        parse_mode="HTML",
+    )
 
 
 @router.callback_query(F.data == "my_questions")
