@@ -10,7 +10,7 @@ from utils.time_utils import get_utc_now_naive
 from bot.services.notification_service import notify_pharmacists_about_new_question
 from bot.handlers.qa_states import UserQAStates
 from bot.services.dialog_service import DialogService
-from bot.handlers.user_questions import process_dialog_message
+from bot.handlers.user_question_handlers.message_handlers import process_dialog_message
 from bot.keyboards.qa_keyboard import get_post_consultation_keyboard
 
 logger = logging.getLogger(__name__)

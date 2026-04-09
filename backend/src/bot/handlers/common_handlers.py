@@ -755,7 +755,7 @@ async def my_questions_callback(
 ):
     """Быстрый просмотр своих вопросов через кнопку"""
     # Вместо модификации message.from_user, передаем callback напрямую
-    from bot.handlers.user_questions import cmd_my_questions
+    from bot.handlers.user_question_handlers.commands import cmd_my_questions
 
     await cmd_my_questions(callback, db, user, is_pharmacist)
 
@@ -911,7 +911,7 @@ async def my_questions_from_completed_callback(
     await callback.answer()
 
     # Используем существующую функцию
-    from bot.handlers.user_questions import cmd_my_questions
+    from bot.handlers.user_question_handlers.commands import cmd_my_questions
 
     await cmd_my_questions(callback, db, user, is_pharmacist)
 
