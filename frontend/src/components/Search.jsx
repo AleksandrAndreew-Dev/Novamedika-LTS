@@ -7,6 +7,7 @@ import React, {
   Suspense,
 } from "react";
 import SearchBar from "./SearchBar";
+import ErrorBoundary from "./ErrorBoundary";
 const FormSelection = lazy(() => import("./FormSelection"));
 const SearchResults = lazy(() => import("./SearchResults"));
 import { useTelegramWebApp } from "../telegram/TelegramContext";
@@ -382,52 +383,120 @@ export default function Search() {
           )}
 
           {step === 2 && searchContext && (
-            <Suspense
-              fallback={
-                <div className="flex justify-center items-center py-12">
-                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-telegram-primary"></div>
-                  <span className="text-gray-600 ml-3">Загрузка...</span>
+            <ErrorBoundary
+              fallback={() => (
+                <div className="bg-white rounded-2xl shadow-sm border border-red-200 p-6 text-center">
+                  <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <svg
+                      className="w-6 h-6 text-red-500"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    Ошибка загрузки вариантов
+                  </h3>
+                  <p className="text-gray-600 text-sm mb-4">
+                    Не удалось отобразить результаты. Попробуйте ещё раз.
+                  </p>
+                  <button
+                    onClick={() => setStep(1)}
+                    className="bg-telegram-primary text-gray-900 font-medium py-2 px-6 rounded-lg transition-colors hover:bg-blue-600 min-h-[44px]"
+                  >
+                    Вернуться к поиску
+                  </button>
                 </div>
-              }
+              )}
             >
-              <FormSelection
-                availableCombinations={
-                  searchContext.availableCombinations || []
+              <Suspense
+                fallback={
+                  <div className="flex justify-center items-center py-12">
+                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-telegram-primary"></div>
+                    <span className="text-gray-600 ml-3">Загрузка...</span>
+                  </div>
                 }
-                searchData={searchData}
-                onFormSelect={handleFormSelect}
-                onBack={() => setStep(1)}
-                loading={loading}
-                isTelegram={isTelegram}
-              />
-            </Suspense>
+              >
+                <FormSelection
+                  availableCombinations={
+                    searchContext.availableCombinations || []
+                  }
+                  searchData={searchData}
+                  onFormSelect={handleFormSelect}
+                  onBack={() => setStep(1)}
+                  loading={loading}
+                  isTelegram={isTelegram}
+                />
+              </Suspense>
+            </ErrorBoundary>
           )}
 
           {step === 3 && (
-            <Suspense
-              fallback={
-                <div className="flex justify-center items-center py-12">
-                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-telegram-primary"></div>
-                  <span className="text-gray-600 ml-3">Загрузка...</span>
+            <ErrorBoundary
+              fallback={() => (
+                <div className="bg-white rounded-2xl shadow-sm border border-red-200 p-6 text-center">
+                  <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <svg
+                      className="w-6 h-6 text-red-500"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    Ошибка загрузки результатов
+                  </h3>
+                  <p className="text-gray-600 text-sm mb-4">
+                    Не удалось отобразить результаты поиска. Попробуйте ещё раз.
+                  </p>
+                  <button
+                    onClick={() => setStep(2)}
+                    className="bg-telegram-primary text-gray-900 font-medium py-2 px-6 rounded-lg transition-colors hover:bg-blue-600 min-h-[44px]"
+                  >
+                    Вернуться к выбору формы
+                  </button>
                 </div>
-              }
+              )}
             >
-              <SearchResults
-                results={results}
-                searchData={searchData}
-                pagination={pagination}
-                onPageChange={handlePageChange}
-                onNewSearch={() => {
-                  setStep(1);
-                  setSearchData({ name: "", city: "", form: "" });
-                  setResults([]);
-                  setSearchContext(null);
-                }}
-                onBackToForms={() => setStep(2)}
-                loading={loading}
-                isTelegram={isTelegram}
-              />
-            </Suspense>
+              <Suspense
+                fallback={
+                  <div className="flex justify-center items-center py-12">
+                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-telegram-primary"></div>
+                    <span className="text-gray-600 ml-3">Загрузка...</span>
+                  </div>
+                }
+              >
+                <SearchResults
+                  results={results}
+                  searchData={searchData}
+                  pagination={pagination}
+                  onPageChange={handlePageChange}
+                  onNewSearch={() => {
+                    setStep(1);
+                    setSearchData({ name: "", city: "", form: "" });
+                    setResults([]);
+                    setSearchContext(null);
+                  }}
+                  onBackToForms={() => setStep(2)}
+                  loading={loading}
+                  isTelegram={isTelegram}
+                />
+              </Suspense>
+            </ErrorBoundary>
           )}
         </div>
       </div>
