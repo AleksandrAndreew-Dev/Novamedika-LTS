@@ -343,9 +343,9 @@ async def universal_cancel(message: Message, state: FSMContext):
     )
 
 
-@router.message()
+@router.message(F.text & ~F.command)
 async def unknown_command(message: Message):
-    """Обработка неизвестных команд"""
+    """Обработка текста, который не является известной командой"""
     await message.answer(
         "❓ Неизвестная команда.\n\n"
         "Используйте /start для главного меню или /help для справки.",
