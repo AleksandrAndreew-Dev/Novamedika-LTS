@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import SearchBar from "./SearchBar";
 import FormSelection from "./FormSelection";
 import SearchResults from "./SearchResults";
@@ -23,6 +23,8 @@ export default function Search() {
     totalPages: 1,
   });
   const [error, setError] = useState(null);
+
+  const abortRef = useRef(null);
 
   const { tg, isTelegram } = useTelegramWebApp();
 
@@ -62,6 +64,9 @@ export default function Search() {
       }
     };
     fetchCities();
+    return () => {
+      if (abortRef.current) abortRef.current.abort();
+    };
   }, []);
 
   useEffect(() => {
@@ -82,6 +87,10 @@ export default function Search() {
   }, [step, isTelegram, tg, handleStepNavigation]);
 
   const handleInitialSearch = async (name, city) => {
+    if (abortRef.current) abortRef.current.abort();
+    abortRef.current = new AbortController();
+    const { signal } = abortRef.current;
+
     setLoading(true);
     setError(null);
     try {
@@ -92,6 +101,7 @@ export default function Search() {
           page: 1,
           size: 20,
         },
+        signal,
       });
 
       const responseData = response.data || {};
@@ -103,6 +113,7 @@ export default function Search() {
       });
       setStep(2);
     } catch (error) {
+      if (error.name === "CanceledError") return;
       console.error("Search error:", error);
       setError("Ошибка при поиске. Попробуйте еще раз.");
     } finally {
@@ -111,6 +122,10 @@ export default function Search() {
   };
 
   const handleFormSelect = async (name, form, manufacturer, country) => {
+    if (abortRef.current) abortRef.current.abort();
+    abortRef.current = new AbortController();
+    const { signal } = abortRef.current;
+
     setLoading(true);
     setError(null);
     try {
@@ -125,7 +140,7 @@ export default function Search() {
       if (country) params.country = country;
       if (searchData.city) params.city = searchData.city;
 
-      const response = await api.get("/search-fts/", { params });
+      const response = await api.get("/search-fts/", { params, signal });
 
       setSearchData((prev) => ({
         ...prev,
@@ -135,7 +150,6 @@ export default function Search() {
         country,
       }));
 
-      // ВАЖНО: response.data.items уже содержит все необходимые поля
       setResults(response.data.items || []);
       setPagination((prev) => ({
         ...prev,
@@ -145,6 +159,7 @@ export default function Search() {
       }));
       setStep(3);
     } catch (error) {
+      if (error.name === "CanceledError") return;
       console.error("Form selection error:", error);
       setError("Ошибка при загрузке результатов.");
     } finally {
@@ -153,6 +168,10 @@ export default function Search() {
   };
 
   const handlePageChange = async (newPage) => {
+    if (abortRef.current) abortRef.current.abort();
+    abortRef.current = new AbortController();
+    const { signal } = abortRef.current;
+
     setLoading(true);
     try {
       const params = {
@@ -167,7 +186,7 @@ export default function Search() {
       if (searchData.country) params.country = searchData.country;
       if (searchData.city) params.city = searchData.city;
 
-      const response = await api.get("/search-fts/", { params });
+      const response = await api.get("/search-fts/", { params, signal });
 
       setResults(response.data.items);
       setPagination((prev) => ({
@@ -177,6 +196,7 @@ export default function Search() {
         totalPages: response.data.total_pages,
       }));
     } catch (error) {
+      if (error.name === "CanceledError") return;
       console.error("Pagination error:", error);
       setError("Ошибка при загрузке страницы.");
     } finally {
