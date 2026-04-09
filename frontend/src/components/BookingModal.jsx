@@ -1,6 +1,6 @@
 import React from "react";
 
-export default function BookingModal({
+const BookingModal = React.memo(function BookingModal({
   bookingState,
   onFormChange,
   onQuantityChange,
@@ -231,4 +231,6 @@ export default function BookingModal({
       </div>
     </div>
   );
-}
+});
+
+export default BookingModal;

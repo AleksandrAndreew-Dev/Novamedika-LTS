@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 
-export default function FormSelection({
+const FormSelection = React.memo(function FormSelection({
   searchData,
   onFormSelect,
   onBack,
@@ -19,7 +19,7 @@ export default function FormSelection({
       combination.name, // name
       combination.form, // form
       combination.manufacturer, // manufacturer
-      combination.country // country
+      combination.country, // country
     );
   };
 
@@ -220,4 +220,6 @@ export default function FormSelection({
       </div>
     </div>
   );
-}
+});
+
+export default FormSelection;
