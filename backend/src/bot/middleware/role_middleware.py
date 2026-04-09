@@ -6,10 +6,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 import logging
 
-
 from db.qa_models import Pharmacist, User
 from services.user_service import get_or_create_user
-import logging
+
+logger = logging.getLogger(__name__)
 
 
 async def get_pharmacist_by_telegram_id(
