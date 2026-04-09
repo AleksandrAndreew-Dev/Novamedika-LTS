@@ -9,14 +9,21 @@ const SearchBar = React.memo(function SearchBar({
 }) {
   const [name, setName] = useState("");
   const [city, setCity] = useState(currentCity || "");
+  const [nameError, setNameError] = useState("");
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!name.trim()) {
-      alert("Пожалуйста, введите название препарата");
+      setNameError("Введите название препарата");
       return;
     }
+    setNameError("");
     onSearch(name, city);
+  };
+
+  const handleNameChange = (e) => {
+    setName(e.target.value);
+    if (nameError) setNameError("");
   };
 
   return (
@@ -56,16 +63,29 @@ const SearchBar = React.memo(function SearchBar({
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={handleNameChange}
               placeholder="Например: анальгин, парацетамол..."
-              className="w-full px-3 md:px-4 py-3 md:py-4 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:ring-offset-2 focus:border-transparent transition-all text-sm md:text-base min-h-[44px]"
+              className={`w-full px-3 md:px-4 py-3 md:py-4 bg-gray-50 border rounded-xl focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:ring-offset-2 focus:border-transparent transition-all text-sm md:text-base min-h-[44px] ${
+                nameError ? "border-red-400 bg-red-50" : "border-gray-200"
+              }`}
               required
               aria-required="true"
-              aria-describedby="name-description"
+              aria-describedby={nameError ? "name-error" : "name-description"}
+              aria-invalid={!!nameError}
             />
-            <div id="name-description" className="sr-only">
-              Введите название лекарственного препарата для поиска
-            </div>
+            {nameError ? (
+              <p
+                id="name-error"
+                className="text-red-500 text-xs mt-1"
+                role="alert"
+              >
+                {nameError}
+              </p>
+            ) : (
+              <div id="name-description" className="sr-only">
+                Введите название лекарственного препарата для поиска
+              </div>
+            )}
           </div>
 
           <div>
