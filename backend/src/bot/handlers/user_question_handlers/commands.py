@@ -15,7 +15,7 @@ from sqlalchemy.orm import selectinload
 from db.qa_models import User, Question, Pharmacist
 from bot.handlers.qa_states import UserQAStates
 from bot.handlers.common_handlers import get_user_keyboard
-from bot.keyboards.pagiantion_keyboard import make_questions_pagination_keyboard
+from bot.keyboards.pagination_keyboard import make_questions_pagination_keyboard
 from src.utils.get_utils import get_all_pharmacist_questions
 from src.utils.pharm_format_questions import format_pharmacist_questions_list
 
@@ -159,8 +159,7 @@ async def cmd_done(message: Message, state: FSMContext, is_pharmacist: bool):
     if current_state == UserQAStates.in_dialog:
         await state.clear()
         await message.answer(
-            "✅ Диалог завершен.\n\n"
-            "Если у вас есть еще вопросы, используйте /ask"
+            "✅ Диалог завершен.\n\n" "Если у вас есть еще вопросы, используйте /ask"
         )
     else:
         await message.answer("ℹ️ В данный момент у вас нет активного диалога.")

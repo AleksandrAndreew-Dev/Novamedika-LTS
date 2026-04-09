@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 from db.qa_models import User, Question, Pharmacist
 from bot.handlers.qa_states import UserQAStates
 from bot.keyboards.qa_keyboard import get_post_consultation_keyboard
-from bot.keyboards.pagiantion_keyboard import make_questions_pagination_keyboard
+from bot.keyboards.pagination_keyboard import make_questions_pagination_keyboard
 from bot.services.dialog_service import DialogService
 from bot.handlers.user_question_handlers.commands import (
     get_all_user_questions,
