@@ -5,14 +5,15 @@ from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 import logging
 
-from db.qa_models import User, Question
+from db.qa_models import User, Question, Pharmacist
 from utils.time_utils import get_utc_now_naive
 from bot.services.notification_service import notify_pharmacists_about_new_question
 from bot.handlers.qa_states import UserQAStates
 from bot.services.dialog_service import DialogService
-from bot.handlers.user_question_handlers.message_handlers import process_dialog_message
+from bot.keyboards.qa_keyboard import make_pharmacist_dialog_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,82 @@ def should_create_question(text: str) -> bool:
     return True
 
 
+async def _process_active_dialog_message(
+    message: Message,
+    db: AsyncSession,
+    user: User,
+    active_question: Question,
+):
+    """Отправить сообщение пользователя фармацевту в рамках активного диалога."""
+    try:
+        # Сохраняем сообщение в историю
+        await DialogService.add_message(
+            db=db,
+            question_id=active_question.uuid,
+            sender_type="user",
+            sender_id=user.uuid,
+            message_type="message",
+            text=message.text,
+        )
+        await db.commit()
+
+        # Находим фармацевта
+        pharmacist_result = await db.execute(
+            select(Pharmacist)
+            .options(selectinload(Pharmacist.user))
+            .where(Pharmacist.uuid == active_question.taken_by)
+        )
+        pharmacist = pharmacist_result.scalar_one_or_none()
+
+        if not pharmacist or not pharmacist.user:
+            logger.warning("No pharmacist for question %s", active_question.uuid)
+            await message.answer("❌ Фармацевт не найден для этого диалога.")
+            return
+
+        user_name = user.first_name or "Пользователь"
+        if user.last_name:
+            user_name = f"{user.first_name} {user.last_name}"
+
+        pharmacist_name = "Фармацевт"
+        if pharmacist.pharmacy_info:
+            first = pharmacist.pharmacy_info.get("first_name", "")
+            last = pharmacist.pharmacy_info.get("last_name", "")
+            patr = pharmacist.pharmacy_info.get("patronymic", "")
+            parts = [p for p in [last, first, patr] if p]
+            pharmacist_name = " ".join(parts) if parts else "Фармацевт"
+
+        # Отправляем фармацевту
+        await DialogService.send_unified_dialog_history(
+            bot=message.bot,
+            chat_id=pharmacist.user.telegram_id,
+            question_uuid=active_question.uuid,
+            db=db,
+            title="СООБЩЕНИЕ ОТ ПОЛЬЗОВАТЕЛЯ",
+            pre_text=(
+                f"💬 <b>СООБЩЕНИЕ ОТ ПОЛЬЗОВАТЕЛЯ</b>\n\n"
+                f"👤 <b>Пользователь:</b> {user_name}\n"
+                f"❓ <b>По вопросу:</b>\n{active_question.text[:150]}...\n\n"
+                f"💭 <b>Сообщение:</b>\n{message.text}\n\n"
+            ),
+            post_text=None,
+            is_pharmacist=True,
+            show_buttons=True,
+            custom_buttons=make_pharmacist_dialog_keyboard(
+                active_question.uuid
+            ).inline_keyboard,
+        )
+
+        # Подтверждение пользователю
+        await message.answer(
+            f"✅ Сообщение отправлено фармацевту {pharmacist_name}.\n\n"
+            "Ожидайте ответа.",
+        )
+
+    except Exception as e:
+        logger.error("Error in _process_active_dialog_message: %s", e, exc_info=True)
+        await message.answer("❌ Ошибка при отправке сообщения. Попробуйте ещё раз.")
+
+
 async def try_create_question(
     message: Message,
     db: AsyncSession,
@@ -64,45 +141,29 @@ async def try_create_question(
         message.text[:50] if message.text else "None",
     )
 
-    # Активные консультации — продолжаем диалог
-    if current_state is None:
-        result = await db.execute(
-            select(Question)
-            .where(
-                Question.user_id == user.uuid,
-                Question.status.in_(["in_progress", "answered"]),
-                Question.taken_by.is_not(None),
-            )
-            .order_by(Question.answered_at.desc())
-            .limit(1)
+    # Проверяем активные консультации (in_progress или answered)
+    result = await db.execute(
+        select(Question)
+        .where(
+            Question.user_id == user.uuid,
+            Question.status.in_(["in_progress", "answered"]),
+            Question.taken_by.is_not(None),
         )
-        active_question = result.scalar_one_or_none()
+        .order_by(Question.answered_at.desc())
+        .limit(1)
+    )
+    active_question = result.scalar_one_or_none()
 
-        if active_question:
-            if active_question.status == "completed":
-                await state.clear()
-            else:
-                await state.update_data(
-                    active_dialog_question_id=str(active_question.uuid)
-                )
-                await state.set_state(UserQAStates.in_dialog)
-                await process_dialog_message(message, state, db, user, is_pharmacist)
-                return True
+    if active_question:
+        logger.info(
+            "User %s has active question %s, sending message",
+            user.uuid,
+            active_question.uuid,
+        )
+        await _process_active_dialog_message(message, db, user, active_question)
+        return True
 
-    # Завершённый диалог в состоянии
-    if current_state == UserQAStates.in_dialog:
-        state_data = await state.get_data()
-        question_uuid = state_data.get("active_dialog_question_id")
-        if question_uuid:
-            result = await db.execute(
-                select(Question).where(Question.uuid == question_uuid)
-            )
-            question = result.scalar_one_or_none()
-            if question and question.status == "completed":
-                await state.clear()
-                current_state = None
-
-    # Состояния, обрабатываемые другими хендлерами — пропускаем
+    # Нет активного вопроса — проверяем состояния
     if current_state is not None:
         if current_state in [
             UserQAStates.waiting_for_prescription_photo,
@@ -121,7 +182,7 @@ async def try_create_question(
     if not should_create_question(message.text):
         return False
 
-    # Создаём вопрос
+    # Создаём новый вопрос
     try:
         logger.info("Creating question from text: '%s'", message.text[:80])
 
@@ -138,7 +199,7 @@ async def try_create_question(
 
         logger.info("Question created: ID=%s", question.uuid)
 
-        dialog_message = await DialogService.create_question_message(question, db)
+        await DialogService.create_question_message(question, db)
         await db.commit()
 
         await notify_pharmacists_about_new_question(question, db)
@@ -152,7 +213,7 @@ async def try_create_question(
         return True
 
     except Exception as e:
-        logger.error(f"Error creating question: {e}", exc_info=True)
+        logger.error("Error creating question: %s", e, exc_info=True)
         await message.answer(
             "❌ Произошла ошибка при отправке вопроса. Попробуйте ещё раз.",
             parse_mode="HTML",
