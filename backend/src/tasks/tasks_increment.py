@@ -200,7 +200,7 @@ async def process_csv_incremental_async(
             file_content, pharmacy.uuid
         )
 
-        # Получаем существующие продукты с НОВОЙ сессией
+        # Получаем существующие продукты (только нужные колонки, не полные ORM-объекты)
         async with async_session_maker() as session:
             existing_hashes = await get_existing_products_with_hashes(
                 session, pharmacy.uuid
@@ -598,29 +598,40 @@ def process_csv_data_with_hashes(
 async def get_existing_products_with_hashes(
     session: AsyncSession, pharmacy_uuid: uuid.UUID
 ) -> Dict[str, dict]:
-    """Асинхронное получение существующих продуктов (включая удаленные)"""
-    from sqlalchemy import or_
+    """Получает хэши существующих продуктов, загружая ТОЛЬКО нужные колонки.
 
-    # Получаем ВСЕ продукты, включая удаленные
+    **Оптимизация:** вместо ``SELECT *`` (полные ORM-объекты) запрашиваются
+    только 6 колонок, участвующих в хэше, плюс ``uuid`` и ``is_removed``.
+    Память: ~200 байт на строку вместо ~2 КБ ORM-объекта.
+    """
     result = await session.execute(
-        select(Product).where(Product.pharmacy_id == pharmacy_uuid)
+        select(
+            Product.uuid,
+            Product.name,
+            Product.form,
+            Product.serial,
+            Product.expiry_date,
+            Product.manufacturer,
+            Product.country,
+            Product.is_removed,
+        ).where(Product.pharmacy_id == pharmacy_uuid)
     )
-    existing_products = result.scalars().all()
+    rows = result.all()
 
     existing_hashes = {}
-    for product in existing_products:
+    for row in rows:
         product_data = {
-            "name": product.name,
-            "form": product.form,
-            "serial": product.serial,
-            "expiry_date": product.expiry_date,
-            "manufacturer": product.manufacturer,
-            "country": product.country,
+            "name": row.name,
+            "form": row.form,
+            "serial": row.serial,
+            "expiry_date": row.expiry_date,
+            "manufacturer": row.manufacturer,
+            "country": row.country,
         }
         product_hash = generate_product_hash(product_data)
         existing_hashes[product_hash] = {
-            "uuid": product.uuid,
-            "is_removed": product.is_removed,  # Добавляем флаг удаления
+            "uuid": row.uuid,
+            "is_removed": row.is_removed,
         }
 
     return existing_hashes
@@ -628,34 +639,27 @@ async def get_existing_products_with_hashes(
 
 def compare_products(
     csv_hashes: Dict[str, dict],
-    existing_hashes: Dict[str, dict],  # Теперь содержит is_removed
+    existing_hashes: Dict[str, dict],
     csv_data: List[dict],
 ) -> Tuple[List[dict], List[dict], List[uuid.UUID]]:
-    """Сравнивает CSV данные с существующими и определяет изменения"""
+    """Сравнивает CSV-хэши с существующими и определяет изменения."""
     to_add = []
     to_update = []
     to_remove = []
 
-    # Находим новые продукты (есть в CSV, но нет в базе)
     for product_hash, product_data in csv_hashes.items():
         if product_hash not in existing_hashes:
             to_add.append(product_data)
 
-    # Находим продукты для удаления (есть в базе, но нет в CSV, и НЕ удалены)
     for product_hash, product_info in existing_hashes.items():
         if product_hash not in csv_hashes:
-            # Удаляем только если продукт еще не помечен как удаленный
             if not product_info.get("is_removed", False):
                 to_remove.append(product_info["uuid"])
 
-    # Находим продукты для обновления (совпадают по хешу)
     for product_hash, product_data in csv_hashes.items():
         if product_hash in existing_hashes:
             existing_info = existing_hashes[product_hash]
-            existing_uuid = existing_info["uuid"]
-            # Добавляем UUID существующего продукта для обновления
-            product_data["existing_uuid"] = existing_uuid
-            # Добавляем флаг is_removed для информации
+            product_data["existing_uuid"] = existing_info["uuid"]
             product_data["is_removed"] = existing_info.get("is_removed", False)
             to_update.append(product_data)
 
