@@ -8,3 +8,6 @@ letsencrypt/acme.json
 agent/
 .vscode/
 .qwen/
+
+pharmacy-sim
+
