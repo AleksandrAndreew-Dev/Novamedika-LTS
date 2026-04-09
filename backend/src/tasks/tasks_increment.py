@@ -36,8 +36,34 @@ _models_initialized = False
 from tasks.celery_app import celery
 
 
+async def get_task_session_maker():
+    """Создаёт **свежий** engine + sessionmaker для Celery-задачи.
+
+    Глобальный ``async_session_maker`` наследуется при форке и вызывает
+    ``InterfaceError: another operation is in progress`` при конкурентном
+    использовании в prefork worker.
+    """
+    from sqlalchemy.ext.asyncio import (
+        create_async_engine,
+        AsyncSession,
+        async_sessionmaker,
+    )
+    from db.base import Base
+
+    database_url = os.getenv(
+        "DATABASE_URL",
+        "postgresql+asyncpg://novamedika:novamedika@postgres:5432/novamedika_prod",
+    )
+
+    engine = create_async_engine(database_url, pool_size=5, max_overflow=0)
+    return (
+        async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False),
+        engine,
+    )
+
+
 async def initialize_task_models():
-    """Потокобезопасная инициализация с очисткой connection pool"""
+    """Инициализация моделей с СОБСТВЕННЫМ движком (не унаследованным)."""
     global _models_initialized
 
     if _models_initialized:
@@ -55,22 +81,15 @@ async def initialize_task_models():
                     f"Initializing database models (attempt {attempt + 1}/{max_retries})"
                 )
 
-                # Явно закрываем старые соединения перед инициализацией
-                from db.database import engine, _engine
+                session_maker, engine = await get_task_session_maker()
+                async with engine.begin() as conn:
+                    await conn.run_sync(Base.metadata.create_all)
 
-                if _engine:
-                    try:
-                        await _engine.dispose()
-                    except:
-                        pass
-
-                await init_models()
-
-                # Тестовое соединение с полным закрытием
-                async with async_session_maker() as session:
+                # Тестовое соединение
+                async with session_maker() as session:
                     await session.execute(select(1))
-                    await session.close()
 
+                await engine.dispose()
                 _models_initialized = True
                 logger.info("Database models initialized successfully for Celery")
                 return
@@ -152,8 +171,10 @@ def process_csv_incremental(
 async def process_csv_incremental_async(
     file_content: str, pharmacy_name: str, pharmacy_number: str
 ):
+    # Создаём task-local engine + session (не унаследованный от fork)
+    session_maker, engine = await get_task_session_maker()
     try:
-        # Инициализируем модели в каждом вызове для безопасности
+        # Инициализируем модели
         await initialize_task_models()
 
         pharmacy_map = {"novamedika": "Новамедика", "ekliniya": "ЭКЛИНИЯ"}
@@ -161,9 +182,8 @@ async def process_csv_incremental_async(
         if not normalized_name:
             raise ValueError(f"Invalid pharmacy: {pharmacy_name}")
 
-        # СОЗДАЕМ ОТДЕЛЬНУЮ СЕССИЮ ДЛЯ КАЖДОЙ ОПЕРАЦИИ
-        async with async_session_maker() as session:
-            # Ищем аптеку по названию и номеру
+        # Ищем/создаём аптеку
+        async with session_maker() as session:
             result = await session.execute(
                 select(Pharmacy).where(
                     and_(
@@ -195,13 +215,13 @@ async def process_csv_incremental_async(
 
             logger.info(f"Using pharmacy: {pharmacy.uuid}")
 
-        # Обрабатываем CSV для найденной/созданной аптеки
+        # Обрабатываем CSV
         csv_data, csv_hashes, processing_errors = process_csv_data_with_hashes(
             file_content, pharmacy.uuid
         )
 
-        # Получаем существующие продукты (только нужные колонки, не полные ORM-объекты)
-        async with async_session_maker() as session:
+        # Получаем существующие продукты (только нужные колонки)
+        async with session_maker() as session:
             existing_hashes = await get_existing_products_with_hashes(
                 session, pharmacy.uuid
             )
@@ -215,7 +235,7 @@ async def process_csv_incremental_async(
             f"Changes: {len(to_add)} to add, {len(to_update)} to update, {len(to_remove)} to remove"
         )
 
-        # Выполняем изменения ТОЛЬКО для продуктов
+        # Выполняем изменения
         stats = await execute_incremental_changes_async(
             to_add, to_update, to_remove, pharmacy.uuid
         )
@@ -232,6 +252,8 @@ async def process_csv_incremental_async(
     except Exception as e:
         logger.error(f"Error in process_csv_incremental_async: {str(e)}", exc_info=True)
         raise
+    finally:
+        await engine.dispose()
 
 
 def normalize_encoding(text: str) -> str:
