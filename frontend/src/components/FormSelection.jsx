@@ -49,14 +49,6 @@ const FormSelection = React.memo(function FormSelection({
                   </span>{" "}
                   найдено
                 </h2>
-
-                {/* <p className="text-gray-800 text-sm mt-1">
-                  По запросу "
-                  <span className="font-semibold uppercase">
-                    {searchData.name}
-                  </span>"
-                  {searchData.city && ` в городе ${searchData.city}`}
-                </p> */}
               </div>
 
               <button
@@ -92,9 +84,6 @@ const FormSelection = React.memo(function FormSelection({
               <h3 className="text-base md:text-lg font-medium text-gray-900 mb-2">
                 Выберите нужное название, форму, производителя и страну
               </h3>
-              {/* <p className="text-gray-800 text-sm">
-                Найдено {availableCombinations.length} вариантов
-              </p> */}
             </div>
           )}
 
