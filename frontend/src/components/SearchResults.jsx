@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from "react";
+import React, { useReducer, useMemo } from "react";
 import { bookingApi } from "../api/client";
 import { useTelegramUser } from "../telegram/TelegramWebApp";
+import { bookingReducer, initialState } from "../hooks/useBookingReducer";
 import BookingModal from "./BookingModal";
 import ResultItemTelegram from "./ResultItemTelegram";
 import ResultItemWeb from "./ResultItemWeb";
@@ -16,36 +17,23 @@ export default function SearchResults({
   loading,
   isTelegram,
 }) {
-  const [bookingState, setBookingState] = useState({
-    modal: { isOpen: false, product: null, quantity: 1 },
-    form: { customer_name: "", customer_phone: "" },
-    loading: false,
-    success: false,
-    error: null,
-    orderInfo: null,
-  });
+  const [bookingState, dispatch] = useReducer(bookingReducer, initialState);
 
   const telegramUser = useTelegramUser();
 
   const openBookingModal = (product) => {
-    setBookingState((prev) => ({
-      ...prev,
-      modal: { isOpen: true, product: product, quantity: 1 },
-      form: {
-        customer_name: "",
-        customer_phone: telegramUser?.phone_number || "",
-      },
-      success: false,
-      error: null,
-      orderInfo: null,
-    }));
+    dispatch({
+      type: "OPEN_MODAL",
+      product,
+      phone: telegramUser?.phone_number || "",
+    });
   };
 
   const handleBooking = async (e) => {
     e.preventDefault();
     if (!bookingState.modal.product) return;
 
-    setBookingState((prev) => ({ ...prev, loading: true, error: null }));
+    dispatch({ type: "SUBMIT_START" });
 
     try {
       const bookingData = {
@@ -68,13 +56,8 @@ export default function SearchResults({
 
       const order = await bookingApi.createOrder(bookingData);
 
-      setBookingState((prev) => ({
-        ...prev,
-        loading: false,
-        success: true,
-        orderInfo: order,
-      }));
-      setTimeout(() => closeBookingModal(), 3000);
+      dispatch({ type: "SUBMIT_SUCCESS", order });
+      setTimeout(() => dispatch({ type: "CLOSE_MODAL" }), 3000);
     } catch (error) {
       let errorMessage = "Ошибка при бронировании";
       if (error.response) {
@@ -89,37 +72,8 @@ export default function SearchResults({
       } else {
         errorMessage = error.message;
       }
-      setBookingState((prev) => ({
-        ...prev,
-        loading: false,
-        error: errorMessage,
-      }));
+      dispatch({ type: "SUBMIT_ERROR", error: errorMessage });
     }
-  };
-
-  const updateBookingForm = (field, value) => {
-    setBookingState((prev) => ({
-      ...prev,
-      form: { ...prev.form, [field]: value },
-    }));
-  };
-
-  const updateBookingQuantity = (quantity) => {
-    setBookingState((prev) => ({
-      ...prev,
-      modal: { ...prev.modal, quantity: Math.max(1, parseInt(quantity) || 1) },
-    }));
-  };
-
-  const closeBookingModal = () => {
-    setBookingState({
-      modal: { isOpen: false, product: null, quantity: 1 },
-      form: { customer_name: "", customer_phone: "" },
-      loading: false,
-      success: false,
-      error: null,
-      orderInfo: null,
-    });
   };
 
   const formatQuantity = (quantity) => {
@@ -192,9 +146,13 @@ export default function SearchResults({
       <BookingModal
         bookingState={bookingState}
         telegramUser={telegramUser}
-        onFormChange={updateBookingForm}
-        onQuantityChange={updateBookingQuantity}
-        onClose={closeBookingModal}
+        onFormChange={(field, value) =>
+          dispatch({ type: "UPDATE_FORM", field, value })
+        }
+        onQuantityChange={(value) =>
+          dispatch({ type: "UPDATE_QUANTITY", value })
+        }
+        onClose={() => dispatch({ type: "CLOSE_MODAL" })}
         onSubmit={handleBooking}
       />
 
