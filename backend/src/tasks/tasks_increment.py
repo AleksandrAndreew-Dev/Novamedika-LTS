@@ -138,35 +138,12 @@ def validate_numeric_value(
 def process_csv_incremental(
     self, file_content: str, pharmacy_name: str, pharmacy_number: str
 ):
-    """Синхронная обертка для асинхронной функции с использованием существующего event loop"""
+    """Синхронная обертка для асинхронной функции."""
     try:
-        # Используем существующий event loop из worker процесса
-        loop = asyncio.get_event_loop()
-
-        # Проверяем, не закрыт ли loop
-        if loop.is_closed():
-            logger.warning("Event loop was closed, creating new one")
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-        # Запускаем асинхронную функцию
-        if loop.is_running():
-            # Если loop уже запущен (редкий случай в Celery), используем create_task
-            async def run_async():
-                return await process_csv_incremental_async(
-                    file_content, pharmacy_name, pharmacy_number
-                )
-
-            future = asyncio.run_coroutine_threadsafe(run_async(), loop)
-            return future.result(timeout=3600)
-        else:
-            # Стандартный случай - запускаем в существующем loop
-            return loop.run_until_complete(
-                process_csv_incremental_async(
-                    file_content, pharmacy_name, pharmacy_number
-                )
-            )
-
+        result = asyncio.run(
+            process_csv_incremental_async(file_content, pharmacy_name, pharmacy_number)
+        )
+        return result
     except Exception as e:
         logger.error(f"Error in process_csv_incremental: {str(e)}")
         raise self.retry(exc=e, countdown=60)
@@ -303,9 +280,9 @@ def normalize_file_content(file_content: str) -> str:
     # Если пришли байты, декодируем их
     if isinstance(file_content, bytes):
         try:
-            file_content = file_content.decode('latin-1')
+            file_content = file_content.decode("latin-1")
         except UnicodeDecodeError:
-            file_content = file_content.decode('latin-1', errors='replace')
+            file_content = file_content.decode("latin-1", errors="replace")
 
     # Попробуем определить кодировку по BOM (Byte Order Mark)
     bom_map = {
@@ -1043,9 +1020,11 @@ def run_async_in_loop(coro):
 def sync_pharmacy_orders_task(self):
     """Периодическая задача для синхронизации заказов"""
     try:
+
         async def _sync():
             await initialize_task_models()
             from tasks.sync_service import SyncService
+
             sync_service = SyncService()
             return await sync_service.sync_all_pharmacies_orders()
 
@@ -1059,9 +1038,11 @@ def sync_pharmacy_orders_task(self):
 def retry_failed_orders_task(self):
     """Повторная отправка неудачных заказов"""
     try:
+
         async def _retry():
             await initialize_task_models()
             from tasks.sync_service import SyncService
+
             sync_service = SyncService()
             return await sync_service.retry_failed_orders()
 
