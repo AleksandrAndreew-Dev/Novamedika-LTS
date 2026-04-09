@@ -8,11 +8,11 @@ from sqlalchemy import (
     DateTime,
     JSON,
     ForeignKey,
-    Index
+    Index,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from db.database import Base
+from .base import Base
 from utils.time_utils import get_utc_now_naive
 
 
@@ -80,18 +80,16 @@ class Question(Base):
         "Pharmacist", foreign_keys=[assigned_to], back_populates="assigned_questions"
     )
     answers = relationship("Answer", back_populates="question")
-    taken_by = Column(UUID(as_uuid=True), ForeignKey("qa_pharmacists.uuid"), nullable=True)
+    taken_by = Column(
+        UUID(as_uuid=True), ForeignKey("qa_pharmacists.uuid"), nullable=True
+    )
     taken_at = Column(DateTime, nullable=True)
 
     taken_pharmacist = relationship(
-        "Pharmacist",
-        foreign_keys=[taken_by],
-        backref="taken_questions"
+        "Pharmacist", foreign_keys=[taken_by], backref="taken_questions"
     )
     dialog_messages = relationship(
-        "DialogMessage",
-        back_populates="question",
-        order_by="DialogMessage.created_at"
+        "DialogMessage", back_populates="question", order_by="DialogMessage.created_at"
     )
 
 
@@ -112,16 +110,19 @@ class Answer(Base):
     pharmacist = relationship("Pharmacist", back_populates="answers")
 
 
-
 # Вместо сложных отношений, используем более простой подход
 class DialogMessage(Base):
     __tablename__ = "qa_dialog_messages"
 
     uuid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    question_id = Column(UUID(as_uuid=True), ForeignKey("qa_questions.uuid"), nullable=False)
+    question_id = Column(
+        UUID(as_uuid=True), ForeignKey("qa_questions.uuid"), nullable=False
+    )
 
     # Тип сообщения
-    message_type = Column(String(20), nullable=False)  # 'question', 'answer', 'clarification', 'photo', 'document'
+    message_type = Column(
+        String(20), nullable=False
+    )  # 'question', 'answer', 'clarification', 'photo', 'document'
 
     # Отправитель
     sender_type = Column(String(20), nullable=False)  # 'user' или 'pharmacist'
@@ -129,7 +130,9 @@ class DialogMessage(Base):
 
     # Содержимое
     text = Column(Text, nullable=True)  # Текст для question/answer/clarification
-    file_id = Column(String(500), nullable=True)  # file_id из Telegram для фото/документов
+    file_id = Column(
+        String(500), nullable=True
+    )  # file_id из Telegram для фото/документов
     caption = Column(Text, nullable=True)  # Описание для фото
 
     # Метаданные
@@ -141,8 +144,7 @@ class DialogMessage(Base):
 
     # В модели DialogMessage
     __table_args__ = (
-        Index('idx_dialog_question_id', 'question_id'),
-        Index('idx_dialog_created_at', 'created_at'),
-        Index('idx_dialog_sender', 'sender_type', 'sender_id'),
+        Index("idx_dialog_question_id", "question_id"),
+        Index("idx_dialog_created_at", "created_at"),
+        Index("idx_dialog_sender", "sender_type", "sender_id"),
     )
-
