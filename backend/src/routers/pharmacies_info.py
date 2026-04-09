@@ -7,27 +7,20 @@ import csv
 import uuid
 from pathlib import Path
 import re
-
-from sqlalchemy import select, and_
-from sqlalchemy.exc import IntegrityError
-from db.database import async_session_maker
-from db.models import Pharmacy
-from sqlalchemy import select
-from sqlalchemy.orm import joinedload
-
-
-from db.schemas import PharmacyUpdate
-
-from db.database import get_db
-from sqlalchemy.ext.asyncio import AsyncSession
-from db.models import Pharmacy, Product
-
 import logging
 
+from sqlalchemy import select, and_, text
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
+
+from db.database import async_session_maker, get_db
+from db.models import Pharmacy, Product
+from db.schemas import PharmacyUpdate
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 security = HTTPBasic()
+
 
 def parse_pharmacy_name(full_name: str) -> tuple[str, str, str]:
     """Разбирает полное название аптеки на название, номер и сеть"""
@@ -53,6 +46,7 @@ def parse_pharmacy_name(full_name: str) -> tuple[str, str, str]:
     chain = determine_chain(full_name.strip())
     return full_name.strip(), "", chain
 
+
 def determine_chain(pharmacy_name: str) -> str:
     """Определяет сеть аптеки по названию"""
     name_lower = pharmacy_name.lower()
@@ -64,6 +58,7 @@ def determine_chain(pharmacy_name: str) -> str:
     else:
         # По умолчанию или можно добавить логику для определения по другим признакам
         return "Новамедика"
+
 
 @router.post("/load-pharmacies/")
 async def load_pharmacies():
@@ -82,7 +77,9 @@ async def load_pharmacies():
                 for row_num, row in enumerate(reader, 1):
                     try:
                         full_name = row["name"]
-                        pharmacy_name, pharmacy_number, chain = parse_pharmacy_name(full_name)
+                        pharmacy_name, pharmacy_number, chain = parse_pharmacy_name(
+                            full_name
+                        )
 
                         if not pharmacy_number:
                             pharmacy_number = row.get("pharmacy_number", "")
@@ -130,7 +127,7 @@ async def load_pharmacies():
                                 address=row["address"],
                                 phone=row["phone"],
                                 opening_hours=row["opening_hours"],
-                                chain=chain  # Используем определенную сеть
+                                chain=chain,  # Используем определенную сеть
                             )
                             session.add(pharmacy)
                             pharmacies_loaded += 1
@@ -156,6 +153,7 @@ async def load_pharmacies():
             detail=f"Ошибка при загрузке данных аптек: {str(e)}",
         )
 
+
 # Остальные endpoints остаются без изменений
 @router.get("/pharmacies/")
 async def get_pharmacies():
@@ -164,6 +162,7 @@ async def get_pharmacies():
         result = await session.execute(select(Pharmacy))
         pharmacies = result.scalars().all()
         return pharmacies
+
 
 @router.get("/check-data/")
 async def check_data(db: AsyncSession = Depends(get_db)):
@@ -207,14 +206,16 @@ async def check_data(db: AsyncSession = Depends(get_db)):
                 "name": p.name,
                 "pharmacy_number": p.pharmacy_number,
                 "city": p.city,
-                "chain": p.chain
+                "chain": p.chain,
             }
             for p in pharmacies[:5]
         ],
         "sample_products": sample_data,
     }
 
+
 from sqlalchemy import text
+
 
 @router.delete("/clear-all-data/")
 async def clear_all_data(db: AsyncSession = Depends(get_db)):
@@ -242,6 +243,7 @@ async def clear_all_data(db: AsyncSession = Depends(get_db)):
             detail=f"Ошибка при удалении данных: {str(e)}",
         )
 
+
 @router.delete("/clear-all-products/")
 async def clear_all_products(db: AsyncSession = Depends(get_db)):
     """Очистка всех данных (продукты и аптеки)"""
@@ -251,7 +253,6 @@ async def clear_all_products(db: AsyncSession = Depends(get_db)):
 
         # Удаляем все продукты
         await db.execute(text("DELETE FROM products;"))
-
 
         # Включаем проверку внешних ключей обратно
         await db.execute(text("SET session_replication_role = 'origin';"))
@@ -268,15 +269,16 @@ async def clear_all_products(db: AsyncSession = Depends(get_db)):
         )
 
 
-CORRECT_USERNAME = os.getenv('CORRECT_USERNAME')
-CORRECT_PASSWORD = os.getenv('CORRECT_PASSWORD')
+CORRECT_USERNAME = os.getenv("CORRECT_USERNAME")
+CORRECT_PASSWORD = os.getenv("CORRECT_PASSWORD")
+
 
 def authenticate_pharmacy(credentials: HTTPBasicCredentials = Depends(security)):
     if not CORRECT_USERNAME or not CORRECT_PASSWORD:
         logger.error("Auth credentials not configured")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Server auth not configured"
+            detail="Server auth not configured",
         )
 
     is_user = secrets.compare_digest(credentials.username, CORRECT_USERNAME)
@@ -290,12 +292,13 @@ def authenticate_pharmacy(credentials: HTTPBasicCredentials = Depends(security))
         )
     return credentials.username
 
+
 @router.put("/pharmacy/{pharmacy_name}/{pharmacy_number}/")
 async def update_pharmacy_info(
     pharmacy_name: str,
     pharmacy_number: str,
     pharmacy_data: PharmacyUpdate,
-    username: str = Depends(authenticate_pharmacy)
+    username: str = Depends(authenticate_pharmacy),
 ):
     """
     Обновление информации об аптеке (город, адрес, телефон, часы работы)
@@ -307,7 +310,7 @@ async def update_pharmacy_info(
         if not normalized_name:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid pharmacy name: {pharmacy_name}"
+                detail=f"Invalid pharmacy name: {pharmacy_name}",
             )
 
         async with async_session_maker() as session:
@@ -325,7 +328,7 @@ async def update_pharmacy_info(
             if not pharmacy:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Pharmacy not found: {normalized_name} number {pharmacy_number}"
+                    detail=f"Pharmacy not found: {normalized_name} number {pharmacy_number}",
                 )
 
             # Обновляем поля
@@ -343,7 +346,7 @@ async def update_pharmacy_info(
                 "status": "success",
                 "message": "Pharmacy information updated successfully",
                 "pharmacy_id": str(pharmacy.uuid),
-                "updated_fields": list(update_data.keys())
+                "updated_fields": list(update_data.keys()),
             }
 
     except HTTPException:
@@ -352,14 +355,15 @@ async def update_pharmacy_info(
         logger.error(f"Error updating pharmacy info: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error updating pharmacy information: {str(e)}"
+            detail=f"Error updating pharmacy information: {str(e)}",
         )
+
 
 @router.get("/pharmacy/{pharmacy_name}/{pharmacy_number}/")
 async def get_pharmacy_info(
     pharmacy_name: str,
     pharmacy_number: str,
-    username: str = Depends(authenticate_pharmacy)
+    username: str = Depends(authenticate_pharmacy),
 ):
     """
     Получение информации об аптеке
@@ -371,7 +375,7 @@ async def get_pharmacy_info(
         if not normalized_name:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid pharmacy name: {pharmacy_name}"
+                detail=f"Invalid pharmacy name: {pharmacy_name}",
             )
 
         async with async_session_maker() as session:
@@ -388,7 +392,7 @@ async def get_pharmacy_info(
             if not pharmacy:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Pharmacy not found: {normalized_name} number {pharmacy_number}"
+                    detail=f"Pharmacy not found: {normalized_name} number {pharmacy_number}",
                 )
 
             return {
@@ -399,7 +403,7 @@ async def get_pharmacy_info(
                 "address": pharmacy.address,
                 "phone": pharmacy.phone,
                 "opening_hours": pharmacy.opening_hours,
-                "chain": pharmacy.chain
+                "chain": pharmacy.chain,
             }
 
     except HTTPException:
@@ -408,5 +412,5 @@ async def get_pharmacy_info(
         logger.error(f"Error getting pharmacy info: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error getting pharmacy information: {str(e)}"
+            detail=f"Error getting pharmacy information: {str(e)}",
         )
