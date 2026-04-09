@@ -6,17 +6,17 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Используем Redis как брокер и бэкенд (убираем RabbitMQ)
-redis_password = os.getenv('REDIS_PASSWORD', '')
-redis_host = os.getenv('REDIS_HOST', 'redis')
+redis_password = os.getenv("REDIS_PASSWORD", "")
+redis_host = os.getenv("REDIS_HOST", "redis")
 
 celery = Celery(
-    'tasks',
-    broker=f'redis://:{redis_password}@{redis_host}:6379/0',
-    backend=f'redis://:{redis_password}@{redis_host}:6379/0',
-    task_serializer='json',
-    accept_content=['json'],
-    result_serializer='json',
-    timezone='UTC',
+    "tasks",
+    broker=f"redis://:{redis_password}@{redis_host}:6379/0",
+    backend=f"redis://:{redis_password}@{redis_host}:6379/0",
+    task_serializer="json",
+    accept_content=["json"],
+    result_serializer="json",
+    timezone="UTC",
     enable_utc=True,
 )
 
@@ -29,19 +29,16 @@ celery.conf.update(
     task_acks_late=True,
     broker_connection_retry_on_startup=True,
     worker_cancel_long_running_tasks_on_connection_loss=True,
-
     # КРИТИЧЕСКИ ВАЖНЫЕ НАСТРОЙКИ ДЛЯ ASYNCPG
-    worker_max_tasks_per_child=1,  # Перезапуск worker после каждой задачи
+    worker_max_tasks_per_child=50,  # Перезапуск worker после 50 задач для очистки памяти
     worker_disable_rate_limits=True,
     task_always_eager=False,
-
     # Настройки для избежания конфликтов с БД
     broker_pool_limit=None,
     result_backend_always_retry=True,
-
     # Настройки для периодических задач
-    beat_schedule_filename='celerybeat-schedule',
-    beat_scheduler='celery.beat.PersistentScheduler',
+    beat_schedule_filename="celerybeat-schedule",
+    beat_scheduler="celery.beat.PersistentScheduler",
 )
 
 # КРИТИЧЕСКИ ВАЖНО: Импортируем все задачи для регистрации
@@ -49,4 +46,4 @@ from tasks import tasks_increment
 from tasks import celery_worker_init
 
 # Регистрируем задачи
-celery.autodiscover_tasks(['tasks'])
+celery.autodiscover_tasks(["tasks"])
