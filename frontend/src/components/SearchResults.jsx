@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { bookingApi } from "../api/client";
 import { useTelegramUser } from "../telegram/TelegramWebApp"; // Добавляем хук
 
@@ -178,57 +178,59 @@ export default function SearchResults({
 
   // УДАЛЕНО: функция getPackagingText больше не используется
 
-  const getGroupedResults = () => {
+  const groupedResults = useMemo(() => {
     const grouped = {};
 
-  results.filter(item => (parseFloat(item.quantity) || 0) > 0)
-  .forEach((item) => {
-    // Используем product_uuid для бронирования
-    const productUuid = item.product_uuid || item.uuid || item.id;
-    const pharmacyId = item.pharmacy_id || item.pharmacy_number;
+    results
+      .filter((item) => (parseFloat(item.quantity) || 0) > 0)
+      .forEach((item) => {
+        // Используем product_uuid для бронирования
+        const productUuid = item.product_uuid || item.uuid || item.id;
+        const pharmacyId = item.pharmacy_id || item.pharmacy_number;
 
-    const key = `${pharmacyId}-${item.name}-${item.form}-${item.manufacturer}`;
+        const key = `${pharmacyId}-${item.name}-${item.form}-${item.manufacturer}`;
 
-    if (!grouped[key]) {
-      grouped[key] = {
-        ...item,
-        // Сохраняем UUID продукта для бронирования
-        product_uuid: productUuid,
-        pharmacy_id: pharmacyId,
-        quantities: [parseFloat(item.quantity) || 0],
-        prices: [parseFloat(item.price) || 0],
-        working_hours: item.working_hours || item.opening_hours || "9:00-21:00",
-      };
-    } else {
-        // Добавляем новое количество (не суммируем!)
-        grouped[key].quantities.push(parseFloat(item.quantity) || 0);
-        // Добавляем новую цену
-        if (!grouped[key].prices.includes(parseFloat(item.price) || 0)) {
-          grouped[key].prices.push(parseFloat(item.price) || 0);
-        }
+        if (!grouped[key]) {
+          grouped[key] = {
+            ...item,
+            // Сохраняем UUID продукта для бронирования
+            product_uuid: productUuid,
+            pharmacy_id: pharmacyId,
+            quantities: [parseFloat(item.quantity) || 0],
+            prices: [parseFloat(item.price) || 0],
+            working_hours:
+              item.working_hours || item.opening_hours || "9:00-21:00",
+          };
+        } else {
+          // Добавляем новое количество (не суммируем!)
+          grouped[key].quantities.push(parseFloat(item.quantity) || 0);
+          // Добавляем новую цену
+          if (!grouped[key].prices.includes(parseFloat(item.price) || 0)) {
+            grouped[key].prices.push(parseFloat(item.price) || 0);
+          }
 
-        // Обновляем время, если запись новее
-        const currentDate = new Date(grouped[key].updated_at);
-        const newDate = new Date(item.updated_at);
-        if (newDate > currentDate) {
-          grouped[key].updated_at = item.updated_at;
-          if (item.working_hours || item.opening_hours) {
-            grouped[key].working_hours =
-              item.working_hours || item.opening_hours;
+          // Обновляем время, если запись новее
+          const currentDate = new Date(grouped[key].updated_at);
+          const newDate = new Date(item.updated_at);
+          if (newDate > currentDate) {
+            grouped[key].updated_at = item.updated_at;
+            if (item.working_hours || item.opening_hours) {
+              grouped[key].working_hours =
+                item.working_hours || item.opening_hours;
+            }
           }
         }
-      }
-    });
+      });
 
     // Преобразуем обратно в массив с рассчитанными суммами
-     return Object.values(grouped).map((item) => ({
-    ...item,
-    quantity: item.quantities.reduce((sum, q) => sum + q, 0),
-    price: Math.min(...item.prices),
-    hasMultiplePrices: item.prices.length > 1,
-    originalPrices: item.prices,
-  }));
-};
+    return Object.values(grouped).map((item) => ({
+      ...item,
+      quantity: item.quantities.reduce((sum, q) => sum + q, 0),
+      price: Math.min(...item.prices),
+      hasMultiplePrices: item.prices.length > 1,
+      originalPrices: item.prices,
+    }));
+  }, [results]);
 
   const formatQuantity = (quantity) => {
     const num = parseFloat(quantity);
@@ -241,8 +243,6 @@ export default function SearchResults({
     // Для дробных значений показываем с точностью до 3 знаков
     return num.toFixed(3).replace(/\.?0+$/, "");
   };
-
-  const groupedResults = getGroupedResults();
 
   const formatDate = (dateString) => {
     if (!dateString) return "Недавно";
@@ -618,7 +618,7 @@ export default function SearchResults({
                   aria-label={`${item.name} в аптеке ${
                     item.pharmacy_name
                   }. Цена: ${item.price} рублей. Количество: ${formatQuantity(
-                    item.quantity
+                    item.quantity,
                   )} упаковок. Адрес: ${item.pharmacy_address}. Телефон: ${
                     item.pharmacy_phone
                   }`}
@@ -659,7 +659,7 @@ export default function SearchResults({
                       </svg>
                       <span>
                         {item.pharmacy_name} №{item.pharmacy_number},{" "}
-                        {item.pharmacy_city}, {" "} {item.pharmacy_address}
+                        {item.pharmacy_city}, {item.pharmacy_address}
                       </span>
                     </div>
                     <div className="flex items-center">
