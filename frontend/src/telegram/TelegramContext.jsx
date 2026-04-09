@@ -7,6 +7,7 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
+import { logger } from "../utils/logger";
 
 const TelegramContext = createContext(null);
 
@@ -31,14 +32,14 @@ export function TelegramProvider({ children }) {
         setIsTelegram(true);
         setIsReady(true);
 
-        console.log("Telegram Web App initialized:", {
+        logger.log("Telegram Web App initialized:", {
           platform: telegram.platform,
           version: telegram.version,
           user: telegram.initDataUnsafe?.user,
         });
       } else {
         setIsReady(true);
-        console.log("Not in Telegram environment");
+        logger.log("Not in Telegram environment");
       }
     };
 
@@ -53,7 +54,7 @@ export function TelegramProvider({ children }) {
         setTimeout(checkTelegram, 100);
       } else {
         setIsReady(true);
-        console.log("Telegram Web App not detected after timeout");
+        logger.log("Telegram Web App not detected after timeout");
       }
     };
 

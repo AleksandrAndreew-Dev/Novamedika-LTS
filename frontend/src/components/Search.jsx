@@ -12,6 +12,7 @@ const FormSelection = lazy(() => import("./FormSelection"));
 const SearchResults = lazy(() => import("./SearchResults"));
 import { useTelegramWebApp } from "../telegram/TelegramContext";
 import { api } from "../api/client";
+import { logger } from "../utils/logger";
 
 export default function Search() {
   const [step, setStep] = useState(1);
@@ -67,7 +68,7 @@ export default function Search() {
           setCities(cities);
         }
       } catch (error) {
-        console.error("Error fetching cities:", error);
+        logger.error("Error fetching cities:", error);
         setCities(["Минск", "Гомель", "Брест", "Гродно", "Витебск", "Могилев"]);
       }
     };
@@ -122,7 +123,7 @@ export default function Search() {
       setStep(2);
     } catch (error) {
       if (error.name === "CanceledError") return;
-      console.error("Search error:", error);
+      logger.error("Search error:", error);
       setError("Ошибка при поиске. Попробуйте еще раз.");
     } finally {
       setLoading(false);
@@ -168,7 +169,7 @@ export default function Search() {
       setStep(3);
     } catch (error) {
       if (error.name === "CanceledError") return;
-      console.error("Form selection error:", error);
+      logger.error("Form selection error:", error);
       setError("Ошибка при загрузке результатов.");
     } finally {
       setLoading(false);
@@ -205,7 +206,7 @@ export default function Search() {
       }));
     } catch (error) {
       if (error.name === "CanceledError") return;
-      console.error("Pagination error:", error);
+      logger.error("Pagination error:", error);
       setError("Ошибка при загрузке страницы.");
     } finally {
       setLoading(false);
