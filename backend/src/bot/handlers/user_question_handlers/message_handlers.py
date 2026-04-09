@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from db.qa_models import User, Question, Pharmacist
 from bot.handlers.qa_states import UserQAStates
-from bot.handlers.common_handlers import get_user_keyboard
+from bot.handlers.common_handlers import get_user_inline_keyboard
 from bot.services.notification_service import notify_pharmacists_about_new_question
 from bot.services.dialog_service import DialogService
 from utils.time_utils import get_utc_now_naive
@@ -74,7 +74,7 @@ async def process_user_question(
             "✅ <b>Вопрос отправлен</b>\n\n"
             "Фармацевт ответит как только освободится.",
             parse_mode="HTML",
-            reply_markup=get_user_keyboard(),
+            reply_markup=get_user_inline_keyboard(),
         )
         await state.clear()
 

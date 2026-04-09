@@ -12,8 +12,8 @@ from sqlalchemy import select, func
 from db.qa_models import User, Question, Pharmacist
 from bot.handlers.qa_states import UserQAStates
 from bot.handlers.common_handlers.keyboards import (
-    get_pharmacist_keyboard,
-    get_user_keyboard,
+    get_pharmacist_inline_keyboard,
+    get_user_inline_keyboard,
 )
 from utils.time_utils import get_utc_now_naive
 
@@ -33,14 +33,14 @@ async def back_to_main_callback(
         await callback.message.answer(
             "👨‍⚕️ <b>Панель фармацевта</b>\n\n" "Выберите действие:",
             parse_mode="HTML",
-            reply_markup=get_pharmacist_keyboard(),
+            reply_markup=get_pharmacist_inline_keyboard(),
         )
     else:
         await callback.message.answer(
             "👋 <b>Главное меню</b>\n\n"
             " Напишите ваш вопрос фармацевтическомуу специалисту в чат  или Выберите действие:",
             parse_mode="HTML",
-            reply_markup=get_user_keyboard(),
+            reply_markup=get_user_inline_keyboard(),
         )
 
     await callback.answer()
@@ -70,7 +70,7 @@ async def back_to_pharmacist_main_callback(
         f"📊 Статус: {status_text}\n\n"
         "Выберите действие:",
         parse_mode="HTML",
-        reply_markup=get_pharmacist_keyboard(),
+        reply_markup=get_pharmacist_inline_keyboard(),
     )
     await callback.answer()
 
@@ -190,7 +190,7 @@ async def go_online_callback(
         "🟢 <b>Вы теперь онлайн!</b>\n\n"
         "Вы будете получать уведомления о новых вопросах.",
         parse_mode="HTML",
-        reply_markup=get_pharmacist_keyboard(),
+        reply_markup=get_pharmacist_inline_keyboard(),
     )
     await callback.answer()
 
@@ -215,7 +215,7 @@ async def go_offline_callback(
         "🔴 <b>Вы теперь офлайн.</b>\n\n"
         "Вы не будете получать уведомления о новых вопросах.",
         parse_mode="HTML",
-        reply_markup=get_pharmacist_keyboard(),
+        reply_markup=get_pharmacist_inline_keyboard(),
     )
     await callback.answer()
 
@@ -319,7 +319,7 @@ async def user_help_callback(callback: CallbackQuery):
         "Нажмите кнопку «Завершить диалог» в сообщении с ответом,\n"
         "чтобы завершить консультацию по текущему вопросу.",
         parse_mode="HTML",
-        reply_markup=get_user_keyboard(),
+        reply_markup=get_user_inline_keyboard(),
     )
 
 

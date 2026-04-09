@@ -3,7 +3,13 @@
 import logging
 
 from aiogram import F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
+from aiogram.types import (
+    Message,
+    CallbackQuery,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    ReplyKeyboardRemove,
+)
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 
@@ -12,7 +18,11 @@ from sqlalchemy import select
 
 from db.qa_models import User, Question, Pharmacist
 from bot.handlers.qa_states import UserQAStates
-from bot.handlers.common_handlers.keyboards import get_pharmacist_keyboard, get_user_keyboard, get_reply_keyboard_with_webapp
+from bot.handlers.common_handlers.keyboards import (
+    get_pharmacist_inline_keyboard,
+    get_user_inline_keyboard,
+    get_webapp_only_keyboard,
+)
 from utils.time_utils import get_utc_now_naive
 
 logger = logging.getLogger(__name__)
@@ -129,7 +139,7 @@ async def cmd_start(
             f"📊 Статус: {status_text}\n\n"
             "Выберите действие:",
             parse_mode="HTML",
-            reply_markup=get_pharmacist_keyboard(),
+            reply_markup=get_pharmacist_inline_keyboard(),
         )
     else:
         full_message_text = (
@@ -143,7 +153,7 @@ async def cmd_start(
         await message.answer(
             full_message_text,
             parse_mode="HTML",
-            reply_markup=get_user_keyboard(),
+            reply_markup=get_user_inline_keyboard(),
         )
 
 
@@ -156,7 +166,7 @@ async def show_search_webapp_command(message: Message, is_pharmacist: bool):
 
     await message.answer(
         "🔍 Нажмите кнопку ниже для поиска лекарств:",
-        reply_markup=get_reply_keyboard_with_webapp(),
+        reply_markup=get_webapp_only_keyboard(),
     )
 
 
@@ -243,7 +253,7 @@ async def cmd_help(message: Message, is_pharmacist: bool):
             "2. Как придет уведомление — нажмите «💬 Ответить»\n"
             "3. Напишите ответ пользователю",
             parse_mode="HTML",
-            reply_markup=get_pharmacist_keyboard(),
+            reply_markup=get_pharmacist_inline_keyboard(),
         )
     else:
         await message.answer(
@@ -254,7 +264,7 @@ async def cmd_help(message: Message, is_pharmacist: bool):
             "Фармацевт ответит, как только освободится.",
             "👨‍⚕️ <b>Если вы фармацевт</b> - нажмите «Я фарм специалист» в меню",
             parse_mode="HTML",
-            reply_markup=get_user_keyboard(),
+            reply_markup=get_user_inline_keyboard(),
         )
 
 

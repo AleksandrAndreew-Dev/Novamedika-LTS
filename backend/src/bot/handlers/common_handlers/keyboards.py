@@ -4,13 +4,77 @@ import os
 
 from aiogram.types import (
     ReplyKeyboardMarkup,
+    InlineKeyboardMarkup,
     KeyboardButton,
+    InlineKeyboardButton,
     WebAppInfo,
 )
 
 
-def get_reply_keyboard_with_webapp():
-    """Клавиатура с WebApp для поиска лекарств"""
+def get_pharmacist_inline_keyboard():
+    """Inline-клавиатура фармацевта"""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🟢 Онлайн", callback_data="go_online"),
+                InlineKeyboardButton(text="⚫ Офлайн", callback_data="go_offline"),
+            ],
+            [
+                InlineKeyboardButton(text="📋 Вопросы", callback_data="view_questions"),
+                InlineKeyboardButton(
+                    text="📊 Статистика", callback_data="questions_stats"
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📜 История", callback_data="my_questions_from_completed"
+                ),
+                InlineKeyboardButton(text="❓ Помощь", callback_data="pharmacist_help"),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔍 Поиск лекарств",
+                    web_app=WebAppInfo(
+                        url=os.getenv("VITE_API_URL", "https://spravka.novamedika.com")
+                    ),
+                )
+            ],
+        ],
+    )
+
+
+def get_user_inline_keyboard():
+    """Inline-клавиатура пользователя"""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="❓ Задать вопрос", callback_data="ask_question"
+                ),
+                InlineKeyboardButton(
+                    text="📋 Мои вопросы", callback_data="my_questions"
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📜 История", callback_data="my_questions_from_completed"
+                ),
+                InlineKeyboardButton(text="❓ Помощь", callback_data="user_help"),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔍 Поиск лекарств",
+                    web_app=WebAppInfo(
+                        url=os.getenv("VITE_API_URL", "https://spravka.novamedika.com")
+                    ),
+                )
+            ],
+        ],
+    )
+
+
+def get_webapp_only_keyboard():
+    """Reply-клавиатура только с WebApp (inline не поддерживает WebAppInfo)"""
     return ReplyKeyboardMarkup(
         keyboard=[
             [
@@ -21,45 +85,7 @@ def get_reply_keyboard_with_webapp():
                     ),
                 )
             ],
-            [
-                KeyboardButton(text="❓ Задать вопрос"),
-                KeyboardButton(text="📋 Мои вопросы"),
-            ],
-            [KeyboardButton(text="❓ Помощь")],
         ],
         resize_keyboard=True,
-        input_field_placeholder="Выберите действие или напишите вопрос...",
-    )
-
-
-def get_pharmacist_keyboard():
-    """Клавиатура для фармацевта"""
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="🟢 Онлайн"), KeyboardButton(text="⚫ Офлайн")],
-            [
-                KeyboardButton(text="📋 Вопросы"),
-                KeyboardButton(text="📊 Статистика"),
-            ],
-            [KeyboardButton(text="📜 История"), KeyboardButton(text="❓ Помощь")],
-            [KeyboardButton(text="🔍 Поиск лекарств")],
-        ],
-        resize_keyboard=True,
-        input_field_placeholder="Выберите действие...",
-    )
-
-
-def get_user_keyboard():
-    """Клавиатура для пользователя"""
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [
-                KeyboardButton(text="❓ Задать вопрос"),
-                KeyboardButton(text="📋 Мои вопросы"),
-            ],
-            [KeyboardButton(text="❓ Помощь")],
-            [KeyboardButton(text="🔍 Поиск лекарств")],
-        ],
-        resize_keyboard=True,
-        input_field_placeholder="Выберите действие или напишите вопрос...",
+        input_field_placeholder="Откройте поиск лекарств...",
     )

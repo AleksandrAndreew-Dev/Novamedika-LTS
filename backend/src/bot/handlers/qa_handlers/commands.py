@@ -3,7 +3,12 @@
 import logging
 
 from aiogram import F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import (
+    Message,
+    CallbackQuery,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+)
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 
@@ -12,14 +17,14 @@ from sqlalchemy import select, func
 
 from utils.time_utils import get_utc_now_naive
 from db.qa_models import User, Pharmacist, Question, Answer
-from bot.handlers.common_handlers import get_pharmacist_keyboard
+from bot.handlers.common_handlers import get_pharmacist_inline_keyboard
 from bot.keyboards.qa_keyboard import make_question_keyboard
 from bot.services.dialog_service import DialogService
 from bot.services.notification_service import get_online_pharmacists
 
 logger = logging.getLogger(__name__)
 
-router = __import__('aiogram').Router()
+router = __import__("aiogram").Router()
 
 
 @router.message(Command("online"))
@@ -57,7 +62,7 @@ async def set_online(
                 f"Ожидающих вопросов: {pending_count}\n"
                 "Как придет уведомление — нажмите «💬 Ответить»",
                 parse_mode="HTML",
-                reply_markup=get_pharmacist_keyboard(),
+                reply_markup=get_pharmacist_inline_keyboard(),
             )
 
             result = await db.execute(
@@ -82,7 +87,7 @@ async def set_online(
             await message.answer(
                 "🟢 <b>Вы теперь онлайн!</b>\n\n"
                 "Как только пользователь задаст вопрос — вы получите уведомление.",
-                reply_markup=get_pharmacist_keyboard(),
+                reply_markup=get_pharmacist_inline_keyboard(),
             )
 
     except Exception as e:
@@ -122,7 +127,7 @@ async def set_offline(
         await message.answer(
             "✅ Вы теперь офлайн.",
             parse_mode="HTML",
-            reply_markup=get_pharmacist_keyboard(),
+            reply_markup=get_pharmacist_inline_keyboard(),
         )
 
     except Exception as e:
@@ -260,7 +265,9 @@ async def cmd_questions(
                     if patronymic:
                         name_parts.append(patronymic)
 
-                    pharmacist_name = " ".join(name_parts) if name_parts else "Фармацевт"
+                    pharmacist_name = (
+                        " ".join(name_parts) if name_parts else "Фармацевт"
+                    )
                     chain = taken_pharmacist.pharmacy_info.get("chain", "")
                     number = taken_pharmacist.pharmacy_info.get("number", "")
 
