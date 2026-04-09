@@ -145,7 +145,6 @@ export default function SearchResults({
     <div className={`${isTelegram ? "p-2" : "p-4"} max-w-6xl mx-auto`}>
       <BookingModal
         bookingState={bookingState}
-        telegramUser={telegramUser}
         onFormChange={(field, value) =>
           dispatch({ type: "UPDATE_FORM", field, value })
         }

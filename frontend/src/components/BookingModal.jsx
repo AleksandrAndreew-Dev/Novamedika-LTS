@@ -2,7 +2,6 @@ import React from "react";
 
 export default function BookingModal({
   bookingState,
-  telegramUser,
   onFormChange,
   onQuantityChange,
   onClose,
@@ -31,11 +30,23 @@ export default function BookingModal({
           {bookingState.success ? (
             <div className="text-center">
               <div className="w-16 h-16 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
-                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                <svg
+                  className="w-8 h-8 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
                 </svg>
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Бронирование успешно!</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">
+                Бронирование успешно!
+              </h3>
               <p className="text-gray-600 mb-2">
                 Номер заказа:{" "}
                 <strong className="text-gray-900">
@@ -55,20 +66,34 @@ export default function BookingModal({
           ) : (
             <>
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-900">Бронирование</h2>
+                <h2 className="text-2xl font-bold text-gray-900">
+                  Бронирование
+                </h2>
                 <button
                   onClick={onClose}
                   disabled={bookingState.loading}
                   className="text-gray-400 hover:text-gray-600 disabled:opacity-50 transition-colors p-1 rounded-lg hover:bg-gray-100"
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  <svg
+                    className="w-6 h-6"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
                   </svg>
                 </button>
               </div>
 
               <div className="mb-6 p-4 bg-gradient-to-r from-gray-50 to-blue-50 rounded-xl border border-gray-200">
-                <h3 className="font-bold text-gray-900 text-lg mb-2">{product.name}</h3>
+                <h3 className="font-bold text-gray-900 text-lg mb-2">
+                  {product.name}
+                </h3>
                 <p className="text-sm text-gray-600 mb-1">{product.form}</p>
 
                 <div className="mt-4 pt-3 border-t border-gray-200">
@@ -76,10 +101,15 @@ export default function BookingModal({
                   <p className="text-sm text-gray-600 mb-1">
                     {product.pharmacy_name} №{product.pharmacy_number}
                   </p>
-                  <p className="text-sm text-gray-600 mb-1">Адрес: {product.pharmacy_address}</p>
-                  <p className="text-sm text-gray-600 mb-1">Телефон: {product.pharmacy_phone}</p>
+                  <p className="text-sm text-gray-600 mb-1">
+                    Адрес: {product.pharmacy_address}
+                  </p>
+                  <p className="text-sm text-gray-600 mb-1">
+                    Телефон: {product.pharmacy_phone}
+                  </p>
                   <p className="text-sm text-gray-600">
-                    Время работы: {product.working_hours || "Уточняйте в аптеке"}
+                    Время работы:{" "}
+                    {product.working_hours || "Уточняйте в аптеке"}
                   </p>
                 </div>
 
@@ -87,32 +117,44 @@ export default function BookingModal({
                   <p className="text-sm font-semibold text-gray-700">
                     Доступно: {formatQuantity(product.quantity)} уп.
                   </p>
-                  <p className="text-lg font-bold text-blue-600">{product.price} Br</p>
+                  <p className="text-lg font-bold text-blue-600">
+                    {product.price} Br
+                  </p>
                 </div>
               </div>
 
               {bookingState.error && (
                 <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl">
                   <div className="flex items-center">
-                    <svg className="w-5 h-5 text-red-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <svg
+                      className="w-5 h-5 text-red-500 mr-2"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
                       <path
                         fillRule="evenodd"
                         d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
                         clipRule="evenodd"
                       />
                     </svg>
-                    <span className="text-red-800 text-sm font-medium">{bookingState.error}</span>
+                    <span className="text-red-800 text-sm font-medium">
+                      {bookingState.error}
+                    </span>
                   </div>
                 </div>
               )}
 
               <form onSubmit={onSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Ваше имя *</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Ваше имя *
+                  </label>
                   <input
                     type="text"
                     value={bookingState.form.customer_name}
-                    onChange={(e) => onFormChange("customer_name", e.target.value)}
+                    onChange={(e) =>
+                      onFormChange("customer_name", e.target.value)
+                    }
                     required
                     disabled={bookingState.loading}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 transition-all duration-200"
@@ -121,11 +163,15 @@ export default function BookingModal({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Телефон *</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Телефон *
+                  </label>
                   <input
                     type="tel"
                     value={bookingState.form.customer_phone}
-                    onChange={(e) => onFormChange("customer_phone", e.target.value)}
+                    onChange={(e) =>
+                      onFormChange("customer_phone", e.target.value)
+                    }
                     required
                     disabled={bookingState.loading}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 transition-all duration-200"
@@ -134,7 +180,9 @@ export default function BookingModal({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Количество упаковок *</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Количество упаковок *
+                  </label>
                   <input
                     type="number"
                     min="1"
@@ -146,7 +194,9 @@ export default function BookingModal({
                   />
                   <p className="text-xs text-gray-500 mt-2">
                     Итоговая сумма:{" "}
-                    <strong className="text-blue-600">{calculateTotalPrice()} Br</strong>
+                    <strong className="text-blue-600">
+                      {calculateTotalPrice()} Br
+                    </strong>
                   </p>
                 </div>
 
