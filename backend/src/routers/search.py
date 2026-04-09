@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func, or_, text, case, and_
+from sqlalchemy import select, func, or_, text, case, and_, literal
 from sqlalchemy.orm import selectinload, joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
@@ -168,17 +168,16 @@ async def search_full_text(
     ]
 
     # ОПТИМИЗАЦИЯ: вместо 3 отдельных COUNT-запросов — один запрос с CASE
+    fts_conditions_list = [c for c in fts_conditions if c]
+    fts_clause = or_(*fts_conditions_list) if fts_conditions_list else literal(False)
+
     level_counts_query = (
         select(
             func.count(case((or_(*exact_conditions), 1), else_=None)).label(
                 "exact_count"
             ),
-            func.count(
-                case((or_(*[c for c in fts_conditions if c]), 1), else_=None)
-            ).label("fts_count"),
-            func.count(
-                case((fuzzy_condition if fuzzy_condition else False, 1), else_=None)
-            ).label("fuzzy_count"),
+            func.count(case((fts_clause, 1), else_=None)).label("fts_count"),
+            func.count(case((fuzzy_condition, 1), else_=None)).label("fuzzy_count"),
         )
         .select_from(Product)
         .join(Pharmacy)
