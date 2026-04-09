@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
@@ -8,15 +7,24 @@ import logging
 
 from db.database import get_db
 from db.qa_models import User, Pharmacist
-from db.qa_schemas import PharmacistCreate, PharmacistResponse, UserResponse, PharmacyInfoSimple
+from services.user_service import get_or_create_user
+from db.qa_schemas import (
+    PharmacistCreate,
+    PharmacistResponse,
+    UserResponse,
+    PharmacyInfoSimple,
+)
 from auth.auth import create_access_token, get_current_pharmacist
 from utils.time_utils import get_utc_now_naive
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+
 # Новая функция для получения фармацевта по Telegram ID
-async def get_pharmacist_by_telegram_id(telegram_id: int, db: AsyncSession) -> Pharmacist:
+async def get_pharmacist_by_telegram_id(
+    telegram_id: int, db: AsyncSession
+) -> Pharmacist:
     """Найти фармацевта по Telegram ID"""
     result = await db.execute(
         select(Pharmacist)
@@ -27,46 +35,29 @@ async def get_pharmacist_by_telegram_id(telegram_id: int, db: AsyncSession) -> P
     )
     return result.scalars().first()
 
-# pharmacist_auth.py - ДОБАВИТЬ эту функцию
-async def get_or_create_user(telegram_data: dict, db: AsyncSession) -> User:
-    """Найти или создать пользователя"""
-    from sqlalchemy import select
-    import uuid
 
-    result = await db.execute(
-        select(User).where(User.telegram_id == telegram_data["telegram_user_id"])
-    )
-    user = result.scalar_one_or_none()
-
-    if not user:
-        user = User(
-            uuid=uuid.uuid4(),
+@router.post("/register-from-telegram/", response_model=PharmacistResponse)
+async def register_pharmacist(telegram_data: dict, db: AsyncSession = Depends(get_db)):
+    """Регистрация фармацевта с проверкой дубликатов"""
+    try:
+        user = await get_or_create_user(
+            db,
             telegram_id=telegram_data["telegram_user_id"],
             first_name=telegram_data.get("first_name"),
             last_name=telegram_data.get("last_name"),
             telegram_username=telegram_data.get("telegram_username"),
-            user_type="pharmacist"
+            user_type="pharmacist",
         )
-        db.add(user)
-        await db.flush()
-
-    return user
-
-@router.post("/register-from-telegram/", response_model=PharmacistResponse)
-async def register_pharmacist(
-    telegram_data: dict,
-    db: AsyncSession = Depends(get_db)
-):
-    """Регистрация фармацевта с проверкой дубликатов"""
-    try:
-        user = await get_or_create_user(telegram_data, db)
         pharmacy_info = telegram_data.get("pharmacy_info", {})
 
         # ПРОВЕРКА ДУБЛИКАТОВ - ИСПРАВЛЕННАЯ ВЕРСИЯ
         result = await db.execute(
             select(Pharmacist)
             .where(Pharmacist.user_id == user.uuid)
-            .where(Pharmacist.pharmacy_info["name"].as_string() == pharmacy_info.get("name"))
+            .where(
+                Pharmacist.pharmacy_info["name"].as_string()
+                == pharmacy_info.get("name")
+            )
         )
         existing_pharmacist = result.scalar_one_or_none()
 
@@ -84,7 +75,7 @@ async def register_pharmacist(
                 pharmacy_info=pharmacy_info,
                 is_active=True,
                 is_online=True,
-                last_seen=get_utc_now_naive()
+                last_seen=get_utc_now_naive(),
             )
             db.add(pharmacist)
 
@@ -95,18 +86,16 @@ async def register_pharmacist(
             uuid=pharmacist.uuid,
             user=UserResponse.model_validate(user),
             pharmacy_info=PharmacyInfoSimple(**pharmacy_info),
-            is_active=pharmacist.is_active
+            is_active=pharmacist.is_active,
         )
 
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.post("/login/")
-async def pharmacist_login(
-    telegram_user_id: int,
-    db: AsyncSession = Depends(get_db)
-):
+async def pharmacist_login(telegram_user_id: int, db: AsyncSession = Depends(get_db)):
     """Логин фармацевта по Telegram ID (поддерживает несколько аптек)"""
     try:
         result = await db.execute(
@@ -131,7 +120,9 @@ async def pharmacist_login(
 
         # Если нужно, можно вернуть список всех аптек для выбора
         if len(pharmacists) > 1:
-            logger.info(f"User {telegram_user_id} has {len(pharmacists)} active pharmacist profiles")
+            logger.info(
+                f"User {telegram_user_id} has {len(pharmacists)} active pharmacist profiles"
+            )
 
         # Создаем JWT токен
         access_token = create_access_token(data={"sub": str(pharmacist.uuid)})
@@ -143,32 +134,34 @@ async def pharmacist_login(
                 uuid=pharmacist.uuid,
                 user=UserResponse.model_validate(pharmacist.user),
                 pharmacy_info=pharmacist.pharmacy_info,
-                is_active=pharmacist.is_active
+                is_active=pharmacist.is_active,
             ),
-            "total_pharmacies": len(pharmacists)  # Информация о количестве аптек
+            "total_pharmacies": len(pharmacists),  # Информация о количестве аптек
         }
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.get("/me", response_model=PharmacistResponse)
 async def get_current_pharmacist_info(
-    pharmacist: Pharmacist = Depends(get_current_pharmacist)
+    pharmacist: Pharmacist = Depends(get_current_pharmacist),
 ):
     """Получение информации о текущем фармацевте"""
     return PharmacistResponse(
         uuid=pharmacist.uuid,
         user=UserResponse.model_validate(pharmacist.user),
         pharmacy_info=pharmacist.pharmacy_info,  # ✅ Используем JSON данные
-        is_active=pharmacist.is_active
+        is_active=pharmacist.is_active,
     )
+
 
 # Новые эндпоинты для управления онлайн статусом
 @router.post("/online")
 async def set_online(
     pharmacist: Pharmacist = Depends(get_current_pharmacist),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Перевести фармацевта в онлайн"""
     pharmacist.is_online = True
@@ -177,10 +170,11 @@ async def set_online(
 
     return {"status": "success", "message": "Вы теперь онлайн"}
 
+
 @router.post("/offline")
 async def set_offline(
     pharmacist: Pharmacist = Depends(get_current_pharmacist),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Перевести фармацевта в офлайн"""
     pharmacist.is_online = False
@@ -189,25 +183,23 @@ async def set_offline(
 
     return {"status": "success", "message": "Вы теперь офлайн"}
 
+
 @router.get("/status")
-async def get_status(
-    pharmacist: Pharmacist = Depends(get_current_pharmacist)
-):
+async def get_status(pharmacist: Pharmacist = Depends(get_current_pharmacist)):
     """Получить текущий статус фармацевта"""
     return {
         "is_online": pharmacist.is_online,
         "last_seen": pharmacist.last_seen,
         "is_active": pharmacist.is_active,
-        "pharmacy_info": pharmacist.pharmacy_info
+        "pharmacy_info": pharmacist.pharmacy_info,
     }
-
 
 
 # В конце pharmacist_auth.py добавить:
 __all__ = [
-    'router',
-    'get_pharmacist_by_telegram_id',
-    'get_or_create_user',
-    'register_pharmacist',
-    'pharmacist_login'
+    "router",
+    "get_pharmacist_by_telegram_id",
+    "get_or_create_user",
+    "register_pharmacist",
+    "pharmacist_login",
 ]

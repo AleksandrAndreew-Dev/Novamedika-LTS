@@ -8,41 +8,8 @@ import logging
 
 
 from db.qa_models import Pharmacist, User
-import uuid
-
-logger = logging.getLogger(__name__)
-
-
-async def get_or_create_user(telegram_id: int, db: AsyncSession) -> User:
-    try:
-        result = await db.execute(select(User).where(User.telegram_id == telegram_id))
-        user = result.scalar_one_or_none()
-        if user:
-            return user
-
-        new_user = User(
-            uuid=uuid.uuid4(),
-            telegram_id=telegram_id,
-            first_name=None,
-            last_name=None,
-            telegram_username=None,
-            user_type="customer",
-        )
-        db.add(new_user)
-        try:
-            await db.commit()
-            await db.refresh(new_user)
-            logger.info(f"Created new user with telegram_id: {telegram_id}")
-            return new_user
-        except Exception as e:
-            await db.rollback()
-            # Если не удалось создать пользователя, возвращаем None
-            logger.exception(f"Failed to create user for {telegram_id}: {e}")
-            return None
-
-    except Exception as e:
-        logger.exception(f"Error in get_or_create_user for {telegram_id}: {e}")
-        return None  # Возвращаем None вместо исключения
+from services.user_service import get_or_create_user
+import logging
 
 
 async def get_pharmacist_by_telegram_id(
@@ -107,7 +74,7 @@ class RoleMiddleware(BaseMiddleware):
         user_id = from_user.id
 
         try:
-            user = await get_or_create_user(user_id, db)
+            user = await get_or_create_user(db, telegram_id=user_id)
             pharmacist = await get_pharmacist_by_telegram_id(user_id, db)
         except Exception as e:
             logger.error(f"Error in role middleware user processing for {user_id}: {e}")

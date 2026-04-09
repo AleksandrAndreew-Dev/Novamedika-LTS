@@ -1,5 +1,10 @@
 from aiogram import Router, F
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.types import (
+    Message,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardRemove,
+)
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -10,10 +15,12 @@ import os
 import uuid
 
 from db.qa_models import Pharmacist, User
+from services.user_service import get_or_create_user
 from utils.time_utils import get_utc_now_naive
 
 logger = logging.getLogger(__name__)
 router = Router()
+
 
 class RegistrationStates(StatesGroup):
     waiting_secret_word = State()
@@ -25,31 +32,17 @@ class RegistrationStates(StatesGroup):
     waiting_patronymic = State()
 
 
-async def get_or_create_user(telegram_data: dict, db: AsyncSession) -> User:
-    """Найти или создать пользователя"""
-    result = await db.execute(
-        select(User).where(User.telegram_id == telegram_data["telegram_user_id"])
-    )
-    user = result.scalar_one_or_none()
-
-    if not user:
-        user = User(
-            uuid=uuid.uuid4(),
+async def register_pharmacist_from_telegram(telegram_data: dict, db: AsyncSession):
+    """Регистрация фармацевта с проверкой дубликатов"""
+    try:
+        user = await get_or_create_user(
+            db,
             telegram_id=telegram_data["telegram_user_id"],
             first_name=telegram_data.get("first_name"),
             last_name=telegram_data.get("last_name"),
             telegram_username=telegram_data.get("telegram_username"),
-            user_type="pharmacist"
+            user_type="pharmacist",
         )
-        db.add(user)
-        await db.flush()
-
-    return user
-
-async def register_pharmacist_from_telegram(telegram_data: dict, db: AsyncSession):
-    """Регистрация фармацевта с проверкой дубликатов"""
-    try:
-        user = await get_or_create_user(telegram_data, db)
         pharmacy_info = telegram_data.get("pharmacy_info", {})
 
         # Добавляем ФИО в информацию о фармацевте
@@ -78,7 +71,7 @@ async def register_pharmacist_from_telegram(telegram_data: dict, db: AsyncSessio
                 pharmacy_info=pharmacy_info,
                 is_active=True,
                 is_online=True,
-                last_seen=get_utc_now_naive()
+                last_seen=get_utc_now_naive(),
             )
             db.add(pharmacist)
 
@@ -91,41 +84,56 @@ async def register_pharmacist_from_telegram(telegram_data: dict, db: AsyncSessio
         logger.error(f"Registration error: {e}")
         raise
 
+
 @router.message(Command("register"))
-async def cmd_register(message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool):
+async def cmd_register(
+    message: Message, state: FSMContext, db: AsyncSession, is_pharmacist: bool
+):
     """Начать регистрацию фармацевта с проверки секретного слова"""
-    logger.info(f"Command /register from user {message.from_user.id}, is_pharmacist: {is_pharmacist}")
+    logger.info(
+        f"Command /register from user {message.from_user.id}, is_pharmacist: {is_pharmacist}"
+    )
 
     if is_pharmacist:
         await message.answer("❌ Вы уже зарегистрированы как фармацевт!")
         return
 
     cancel_keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]],
-        resize_keyboard=True
+        keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]], resize_keyboard=True
     )
 
     await message.answer(
         "🔐 Регистрация фармацевта\n\n"
         "Для начала регистрации введите секретное слово:",
-        reply_markup=cancel_keyboard
+        reply_markup=cancel_keyboard,
     )
     await state.set_state(RegistrationStates.waiting_secret_word)
 
-@router.message(RegistrationStates.waiting_secret_word, F.text == "❌ Отмена регистрации")
-@router.message(RegistrationStates.waiting_pharmacy_chain, F.text == "❌ Отмена регистрации")
-@router.message(RegistrationStates.waiting_pharmacy_number, F.text == "❌ Отмена регистрации")
-@router.message(RegistrationStates.waiting_pharmacy_role, F.text == "❌ Отмена регистрации")
-@router.message(RegistrationStates.waiting_first_name, F.text == "❌ Отмена регистрации")
+
+@router.message(
+    RegistrationStates.waiting_secret_word, F.text == "❌ Отмена регистрации"
+)
+@router.message(
+    RegistrationStates.waiting_pharmacy_chain, F.text == "❌ Отмена регистрации"
+)
+@router.message(
+    RegistrationStates.waiting_pharmacy_number, F.text == "❌ Отмена регистрации"
+)
+@router.message(
+    RegistrationStates.waiting_pharmacy_role, F.text == "❌ Отмена регистрации"
+)
+@router.message(
+    RegistrationStates.waiting_first_name, F.text == "❌ Отмена регистрации"
+)
 @router.message(RegistrationStates.waiting_last_name, F.text == "❌ Отмена регистрации")
-@router.message(RegistrationStates.waiting_patronymic, F.text == "❌ Отмена регистрации")
+@router.message(
+    RegistrationStates.waiting_patronymic, F.text == "❌ Отмена регистрации"
+)
 async def cancel_registration(message: Message, state: FSMContext):
     """Отмена регистрации"""
     await state.clear()
-    await message.answer(
-        "❌ Регистрация отменена.",
-        reply_markup=ReplyKeyboardRemove()
-    )
+    await message.answer("❌ Регистрация отменена.", reply_markup=ReplyKeyboardRemove())
+
 
 @router.message(RegistrationStates.waiting_secret_word)
 async def process_secret_word(message: Message, state: FSMContext):
@@ -141,17 +149,17 @@ async def process_secret_word(message: Message, state: FSMContext):
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="Новамедика"), KeyboardButton(text="Эклиния")],
-            [KeyboardButton(text="❌ Отмена регистрации")]
+            [KeyboardButton(text="❌ Отмена регистрации")],
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
     )
 
     await message.answer(
-        "✅ Секретное слово принято!\n\n"
-        "Теперь выберите сеть аптек:",
-        reply_markup=keyboard
+        "✅ Секретное слово принято!\n\n" "Теперь выберите сеть аптек:",
+        reply_markup=keyboard,
     )
     await state.set_state(RegistrationStates.waiting_pharmacy_chain)
+
 
 @router.message(RegistrationStates.waiting_pharmacy_chain)
 async def process_pharmacy_chain(message: Message, state: FSMContext):
@@ -164,15 +172,14 @@ async def process_pharmacy_chain(message: Message, state: FSMContext):
     await state.update_data(pharmacy_chain=chain)
 
     cancel_keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]],
-        resize_keyboard=True
+        keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]], resize_keyboard=True
     )
 
     await message.answer(
-        "🔢 Введите номер аптеки (только цифры):",
-        reply_markup=cancel_keyboard
+        "🔢 Введите номер аптеки (только цифры):", reply_markup=cancel_keyboard
     )
     await state.set_state(RegistrationStates.waiting_pharmacy_number)
+
 
 @router.message(RegistrationStates.waiting_pharmacy_number)
 async def process_pharmacy_number(message: Message, state: FSMContext):
@@ -188,14 +195,15 @@ async def process_pharmacy_number(message: Message, state: FSMContext):
         keyboard=[
             [KeyboardButton(text="Фармацевт")],
             [KeyboardButton(text="Провизор")],
-            [KeyboardButton(text="❌ Отмена регистрации")]
+            [KeyboardButton(text="❌ Отмена регистрации")],
         ],
         resize_keyboard=True,
-        one_time_keyboard=True
+        one_time_keyboard=True,
     )
 
     await message.answer("Выберите вашу роль:", reply_markup=keyboard)
     await state.set_state(RegistrationStates.waiting_pharmacy_role)
+
 
 @router.message(RegistrationStates.waiting_pharmacy_role)
 async def process_pharmacy_role(message: Message, state: FSMContext):
@@ -208,15 +216,14 @@ async def process_pharmacy_role(message: Message, state: FSMContext):
     await state.update_data(pharmacy_role=role)
 
     cancel_keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]],
-        resize_keyboard=True
+        keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]], resize_keyboard=True
     )
 
     await message.answer(
-        "👤 Введите ваше имя (обязательно):",
-        reply_markup=cancel_keyboard
+        "👤 Введите ваше имя (обязательно):", reply_markup=cancel_keyboard
     )
     await state.set_state(RegistrationStates.waiting_first_name)
+
 
 @router.message(RegistrationStates.waiting_first_name)
 async def process_first_name(message: Message, state: FSMContext):
@@ -229,15 +236,14 @@ async def process_first_name(message: Message, state: FSMContext):
     await state.update_data(first_name=first_name)
 
     cancel_keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]],
-        resize_keyboard=True
+        keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]], resize_keyboard=True
     )
 
     await message.answer(
-        "👤 Введите вашу фамилию (обязательно):",
-        reply_markup=cancel_keyboard
+        "👤 Введите вашу фамилию (обязательно):", reply_markup=cancel_keyboard
     )
     await state.set_state(RegistrationStates.waiting_last_name)
+
 
 @router.message(RegistrationStates.waiting_last_name)
 async def process_last_name(message: Message, state: FSMContext):
@@ -250,15 +256,15 @@ async def process_last_name(message: Message, state: FSMContext):
     await state.update_data(last_name=last_name)
 
     cancel_keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]],
-        resize_keyboard=True
+        keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]], resize_keyboard=True
     )
 
     await message.answer(
         "👤 Введите ваше отчество (или отправьте '-' чтобы пропустить):",
-        reply_markup=cancel_keyboard
+        reply_markup=cancel_keyboard,
     )
     await state.set_state(RegistrationStates.waiting_patronymic)
+
 
 @router.message(RegistrationStates.waiting_patronymic)
 async def process_patronymic(message: Message, state: FSMContext, db: AsyncSession):
@@ -273,21 +279,21 @@ async def process_patronymic(message: Message, state: FSMContext, db: AsyncSessi
         # Формируем данные для регистрации
         pharmacy_info = {
             "name": f"{data['pharmacy_chain']} №{data['pharmacy_number']}",
-            "number": data['pharmacy_number'],
-            "chain": data['pharmacy_chain'],
-            "role": data['pharmacy_role'],
-            "first_name": data['first_name'],
-            "last_name": data['last_name'],
-            "patronymic": patronymic
+            "number": data["pharmacy_number"],
+            "chain": data["pharmacy_chain"],
+            "role": data["pharmacy_role"],
+            "first_name": data["first_name"],
+            "last_name": data["last_name"],
+            "patronymic": patronymic,
         }
 
         telegram_data = {
             "telegram_user_id": message.from_user.id,
-            "first_name": data['first_name'],
-            "last_name": data['last_name'],
+            "first_name": data["first_name"],
+            "last_name": data["last_name"],
             "patronymic": patronymic,
             "telegram_username": message.from_user.username,
-            "pharmacy_info": pharmacy_info
+            "pharmacy_info": pharmacy_info,
         }
 
         # Вызываем функцию регистрации
@@ -316,10 +322,7 @@ async def process_patronymic(message: Message, state: FSMContext, db: AsyncSessi
             "• Управлять своим онлайн статусом (/online, /offline)"
         )
 
-        await message.answer(
-            welcome_message,
-            reply_markup=ReplyKeyboardRemove()
-        )
+        await message.answer(welcome_message, reply_markup=ReplyKeyboardRemove())
         await state.clear()
 
     except Exception as e:

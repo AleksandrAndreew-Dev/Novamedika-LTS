@@ -8,6 +8,7 @@ from db.database import get_db
 from db.qa_models import User, Question, Answer, Pharmacist
 from db.qa_schemas import QuestionCreate, QuestionResponse, AnswerBase, AnswerResponse
 from auth.auth import get_current_pharmacist
+from services.user_service import get_or_create_user
 import logging
 from sqlalchemy.orm import selectinload  # ДОБАВИТЬ
 
@@ -16,11 +17,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-
 async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncSession):
     """Отправка ответа пользователю в Telegram"""
     try:
         from bot.core import bot_manager
+
         bot, _ = await bot_manager.initialize()
 
         if not bot:
@@ -35,36 +36,14 @@ async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncS
                 "Спасибо, что пользуйтесь нашим сервисом! ❤️"
             )
 
-            await bot.send_message(
-                chat_id=question.user.telegram_id,
-                text=message_text
-            )
+            await bot.send_message(chat_id=question.user.telegram_id, text=message_text)
             logger.info(f"Answer sent to user {question.user.telegram_id}")
 
     except Exception as e:
         logger.error(f"Failed to send answer to user: {e}")
 
+
 # Вспомогательные функции
-async def get_or_create_user(telegram_data: dict, db: AsyncSession) -> User:
-    """Найти или создать пользователя"""
-    result = await db.execute(
-        select(User).where(User.telegram_id == telegram_data["telegram_user_id"])
-    )
-    user = result.scalar_one_or_none()
-
-    if not user:
-        user = User(
-            uuid=uuid.uuid4(),
-            telegram_id=telegram_data["telegram_user_id"],
-            first_name=telegram_data.get("first_name"),
-            last_name=telegram_data.get("last_name"),
-            telegram_username=telegram_data.get("telegram_username")
-        )
-        db.add(user)
-        await db.flush()
-
-    return user
-
 async def get_user_by_telegram_id(telegram_id: int, db: AsyncSession) -> User:
     """Найти пользователя по Telegram ID"""
     result = await db.execute(select(User).where(User.telegram_id == telegram_id))
@@ -73,22 +52,15 @@ async def get_user_by_telegram_id(telegram_id: int, db: AsyncSession) -> User:
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
+
 # Эндпоинты
 @router.post("/questions/", response_model=QuestionResponse)
-async def create_question(
-    question: QuestionCreate,
-    db: AsyncSession = Depends(get_db)
-):
+async def create_question(question: QuestionCreate, db: AsyncSession = Depends(get_db)):
     """Создать вопрос"""
     try:
         user = await get_or_create_user(
-            {
-                "telegram_user_id": question.telegram_user_id,
-                "first_name": None,
-                "last_name": None,
-                "telegram_username": None
-            },
-            db
+            db,
+            telegram_id=question.telegram_user_id,
         )
 
         new_question = Question(
@@ -96,7 +68,7 @@ async def create_question(
             user_id=user.uuid,
             text=question.text,
             category=question.category,
-            context_data=question.context_data
+            context_data=question.context_data,
         )
 
         db.add(new_question)
@@ -110,20 +82,22 @@ async def create_question(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при создании вопроса: {str(e)}"
+            detail=f"Ошибка при создании вопроса: {str(e)}",
         )
+
 
 @router.get("/questions/", response_model=List[QuestionResponse])
 async def get_questions(
-    status: Optional[str] = None,
-    db: AsyncSession = Depends(get_db)
+    status: Optional[str] = None, db: AsyncSession = Depends(get_db)
 ):
     """Получить все вопросы (с фильтром по статусу)"""
     try:
         query = select(Question).options(
             selectinload(Question.user),
             selectinload(Question.assigned_pharmacist).selectinload(Pharmacist.user),
-            selectinload(Question.answers).selectinload(Answer.pharmacist).selectinload(Pharmacist.user)
+            selectinload(Question.answers)
+            .selectinload(Answer.pharmacist)
+            .selectinload(Pharmacist.user),
         )
 
         if status:
@@ -138,22 +112,24 @@ async def get_questions(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при получении вопросов: {str(e)}"
+            detail=f"Ошибка при получении вопросов: {str(e)}",
         )
 
+
 @router.get("/questions/{question_id}", response_model=QuestionResponse)
-async def get_question(
-    question_id: str,
-    db: AsyncSession = Depends(get_db)
-):
+async def get_question(question_id: str, db: AsyncSession = Depends(get_db)):
     """Получить вопрос по ID"""
     try:
         result = await db.execute(
             select(Question)
             .options(
                 selectinload(Question.user),
-                selectinload(Question.assigned_pharmacist).selectinload(Pharmacist.user),
-                selectinload(Question.answers).selectinload(Answer.pharmacist).selectinload(Pharmacist.user)
+                selectinload(Question.assigned_pharmacist).selectinload(
+                    Pharmacist.user
+                ),
+                selectinload(Question.answers)
+                .selectinload(Answer.pharmacist)
+                .selectinload(Pharmacist.user),
             )
             .where(Question.uuid == uuid.UUID(question_id))
         )
@@ -167,8 +143,9 @@ async def get_question(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при получении вопроса: {str(e)}"
+            detail=f"Ошибка при получении вопроса: {str(e)}",
         )
+
 
 # routers/qa.py - проверьте сигнатуру функции answer_question
 @router.post("/questions/{question_id}/answer", response_model=AnswerResponse)
@@ -176,7 +153,7 @@ async def answer_question(
     question_id: str,
     answer: AnswerBase,
     pharmacist: Pharmacist = Depends(get_current_pharmacist),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Ответить на вопрос"""
     try:
@@ -194,11 +171,11 @@ async def answer_question(
             uuid=uuid.uuid4(),
             question_id=question.uuid,
             pharmacist_id=pharmacist.uuid,
-            text=answer.text
+            text=answer.text,
         )
 
         # Обновляем статус вопроса
-        question.status = 'answered'
+        question.status = "answered"
         question.answered_by = pharmacist.uuid
 
         db.add(new_answer)
@@ -211,14 +188,15 @@ async def answer_question(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при создании ответа: {str(e)}"
+            detail=f"Ошибка при создании ответа: {str(e)}",
         )
+
 
 @router.put("/questions/{question_id}/assign")
 async def assign_question(
     question_id: str,
     pharmacist: Pharmacist = Depends(get_current_pharmacist),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Назначить вопрос себе"""
     try:
@@ -239,14 +217,12 @@ async def assign_question(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при назначении вопроса: {str(e)}"
+            detail=f"Ошибка при назначении вопроса: {str(e)}",
         )
 
+
 @router.get("/users/{telegram_id}/questions", response_model=List[QuestionResponse])
-async def get_user_questions(
-    telegram_id: int,
-    db: AsyncSession = Depends(get_db)
-):
+async def get_user_questions(telegram_id: int, db: AsyncSession = Depends(get_db)):
     """Получить вопросы пользователя"""
     try:
         user = await get_user_by_telegram_id(telegram_id, db)
@@ -255,7 +231,9 @@ async def get_user_questions(
             select(Question)
             .options(
                 selectinload(Question.user),
-                selectinload(Question.answers).selectinload(Answer.pharmacist).selectinload(Pharmacist.user)
+                selectinload(Question.answers)
+                .selectinload(Answer.pharmacist)
+                .selectinload(Pharmacist.user),
             )
             .where(Question.user_id == user.uuid)
             .order_by(Question.created_at.desc())
@@ -267,15 +245,17 @@ async def get_user_questions(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при получении вопросов: {str(e)}"
+            detail=f"Ошибка при получении вопросов: {str(e)}",
         )
 
+
 # routers/qa.py - ДОПОЛНЕНИЯ
+
 
 @router.get("/pharmacist/questions", response_model=List[QuestionResponse])
 async def get_pharmacist_questions(
     pharmacist: Pharmacist = Depends(get_current_pharmacist),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Получить вопросы, назначенные текущему фармацевту"""
     try:
@@ -283,7 +263,9 @@ async def get_pharmacist_questions(
             select(Question)
             .options(
                 selectinload(Question.user),
-                selectinload(Question.answers).selectinload(Answer.pharmacist).selectinload(Pharmacist.user)
+                selectinload(Question.answers)
+                .selectinload(Answer.pharmacist)
+                .selectinload(Pharmacist.user),
             )
             .where(Question.assigned_to == pharmacist.uuid)
             .order_by(Question.created_at.desc())
@@ -292,7 +274,10 @@ async def get_pharmacist_questions(
         return [QuestionResponse.model_validate(q) for q in questions]
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ошибка при получении вопросов: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Ошибка при получении вопросов: {str(e)}"
+        )
+
 
 @router.get("/questions/stats/")
 async def get_questions_stats(db: AsyncSession = Depends(get_db)):
@@ -303,21 +288,27 @@ async def get_questions_stats(db: AsyncSession = Depends(get_db)):
         total = total_result.scalars().all()
 
         # Вопросы по статусам
-        pending_result = await db.execute(select(Question).where(Question.status == "pending"))
+        pending_result = await db.execute(
+            select(Question).where(Question.status == "pending")
+        )
         pending = pending_result.scalars().all()
 
-        answered_result = await db.execute(select(Question).where(Question.status == "answered"))
+        answered_result = await db.execute(
+            select(Question).where(Question.status == "answered")
+        )
         answered = answered_result.scalars().all()
 
         return {
             "total": len(total),
             "pending": len(pending),
             "answered": len(answered),
-            "answer_rate": len(answered) / len(total) if total else 0
+            "answer_rate": len(answered) / len(total) if total else 0,
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ошибка при получении статистики: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Ошибка при получении статистики: {str(e)}"
+        )
 
 
-__all__ = ['router', 'answer_question_internal']
+__all__ = ["router", "answer_question_internal"]
