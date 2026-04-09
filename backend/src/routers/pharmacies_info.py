@@ -13,7 +13,7 @@ from sqlalchemy import select, and_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from db.database import async_session_maker, get_db
+from db.database import get_db
 from db.models import Pharmacy, Product
 from db.schemas import PharmacyUpdate
 
@@ -61,91 +61,90 @@ def determine_chain(pharmacy_name: str) -> str:
 
 
 @router.post("/load-pharmacies/")
-async def load_pharmacies():
+async def load_pharmacies(db: AsyncSession = Depends(get_db)):
     """Эндпоинт для загрузки данных аптек из CSV"""
     try:
         base_dir = Path(__file__).resolve().parent.parent
         csv_file_path = base_dir / "data" / "pharmacies_info.csv"
 
-        async with async_session_maker() as session:
-            with open(csv_file_path, "r", encoding="utf-8") as file:
-                reader = csv.DictReader(file)
-                pharmacies_loaded = 0
-                pharmacies_updated = 0
-                errors = []
+        with open(csv_file_path, "r", encoding="utf-8") as file:
+            reader = csv.DictReader(file)
+            pharmacies_loaded = 0
+            pharmacies_updated = 0
+            errors = []
 
-                for row_num, row in enumerate(reader, 1):
-                    try:
-                        full_name = row["name"]
-                        pharmacy_name, pharmacy_number, chain = parse_pharmacy_name(
-                            full_name
-                        )
+            for row_num, row in enumerate(reader, 1):
+                try:
+                    full_name = row["name"]
+                    pharmacy_name, pharmacy_number, chain = parse_pharmacy_name(
+                        full_name
+                    )
 
-                        if not pharmacy_number:
-                            pharmacy_number = row.get("pharmacy_number", "")
+                    if not pharmacy_number:
+                        pharmacy_number = row.get("pharmacy_number", "")
 
-                        # Ищем аптеку по имени и номеру (уникальная комбинация)
-                        existing_pharmacy = await session.execute(
-                            select(Pharmacy).where(
-                                and_(
-                                    Pharmacy.name == pharmacy_name,
-                                    Pharmacy.pharmacy_number == pharmacy_number,
-                                )
+                    # Ищем аптеку по имени и номеру (уникальная комбинация)
+                    existing_pharmacy = await db.execute(
+                        select(Pharmacy).where(
+                            and_(
+                                Pharmacy.name == pharmacy_name,
+                                Pharmacy.pharmacy_number == pharmacy_number,
                             )
                         )
-                        existing_pharmacy = existing_pharmacy.scalar_one_or_none()
+                    )
+                    existing_pharmacy = existing_pharmacy.scalar_one_or_none()
 
-                        if existing_pharmacy:
-                            # Обновляем только если данные изменились
-                            update_needed = False
-                            if existing_pharmacy.city != row["city"]:
-                                existing_pharmacy.city = row["city"]
-                                update_needed = True
-                            if existing_pharmacy.address != row["address"]:
-                                existing_pharmacy.address = row["address"]
-                                update_needed = True
-                            if existing_pharmacy.phone != row["phone"]:
-                                existing_pharmacy.phone = row["phone"]
-                                update_needed = True
-                            if existing_pharmacy.opening_hours != row["opening_hours"]:
-                                existing_pharmacy.opening_hours = row["opening_hours"]
-                                update_needed = True
-                            # Обновляем сеть, если она изменилась
-                            if existing_pharmacy.chain != chain:
-                                existing_pharmacy.chain = chain
-                                update_needed = True
+                    if existing_pharmacy:
+                        # Обновляем только если данные изменились
+                        update_needed = False
+                        if existing_pharmacy.city != row["city"]:
+                            existing_pharmacy.city = row["city"]
+                            update_needed = True
+                        if existing_pharmacy.address != row["address"]:
+                            existing_pharmacy.address = row["address"]
+                            update_needed = True
+                        if existing_pharmacy.phone != row["phone"]:
+                            existing_pharmacy.phone = row["phone"]
+                            update_needed = True
+                        if existing_pharmacy.opening_hours != row["opening_hours"]:
+                            existing_pharmacy.opening_hours = row["opening_hours"]
+                            update_needed = True
+                        # Обновляем сеть, если она изменилась
+                        if existing_pharmacy.chain != chain:
+                            existing_pharmacy.chain = chain
+                            update_needed = True
 
-                            if update_needed:
-                                pharmacies_updated += 1
-                        else:
-                            # Создаем новую аптеку
-                            pharmacy = Pharmacy(
-                                uuid=uuid.uuid4(),
-                                name=pharmacy_name,
-                                pharmacy_number=pharmacy_number,
-                                city=row["city"],
-                                address=row["address"],
-                                phone=row["phone"],
-                                opening_hours=row["opening_hours"],
-                                chain=chain,  # Используем определенную сеть
-                            )
-                            session.add(pharmacy)
-                            pharmacies_loaded += 1
+                        if update_needed:
+                            pharmacies_updated += 1
+                    else:
+                        # Создаем новую аптеку
+                        pharmacy = Pharmacy(
+                            uuid=uuid.uuid4(),
+                            name=pharmacy_name,
+                            pharmacy_number=pharmacy_number,
+                            city=row["city"],
+                            address=row["address"],
+                            phone=row["phone"],
+                            opening_hours=row["opening_hours"],
+                            chain=chain,  # Используем определенную сеть
+                        )
+                        db.add(pharmacy)
+                        pharmacies_loaded += 1
 
-                    except Exception as e:
-                        errors.append(f"Row {row_num}: {str(e)}")
-                        continue
+                except Exception as e:
+                    errors.append(f"Row {row_num}: {str(e)}")
+                    continue
 
-                await session.commit()
+            await db.commit()
 
-                return {
-                    "status": "success",
-                    "message": "Данные аптек успешно загружены",
-                    "loaded": pharmacies_loaded,
-                    "updated": pharmacies_updated,
-                    "errors": errors,
-                    "total": pharmacies_loaded + pharmacies_updated,
-                }
+            return {
+                "status": "success",
+                "message": "Данные аптек успешно загружены",
+                "loaded": pharmacies_loaded,
+                "updated": pharmacies_updated,
+                "errors": errors,
+                "total": pharmacies_loaded + pharmacies_updated,
+            }
 
     except Exception as e:
         raise HTTPException(
@@ -156,12 +155,11 @@ async def load_pharmacies():
 
 # Остальные endpoints остаются без изменений
 @router.get("/pharmacies/")
-async def get_pharmacies():
+async def get_pharmacies(db: AsyncSession = Depends(get_db)):
     """Получить список всех аптек"""
-    async with async_session_maker() as session:
-        result = await session.execute(select(Pharmacy))
-        pharmacies = result.scalars().all()
-        return pharmacies
+    result = await db.execute(select(Pharmacy))
+    pharmacies = result.scalars().all()
+    return pharmacies
 
 
 @router.get("/check-data/")
@@ -298,6 +296,7 @@ async def update_pharmacy_info(
     pharmacy_name: str,
     pharmacy_number: str,
     pharmacy_data: PharmacyUpdate,
+    db: AsyncSession = Depends(get_db),
     username: str = Depends(authenticate_pharmacy),
 ):
     """
@@ -313,41 +312,40 @@ async def update_pharmacy_info(
                 detail=f"Invalid pharmacy name: {pharmacy_name}",
             )
 
-        async with async_session_maker() as session:
-            # Ищем аптеку
-            result = await session.execute(
-                select(Pharmacy).where(
-                    and_(
-                        Pharmacy.name == normalized_name,
-                        Pharmacy.pharmacy_number == str(pharmacy_number),
-                    )
+        # Ищем аптеку
+        result = await db.execute(
+            select(Pharmacy).where(
+                and_(
+                    Pharmacy.name == normalized_name,
+                    Pharmacy.pharmacy_number == str(pharmacy_number),
                 )
             )
-            pharmacy = result.scalar_one_or_none()
+        )
+        pharmacy = result.scalar_one_or_none()
 
-            if not pharmacy:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Pharmacy not found: {normalized_name} number {pharmacy_number}",
-                )
+        if not pharmacy:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Pharmacy not found: {normalized_name} number {pharmacy_number}",
+            )
 
-            # Обновляем поля
-            update_data = pharmacy_data.dict(exclude_unset=True)
-            for field, value in update_data.items():
-                if hasattr(pharmacy, field):
-                    setattr(pharmacy, field, value)
+        # Обновляем поля
+        update_data = pharmacy_data.dict(exclude_unset=True)
+        for field, value in update_data.items():
+            if hasattr(pharmacy, field):
+                setattr(pharmacy, field, value)
 
-            await session.commit()
-            await session.refresh(pharmacy)
+        await db.commit()
+        await db.refresh(pharmacy)
 
-            logger.info(f"Updated pharmacy info: {pharmacy.uuid}")
+        logger.info(f"Updated pharmacy info: {pharmacy.uuid}")
 
-            return {
-                "status": "success",
-                "message": "Pharmacy information updated successfully",
-                "pharmacy_id": str(pharmacy.uuid),
-                "updated_fields": list(update_data.keys()),
-            }
+        return {
+            "status": "success",
+            "message": "Pharmacy information updated successfully",
+            "pharmacy_id": str(pharmacy.uuid),
+            "updated_fields": list(update_data.keys()),
+        }
 
     except HTTPException:
         raise
@@ -363,6 +361,7 @@ async def update_pharmacy_info(
 async def get_pharmacy_info(
     pharmacy_name: str,
     pharmacy_number: str,
+    db: AsyncSession = Depends(get_db),
     username: str = Depends(authenticate_pharmacy),
 ):
     """
@@ -378,33 +377,32 @@ async def get_pharmacy_info(
                 detail=f"Invalid pharmacy name: {pharmacy_name}",
             )
 
-        async with async_session_maker() as session:
-            result = await session.execute(
-                select(Pharmacy).where(
-                    and_(
-                        Pharmacy.name == normalized_name,
-                        Pharmacy.pharmacy_number == str(pharmacy_number),
-                    )
+        result = await db.execute(
+            select(Pharmacy).where(
+                and_(
+                    Pharmacy.name == normalized_name,
+                    Pharmacy.pharmacy_number == str(pharmacy_number),
                 )
             )
-            pharmacy = result.scalar_one_or_none()
+        )
+        pharmacy = result.scalar_one_or_none()
 
-            if not pharmacy:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Pharmacy not found: {normalized_name} number {pharmacy_number}",
-                )
+        if not pharmacy:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Pharmacy not found: {normalized_name} number {pharmacy_number}",
+            )
 
-            return {
-                "uuid": pharmacy.uuid,
-                "name": pharmacy.name,
-                "pharmacy_number": pharmacy.pharmacy_number,
-                "city": pharmacy.city,
-                "address": pharmacy.address,
-                "phone": pharmacy.phone,
-                "opening_hours": pharmacy.opening_hours,
-                "chain": pharmacy.chain,
-            }
+        return {
+            "uuid": pharmacy.uuid,
+            "name": pharmacy.name,
+            "pharmacy_number": pharmacy.pharmacy_number,
+            "city": pharmacy.city,
+            "address": pharmacy.address,
+            "phone": pharmacy.phone,
+            "opening_hours": pharmacy.opening_hours,
+            "chain": pharmacy.chain,
+        }
 
     except HTTPException:
         raise
