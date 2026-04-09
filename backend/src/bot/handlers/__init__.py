@@ -1,6 +1,10 @@
 from .common_handlers import router as common_router
 from .registration import router as registration_router, RegistrationStates
-from .user_questions import router as user_questions_router
+from .user_question_handlers import (
+    router as user_questions_router,
+    get_all_user_questions,
+    format_questions_list,
+)
 from .qa_handlers import router as qa_handlers_router
 from bot.middleware.role_middleware import RoleMiddleware
 from .direct_questions import router as direct_questions_router
@@ -17,4 +21,6 @@ __all__ = [
     "clarify_router",
     "RegistrationStates",
     "dialog_management_router",
+    "get_all_user_questions",
+    "format_questions_list",
 ]
