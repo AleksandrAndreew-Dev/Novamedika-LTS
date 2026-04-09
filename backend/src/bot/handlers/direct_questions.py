@@ -1,8 +1,9 @@
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
+from aiogram.exceptions import SkipHandler
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select  # ДОБАВИТЬ
+from sqlalchemy import select
 import logging
 
 from db.qa_models import User, Question
@@ -55,16 +56,22 @@ async def handle_direct_text(
     is_pharmacist: bool,
     state: FSMContext,
 ):
-    """Обработка прямых текстовых сообщений как вопросов С ПРОВЕРКАМИ"""
+    """Обработка прямых текстовых сообщений как вопросов"""
 
     if is_pharmacist:
-        return
+        logger.debug("handle_direct_text: skipping pharmacist message")
+        raise SkipHandler()
 
     current_state = await state.get_state()
+    logger.debug(
+        "handle_direct_text: user=%s, state=%s, text='%s'",
+        user.uuid,
+        current_state,
+        message.text[:50] if message.text else "None",
+    )
 
     # ✅ ПРОВЕРКА: Если у пользователя есть активные консультации
     if current_state is None:
-        # Проверяем есть ли активные вопросы (in_progress или answered)
         result = await db.execute(
             select(Question)
             .where(
@@ -78,19 +85,13 @@ async def handle_direct_text(
         active_question = result.scalar_one_or_none()
 
         if active_question:
-            # ✅ ПРОВЕРКА: Не завершен ли диалог
             if active_question.status == "completed":
-                # Очищаем состояние и создаем новый вопрос
                 await state.clear()
-                # Пропускаем автоматическое продолжение
             else:
-                # Автоматически продолжаем диалог
                 await state.update_data(
                     active_dialog_question_id=str(active_question.uuid)
                 )
                 await state.set_state(UserQAStates.in_dialog)
-
-                # Пересылаем сообщение как продолжение диалога
                 await process_dialog_message(message, state, db, user, is_pharmacist)
                 return
 
@@ -104,35 +105,42 @@ async def handle_direct_text(
                 select(Question).where(Question.uuid == question_uuid)
             )
             question = result.scalar_one_or_none()
-
-            # Если диалог завершен, очищаем состояние
             if question and question.status == "completed":
                 await state.clear()
-                # Продолжаем обработку как новый вопрос
                 current_state = None
 
+    # Если пользователь в состоянии, которое обрабатывается другим хендлером — пропускаем
     if current_state is not None:
-        # Для этих состояний пропускаем обработку (уже есть другие обработчики)
         if current_state in [
             UserQAStates.waiting_for_prescription_photo,
             UserQAStates.waiting_for_clarification,
             UserQAStates.in_dialog,
             UserQAStates.waiting_for_question,
         ]:
-            return
+            logger.debug(
+                "handle_direct_text: skipping, user in state %s", current_state
+            )
+            raise SkipHandler()
 
         # Для других состояний сбрасываем
         await state.clear()
 
     # Проверяем текст
     if not message.text or not message.text.strip():
-        return
+        logger.debug("handle_direct_text: empty text, skipping")
+        raise SkipHandler()
 
     if not should_create_question(message.text):
-        return
+        logger.debug(
+            "handle_direct_text: should_create_question=False for '%s'",
+            message.text[:50],
+        )
+        raise SkipHandler()
 
+    # Создаём вопрос
     try:
-        # Создаем вопрос
+        logger.info("Creating question from text: '%s'", message.text[:80])
+
         question = Question(
             text=message.text,
             user_id=user.uuid,
@@ -145,24 +153,22 @@ async def handle_direct_text(
         await db.refresh(question)
 
         logger.info(
-            f"Direct question created: ID={question.uuid}, text='{message.text[:50]}...'"
+            "Direct question created: ID=%s, text='%s...'",
+            question.uuid,
+            question.text[:50],
         )
 
-        # СОЗДАЕМ ПЕРВОЕ СООБЩЕНИЕ В ИСТОРИИ ДИАЛОГА
         dialog_message = await DialogService.create_question_message(question, db)
         await db.commit()
 
         logger.info(
-            f"Dialog message created: question_id={dialog_message.question_id}, type={dialog_message.message_type}"
+            "Dialog message created: question_id=%s, type=%s",
+            dialog_message.question_id,
+            dialog_message.message_type,
         )
 
-        history = await DialogService.get_dialog_history(question.uuid, db, limit=10)
-        logger.info(f"Dialog history after creation: {len(history)} messages")
-
-        # Уведомляем фармацевтов
         await notify_pharmacists_about_new_question(question, db)
 
-        # Подтверждение пользователю
         await message.answer(
             "✅ <b>Вопрос отправлен!</b>\n\n"
             "Фармацевты получили уведомление и скоро ответят.\n\n"
