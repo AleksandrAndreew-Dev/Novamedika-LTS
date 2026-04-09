@@ -1,6 +1,6 @@
 // src/api/client.js
-import axios from 'axios';
-import { NORMALIZED_API_BASE } from './config';
+import axios from "axios";
+import { NORMALIZED_API_BASE } from "./config";
 
 export const api = axios.create({
   baseURL: NORMALIZED_API_BASE,
@@ -11,71 +11,33 @@ export const api = axios.create({
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.error('API Error:', error);
+    console.error("API Error:", error);
 
     if (error.response) {
       // Сервер ответил с ошибкой
-      console.error('Response error:', error.response.status, error.response.data);
+      console.error(
+        "Response error:",
+        error.response.status,
+        error.response.data,
+      );
     } else if (error.request) {
       // Запрос был сделан, но ответ не получен
-      console.error('Request error:', error.request);
+      console.error("Request error:", error.request);
     } else {
       // Что-то пошло не так при настройке запроса
-      console.error('Error:', error.message);
+      console.error("Error:", error.message);
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 // Методы для работы с бронированиями
 export const bookingApi = {
-  // Создание заказа бронирования
   createOrder: async (orderData) => {
-    const response = await api.post('/orders', orderData);
+    const response = await api.post("/orders", orderData);
     return response.data;
   },
-
-  // Получение информации о заказе
-  getOrder: async (orderId) => {
-    const response = await api.get(`/orders/${orderId}`);
-    return response.data;
-  },
-
-  // Обновление статуса заказа
-  updateOrderStatus: async (orderId, status) => {
-    const response = await api.patch(`/orders/${orderId}`, { status });
-    return response.data;
-  },
-
-  // Отмена заказа
-  cancelOrder: async (orderId) => {
-    const response = await api.patch(`/orders/${orderId}`, { status: 'cancelled' });
-    return response.data;
-  },
-
-  // Получение списка заказов с фильтрацией
-  getOrders: async (params = {}) => {
-    const response = await api.get('/orders', { params });
-    return response.data;
-  },
-
-  // Получение заказов по телефону пользователя
-  getUserOrders: async (phone) => {
-    const response = await api.get('/orders', {
-      params: { customer_phone: phone }
-    });
-    return response.data;
-  },
-
-  // Получение заказов конкретной аптеки
-  getPharmacyOrders: async (pharmacyId, status = null) => {
-    const params = { pharmacy_id: pharmacyId };
-    if (status) params.status = status;
-
-    const response = await api.get('/orders', { params });
-    return response.data;
-  }
 };
 
 // Экспортируем по умолчанию основной API клиент
