@@ -41,7 +41,7 @@ export default function Search() {
 
         const cities = Array.isArray(data)
           ? data
-          : data?.results ?? data?.items ?? [];
+          : (data?.results ?? data?.items ?? []);
         if (!Array.isArray(cities)) {
           setCities([
             "Минск",
@@ -70,18 +70,14 @@ export default function Search() {
     } else {
       tg.BackButton.show();
       tg.BackButton.onClick(() => {
-        if (step === 2) {
-          setStep(1);
-        } else if (step === 3) {
-          setStep(2);
-        }
+        handleStepNavigation(step - 1);
       });
     }
 
     return () => {
       tg.BackButton.offClick();
     };
-  }, [step, isTelegram, tg]);
+  }, [step, isTelegram, tg, handleStepNavigation]);
 
   const handleInitialSearch = async (name, city) => {
     setLoading(true);
@@ -198,13 +194,7 @@ export default function Search() {
           <div className="text-center py-4 px-4 relative">
             {step > 1 && (
               <button
-                onClick={() => {
-                  if (step === 2) {
-                    setStep(1);
-                  } else if (step === 3) {
-                    setStep(2);
-                  }
-                }}
+                onClick={() => handleStepNavigation(step - 1)}
                 disabled={loading}
                 className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center text-sm"
               >
@@ -250,15 +240,15 @@ export default function Search() {
                         stepNum === step
                           ? "bg-telegram-primary text-white shadow-md"
                           : stepNum < step
-                          ? "bg-telegram-primary/20 text-telegram-primary cursor-pointer hover:bg-telegram-primary/30"
-                          : "bg-gray-100 text-gray-400"
+                            ? "bg-telegram-primary/20 text-telegram-primary cursor-pointer hover:bg-telegram-primary/30"
+                            : "bg-gray-100 text-gray-400"
                       }`}
                       aria-label={`Перейти к шагу ${stepNum}: ${
                         stepNum === 1
                           ? "Поиск"
                           : stepNum === 2
-                          ? "Выбор формы"
-                          : "Результаты"
+                            ? "Выбор формы"
+                            : "Результаты"
                       }`}
                     >
                       {stepNum}
