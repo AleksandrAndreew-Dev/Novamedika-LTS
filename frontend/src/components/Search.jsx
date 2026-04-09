@@ -1,7 +1,14 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  lazy,
+  Suspense,
+} from "react";
 import SearchBar from "./SearchBar";
-import FormSelection from "./FormSelection";
-import SearchResults from "./SearchResults";
+const FormSelection = lazy(() => import("./FormSelection"));
+const SearchResults = lazy(() => import("./SearchResults"));
 import { useTelegramWebApp } from "../telegram/TelegramContext";
 import { api } from "../api/client";
 
@@ -375,32 +382,52 @@ export default function Search() {
           )}
 
           {step === 2 && searchContext && (
-            <FormSelection
-              availableCombinations={searchContext.availableCombinations || []}
-              searchData={searchData}
-              onFormSelect={handleFormSelect}
-              onBack={() => setStep(1)}
-              loading={loading}
-              isTelegram={isTelegram}
-            />
+            <Suspense
+              fallback={
+                <div className="flex justify-center items-center py-12">
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-telegram-primary"></div>
+                  <span className="text-gray-600 ml-3">Загрузка...</span>
+                </div>
+              }
+            >
+              <FormSelection
+                availableCombinations={
+                  searchContext.availableCombinations || []
+                }
+                searchData={searchData}
+                onFormSelect={handleFormSelect}
+                onBack={() => setStep(1)}
+                loading={loading}
+                isTelegram={isTelegram}
+              />
+            </Suspense>
           )}
 
           {step === 3 && (
-            <SearchResults
-              results={results}
-              searchData={searchData}
-              pagination={pagination}
-              onPageChange={handlePageChange}
-              onNewSearch={() => {
-                setStep(1);
-                setSearchData({ name: "", city: "", form: "" });
-                setResults([]);
-                setSearchContext(null);
-              }}
-              onBackToForms={() => setStep(2)}
-              loading={loading}
-              isTelegram={isTelegram}
-            />
+            <Suspense
+              fallback={
+                <div className="flex justify-center items-center py-12">
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-telegram-primary"></div>
+                  <span className="text-gray-600 ml-3">Загрузка...</span>
+                </div>
+              }
+            >
+              <SearchResults
+                results={results}
+                searchData={searchData}
+                pagination={pagination}
+                onPageChange={handlePageChange}
+                onNewSearch={() => {
+                  setStep(1);
+                  setSearchData({ name: "", city: "", form: "" });
+                  setResults([]);
+                  setSearchContext(null);
+                }}
+                onBackToForms={() => setStep(2)}
+                loading={loading}
+                isTelegram={isTelegram}
+              />
+            </Suspense>
           )}
         </div>
       </div>

@@ -7,22 +7,22 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     port: 5173,
-    
   },
   preview: {
     host: "0.0.0.0",
     port: 80,
   },
   build: {
-    outDir: 'dist',
+    outDir: "dist",
     sourcemap: false,
-    // Добавляем настройки для корректной сборки
     rollupOptions: {
       output: {
-        manualChunks: undefined,
-      }
-    }
+        manualChunks: {
+          "react-vendor": ["react", "react-dom"],
+        },
+      },
+    },
   },
   // Убедимся что base правильный
-  base: '/',
+  base: "/",
 });
