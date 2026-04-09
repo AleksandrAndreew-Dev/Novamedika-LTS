@@ -8,6 +8,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from db.database import get_db
 from db.models import Pharmacy, Product
@@ -85,7 +86,7 @@ async def get_orders(
 ):
     """Получение списка заказов с фильтрацией"""
     try:
-        query = select(BookingOrder)
+        query = select(BookingOrder).options(selectinload(BookingOrder.pharmacy))
         if pharmacy_id:
             query = query.where(BookingOrder.pharmacy_id == pharmacy_id)
         if status:
@@ -93,14 +94,11 @@ async def get_orders(
         query = query.order_by(BookingOrder.created_at.desc())
 
         result = await db.execute(query)
-        orders = result.scalars().all()
+        orders = result.scalars().unique().all()
 
         response_orders = []
         for order in orders:
-            pharmacy_result = await db.execute(
-                select(Pharmacy).where(Pharmacy.uuid == order.pharmacy_id)
-            )
-            pharmacy = pharmacy_result.scalar_one_or_none()
+            pharmacy = order.pharmacy
 
             order_dict = {
                 "uuid": str(order.uuid),
@@ -196,9 +194,7 @@ async def update_order_status(
         await db.commit()
 
         if old_status != status:
-            await send_order_status_notification(
-                order, old_status, status, db, comment
-            )
+            await send_order_status_notification(order, old_status, status, db, comment)
 
         logger.info(
             f"Order {order_id} status manually updated from {old_status} to {status}. Comment: {comment}"
