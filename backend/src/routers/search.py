@@ -238,6 +238,93 @@ async def search_full_text(
             "search_level": "none",
         }
 
+    # Если form/manufacturer/country указаны (шаг 3 — конкретная комбинация),
+    # ищем напрямую по фильтрам, без level-based поиска
+    is_specific_combination = bool(form and manufacturer and country)
+
+    if is_specific_combination:
+        # Прямой поиск по фильтрам комбинации
+        items_query = (
+            select(Product).options(joinedload(Product.pharmacy)).join(Pharmacy)
+        )
+
+        if city and city != "Все города":
+            items_query = items_query.where(Pharmacy.city == city)
+        if form and form != "Все формы":
+            items_query = items_query.where(Product.form == form)
+        if manufacturer and manufacturer != "Все производители":
+            items_query = items_query.where(
+                Product.manufacturer.ilike(f"%{manufacturer}%")
+            )
+        if country and country != "Все страны":
+            items_query = items_query.where(Product.country.ilike(f"%{country}%"))
+        if min_price is not None:
+            items_query = items_query.where(Product.price >= min_price)
+        if max_price is not None:
+            items_query = items_query.where(Product.price <= max_price)
+
+        # Фильтр по поисковому запросу — мягкий, чтобы не отсеять результаты
+        items_query = items_query.where(
+            or_(
+                Product.name.ilike(f"%{search_query}%"),
+                Product.name.ilike(f"%{search_query}"),
+                Product.name.ilike(f"{search_query}%"),
+            )
+        )
+
+        items_query = items_query.order_by(
+            Product.price.asc(),
+            Product.quantity.desc(),
+        )
+
+        count_query = select(func.count()).select_from(items_query.subquery())
+        total_result = await db.execute(count_query)
+        total = total_result.scalar() or 0
+
+        total_pages = ceil(total / size) if total > 0 else 1
+        current_page = min(page, total_pages)
+
+        items_result = await db.execute(
+            items_query.offset((current_page - 1) * size).limit(size)
+        )
+        products = items_result.unique().scalars().all()
+
+        items = []
+        for p in products:
+            items.append(
+                {
+                    "uuid": str(p.uuid),
+                    "name": p.name,
+                    "form": p.form,
+                    "manufacturer": p.manufacturer,
+                    "country": p.country,
+                    "price": float(p.price) if p.price else 0.0,
+                    "quantity": float(p.quantity) if p.quantity else 0.0,
+                    "pharmacy_name": p.pharmacy.name if p.pharmacy else "Unknown",
+                    "pharmacy_city": p.pharmacy.city if p.pharmacy else "Unknown",
+                    "pharmacy_address": p.pharmacy.address if p.pharmacy else "Unknown",
+                    "pharmacy_phone": p.pharmacy.phone if p.pharmacy else "Unknown",
+                    "pharmacy_number": (
+                        p.pharmacy.pharmacy_number if p.pharmacy else "N/A"
+                    ),
+                    "pharmacy_id": p.pharmacy.uuid if p.pharmacy else None,
+                    "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+                    "working_hours": getattr(p.pharmacy, "working_hours", None)
+                    or getattr(p.pharmacy, "opening_hours", "9:00-21:00"),
+                }
+            )
+
+        return {
+            "items": items,
+            "total": total,
+            "page": current_page,
+            "size": size,
+            "total_pages": total_pages,
+            "available_combinations": [],
+            "total_found": 0,
+            "search_level": "specific_combination",
+        }
+
     # Продолжение с выбранным условием...
     if form and form != "Все формы":
         available_combinations = []
