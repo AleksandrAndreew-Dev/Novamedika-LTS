@@ -263,13 +263,14 @@ async def search_full_text(
         if max_price is not None:
             items_query = items_query.where(Product.price <= max_price)
 
-        # Мягкий фильтр по имени: каждое значимое слово (>= 2 символов)
-        # должно встречаться в названии продукта. Исключаем стоп-слова.
+        # Мягкий фильтр по имени: только ПЕРВОЕ значимое слово.
+        # Остальные фильтры (manufacturer, country, form) уже точные.
+        # Например: 'ТОНОМЕТР BM-26 УП.' → 'тонометр', а 'bm-26' может
+        # отличаться от реального продукта ('BM-23', 'BM-27' и т.д.)
         stopwords = {"уп", "упак", "н", "и", "в", "на", "по", "для", "от"}
         words = [w for w in search_query.split() if len(w) >= 2 and w not in stopwords]
         if words:
-            name_conditions = [Product.name.ilike(f"%{w}%") for w in words]
-            items_query = items_query.where(and_(*name_conditions))
+            items_query = items_query.where(Product.name.ilike(f"%{words[0]}%"))
 
         items_query = items_query.order_by(
             Product.price.asc(),
