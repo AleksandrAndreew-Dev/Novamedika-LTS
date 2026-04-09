@@ -263,10 +263,10 @@ async def search_full_text(
         if max_price is not None:
             items_query = items_query.where(Product.price <= max_price)
 
-        # Мягкий фильтр по имени: только ПЕРВОЕ значимое слово.
-        # Остальные фильтры (manufacturer, country, form) уже точные.
-        # Например: 'ТОНОМЕТР BM-26 УП.' → 'тонометр', а 'bm-26' может
-        # отличаться от реального продукта ('BM-23', 'BM-27' и т.д.)
+        # Фильтруем только товары в наличии
+        items_query = items_query.where(Product.quantity > 0)
+
+        # Фильтр по имени: только ПЕРВОЕ значимое слово
         stopwords = {"уп", "упак", "н", "и", "в", "на", "по", "для", "от"}
         words = [w for w in search_query.split() if len(w) >= 2 and w not in stopwords]
         if words:
@@ -367,11 +367,14 @@ async def search_full_text(
         if max_price is not None:
             combinations_query = combinations_query.where(Product.price <= max_price)
 
-        combinations_query = combinations_query.group_by(
-            Product.name, Product.form, Product.manufacturer, Product.country
-        ).order_by(
-            text(
-                """
+        combinations_query = (
+            combinations_query.group_by(
+                Product.name, Product.form, Product.manufacturer, Product.country
+            )
+            .having(func.sum(Product.quantity) > 0)
+            .order_by(
+                text(
+                    """
                 exact_score DESC,
                 starts_score DESC,
                 word_score DESC,
@@ -380,8 +383,9 @@ async def search_full_text(
                 levenshtein_score DESC,
                 count DESC
             """
-            ),
-            Product.name.asc(),
+                ),
+                Product.name.asc(),
+            )
         )
 
         combinations_result = await db.execute(combinations_query)
@@ -413,6 +417,8 @@ async def search_full_text(
     # Применяем фильтры для товаров
     if city and city != "Все города":
         items_query = items_query.where(Pharmacy.city.ilike(city))
+    # Показываем только товары в наличии
+    items_query = items_query.where(Product.quantity > 0)
     if form and form != "Все формы":
         items_query = items_query.where(Product.form == form)
     if manufacturer and manufacturer != "Все производители":
