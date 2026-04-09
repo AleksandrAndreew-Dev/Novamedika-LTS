@@ -311,4 +311,4 @@ async def get_questions_stats(db: AsyncSession = Depends(get_db)):
         )
 
 
-__all__ = ["router", "answer_question_internal"]
+__all__ = ["router"]
