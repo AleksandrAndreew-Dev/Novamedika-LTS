@@ -62,11 +62,13 @@ async def lifespan(app: FastAPI):
     dp.update.outer_middleware(RoleMiddleware())
 
     # Порядок роутеров важен: специфичные handlers ДО общих
+    # registration_router ДО common_router, чтобы FSM-состояния регистрации
+    # не перехватывались unknown_command из common_router/commands.py
+    dp.include_router(registration_router)
     dp.include_router(user_questions_router)
     dp.include_router(clarify_router)
     dp.include_router(common_router)
     dp.include_router(dialog_management_router)
-    dp.include_router(registration_router)
     dp.include_router(qa_handlers_router)
 
     # УСТАНОВКА КОМАНД БОТА

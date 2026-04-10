@@ -12,6 +12,7 @@ from db.qa_models import User, Question, Pharmacist
 from utils.time_utils import get_utc_now_naive
 from bot.services.notification_service import notify_pharmacists_about_new_question
 from bot.handlers.qa_states import UserQAStates
+from bot.handlers.registration import RegistrationStates
 from bot.services.dialog_service import DialogService
 from bot.keyboards.qa_keyboard import (
     make_pharmacist_dialog_keyboard,
@@ -265,6 +266,18 @@ async def try_create_question(
 
     # ===== ПРОВЕРКА 3: Другие состояния =====
     if current_state is not None:
+        # Пропускаем состояния регистрации — они обрабатываются своим роутером
+        registration_states = {
+            RegistrationStates.waiting_secret_word.state,
+            RegistrationStates.waiting_pharmacy_chain.state,
+            RegistrationStates.waiting_pharmacy_number.state,
+            RegistrationStates.waiting_pharmacy_role.state,
+            RegistrationStates.waiting_first_name.state,
+            RegistrationStates.waiting_last_name.state,
+            RegistrationStates.waiting_patronymic.state,
+        }
+        if current_state in registration_states:
+            return False
         if current_state in [
             UserQAStates.waiting_for_prescription_photo,
             UserQAStates.waiting_for_clarification,
