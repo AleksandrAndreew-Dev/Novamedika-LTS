@@ -11,7 +11,7 @@ from .clarify_handlers import router as clarify_router
 from .dialog_management import router as dialog_management_router
 
 # direct_questions — теперь только утилиты, без роутера
-from .direct_questions import try_create_question
+from .direct_questions import try_create_question, send_user_message_to_pharmacist
 
 __all__ = [
     "common_router",
@@ -25,4 +25,5 @@ __all__ = [
     "get_all_user_questions",
     "format_questions_list",
     "try_create_question",
+    "send_user_message_to_pharmacist",
 ]

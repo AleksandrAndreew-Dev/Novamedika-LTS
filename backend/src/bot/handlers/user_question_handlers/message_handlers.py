@@ -15,6 +15,7 @@ from bot.handlers.qa_states import UserQAStates
 from bot.handlers.common_handlers import get_user_inline_keyboard
 from bot.services.notification_service import notify_pharmacists_about_new_question
 from bot.services.dialog_service import DialogService
+from bot.handlers.direct_questions import send_user_message_to_pharmacist
 from utils.time_utils import get_utc_now_naive
 
 logger = logging.getLogger(__name__)
@@ -139,75 +140,13 @@ async def process_dialog_message(
             await message.answer("❌ Фармацевт не назначен для этого диалога.")
             return
 
-        pharmacist_result = await db.execute(
-            select(Pharmacist)
-            .options(selectinload(Pharmacist.user))
-            .where(Pharmacist.uuid == question.taken_by)
-        )
-        pharmacist = pharmacist_result.scalar_one_or_none()
+        # Используем унифицированную функцию
+        success = await send_user_message_to_pharmacist(message, db, user, question)
 
-        if not pharmacist or not pharmacist.user:
-            await message.answer("❌ Фармацевт не найден.")
-            return
-
-        await DialogService.add_message(
-            db=db,
-            question_id=question.uuid,
-            sender_type="user",
-            sender_id=user.uuid,
-            message_type="message",
-            text=message.text,
-        )
-        await db.commit()
-
-        user_name = user.first_name or "Пользователь"
-        if user.last_name:
-            user_name = f"{user.first_name} {user.last_name}"
-
-        pharmacist_name = "Фармацевт"
-        if pharmacist.pharmacy_info:
-            first_name = pharmacist.pharmacy_info.get("first_name", "")
-            last_name = pharmacist.pharmacy_info.get("last_name", "")
-            patronymic = pharmacist.pharmacy_info.get("patronymic", "")
-
-            name_parts = []
-            if last_name:
-                name_parts.append(last_name)
-            if first_name:
-                name_parts.append(first_name)
-            if patronymic:
-                name_parts.append(patronymic)
-
-            pharmacist_name = " ".join(name_parts) if name_parts else "Фармацевт"
-
-        await DialogService.send_unified_dialog_history(
-            bot=message.bot,
-            chat_id=pharmacist.user.telegram_id,
-            question_uuid=question.uuid,
-            db=db,
-            title="СООБЩЕНИЕ ОТ ПОЛЬЗОВАТЕЛЯ",
-            pre_text=(
-                f"💬 <b>СООБЩЕНИЕ ОТ ПОЛЬЗОВАТЕЛЯ</b>\n\n"
-                f"👤 <b>Пользователь:</b> {user_name}\n"
-                f"❓ <b>По вопросу:</b>\n{question.text[:150]}...\n\n"
-                f"💭 <b>Сообщение:</b>\n{message.text}\n\n"
-            ),
-            post_text=None,
-            is_pharmacist=True,
-            show_buttons=True,
-        )
-
-        await DialogService.send_unified_dialog_history(
-            bot=message.bot,
-            chat_id=message.chat.id,
-            question_uuid=question.uuid,
-            db=db,
-            title="ВАШЕ СООБЩЕНИЕ ОТПРАВЛЕНО",
-            pre_text=f"✅ Сообщение отправлено фармацевту {pharmacist_name}.\n\n",
-            post_text=None,
-            is_pharmacist=False,
-            show_buttons=True,
-        )
+        if not success:
+            logger.warning(
+                f"Failed to send message to pharmacist for question {question_uuid}"
+            )
 
     except Exception as e:
         logger.error(f"Error in process_dialog_message: {e}", exc_info=True)

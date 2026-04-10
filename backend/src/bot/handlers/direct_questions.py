@@ -21,6 +21,110 @@ from bot.keyboards.qa_keyboard import (
 logger = logging.getLogger(__name__)
 
 
+async def send_user_message_to_pharmacist(
+    message: Message,
+    db: AsyncSession,
+    user: User,
+    question: Question,
+) -> bool:
+    """Унифицированная функция: отправить сообщение пользователя фармацевту.
+
+    Возвращает True при успехе, False при ошибке.
+    """
+    try:
+        # Обновляем статус вопроса, если нужно
+        if question.status in ["pending", "answered"]:
+            question.status = "in_progress"
+            await db.commit()
+            logger.info("Updated question %s status to in_progress", question.uuid)
+
+        # Сохраняем сообщение в историю
+        await DialogService.add_message(
+            db=db,
+            question_id=question.uuid,
+            sender_type="user",
+            sender_id=user.uuid,
+            message_type="message",
+            text=message.text,
+        )
+        await db.commit()
+
+        # Находим фармацевта
+        pharmacist_result = await db.execute(
+            select(Pharmacist)
+            .options(selectinload(Pharmacist.user))
+            .where(Pharmacist.uuid == question.taken_by)
+        )
+        pharmacist = pharmacist_result.scalar_one_or_none()
+
+        if not pharmacist or not pharmacist.user:
+            logger.warning("No pharmacist for question %s", question.uuid)
+            await message.answer("❌ Фармацевт не найден для этого диалога.")
+            return False
+
+        user_name = user.first_name or "Пользователь"
+        if user.last_name:
+            user_name = f"{user.first_name} {user.last_name}"
+
+        pharmacist_name = "Фармацевт"
+        if pharmacist.pharmacy_info:
+            first = pharmacist.pharmacy_info.get("first_name", "")
+            last = pharmacist.pharmacy_info.get("last_name", "")
+            patr = pharmacist.pharmacy_info.get("patronymic", "")
+            parts = [p for p in [last, first, patr] if p]
+            pharmacist_name = " ".join(parts) if parts else "Фармацевт"
+
+        # Отправляем фармацевту
+        await DialogService.send_unified_dialog_history(
+            bot=message.bot,
+            chat_id=pharmacist.user.telegram_id,
+            question_uuid=question.uuid,
+            db=db,
+            title="СООБЩЕНИЕ ОТ ПОЛЬЗОВАТЕЛЯ",
+            pre_text=(
+                f"💬 <b>СООБЩЕНИЕ ОТ ПОЛЬЗОВАТЕЛЯ</b>\n\n"
+                f"👤 <b>Пользователь:</b> {user_name}\n"
+                f"❓ <b>По вопросу:</b>\n{question.text[:150]}...\n\n"
+                f"💭 <b>Сообщение:</b>\n{message.text}\n\n"
+            ),
+            post_text=None,
+            is_pharmacist=True,
+            show_buttons=True,
+            custom_buttons=make_pharmacist_dialog_keyboard(
+                question.uuid
+            ).inline_keyboard,
+        )
+
+        # Подтверждение пользователю
+        photo_requested = (
+            question.context_data.get("photo_requested", False)
+            if question.context_data
+            else False
+        )
+
+        await DialogService.send_unified_dialog_history(
+            bot=message.bot,
+            chat_id=message.chat.id,
+            question_uuid=question.uuid,
+            db=db,
+            title="ВАШЕ СООБЩЕНИЕ ОТПРАВЛЕНО",
+            pre_text=f"✅ Сообщение отправлено фармацевту {pharmacist_name}.\n\n",
+            post_text=None,
+            is_pharmacist=False,
+            show_buttons=True,
+            custom_buttons=make_user_dialog_keyboard_with_end(
+                question.uuid, photo_requested=photo_requested
+            ).inline_keyboard,
+        )
+
+        return True
+
+    except Exception as e:
+        logger.error("Error in send_user_message_to_pharmacist: %s", e, exc_info=True)
+        await message.answer("❌ Ошибка при отправке сообщения. Попробуйте ещё раз.")
+        return False
+
+
 def should_create_question(text: str) -> bool:
     """Определяет, стоит ли создавать вопрос из текста"""
     text_lower = text.lower().strip()
@@ -54,89 +158,7 @@ async def _process_active_dialog_message(
     active_question: Question,
 ):
     """Отправить сообщение пользователя фармацевту в рамках активного диалога."""
-    try:
-        # Сохраняем сообщение в историю
-        await DialogService.add_message(
-            db=db,
-            question_id=active_question.uuid,
-            sender_type="user",
-            sender_id=user.uuid,
-            message_type="message",
-            text=message.text,
-        )
-        await db.commit()
-
-        # Находим фармацевта
-        pharmacist_result = await db.execute(
-            select(Pharmacist)
-            .options(selectinload(Pharmacist.user))
-            .where(Pharmacist.uuid == active_question.taken_by)
-        )
-        pharmacist = pharmacist_result.scalar_one_or_none()
-
-        if not pharmacist or not pharmacist.user:
-            logger.warning("No pharmacist for question %s", active_question.uuid)
-            await message.answer("❌ Фармацевт не найден для этого диалога.")
-            return
-
-        user_name = user.first_name or "Пользователь"
-        if user.last_name:
-            user_name = f"{user.first_name} {user.last_name}"
-
-        pharmacist_name = "Фармацевт"
-        if pharmacist.pharmacy_info:
-            first = pharmacist.pharmacy_info.get("first_name", "")
-            last = pharmacist.pharmacy_info.get("last_name", "")
-            patr = pharmacist.pharmacy_info.get("patronymic", "")
-            parts = [p for p in [last, first, patr] if p]
-            pharmacist_name = " ".join(parts) if parts else "Фармацевт"
-
-        # Отправляем фармацевту
-        await DialogService.send_unified_dialog_history(
-            bot=message.bot,
-            chat_id=pharmacist.user.telegram_id,
-            question_uuid=active_question.uuid,
-            db=db,
-            title="СООБЩЕНИЕ ОТ ПОЛЬЗОВАТЕЛЯ",
-            pre_text=(
-                f"💬 <b>СООБЩЕНИЕ ОТ ПОЛЬЗОВАТЕЛЯ</b>\n\n"
-                f"👤 <b>Пользователь:</b> {user_name}\n"
-                f"❓ <b>По вопросу:</b>\n{active_question.text[:150]}...\n\n"
-                f"💭 <b>Сообщение:</b>\n{message.text}\n\n"
-            ),
-            post_text=None,
-            is_pharmacist=True,
-            show_buttons=True,
-            custom_buttons=make_pharmacist_dialog_keyboard(
-                active_question.uuid
-            ).inline_keyboard,
-        )
-
-        # Подтверждение пользователю — полноценное, с inline-кнопками
-        photo_requested = (
-            active_question.context_data.get("photo_requested", False)
-            if active_question.context_data
-            else False
-        )
-
-        await DialogService.send_unified_dialog_history(
-            bot=message.bot,
-            chat_id=message.chat.id,
-            question_uuid=active_question.uuid,
-            db=db,
-            title="ВАШЕ СООБЩЕНИЕ ОТПРАВЛЕНО",
-            pre_text=f"✅ Сообщение отправлено фармацевту {pharmacist_name}.\n\n",
-            post_text=None,
-            is_pharmacist=False,
-            show_buttons=True,
-            custom_buttons=make_user_dialog_keyboard_with_end(
-                active_question.uuid, photo_requested=photo_requested
-            ).inline_keyboard,
-        )
-
-    except Exception as e:
-        logger.error("Error in _process_active_dialog_message: %s", e, exc_info=True)
-        await message.answer("❌ Ошибка при отправке сообщения. Попробуйте ещё раз.")
+    await send_user_message_to_pharmacist(message, db, user, active_question)
 
 
 async def try_create_question(

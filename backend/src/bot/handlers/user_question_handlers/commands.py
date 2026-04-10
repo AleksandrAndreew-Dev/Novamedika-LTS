@@ -16,6 +16,7 @@ from db.qa_models import User, Question, Pharmacist
 from bot.handlers.qa_states import UserQAStates
 from bot.handlers.common_handlers import get_user_inline_keyboard
 from bot.keyboards.pagination_keyboard import make_questions_pagination_keyboard
+from bot.handlers.dialog_management import complete_dialog_service
 from src.utils.get_utils import get_all_pharmacist_questions
 from src.utils.pharm_format_questions import format_pharmacist_questions_list
 
@@ -148,18 +149,65 @@ async def cmd_my_questions(
 
 
 @router.message(Command("done"))
-async def cmd_done(message: Message, state: FSMContext, is_pharmacist: bool):
-    """Завершение диалога"""
+async def cmd_done(
+    message: Message,
+    state: FSMContext,
+    is_pharmacist: bool,
+    user: User,
+    db: AsyncSession,
+):
+    """Завершение диалога через /done - теперь с обновлением БД"""
     logger.info(
         f"Command /done from user {message.from_user.id}, is_pharmacist: {is_pharmacist}"
     )
 
     current_state = await state.get_state()
 
-    if current_state == UserQAStates.in_dialog:
+    if current_state != UserQAStates.in_dialog:
+        await message.answer("ℹ️ В данный момент у вас нет активного диалога.")
+        return
+
+    # Получаем UUID вопроса из состояния
+    state_data = await state.get_data()
+    question_uuid = state_data.get("active_dialog_question_id")
+
+    if not question_uuid:
+        await message.answer("❌ Не найден активный диалог.")
+        await state.clear()
+        return
+
+    # Проверяем, что вопрос существует и принадлежит пользователю
+    result = await db.execute(select(Question).where(Question.uuid == question_uuid))
+    question = result.scalar_one_or_none()
+
+    if not question or question.user_id != user.uuid:
+        await message.answer("❌ Диалог не найден или недоступен.")
+        await state.clear()
+        return
+
+    if question.status == "completed":
+        await message.answer("✅ Эта консультация уже завершена.")
+        await state.clear()
+        return
+
+    # Завершаем диалог через сервис
+    success = await complete_dialog_service(
+        question_uuid=question_uuid,
+        db=db,
+        initiator_type="user",
+        initiator=user,
+        message=message,
+    )
+
+    if success:
         await state.clear()
         await message.answer(
-            "✅ Диалог завершен.\n\n" "Если у вас есть еще вопросы, используйте /ask"
+            "✅ <b>Диалог завершен</b>\n\n"
+            "Фармацевт уведомлен.\n\n"
+            "Если у вас есть еще вопросы, используйте /ask",
+            parse_mode="HTML",
         )
     else:
-        await message.answer("ℹ️ В данный момент у вас нет активного диалога.")
+        await message.answer(
+            "❌ Произошла ошибка при завершении диалога. Попробуйте еще раз."
+        )
