@@ -379,13 +379,19 @@ async def process_prescription_document(
 async def finish_photo_upload(
     message_or_callback, state: FSMContext, db: AsyncSession, user: User
 ):
-    """Завершение загрузки фото рецепта — отправка альбомом фармацевту"""
+    """Завершение загрузки фото — отправка альбомом фармацевту"""
     try:
         state_data = await state.get_data()
         question_uuid = state_data.get("prescription_photo_question_id")
         pharmacist_id = state_data.get("prescription_photo_pharmacist_id")
         original_message_id = state_data.get("prescription_photo_message_id")
         photo_file_ids = state_data.get("photo_file_ids", [])
+
+        # Определяем chat_id
+        if hasattr(message_or_callback, "chat"):
+            chat_id = message_or_callback.chat.id
+        else:
+            chat_id = message_or_callback.message.chat.id
 
         if not question_uuid or not pharmacist_id:
             await _send_finish_response(
@@ -405,51 +411,75 @@ async def finish_photo_upload(
             user_name = f"{user.first_name} {user.last_name}"
 
         if pharmacist and pharmacist.user and photo_file_ids:
-            # Сначала показываем пользователю превью альбома
+            # Отправляем альбом фармацевту
             media_group = [InputMediaPhoto(media=file_id) for file_id in photo_file_ids]
 
-            preview_caption = (
-                f"📸 <b>Альбом: {len(photo_file_ids)} фото</b>\n\n"
-                f"Всё верно? Нажмите «✅ Отправить фармацевту»"
-            )
-            media_group[0].caption = preview_caption
-            media_group[0].parse_mode = "HTML"
-
-            await message_or_callback.bot.send_media_group(
-                chat_id=message_or_callback.chat.id,
-                media=media_group,
+            history_text, _ = await DialogService.format_dialog_history_for_display(
+                question_uuid, db
             )
 
-            confirm_keyboard = InlineKeyboardMarkup(
+            caption = (
+                f"📸 <b>Получено фото рецепта ({len(photo_file_ids)} шт.)</b>\n\n"
+                f"👤 <b>От пользователя:</b> {user_name}\n"
+                f"📅 <b>Время:</b> {get_utc_now_naive().strftime('%d.%m.%Y %H:%M')}\n\n"
+                f"{history_text}"
+            )
+
+            pharmacist_keyboard = InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
                         InlineKeyboardButton(
-                            text="✅ Отправить фармацевту",
-                            callback_data=f"confirm_send_photos_{question_uuid}",
-                        )
+                            text="💬 Ответить пользователю",
+                            callback_data=f"answer_{question_uuid}",
+                        ),
+                        InlineKeyboardButton(
+                            text="📸 Запросить еще фото",
+                            callback_data=f"request_more_photos_{question_uuid}",
+                        ),
                     ],
                     [
                         InlineKeyboardButton(
-                            text="❌ Отменить",
-                            callback_data=f"cancel_photo_upload_{question_uuid}",
+                            text="✅ Завершить консультацию",
+                            callback_data=f"end_dialog_{question_uuid}",
                         )
                     ],
                 ]
             )
 
-            await message_or_callback.bot.send_message(
-                chat_id=message_or_callback.chat.id,
-                text="👆 Это ваш альбом. Проверьте и подтвердите отправку.",
-                reply_markup=confirm_keyboard,
-            )
-            return  # Ждём подтверждения
+            try:
+                media_group[0].caption = caption
+                media_group[0].parse_mode = "HTML"
+
+                await message_or_callback.bot.send_media_group(
+                    chat_id=pharmacist.user.telegram_id,
+                    media=media_group,
+                )
+                await message_or_callback.bot.send_message(
+                    chat_id=pharmacist.user.telegram_id,
+                    text=f"👆 Фото от {user_name}",
+                    reply_markup=pharmacist_keyboard,
+                )
+            except TelegramBadRequest as e:
+                logger.error(f"Error sending media group: {e}")
+                for file_id in photo_file_ids:
+                    await message_or_callback.bot.send_photo(
+                        chat_id=pharmacist.user.telegram_id,
+                        photo=file_id,
+                        caption=caption if file_id == photo_file_ids[0] else None,
+                        parse_mode="HTML" if file_id == photo_file_ids[0] else None,
+                        reply_markup=(
+                            pharmacist_keyboard
+                            if file_id == photo_file_ids[0]
+                            else None
+                        ),
+                    )
 
         await state.clear()
 
         if original_message_id:
             try:
                 await message_or_callback.bot.edit_message_reply_markup(
-                    chat_id=message_or_callback.chat.id,
+                    chat_id=chat_id,
                     message_id=original_message_id,
                     reply_markup=None,
                 )
@@ -460,7 +490,7 @@ async def finish_photo_upload(
         await _send_finish_response(
             message_or_callback,
             state,
-            f"✅ <b>Загрузка фото завершена</b> ({photo_count} шт.)\n\n"
+            f"✅ <b>Альбом отправлен фармацевту!</b> ({photo_count} фото)\n\n"
             "Фармацевт получит фото и ответит вам.",
         )
 

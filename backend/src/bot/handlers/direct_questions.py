@@ -14,6 +14,7 @@ from bot.services.notification_service import notify_pharmacists_about_new_quest
 from bot.handlers.qa_states import UserQAStates, QAStates
 from bot.handlers.registration import RegistrationStates
 from bot.services.dialog_service import DialogService
+from bot.keyboards.qa_keyboard import make_user_dialog_keyboard_with_end
 
 logger = logging.getLogger(__name__)
 
@@ -119,20 +120,22 @@ async def send_user_message_to_pharmacist(
             else False
         )
 
-        await DialogService.send_unified_dialog_history(
-            bot=message.bot,
-            chat_id=message.chat.id,
-            question_uuid=question.uuid,
-            db=db,
-            title="ВАШЕ СООБЩЕНИЕ ОТПРАВЛЕНО",
-            pre_text=f"✅ Сообщение отправлено фармацевту {pharmacist_name}.\n\n",
-            post_text=None,
-            is_pharmacist=False,
-            show_buttons=True,
-            custom_buttons=make_user_dialog_keyboard_with_end(
-                question.uuid, photo_requested=photo_requested
-            ).inline_keyboard,
+        user_keyboard = make_user_dialog_keyboard_with_end(
+            question.uuid, photo_requested=photo_requested
         )
+
+        if message.photo:
+            await message.answer(
+                "✅ <b>Фото отправлено фармацевту!</b>",
+                parse_mode="HTML",
+                reply_markup=user_keyboard,
+            )
+        else:
+            await message.answer(
+                "✅ <b>Сообщение отправлено фармацевту!</b>\n\n" "Ожидайте ответа.",
+                parse_mode="HTML",
+                reply_markup=user_keyboard,
+            )
 
         return True
 
