@@ -2,6 +2,7 @@
 
 import logging
 import uuid
+from datetime import datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -133,8 +134,6 @@ async def send_order_status_notification(
     text_ru = status_text_ru.get(new_status, new_status)
 
     if new_status == "confirmed":
-        from datetime import timedelta
-
         tomorrow = datetime.now() + timedelta(days=1)
         tomorrow_str = tomorrow.strftime("%d.%m.%Y")
 
