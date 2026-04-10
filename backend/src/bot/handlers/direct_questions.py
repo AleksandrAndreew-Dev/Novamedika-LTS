@@ -1,7 +1,7 @@
 """Utility functions for creating questions from direct text messages.
 No router handlers here — called from unknown_command as a fallback."""
 
-from aiogram.types import Message
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -14,10 +14,6 @@ from bot.services.notification_service import notify_pharmacists_about_new_quest
 from bot.handlers.qa_states import UserQAStates, QAStates
 from bot.handlers.registration import RegistrationStates
 from bot.services.dialog_service import DialogService
-from bot.keyboards.qa_keyboard import (
-    make_pharmacist_dialog_keyboard,
-    make_user_dialog_keyboard_with_end,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -28,10 +24,7 @@ async def send_user_message_to_pharmacist(
     user: User,
     question: Question,
 ) -> bool:
-    """Унифицированная функция: отправить сообщение пользователя фармацевту.
-
-    Возвращает True при успехе, False при ошибке.
-    """
+    """Унифицированная функция: отправить сообщение пользователя фармацевту."""
     try:
         # Обновляем статус вопроса, если нужно
         if question.status in ["pending", "answered"]:
@@ -39,14 +32,27 @@ async def send_user_message_to_pharmacist(
             await db.commit()
             logger.info("Updated question %s status to in_progress", question.uuid)
 
+        # Определяем тип сообщения
+        if message.photo:
+            photo = message.photo[-1]
+            msg_type = "photo"
+            file_id = photo.file_id
+            text_content = None
+        else:
+            msg_type = "message"
+            file_id = None
+            text_content = message.text
+
         # Сохраняем сообщение в историю
         await DialogService.add_message(
             db=db,
             question_id=question.uuid,
             sender_type="user",
             sender_id=user.uuid,
-            message_type="message",
-            text=message.text,
+            message_type=msg_type,
+            text=text_content,
+            file_id=file_id,
+            caption=message.caption,
         )
         await db.commit()
 
@@ -67,34 +73,44 @@ async def send_user_message_to_pharmacist(
         if user.last_name:
             user_name = f"{user.first_name} {user.last_name}"
 
-        pharmacist_name = "Фармацевт"
-        if pharmacist.pharmacy_info:
-            first = pharmacist.pharmacy_info.get("first_name", "")
-            last = pharmacist.pharmacy_info.get("last_name", "")
-            patr = pharmacist.pharmacy_info.get("patronymic", "")
-            parts = [p for p in [last, first, patr] if p]
-            pharmacist_name = " ".join(parts) if parts else "Фармацевт"
-
-        # Отправляем фармацевту
-        await DialogService.send_unified_dialog_history(
-            bot=message.bot,
-            chat_id=pharmacist.user.telegram_id,
-            question_uuid=question.uuid,
-            db=db,
-            title="СООБЩЕНИЕ ОТ ПОЛЬЗОВАТЕЛЯ",
-            pre_text=(
-                f"💬 <b>СООБЩЕНИЕ ОТ ПОЛЬЗОВАТЕЛЯ</b>\n\n"
-                f"👤 <b>Пользователь:</b> {user_name}\n"
-                f"❓ <b>По вопросу:</b>\n{question.text[:150]}...\n\n"
-                f"💭 <b>Сообщение:</b>\n{message.text}\n\n"
-            ),
-            post_text=None,
-            is_pharmacist=True,
-            show_buttons=True,
-            custom_buttons=make_pharmacist_dialog_keyboard(
-                question.uuid
-            ).inline_keyboard,
+        pharmacist_keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="💬 Ответить",
+                        callback_data=f"answer_{question.uuid}",
+                    ),
+                    InlineKeyboardButton(
+                        text="✅ Завершить",
+                        callback_data=f"end_dialog_{question.uuid}",
+                    ),
+                ]
+            ]
         )
+
+        # Отправляем фармацевту только новое сообщение, без всей истории
+        if message.photo:
+            await message.bot.send_photo(
+                chat_id=pharmacist.user.telegram_id,
+                photo=photo.file_id,
+                caption=(
+                    f"👤 <b>{user_name}</b>\n"
+                    f"❓ По вопросу: {question.text[:100]}..."
+                ),
+                parse_mode="HTML",
+                reply_markup=pharmacist_keyboard,
+            )
+        else:
+            await message.bot.send_message(
+                chat_id=pharmacist.user.telegram_id,
+                text=(
+                    f"💬 <b>Сообщение от {user_name}</b>\n\n"
+                    f"{message.text}\n\n"
+                    f"❓ <i>По вопросу: {question.text[:100]}...</i>"
+                ),
+                parse_mode="HTML",
+                reply_markup=pharmacist_keyboard,
+            )
 
         # Подтверждение пользователю
         photo_requested = (
