@@ -63,6 +63,12 @@ def get_user_inline_keyboard():
             ],
             [
                 InlineKeyboardButton(
+                    text="👨‍⚕️ Я фармацевт / Регистрация",
+                    callback_data="i_am_pharmacist",
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text="🔍 Поиск лекарств",
                     web_app=WebAppInfo(url=webapp_url),
                 )

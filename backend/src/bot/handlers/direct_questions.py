@@ -13,7 +13,10 @@ from utils.time_utils import get_utc_now_naive
 from bot.services.notification_service import notify_pharmacists_about_new_question
 from bot.handlers.qa_states import UserQAStates
 from bot.services.dialog_service import DialogService
-from bot.keyboards.qa_keyboard import make_pharmacist_dialog_keyboard
+from bot.keyboards.qa_keyboard import (
+    make_pharmacist_dialog_keyboard,
+    make_user_dialog_keyboard_with_end,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -109,10 +112,26 @@ async def _process_active_dialog_message(
             ).inline_keyboard,
         )
 
-        # Подтверждение пользователю
-        await message.answer(
-            f"✅ Сообщение отправлено фармацевту {pharmacist_name}.\n\n"
-            "Ожидайте ответа.",
+        # Подтверждение пользователю — полноценное, с inline-кнопками
+        photo_requested = (
+            active_question.context_data.get("photo_requested", False)
+            if active_question.context_data
+            else False
+        )
+
+        await DialogService.send_unified_dialog_history(
+            bot=message.bot,
+            chat_id=message.chat.id,
+            question_uuid=active_question.uuid,
+            db=db,
+            title="ВАШЕ СООБЩЕНИЕ ОТПРАВЛЕНО",
+            pre_text=f"✅ Сообщение отправлено фармацевту {pharmacist_name}.\n\n",
+            post_text=None,
+            is_pharmacist=False,
+            show_buttons=True,
+            custom_buttons=make_user_dialog_keyboard_with_end(
+                active_question.uuid, photo_requested=photo_requested
+            ).inline_keyboard,
         )
 
     except Exception as e:
@@ -127,8 +146,14 @@ async def try_create_question(
     is_pharmacist: bool,
     state: FSMContext,
 ) -> bool:
-    """Попытка создать вопрос из текстового сообщения.
-    Возвращает True если вопрос создан/обработан, False если нет."""
+    """Попытка создать вопрос из текстового сообщения или продолжить диалог.
+    Возвращает True если вопрос создан/обработан, False если нет.
+
+    Логика (как в 538dd6b):
+    1. Если есть активный диалог — сообщение идёт туда автоматически.
+    2. Если состояние in_dialog — явная обработка диалогового сообщения.
+    3. Иначе — попытка создать новый вопрос.
+    """
 
     if is_pharmacist:
         return False
@@ -141,7 +166,7 @@ async def try_create_question(
         message.text[:50] if message.text else "None",
     )
 
-    # Проверяем активные консультации (in_progress или answered)
+    # ===== ПРОВЕРКА 1: Активный диалог (автоматическое продолжение) =====
     result = await db.execute(
         select(Question)
         .where(
@@ -155,34 +180,87 @@ async def try_create_question(
     active_question = result.scalar_one_or_none()
 
     if active_question:
-        logger.info(
-            "User %s has active question %s, sending message",
-            user.uuid,
-            active_question.uuid,
-        )
-        await _process_active_dialog_message(message, db, user, active_question)
-        return True
+        # Проверка: не завершён ли диалог
+        if active_question.status == "completed":
+            await state.clear()
+            # Пропускаем автоматическое продолжение — создадим новый вопрос ниже
+            logger.info("Active question completed, will create new one")
+        else:
+            # Автоматически продолжаем диалог
+            logger.info(
+                "User %s has active question %s, auto-continuing dialog",
+                user.uuid,
+                active_question.uuid,
+            )
 
-    # Нет активного вопроса — проверяем состояния
+            # Устанавливаем состояние in_dialog для будущих сообщений
+            await state.update_data(active_dialog_question_id=str(active_question.uuid))
+            await state.set_state(UserQAStates.in_dialog)
+
+            # Пересылаем сообщение фармацевту
+            await _process_active_dialog_message(message, db, user, active_question)
+            return True
+
+    # ===== ПРОВЕРКА 2: Состояние in_dialog — явная обработка =====
+    # Как в 538dd6b: handle_direct_text вызывал process_dialog_message напрямую
+    if current_state == UserQAStates.in_dialog:
+        state_data = await state.get_data()
+        question_uuid = state_data.get("active_dialog_question_id")
+
+        if question_uuid:
+            result = await db.execute(
+                select(Question).where(Question.uuid == question_uuid)
+            )
+            question = result.scalar_one_or_none()
+
+            if question and question.status == "completed":
+                # Диалог завершён — очищаем и создаём новый вопрос
+                await state.clear()
+                logger.info("Dialog completed via state, will create new question")
+            elif question:
+                # Активный диалог через состояние — обрабатываем напрямую
+                await _process_active_dialog_message(message, db, user, question)
+                return True
+        else:
+            # Состояние in_dialog но нет UUID — ищем активный вопрос
+            result = await db.execute(
+                select(Question)
+                .where(
+                    Question.user_id == user.uuid,
+                    Question.status.in_(["in_progress", "answered"]),
+                    Question.taken_by.is_not(None),
+                )
+                .order_by(Question.answered_at.desc())
+                .limit(1)
+            )
+            found = result.scalar_one_or_none()
+            if found:
+                await state.update_data(active_dialog_question_id=str(found.uuid))
+                await _process_active_dialog_message(message, db, user, found)
+                return True
+            # Нет активного вопроса — сбрасываем состояние
+            await state.clear()
+
+    # ===== ПРОВЕРКА 3: Другие состояния =====
     if current_state is not None:
         if current_state in [
             UserQAStates.waiting_for_prescription_photo,
             UserQAStates.waiting_for_clarification,
-            UserQAStates.in_dialog,
             UserQAStates.waiting_for_question,
+            UserQAStates.waiting_for_registration,
         ]:
             logger.debug("try_create_question: skip, state=%s", current_state)
             return False
         await state.clear()
 
-    # Проверяем текст
+    # ===== Проверка 4: Валидация текста =====
     if not message.text or not message.text.strip():
         return False
 
     if not should_create_question(message.text):
         return False
 
-    # Создаём новый вопрос
+    # ===== Создание нового вопроса =====
     try:
         logger.info("Creating question from text: '%s'", message.text[:80])
 

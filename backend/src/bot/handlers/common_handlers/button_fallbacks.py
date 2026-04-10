@@ -117,6 +117,7 @@ USER_BUTTONS = {
     "📋 Мои вопросы": "my_questions",
     "📜 История": "my_questions_from_completed",
     "❓ Помощь": "user_help",
+    "👨‍⚕️ Я фармацевт / Регистрация": "i_am_pharmacist",
 }
 
 
@@ -169,6 +170,15 @@ async def user_button_fallback(
             "1. Просто напишите вопрос в чат\n"
             "2. Фармацевт ответит в ближайшее время\n"
             "3. После ответа вы увидите кнопки для уточнения и завершения",
+            parse_mode="HTML",
+            reply_markup=get_user_inline_keyboard(),
+        )
+
+    elif action == "i_am_pharmacist":
+        await message.answer(
+            "👨‍⚕️ <b>Регистрация фармацевта</b>\n\n"
+            "Для регистрации обратитесь к администратору.\n\n"
+            "Или нажмите кнопку «Регистрация» ниже.",
             parse_mode="HTML",
             reply_markup=get_user_inline_keyboard(),
         )
