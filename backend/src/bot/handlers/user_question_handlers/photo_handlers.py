@@ -230,58 +230,51 @@ async def process_prescription_photo(
         count = len(photo_file_ids)
 
         if count == 1:
-            # Первое фото — показываем кнопки и инструкцию
-            await message.answer(
-                f"📸 <b>Фото 1 сохранено</b>\n\n"
-                f"Все фото будут отправлены фармацевту <b>одним альбомом</b>.\n\n"
-                f"👇 Выберите действие:",
+            # Первое фото — показываем его с инструкцией
+            await message.answer_photo(
+                photo=photo.file_id,
+                caption=(
+                    f"📸 <b>Фото 1 сохранено</b>\n\n"
+                    f"Все фото будут отправлены фармацевту <b>одним альбомом</b>.\n\n"
+                    f"👇 Продолжайте отправлять фото или выберите действие:"
+                ),
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[
                         [
                             InlineKeyboardButton(
-                                text="✅ Подтвердить и отправить",
-                                callback_data=f"finish_photo_upload_{question_uuid}",
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
                                 text="📸 Отправить ещё фото",
                                 callback_data=f"send_prescription_photo_{question_uuid}",
                             )
                         ],
                         [
                             InlineKeyboardButton(
-                                text="❌ Отменить загрузку",
+                                text="✅ Подтвердить и отправить",
+                                callback_data=f"finish_photo_upload_{question_uuid}",
+                            ),
+                            InlineKeyboardButton(
+                                text="❌ Отменить",
                                 callback_data=f"cancel_photo_upload_{question_uuid}",
-                            )
+                            ),
                         ],
                     ]
                 ),
             )
         else:
-            # Последующие фото — только тихое подтверждение
+            # Последующие фото — тихое подтверждение без лишних сообщений
             await message.answer(
-                f"✅ Фото {count} добавлено",
+                f"✅ Фото {count} добавлено в альбом. Отправьте ещё или нажмите кнопку ниже.",
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[
                         [
                             InlineKeyboardButton(
                                 text="✅ Подтвердить и отправить",
                                 callback_data=f"finish_photo_upload_{question_uuid}",
-                            )
-                        ],
-                        [
+                            ),
                             InlineKeyboardButton(
-                                text="📸 Отправить ещё фото",
-                                callback_data=f"send_prescription_photo_{question_uuid}",
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                text="❌ Отменить загрузку",
+                                text="❌ Отменить",
                                 callback_data=f"cancel_photo_upload_{question_uuid}",
-                            )
+                            ),
                         ],
                     ]
                 ),
@@ -334,16 +327,10 @@ async def process_prescription_document(
             await message.answer(
                 f"📸 <b>Фото 1 сохранено</b>\n\n"
                 f"Все фото будут отправлены фармацевту <b>одним альбомом</b>.\n\n"
-                f"👇 Выберите действие:",
+                f"👇 Продолжайте отправлять фото или выберите действие:",
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[
-                        [
-                            InlineKeyboardButton(
-                                text="✅ Подтвердить и отправить",
-                                callback_data=f"finish_photo_upload_{question_uuid}",
-                            )
-                        ],
                         [
                             InlineKeyboardButton(
                                 text="📸 Отправить ещё фото",
@@ -352,35 +339,31 @@ async def process_prescription_document(
                         ],
                         [
                             InlineKeyboardButton(
-                                text="❌ Отменить загрузку",
+                                text="✅ Подтвердить и отправить",
+                                callback_data=f"finish_photo_upload_{question_uuid}",
+                            ),
+                            InlineKeyboardButton(
+                                text="❌ Отменить",
                                 callback_data=f"cancel_photo_upload_{question_uuid}",
-                            )
+                            ),
                         ],
                     ]
                 ),
             )
         else:
             await message.answer(
-                f"✅ Фото {count} добавлено",
+                f"✅ Фото {count} добавлено в альбом. Отправьте ещё или нажмите кнопку ниже.",
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[
                         [
                             InlineKeyboardButton(
                                 text="✅ Подтвердить и отправить",
                                 callback_data=f"finish_photo_upload_{question_uuid}",
-                            )
-                        ],
-                        [
+                            ),
                             InlineKeyboardButton(
-                                text="📸 Отправить ещё фото",
-                                callback_data=f"send_prescription_photo_{question_uuid}",
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                text="❌ Отменить загрузку",
+                                text="❌ Отменить",
                                 callback_data=f"cancel_photo_upload_{question_uuid}",
-                            )
+                            ),
                         ],
                     ]
                 ),
@@ -422,7 +405,103 @@ async def finish_photo_upload(
             user_name = f"{user.first_name} {user.last_name}"
 
         if pharmacist and pharmacist.user and photo_file_ids:
-            # Формируем альбом
+            # Сначала показываем пользователю превью альбома
+            media_group = [InputMediaPhoto(media=file_id) for file_id in photo_file_ids]
+
+            preview_caption = (
+                f"📸 <b>Альбом: {len(photo_file_ids)} фото</b>\n\n"
+                f"Всё верно? Нажмите «✅ Отправить фармацевту»"
+            )
+            media_group[0].caption = preview_caption
+            media_group[0].parse_mode = "HTML"
+
+            await message_or_callback.bot.send_media_group(
+                chat_id=message_or_callback.chat.id,
+                media=media_group,
+            )
+
+            confirm_keyboard = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="✅ Отправить фармацевту",
+                            callback_data=f"confirm_send_photos_{question_uuid}",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text="❌ Отменить",
+                            callback_data=f"cancel_photo_upload_{question_uuid}",
+                        )
+                    ],
+                ]
+            )
+
+            await message_or_callback.bot.send_message(
+                chat_id=message_or_callback.chat.id,
+                text="👆 Это ваш альбом. Проверьте и подтвердите отправку.",
+                reply_markup=confirm_keyboard,
+            )
+            return  # Ждём подтверждения
+
+        await state.clear()
+
+        if original_message_id:
+            try:
+                await message_or_callback.bot.edit_message_reply_markup(
+                    chat_id=message_or_callback.chat.id,
+                    message_id=original_message_id,
+                    reply_markup=None,
+                )
+            except Exception:
+                pass
+
+        photo_count = len(photo_file_ids)
+        await _send_finish_response(
+            message_or_callback,
+            state,
+            f"✅ <b>Загрузка фото завершена</b> ({photo_count} шт.)\n\n"
+            "Фармацевт получит фото и ответит вам.",
+        )
+
+    except Exception as e:
+        logger.error(f"Error in finish_photo_upload: {e}", exc_info=True)
+        await state.clear()
+        await _send_finish_response(
+            message_or_callback, state, "❌ Ошибка при завершении загрузки"
+        )
+
+
+@router.callback_query(F.data.startswith("confirm_send_photos_"))
+async def confirm_send_photos_callback(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db: AsyncSession,
+    user: User,
+):
+    """Отправка альбома фармацевту после подтверждения пользователем"""
+    try:
+        state_data = await state.get_data()
+        question_uuid = callback.data.replace("confirm_send_photos_", "")
+        pharmacist_id = state_data.get("prescription_photo_pharmacist_id")
+        photo_file_ids = state_data.get("photo_file_ids", [])
+
+        if not pharmacist_id or not photo_file_ids:
+            await callback.answer("❌ Ошибка: нет фото для отправки", show_alert=True)
+            return
+
+        result = await db.execute(
+            select(Pharmacist)
+            .options(selectinload(Pharmacist.user))
+            .where(Pharmacist.uuid == pharmacist_id)
+        )
+        pharmacist = result.scalar_one_or_none()
+
+        user_name = user.first_name or "Пользователь"
+        if user.last_name:
+            user_name = f"{user.first_name} {user.last_name}"
+
+        if pharmacist and pharmacist.user:
             media_group = [InputMediaPhoto(media=file_id) for file_id in photo_file_ids]
 
             history_text, _ = await DialogService.format_dialog_history_for_display(
@@ -458,25 +537,22 @@ async def finish_photo_upload(
             )
 
             try:
-                # Первое фото с подписью и клавиатурой, остальные без
                 media_group[0].caption = caption
                 media_group[0].parse_mode = "HTML"
 
-                await message_or_callback.bot.send_media_group(
+                await callback.bot.send_media_group(
                     chat_id=pharmacist.user.telegram_id,
                     media=media_group,
                 )
-                # Отправляем клавиатуру отдельным сообщением
-                await message_or_callback.bot.send_message(
+                await callback.bot.send_message(
                     chat_id=pharmacist.user.telegram_id,
                     text=f"👆 Фото от {user_name}",
                     reply_markup=pharmacist_keyboard,
                 )
             except TelegramBadRequest as e:
                 logger.error(f"Error sending media group: {e}")
-                # Фоллбэк: отправить по одному
                 for file_id in photo_file_ids:
-                    await message_or_callback.bot.send_photo(
+                    await callback.bot.send_photo(
                         chat_id=pharmacist.user.telegram_id,
                         photo=file_id,
                         caption=caption if file_id == photo_file_ids[0] else None,
@@ -490,30 +566,17 @@ async def finish_photo_upload(
 
         await state.clear()
 
-        if original_message_id:
-            try:
-                await message_or_callback.bot.edit_message_reply_markup(
-                    chat_id=message_or_callback.chat.id,
-                    message_id=original_message_id,
-                    reply_markup=None,
-                )
-            except Exception:
-                pass
-
-        photo_count = len(photo_file_ids)
-        await _send_finish_response(
-            message_or_callback,
-            state,
-            f"✅ <b>Загрузка фото завершена</b> ({photo_count} шт.)\n\n"
-            "Фармацевт получит фото и ответит вам.",
+        await callback.message.answer(
+            f"✅ <b>Альбом отправлен фармацевту!</b> ({len(photo_file_ids)} фото)\n\n"
+            f"Фармацевт получит фото и ответит вам.",
+            parse_mode="HTML",
         )
+        await callback.answer("Фото отправлены")
 
     except Exception as e:
-        logger.error(f"Error in finish_photo_upload: {e}", exc_info=True)
+        logger.error(f"Error in confirm_send_photos_callback: {e}", exc_info=True)
         await state.clear()
-        await _send_finish_response(
-            message_or_callback, state, "❌ Ошибка при завершении загрузки"
-        )
+        await callback.answer("❌ Ошибка при отправке", show_alert=True)
 
 
 async def _send_finish_response(msg, state, text):
