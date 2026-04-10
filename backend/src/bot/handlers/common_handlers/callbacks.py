@@ -3,7 +3,13 @@
 import logging
 
 from aiogram import F, Router
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+)
 from aiogram.fsm.context import FSMContext
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +17,7 @@ from sqlalchemy import select, func
 
 from db.qa_models import User, Question, Pharmacist
 from bot.handlers.qa_states import UserQAStates
+from bot.handlers.registration import RegistrationStates
 from bot.handlers.common_handlers.keyboards import (
     get_pharmacist_inline_keyboard,
     get_user_inline_keyboard,
@@ -381,10 +388,14 @@ async def start_registration_callback(callback: CallbackQuery, state: FSMContext
     await callback.message.answer(
         "📝 <b>Регистрация фармацевта</b>\n\n"
         "Введите секретное слово для регистрации:\n"
-        "(или /cancel для отмены)",
+        "(или нажмите «❌ Отмена регистрации» для отмены)",
         parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]],
+            resize_keyboard=True,
+        ),
     )
-    await state.set_state(UserQAStates.waiting_for_registration)
+    await state.set_state(RegistrationStates.waiting_secret_word)
     await callback.answer()
 
 

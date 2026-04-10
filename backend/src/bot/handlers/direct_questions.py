@@ -247,7 +247,6 @@ async def try_create_question(
             UserQAStates.waiting_for_prescription_photo,
             UserQAStates.waiting_for_clarification,
             UserQAStates.waiting_for_question,
-            UserQAStates.waiting_for_registration,
         ]:
             logger.debug("try_create_question: skip, state=%s", current_state)
             return False

@@ -14,4 +14,3 @@ class UserQAStates(StatesGroup):
     in_dialog = State()
     waiting_for_clarification = State()
     waiting_for_prescription_photo = State()
-    waiting_for_registration = State()
