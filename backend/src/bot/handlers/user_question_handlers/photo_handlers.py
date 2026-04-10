@@ -9,8 +9,10 @@ from aiogram.types import (
     CallbackQuery,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
+    InputMediaPhoto,
 )
 from aiogram.fsm.context import FSMContext
+from aiogram.exceptions import TelegramBadRequest
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -189,7 +191,7 @@ async def send_prescription_photo_callback(
 async def process_prescription_photo(
     message: Message, state: FSMContext, db: AsyncSession, user: User
 ):
-    """Обработка отправленного фото рецепта"""
+    """Обработка отправленного фото рецепта — сохраняет в БД, но не отправляет фармацевту сразу"""
     try:
         state_data = await state.get_data()
         question_uuid = state_data.get("prescription_photo_question_id")
@@ -200,29 +202,13 @@ async def process_prescription_photo(
             await state.clear()
             return
 
-        result = await db.execute(
-            select(Pharmacist)
-            .options(selectinload(Pharmacist.user))
-            .where(Pharmacist.uuid == pharmacist_id)
-        )
-        pharmacist = result.scalar_one_or_none()
-
-        if not pharmacist or not pharmacist.user:
-            await message.answer("❌ Фармацевт не найден")
-            await state.clear()
-            return
-
-        question_result = await db.execute(
-            select(Question).where(Question.uuid == question_uuid)
-        )
-        question = question_result.scalar_one_or_none()
-
-        user_name = user.first_name or "Пользователь"
-        if user.last_name:
-            user_name = f"{user.first_name} {user.last_name}"
-
+        # Добавляем фото в буфер состояния для отправки при /done
+        photo_file_ids = state_data.get("photo_file_ids", [])
         photo = message.photo[-1]
+        photo_file_ids.append(photo.file_id)
+        await state.update_data(photo_file_ids=photo_file_ids)
 
+        # Сохраняем в историю диалога
         await DialogService.add_message(
             db=db,
             question_id=question_uuid,
@@ -234,58 +220,16 @@ async def process_prescription_photo(
         )
         await db.commit()
 
-        history_text, _ = await DialogService.format_dialog_history_for_display(
-            question_uuid, db
-        )
-
-        pharmacist_keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="💬 Ответить пользователю",
-                        callback_data=f"answer_{question_uuid}",
-                    ),
-                    InlineKeyboardButton(
-                        text="📸 Запросить еще фото",
-                        callback_data=f"request_more_photos_{question_uuid}",
-                    ),
-                ],
-                [
-                    InlineKeyboardButton(
-                        text="✅ Завершить консультацию",
-                        callback_data=f"end_dialog_{question_uuid}",
-                    )
-                ],
-            ]
-        )
-
-        await message.bot.send_photo(
-            chat_id=pharmacist.user.telegram_id,
-            photo=photo.file_id,
-            caption=(
-                f"📸 <b>Получено фото рецепта</b>\n\n"
-                f"👤 <b>От пользователя:</b> {user_name}\n"
-                f"📅 <b>Время:</b> {get_utc_now_naive().strftime('%d.%m.%Y %H:%M')}\n\n"
-                f"{history_text}"
-            ),
-            parse_mode="HTML",
-            reply_markup=pharmacist_keyboard,
-        )
-
+        count = len(photo_file_ids)
         await message.answer(
-            f"✅ Фото рецепта отправлено фармацевту!\n\n"
-            f"📸 <b>Фото добавлено в историю диалога.</b>",
+            f"✅ Фото {count} сохранено. Отправьте ещё или нажмите /done для завершения.",
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
                         InlineKeyboardButton(
-                            text="💬 Ответить",
-                            callback_data=f"continue_dialog_{question_uuid}",
-                        ),
-                        InlineKeyboardButton(
-                            text="✅ Завершить консультацию",
-                            callback_data=f"end_dialog_{question_uuid}",
-                        ),
+                            text="✅ Завершить загрузку",
+                            callback_data=f"finish_photo_upload_{question_uuid}",
+                        )
                     ]
                 ]
             ),
@@ -293,7 +237,7 @@ async def process_prescription_photo(
 
     except Exception as e:
         logger.error(f"Error processing prescription photo: {e}", exc_info=True)
-        await message.answer("❌ Ошибка при отправке фото")
+        await message.answer("❌ Ошибка при сохранении фото")
 
 
 @router.message(UserQAStates.waiting_for_prescription_photo, F.document)
@@ -316,79 +260,10 @@ async def process_prescription_document(
             await message.answer("❌ Пожалуйста, отправьте изображение (фото)")
             return
 
-        result = await db.execute(
-            select(Pharmacist)
-            .options(selectinload(Pharmacist.user))
-            .where(Pharmacist.uuid == pharmacist_id)
-        )
-        pharmacist = result.scalar_one_or_none()
-
-        if not pharmacist or not pharmacist.user:
-            await message.answer("❌ Фармацевт не найден")
-            await state.clear()
-            return
-
-        question_result = await db.execute(
-            select(Question).where(Question.uuid == question_uuid)
-        )
-        question = question_result.scalar_one_or_none()
-
-        user_name = user.first_name or "Пользователь"
-        if user.last_name:
-            user_name = f"{user.first_name} {user.last_name}"
-
-        pharmacist_name = "Фармацевт"
-        if pharmacist.pharmacy_info:
-            first_name = pharmacist.pharmacy_info.get("first_name", "")
-            last_name = pharmacist.pharmacy_info.get("last_name", "")
-            patronymic = pharmacist.pharmacy_info.get("patronymic", "")
-
-            name_parts = []
-            if last_name:
-                name_parts.append(last_name)
-            if first_name:
-                name_parts.append(first_name)
-            if patronymic:
-                name_parts.append(patronymic)
-
-            pharmacist_name = " ".join(name_parts) if name_parts else "Фармацевт"
-
-        pharmacist_keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="💬 Ответить пользователю",
-                        callback_data=f"answer_{question_uuid}",
-                    ),
-                    InlineKeyboardButton(
-                        text="📸 Запросить еще фото",
-                        callback_data=f"request_more_photos_{question_uuid}",
-                    ),
-                ],
-                [
-                    InlineKeyboardButton(
-                        text="✅ Завершить консультацию",
-                        callback_data=f"end_dialog_{question_uuid}",
-                    )
-                ],
-            ]
-        )
-
-        await message.bot.send_document(
-            chat_id=pharmacist.user.telegram_id,
-            document=document.file_id,
-            caption=(
-                f"📄 <b>Получен документ с рецептом</b>\n\n"
-                f"👤 <b>От пользователя:</b> {user_name}\n"
-                f"📅 <b>Время:</b> {get_utc_now_naive().strftime('%d.%m.%Y %H:%M')}\n"
-                f"❓ <b>По вопросу:</b> {question.text[:100] if question else 'Вопрос не найден'}...\n"
-                f"{'💬 <b>Описание:</b> ' + message.caption if message.caption else ''}\n\n"
-                f"⚠️ <i>Документ временный и не сохранен в системе</i>\n"
-                f"💊 <i>Этот документ был запрошен вами у пользователя</i>"
-            ),
-            parse_mode="HTML",
-            reply_markup=pharmacist_keyboard,
-        )
+        # Добавляем в буфер
+        photo_file_ids = state_data.get("photo_file_ids", [])
+        photo_file_ids.append(document.file_id)
+        await state.update_data(photo_file_ids=photo_file_ids)
 
         await DialogService.add_message(
             db=db,
@@ -399,70 +274,156 @@ async def process_prescription_document(
             file_id=document.file_id,
             caption=message.caption,
         )
+        await db.commit()
 
+        count = len(photo_file_ids)
         await message.answer(
-            f"✅ Документ с рецептом отправлен фармацевту {pharmacist_name}!\n\n"
-            "Вы можете отправить еще файлы или нажмите /done чтобы завершить."
+            f"✅ Фото {count} сохранено. Отправьте ещё или нажмите /done для завершения.",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="✅ Завершить загрузку",
+                            callback_data=f"finish_photo_upload_{question_uuid}",
+                        )
+                    ]
+                ]
+            ),
         )
 
     except Exception as e:
         logger.error(f"Error processing prescription document: {e}", exc_info=True)
-        await message.answer("❌ Ошибка при отправке документа")
+        await message.answer("❌ Ошибка при сохранении фото")
 
 
 @router.message(Command("done"), UserQAStates.waiting_for_prescription_photo)
+@router.callback_query(F.data.startswith("finish_photo_upload_"))
 async def finish_photo_upload(
-    message: Message, state: FSMContext, db: AsyncSession, user: User
+    message_or_callback, state: FSMContext, db: AsyncSession, user: User
 ):
-    """Завершение загрузки фото рецепта"""
+    """Завершение загрузки фото рецепта — отправка альбомом фармацевту"""
     try:
         state_data = await state.get_data()
         question_uuid = state_data.get("prescription_photo_question_id")
         pharmacist_id = state_data.get("prescription_photo_pharmacist_id")
         original_message_id = state_data.get("prescription_photo_message_id")
+        photo_file_ids = state_data.get("photo_file_ids", [])
 
-        if pharmacist_id:
-            result = await db.execute(
-                select(Pharmacist)
-                .options(selectinload(Pharmacist.user))
-                .where(Pharmacist.uuid == pharmacist_id)
+        if not question_uuid or not pharmacist_id:
+            await _send_finish_response(
+                message_or_callback, state, "❌ Не удалось найти вопрос или фармацевта"
             )
-            pharmacist = result.scalar_one_or_none()
+            return
 
-            if pharmacist and pharmacist.user:
-                user_name = user.first_name or "Пользователь"
-                if user.last_name:
-                    user_name = f"{user.first_name} {user.last_name}"
+        result = await db.execute(
+            select(Pharmacist)
+            .options(selectinload(Pharmacist.user))
+            .where(Pharmacist.uuid == pharmacist_id)
+        )
+        pharmacist = result.scalar_one_or_none()
 
-                await pharmacist.user.telegram_id and await message.bot.send_message(
+        user_name = user.first_name or "Пользователь"
+        if user.last_name:
+            user_name = f"{user.first_name} {user.last_name}"
+
+        if pharmacist and pharmacist.user and photo_file_ids:
+            # Формируем альбом
+            media_group = [InputMediaPhoto(media=file_id) for file_id in photo_file_ids]
+
+            history_text, _ = await DialogService.format_dialog_history_for_display(
+                question_uuid, db
+            )
+
+            caption = (
+                f"📸 <b>Получено фото рецепта ({len(photo_file_ids)} шт.)</b>\n\n"
+                f"👤 <b>От пользователя:</b> {user_name}\n"
+                f"📅 <b>Время:</b> {get_utc_now_naive().strftime('%d.%m.%Y %H:%M')}\n\n"
+                f"{history_text}"
+            )
+
+            pharmacist_keyboard = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="💬 Ответить пользователю",
+                            callback_data=f"answer_{question_uuid}",
+                        ),
+                        InlineKeyboardButton(
+                            text="📸 Запросить еще фото",
+                            callback_data=f"request_more_photos_{question_uuid}",
+                        ),
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text="✅ Завершить консультацию",
+                            callback_data=f"end_dialog_{question_uuid}",
+                        )
+                    ],
+                ]
+            )
+
+            try:
+                # Первое фото с подписью и клавиатурой, остальные без
+                media_group[0].caption = caption
+                media_group[0].parse_mode = "HTML"
+
+                await message_or_callback.bot.send_media_group(
                     chat_id=pharmacist.user.telegram_id,
-                    text=(
-                        f"✅ <b>Пользователь завершил загрузку фото</b>\n\n"
-                        f"👤 {user_name} закончил отправку фото рецепта.\n"
-                        f"Продолжайте консультацию."
-                    ),
-                    parse_mode="HTML",
+                    media=media_group,
                 )
+                # Отправляем клавиатуру отдельным сообщением
+                await message_or_callback.bot.send_message(
+                    chat_id=pharmacist.user.telegram_id,
+                    text=f"👆 Фото от {user_name}",
+                    reply_markup=pharmacist_keyboard,
+                )
+            except TelegramBadRequest as e:
+                logger.error(f"Error sending media group: {e}")
+                # Фоллбэк: отправить по одному
+                for file_id in photo_file_ids:
+                    await message_or_callback.bot.send_photo(
+                        chat_id=pharmacist.user.telegram_id,
+                        photo=file_id,
+                        caption=caption if file_id == photo_file_ids[0] else None,
+                        parse_mode="HTML" if file_id == photo_file_ids[0] else None,
+                        reply_markup=(
+                            pharmacist_keyboard
+                            if file_id == photo_file_ids[0]
+                            else None
+                        ),
+                    )
 
         await state.clear()
 
         if original_message_id:
             try:
-                await message.bot.edit_message_reply_markup(
-                    chat_id=message.chat.id,
+                await message_or_callback.bot.edit_message_reply_markup(
+                    chat_id=message_or_callback.chat.id,
                     message_id=original_message_id,
                     reply_markup=None,
                 )
             except Exception:
                 pass
 
-        await message.answer(
-            "✅ <b>Загрузка фото завершена</b>\n\n"
-            "Фармацевт получит уведомление и ответит вам.",
-            parse_mode="HTML",
+        photo_count = len(photo_file_ids)
+        await _send_finish_response(
+            message_or_callback,
+            state,
+            f"✅ <b>Загрузка фото завершена</b> ({photo_count} шт.)\n\n"
+            "Фармацевт получит фото и ответит вам.",
         )
 
     except Exception as e:
         logger.error(f"Error in finish_photo_upload: {e}", exc_info=True)
         await state.clear()
-        await message.answer("❌ Ошибка при завершении загрузки")
+        await _send_finish_response(
+            message_or_callback, state, "❌ Ошибка при завершении загрузки"
+        )
+
+
+async def _send_finish_response(msg, state, text):
+    """Отправить ответ пользователю в зависимости от типа сообщения."""
+    if hasattr(msg, "answer"):
+        await msg.answer(text, parse_mode="HTML")
+    else:
+        await msg.message.answer(text, parse_mode="HTML")
