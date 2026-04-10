@@ -11,7 +11,7 @@ import logging
 from db.qa_models import User, Question, Pharmacist
 from utils.time_utils import get_utc_now_naive
 from bot.services.notification_service import notify_pharmacists_about_new_question
-from bot.handlers.qa_states import UserQAStates
+from bot.handlers.qa_states import UserQAStates, QAStates
 from bot.handlers.registration import RegistrationStates
 from bot.services.dialog_service import DialogService
 from bot.keyboards.qa_keyboard import (
@@ -277,6 +277,13 @@ async def try_create_question(
             RegistrationStates.waiting_patronymic.state,
         }
         if current_state in registration_states:
+            return False
+        # Пропускаем состояния фармацевта — они обрабатываются qa_handlers_router
+        qa_pharmacist_states = {
+            QAStates.waiting_for_answer.state,
+            QAStates.in_dialog_with_user.state,
+        }
+        if current_state in qa_pharmacist_states:
             return False
         if current_state in [
             UserQAStates.waiting_for_prescription_photo,
