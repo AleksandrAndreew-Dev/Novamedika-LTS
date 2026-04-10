@@ -146,17 +146,16 @@ async def handle_pharmacist_text_in_dialog(
                     ]
                 )
 
-                await DialogService.send_unified_dialog_history(
-                    bot=message.bot,
+                # Отправляем только ответ фармацевта, без всей истории
+                await message.bot.send_message(
                     chat_id=user.telegram_id,
-                    question_uuid=question.uuid,
-                    db=db,
-                    title="ОТВЕТ ФАРМАЦЕВТА",
-                    pre_text="💬 <b>ОТВЕТ ФАРМАЦЕВТА</b>\n\n",
-                    post_text=f"\n\n👨‍⚕️ <b>Фармацевт:</b> {pharmacist_info_text}",
-                    is_pharmacist=False,
-                    show_buttons=True,
-                    custom_buttons=user_dialog_keyboard.inline_keyboard,
+                    text=(
+                        f"💬 <b>Ответ фармацевта</b>\n\n"
+                        f"{message.text}\n\n"
+                        f"👨‍⚕️ <i>{pharmacist_info_text}</i>"
+                    ),
+                    parse_mode="HTML",
+                    reply_markup=user_dialog_keyboard,
                 )
 
                 logger.info(f"Message sent to user {user.telegram_id}")
@@ -167,19 +166,12 @@ async def handle_pharmacist_text_in_dialog(
                     exc_info=True,
                 )
 
-        await DialogService.send_unified_dialog_history(
-            bot=message.bot,
-            chat_id=message.chat.id,
-            question_uuid=question.uuid,
-            db=db,
-            title="ВЫ ОТПРАВИЛИ ОТВЕТ",
-            pre_text="💬 <b>ВЫ ОТПРАВИЛИ ОТВЕТ</b>\n\n",
-            post_text="\n\n<b>Доступные действия:</b>",
-            is_pharmacist=True,
-            show_buttons=True,
-            custom_buttons=make_pharmacist_dialog_keyboard(
-                question.uuid
-            ).inline_keyboard,
+        # Фармацевту подтверждаем отправку кратко
+        await message.answer(
+            f"✅ <b>Ответ отправлен</b>\n\n"
+            f"💬 {message.text[:100]}{'...' if len(message.text) > 100 else ''}",
+            parse_mode="HTML",
+            reply_markup=make_pharmacist_dialog_keyboard(question.uuid),
         )
 
         await state.set_state(QAStates.in_dialog_with_user)
