@@ -5,23 +5,22 @@ from datetime import datetime
 import uuid
 
 
-
-
-
 class OrderCancelRequest(BaseModel):
     reason: Optional[str] = None
+
 
 class OrderStatusUpdate(BaseModel):
     status: str
     comment: Optional[str] = None
 
+
 class BookingOrderBase(BaseModel):
-    product_id: uuid.UUID
+    product_id: Optional[uuid.UUID] = None
     quantity: int
     customer_name: str
     customer_phone: str
     scheduled_pickup: Optional[datetime] = None
-    telegram_id: Optional[int] = None  # Добавляем поле для Telegram ID
+    telegram_id: Optional[int] = None
 
     model_config = {"from_attributes": True}
 
@@ -77,6 +76,7 @@ class BookingOrderResponse(BookingOrderBase):
 
     model_config = {"from_attributes": True}
 
+
 class PharmacyAPIConfigBase(BaseModel):
     api_type: str
     endpoint_url: str
@@ -120,6 +120,7 @@ class PharmacyCreate(BaseModel):
     address: str
     phone: str
     opening_hours: str
+
 
 class PharmacyResponse(BaseModel):
     uuid: uuid.UUID

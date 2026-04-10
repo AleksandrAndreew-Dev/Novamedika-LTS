@@ -241,13 +241,18 @@ async def get_pharmacy_orders(
         if not pharmacy:
             raise HTTPException(status_code=404, detail="Pharmacy not found")
 
-        query = select(BookingOrder).where(BookingOrder.pharmacy_id == pharmacy_id)
+        # Получаем заказы с eager loading pharmacy
+        query = (
+            select(BookingOrder)
+            .options(selectinload(BookingOrder.pharmacy))
+            .where(BookingOrder.pharmacy_id == pharmacy_id)
+        )
         if status:
             query = query.where(BookingOrder.status == status)
         query = query.order_by(BookingOrder.created_at.desc())
 
         result = await db.execute(query)
-        orders = result.scalars().all()
+        orders = result.scalars().unique().all()
 
         response_orders = []
         for order in orders:
