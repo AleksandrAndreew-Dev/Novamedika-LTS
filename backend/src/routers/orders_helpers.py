@@ -38,14 +38,20 @@ async def get_user_telegram_id_by_order(
     order: BookingOrder, db: AsyncSession
 ) -> str | None:
     """Получить telegram_id пользователя по заказу."""
+    # 1. Пробуем получить telegram_id напрямую из заказа
     if order.telegram_id:
-        return order.telegram_id
+        return str(order.telegram_id)
 
-    user_result = await db.execute(
-        select(User).where(User.uuid == order.customer_phone)
-    )
-    user = user_result.scalar_one_or_none()
-    return str(user.telegram_id) if user and user.telegram_id else None
+    # 2. Ищем по номеру телефона в таблице пользователей
+    if order.customer_phone:
+        user_result = await db.execute(
+            select(User).where(User.phone == order.customer_phone)
+        )
+        user = user_result.scalar_one_or_none()
+        if user and user.telegram_id:
+            return str(user.telegram_id)
+
+    return None
 
 
 async def get_pharmacy_name(pharmacy_id: uuid.UUID, db: AsyncSession) -> str:
@@ -95,10 +101,18 @@ async def send_order_status_notification(
 ):
     """Отправить уведомление пользователю об изменении статуса заказа."""
     telegram_id = await get_user_telegram_id_by_order(order, db)
-    if not telegram_id:
-        logger.warning(f"No telegram_id for order {order.uuid}")
-        return
+    product_name = order.product_name or await get_product_name(order.product_id, db)
+    pharmacy_name = await get_pharmacy_name(order.pharmacy_id, db)
+    pharmacy_number = await get_pharmacy_number(order.pharmacy_id, db)
+    pharmacy_phone = await get_pharmacy_phone(order.pharmacy_id, db)
+    pharmacy_address = await get_pharmacy_address(order.pharmacy_id, db)
+    pharmacy_opening_hours = await get_pharmacy_opening_hours(order.pharmacy_id, db)
 
+    pharmacy_full_name = pharmacy_name
+    if pharmacy_number:
+        pharmacy_full_name += f" №{pharmacy_number}"
+
+    # Формируем полное сообщение
     status_emoji = {
         "pending": "⏳",
         "submitted": "📤",
@@ -115,50 +129,100 @@ async def send_order_status_notification(
         "failed": "не выполнен",
     }
 
-    pharmacy_name = await get_pharmacy_name(order.pharmacy_id, db)
-    product_name = order.product_name or await get_product_name(order.product_id, db)
-    pharmacy_phone = await get_pharmacy_phone(order.pharmacy_id, db)
-    pharmacy_address = await get_pharmacy_address(order.pharmacy_id, db)
-
     emoji = status_emoji.get(new_status, "🔄")
     text_ru = status_text_ru.get(new_status, new_status)
 
-    notification = (
-        f"{emoji} <b>Статус заказа изменён</b>\n\n"
-        f"💊 {product_name}\n"
-        f"🏥 {pharmacy_name}\n"
-        f"📞 {pharmacy_phone}\n"
-        f"📍 {pharmacy_address}\n\n"
-        f"Новый статус: <b>{text_ru}</b>"
-    )
-
-    if reason:
-        notification += f"\n\n💬 Комментарий: {reason}"
-
     if new_status == "confirmed":
-        notification += "\n\nВы можете забрать заказ в аптеке."
+        from datetime import timedelta
 
-    try:
-        from bot.core import bot_manager
+        tomorrow = datetime.now() + timedelta(days=1)
+        tomorrow_str = tomorrow.strftime("%d.%m.%Y")
 
-        bot, _ = await bot_manager.initialize()
-        if bot:
-            await bot.send_message(
-                chat_id=telegram_id, text=notification, parse_mode="HTML"
-            )
-            logger.info(
-                f"Sent Telegram notification for order {order.uuid}: {old_status} → {new_status}"
-            )
-    except Exception as e:
-        logger.error(f"Failed to send Telegram notification: {e}")
+        notification = (
+            f"✅ <b>Ваш заказ подтверждён!</b>\n\n"
+            f"📦 Номер заказа: <code>{order.uuid}</code>\n"
+            f"🛍️ Товар: {product_name}\n"
+            f"🏪 Аптека: {pharmacy_full_name}\n"
+            f"📍 Адрес: {pharmacy_address}\n"
+            f"📞 Телефон: {pharmacy_phone}\n"
+            f"🕐 Время работы: {pharmacy_opening_hours}\n\n"
+        )
+        if reason:
+            notification += f"📝 <b>Комментарий от аптеки:</b> {reason}\n\n"
+        notification += f"Вы можете забрать заказ до 12:00 {tomorrow_str}. 🎉"
+
+        sms_text = (
+            f"Заказ подтверждён. {product_name}. Ждём до 12:00 {tomorrow_str}. "
+            f"Адрес: {pharmacy_address}. Аптека: {pharmacy_full_name}. Тел: {pharmacy_phone}"
+        )
+
+    elif new_status == "cancelled":
+        cancellation_reason = reason or order.cancellation_reason or "не указана"
+        notification = (
+            f"❌ <b>Ваш заказ отменён</b>\n\n"
+            f"📦 Номер заказа: <code>{order.uuid}</code>\n"
+            f"🛍️ Товар: {product_name}\n"
+            f"🏪 Аптека: {pharmacy_full_name}\n"
+            f"📍 Адрес: {pharmacy_address}\n"
+            f"📞 Телефон: {pharmacy_phone}\n"
+            f"🕐 Время работы: {pharmacy_opening_hours}\n\n"
+        )
+        if reason:
+            notification += f"📝 <b>Причина отмены:</b> {reason}\n\n"
+        notification += "Если это ошибка, свяжитесь с аптекой по телефону выше."
+
+        sms_text = (
+            f"Заказ отменён. {product_name}. Аптека: {pharmacy_full_name}. "
+            f"Тел: {pharmacy_phone}. Причина: {cancellation_reason}"
+        )
+
+    elif new_status == "failed":
+        notification = (
+            f"⚠️ <b>Проблема с вашим заказом</b>\n\n"
+            f"📦 Номер заказа: <code>{order.uuid}</code>\n"
+            f"🛍️ Товар: {product_name}\n"
+            f"🏪 Аптека: {pharmacy_full_name}\n"
+            f"📍 Адрес: {pharmacy_address}\n"
+            f"📞 Телефон: {pharmacy_phone}\n"
+            f"🕐 Время работы: {pharmacy_opening_hours}\n\n"
+        )
+        if reason:
+            notification += f"📝 <b>Причина проблемы:</b> {reason}\n\n"
+        notification += (
+            "Техническая ошибка при обработке заказа. Мы уже работаем над решением."
+        )
+
+        sms_text = (
+            f"Проблема с заказом. Мы свяжемся с вами. Тел. аптеки: {pharmacy_phone}"
+        )
+    else:
+        return  # Не отправляем уведомление для других статусов
+
+    # Отправляем через Telegram
+    if telegram_id:
+        try:
+            from bot.core import bot_manager
+
+            bot, _ = await bot_manager.initialize()
+            if bot:
+                await bot.send_message(
+                    chat_id=int(telegram_id), text=notification, parse_mode="HTML"
+                )
+                logger.info(
+                    f"Sent Telegram notification for order {order.uuid}: {old_status} → {new_status}"
+                )
+                return
+        except Exception as e:
+            logger.error(f"Failed to send Telegram notification: {e}")
 
     # SMS как fallback
-    if new_status == "confirmed":
+    if order.customer_phone:
         try:
-            sms_text = (
-                f"Ваш заказ {product_name} подтверждён. "
-                f"Заберите в {pharmacy_name}. Тел: {pharmacy_phone}"
+            await send_a1_sms(order.customer_phone, sms_text)
+            logger.info(
+                f"Sent SMS notification for order {order.uuid} to {order.customer_phone}"
             )
-            await send_a1_sms(telegram_id, sms_text)
         except Exception as e:
             logger.error(f"Failed to send SMS notification: {e}")
+    else:
+        logger.warning(f"No contact method for order {order.uuid}")
