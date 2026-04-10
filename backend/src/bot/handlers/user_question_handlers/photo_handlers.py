@@ -228,35 +228,64 @@ async def process_prescription_photo(
         await db.commit()
 
         count = len(photo_file_ids)
-        await message.answer(
-            f"📸 <b>Фото {count} сохранено</b>\n\n"
-            f"Все фото будут отправлены фармацевту <b>одним альбомом</b>.\n\n"
-            f"📎 Сейчас в альбоме: <b>{count} фото</b>\n\n"
-            f"👇 Выберите действие:",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text="✅ Подтвердить и отправить",
-                            callback_data=f"finish_photo_upload_{question_uuid}",
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            text="📸 Отправить ещё фото",
-                            callback_data=f"send_prescription_photo_{question_uuid}",
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            text="❌ Отменить загрузку",
-                            callback_data=f"cancel_photo_upload_{question_uuid}",
-                        )
-                    ],
-                ]
-            ),
-        )
+
+        if count == 1:
+            # Первое фото — показываем кнопки и инструкцию
+            await message.answer(
+                f"📸 <b>Фото 1 сохранено</b>\n\n"
+                f"Все фото будут отправлены фармацевту <b>одним альбомом</b>.\n\n"
+                f"👇 Выберите действие:",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="✅ Подтвердить и отправить",
+                                callback_data=f"finish_photo_upload_{question_uuid}",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                text="📸 Отправить ещё фото",
+                                callback_data=f"send_prescription_photo_{question_uuid}",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                text="❌ Отменить загрузку",
+                                callback_data=f"cancel_photo_upload_{question_uuid}",
+                            )
+                        ],
+                    ]
+                ),
+            )
+        else:
+            # Последующие фото — только тихое подтверждение
+            await message.answer(
+                f"✅ Фото {count} добавлено",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="✅ Подтвердить и отправить",
+                                callback_data=f"finish_photo_upload_{question_uuid}",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                text="📸 Отправить ещё фото",
+                                callback_data=f"send_prescription_photo_{question_uuid}",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                text="❌ Отменить загрузку",
+                                callback_data=f"cancel_photo_upload_{question_uuid}",
+                            )
+                        ],
+                    ]
+                ),
+            )
 
     except Exception as e:
         logger.error(f"Error processing prescription photo: {e}", exc_info=True)
@@ -300,35 +329,62 @@ async def process_prescription_document(
         await db.commit()
 
         count = len(photo_file_ids)
-        await message.answer(
-            f"📸 <b>Фото {count} сохранено</b>\n\n"
-            f"Все фото будут отправлены фармацевту <b>одним альбомом</b>.\n\n"
-            f"📎 Сейчас в альбоме: <b>{count} фото</b>\n\n"
-            f"👇 Выберите действие:",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text="✅ Подтвердить и отправить",
-                            callback_data=f"finish_photo_upload_{question_uuid}",
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            text="📸 Отправить ещё фото",
-                            callback_data=f"send_prescription_photo_{question_uuid}",
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            text="❌ Отменить загрузку",
-                            callback_data=f"cancel_photo_upload_{question_uuid}",
-                        )
-                    ],
-                ]
-            ),
-        )
+
+        if count == 1:
+            await message.answer(
+                f"📸 <b>Фото 1 сохранено</b>\n\n"
+                f"Все фото будут отправлены фармацевту <b>одним альбомом</b>.\n\n"
+                f"👇 Выберите действие:",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="✅ Подтвердить и отправить",
+                                callback_data=f"finish_photo_upload_{question_uuid}",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                text="📸 Отправить ещё фото",
+                                callback_data=f"send_prescription_photo_{question_uuid}",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                text="❌ Отменить загрузку",
+                                callback_data=f"cancel_photo_upload_{question_uuid}",
+                            )
+                        ],
+                    ]
+                ),
+            )
+        else:
+            await message.answer(
+                f"✅ Фото {count} добавлено",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="✅ Подтвердить и отправить",
+                                callback_data=f"finish_photo_upload_{question_uuid}",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                text="📸 Отправить ещё фото",
+                                callback_data=f"send_prescription_photo_{question_uuid}",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                text="❌ Отменить загрузку",
+                                callback_data=f"cancel_photo_upload_{question_uuid}",
+                            )
+                        ],
+                    ]
+                ),
+            )
 
     except Exception as e:
         logger.error(f"Error processing prescription document: {e}", exc_info=True)
