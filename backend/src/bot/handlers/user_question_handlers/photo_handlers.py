@@ -130,6 +130,13 @@ async def send_prescription_photo_callback(
             )
             return
 
+        if question.status == "completed":
+            await callback.answer(
+                "❌ Этот диалог уже завершён. Нельзя отправлять фото.",
+                show_alert=True,
+            )
+            return
+
         pharmacist_id = None
 
         if question.context_data and "photo_requested_by" in question.context_data:

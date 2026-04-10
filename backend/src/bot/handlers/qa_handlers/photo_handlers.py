@@ -54,6 +54,13 @@ async def request_photo_callback(
             await callback.answer("❌ Вопрос не найден", show_alert=True)
             return
 
+        if question.status == "completed":
+            await callback.answer(
+                "❌ Этот диалог уже завершён. Нельзя запрашивать фото.",
+                show_alert=True,
+            )
+            return
+
         if question.taken_by != pharmacist.uuid and question.status == "in_progress":
             await callback.answer(
                 "❌ Этот вопрос уже взят другим фармацевтом", show_alert=True
@@ -154,6 +161,13 @@ async def request_more_photos_callback(
 
         if not question:
             await callback.answer("❌ Вопрос не найден", show_alert=True)
+            return
+
+        if question.status == "completed":
+            await callback.answer(
+                "❌ Этот диалог уже завершён. Нельзя запрашивать фото.",
+                show_alert=True,
+            )
             return
 
         if not question.context_data:
