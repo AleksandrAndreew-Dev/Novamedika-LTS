@@ -1,4 +1,3 @@
-
 import logging
 from typing import List, Optional, Tuple
 from uuid import UUID
@@ -7,7 +6,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-
 
 
 from db.qa_models import DialogMessage, Question
@@ -54,6 +52,37 @@ class DialogService:
             await db.rollback()
             logger.error(f"Error adding dialog message: {e}", exc_info=True)
             raise
+
+    @staticmethod
+    async def remove_photos_from_dialog(
+        question_id: UUID, db: AsyncSession, sender_type: Optional[str] = None
+    ) -> int:
+        """Удалить фото из истории диалога (пометить как удалённые)"""
+        try:
+            query = (
+                select(DialogMessage)
+                .where(DialogMessage.question_id == question_id)
+                .where(DialogMessage.message_type == "photo")
+                .where(DialogMessage.is_deleted == False)
+            )
+            if sender_type:
+                query = query.where(DialogMessage.sender_type == sender_type)
+
+            result = await db.execute(query)
+            messages = result.scalars().all()
+
+            count = 0
+            for msg in messages:
+                msg.is_deleted = True
+                count += 1
+
+            logger.info(f"Removed {count} photos from dialog {question_id}")
+            return count
+
+        except Exception as e:
+            await db.rollback()
+            logger.error(f"Error removing photos from dialog: {e}", exc_info=True)
+            return 0
 
     @staticmethod
     async def get_dialog_history(
@@ -107,9 +136,7 @@ class DialogService:
 
     @staticmethod
     async def format_dialog_history_for_display(
-        question_id: UUID,
-        db: AsyncSession,
-        limit: int = 20
+        question_id: UUID, db: AsyncSession, limit: int = 20
     ) -> Tuple[str, List[str]]:
         """Форматировать историю диалога для отображения - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
         try:
@@ -117,13 +144,18 @@ class DialogService:
             messages = await DialogService.get_dialog_history(question_id, db, limit)
 
             # ✅ ЛОГИРОВАНИЕ для отладки
-            logger.info(f"Formatting dialog history for question {question_id}: {len(messages)} messages")
+            logger.info(
+                f"Formatting dialog history for question {question_id}: {len(messages)} messages"
+            )
 
             if not messages:
-                return "📋 <b>ИСТОРИЯ ДИАЛОГА</b>\n\n" \
-                       "Пока что история диалога пуста. " \
-                       "Все сообщения будут отображаться здесь по мере общения.\n\n" \
-                       "━" * 30, []
+                return (
+                    "📋 <b>ИСТОРИЯ ДИАЛОГА</b>\n\n"
+                    "Пока что история диалога пуста. "
+                    "Все сообщения будут отображаться здесь по мере общения.\n\n"
+                    "━" * 30,
+                    [],
+                )
 
             # Группируем сообщения
             formatted_messages = []
@@ -133,7 +165,9 @@ class DialogService:
 
             for msg in messages:
                 # ✅ ЛОГИРОВАНИЕ каждого сообщения
-                logger.info(f"Message: type={msg.message_type}, sender={msg.sender_type}, text='{msg.text[:50] if msg.text else 'None'}'")
+                logger.info(
+                    f"Message: type={msg.message_type}, sender={msg.sender_type}, text='{msg.text[:50] if msg.text else 'None'}'"
+                )
 
                 # Определяем отправителя и иконку
                 if msg.sender_type == "user":
@@ -169,7 +203,9 @@ class DialogService:
                 else:
                     content = f"💭 <b>Сообщение:</b>\n{msg.text}"
 
-                formatted_msg = f"{sender_icon} <b>{sender_name}</b> [{time_str}]\n{content}\n"
+                formatted_msg = (
+                    f"{sender_icon} <b>{sender_name}</b> [{time_str}]\n{content}\n"
+                )
                 formatted_messages.append(formatted_msg)
 
             # Собираем полную историю (новые сообщения внизу)
@@ -189,9 +225,12 @@ class DialogService:
 
         except Exception as e:
             logger.error(f"Error formatting dialog history: {e}", exc_info=True)
-            return "📋 <b>ИСТОРИЯ ДИАЛОГА</b>\n\n" \
-                   "❌ Не удалось загрузить историю диалога.\n\n" \
-                   "━" * 30, []
+            return (
+                "📋 <b>ИСТОРИЯ ДИАЛОГА</b>\n\n"
+                "❌ Не удалось загрузить историю диалога.\n\n"
+                "━" * 30,
+                [],
+            )
 
     @staticmethod
     async def send_unified_dialog_history(
@@ -204,13 +243,15 @@ class DialogService:
         post_text: Optional[str] = None,
         is_pharmacist: bool = False,
         show_buttons: bool = True,
-        custom_buttons: Optional[List[List[InlineKeyboardButton]]] = None
+        custom_buttons: Optional[List[List[InlineKeyboardButton]]] = None,
     ) -> str:
         """Универсальная функция отправки полной истории диалога - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
         try:
             # Получаем полную историю диалога
-            history_text, file_ids = await DialogService.format_dialog_history_for_display(
-                question_uuid, db, limit=20
+            history_text, file_ids = (
+                await DialogService.format_dialog_history_for_display(
+                    question_uuid, db, limit=20
+                )
             )
 
             # Формируем сообщение
@@ -275,7 +316,7 @@ class DialogService:
                 chat_id=chat_id,
                 text=message_text,
                 parse_mode="HTML",
-                reply_markup=reply_markup
+                reply_markup=reply_markup,
             )
 
             # Отправляем фото, если есть
@@ -284,7 +325,7 @@ class DialogService:
                     await bot.send_photo(
                         chat_id=chat_id,
                         photo=file_id,
-                        caption="📸 Фото из истории диалога"
+                        caption="📸 Фото из истории диалога",
                     )
                 except Exception as e:
                     logger.error(f"Error sending photo: {e}")
@@ -294,9 +335,5 @@ class DialogService:
         except Exception as e:
             logger.error(f"Error in send_unified_dialog_history: {e}", exc_info=True)
             error_msg = f"📋 <b>{title}</b>\n\n❌ Не удалось загрузить историю диалога."
-            await bot.send_message(
-                chat_id=chat_id,
-                text=error_msg,
-                parse_mode="HTML"
-            )
+            await bot.send_message(chat_id=chat_id, text=error_msg, parse_mode="HTML")
             return error_msg

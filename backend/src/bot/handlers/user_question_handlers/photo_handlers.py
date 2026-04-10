@@ -191,7 +191,7 @@ async def send_prescription_photo_callback(
 async def process_prescription_photo(
     message: Message, state: FSMContext, db: AsyncSession, user: User
 ):
-    """Обработка отправленного фото рецепта — сохраняет в БД, но не отправляет фармацевту сразу"""
+    """Обработка отправленного фото рецепта — сохраняет в буфер"""
     try:
         state_data = await state.get_data()
         question_uuid = state_data.get("prescription_photo_question_id")
@@ -202,7 +202,7 @@ async def process_prescription_photo(
             await state.clear()
             return
 
-        # Добавляем фото в буфер состояния для отправки при /done
+        # Добавляем фото в буфер состояния
         photo_file_ids = state_data.get("photo_file_ids", [])
         photo = message.photo[-1]
         photo_file_ids.append(photo.file_id)
@@ -222,15 +222,31 @@ async def process_prescription_photo(
 
         count = len(photo_file_ids)
         await message.answer(
-            f"✅ Фото {count} сохранено. Отправьте ещё или нажмите /done для завершения.",
+            f"📸 <b>Фото {count} сохранено</b>\n\n"
+            f"Все фото будут отправлены фармацевту <b>одним альбомом</b>.\n\n"
+            f"📎 Сейчас в альбоме: <b>{count} фото</b>\n\n"
+            f"👇 Выберите действие:",
+            parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
                         InlineKeyboardButton(
-                            text="✅ Завершить загрузку",
+                            text="✅ Подтвердить и отправить",
                             callback_data=f"finish_photo_upload_{question_uuid}",
                         )
-                    ]
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text="📸 Отправить ещё фото",
+                            callback_data=f"send_prescription_photo_{question_uuid}",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text="❌ Отменить загрузку",
+                            callback_data=f"cancel_photo_upload_{question_uuid}",
+                        )
+                    ],
                 ]
             ),
         )
@@ -278,15 +294,31 @@ async def process_prescription_document(
 
         count = len(photo_file_ids)
         await message.answer(
-            f"✅ Фото {count} сохранено. Отправьте ещё или нажмите /done для завершения.",
+            f"📸 <b>Фото {count} сохранено</b>\n\n"
+            f"Все фото будут отправлены фармацевту <b>одним альбомом</b>.\n\n"
+            f"📎 Сейчас в альбоме: <b>{count} фото</b>\n\n"
+            f"👇 Выберите действие:",
+            parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
                         InlineKeyboardButton(
-                            text="✅ Завершить загрузку",
+                            text="✅ Подтвердить и отправить",
                             callback_data=f"finish_photo_upload_{question_uuid}",
                         )
-                    ]
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text="📸 Отправить ещё фото",
+                            callback_data=f"send_prescription_photo_{question_uuid}",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text="❌ Отменить загрузку",
+                            callback_data=f"cancel_photo_upload_{question_uuid}",
+                        )
+                    ],
                 ]
             ),
         )
@@ -427,3 +459,39 @@ async def _send_finish_response(msg, state, text):
         await msg.answer(text, parse_mode="HTML")
     else:
         await msg.message.answer(text, parse_mode="HTML")
+
+
+@router.callback_query(F.data.startswith("cancel_photo_upload_"))
+async def cancel_photo_upload_callback(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db: AsyncSession,
+    user: User,
+):
+    """Отмена загрузки фото — удаляет все сохранённые фото из истории"""
+    try:
+        state_data = await state.get_data()
+        question_uuid = callback.data.replace("cancel_photo_upload_", "")
+        photo_file_ids = state_data.get("photo_file_ids", [])
+
+        # Удаляем сохранённые фото из истории
+        if photo_file_ids:
+            await DialogService.remove_photos_from_dialog(
+                question_uuid, db, sender_type="user"
+            )
+            await db.commit()
+
+        await state.clear()
+
+        await callback.message.answer(
+            f"❌ <b>Загрузка фото отменена</b>\n\n"
+            f"Удалено фото: <b>{len(photo_file_ids)}</b>\n\n"
+            f"Вы можете повторно отправить фото, нажав «📸 Отправить фото» в диалоге.",
+            parse_mode="HTML",
+        )
+        await callback.answer("Загрузка отменена")
+
+    except Exception as e:
+        logger.error(f"Error in cancel_photo_upload_callback: {e}", exc_info=True)
+        await state.clear()
+        await callback.answer("Ошибка при отмене", show_alert=True)
