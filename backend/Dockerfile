@@ -8,7 +8,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 # System dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential curl gcc libpq-dev ca-certificates \
+    build-essential curl wget gcc libpq-dev ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Создаём непривилегированного пользователя
@@ -21,6 +21,9 @@ COPY pyproject.toml uv.lock ./
 RUN pip install --upgrade pip && pip install uv
 RUN uv sync --frozen --no-cache
 
+# Install gunicorn для production
+RUN /app/.venv/bin/pip install gunicorn
+
 # Copy source code
 COPY src/ ./src/
 
@@ -32,5 +35,14 @@ USER appuser
 
 EXPOSE 8000
 
-# Use uvicorn directly
-CMD ["/app/.venv/bin/uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Production: gunicorn с uvicorn workers (3 worker для 4 CPU)
+CMD ["/app/.venv/bin/gunicorn", "main:app", \
+    "-w", "3", \
+    "-k", "uvicorn.workers.UvicornWorker", \
+    "-b", "0.0.0.0:8000", \
+    "--timeout", "120", \
+    "--graceful-timeout", "30", \
+    "--keep-alive", "5", \
+    "--access-logfile", "-", \
+    "--error-logfile", "-", \
+    "--log-level", "warning"]

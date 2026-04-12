@@ -1,0 +1,45 @@
+# docker-compose.stable.yml — для rollback на предыдущую стабильную версию
+#
+# Использование:
+#   1. Перед обновлением: docker compose -f docker-compose.traefik.prod.yml config > docker-compose.stable.yml
+#   2. При проблемах: docker compose -f docker-compose.stable.yml up -d
+#   3. Проверить: curl -f https://api.novamedika.com/health
+#
+# Этот файл СОХРАНЯЕТ предыдущие image tags и конфигурацию
+
+services:
+  traefik:
+    image: traefik:v3.6.2
+    container_name: traefik-prod
+    # ... (та же конфигурация что и в prod)
+    # Этот файл — ШАБЛОН. Перед deploy скопируйте актуальный compose:
+    # cp docker-compose.traefik.prod.yml docker-compose.stable.yml
+
+  backend:
+    image: ghcr.io/aleksandrandreew-dev/novamedika-lts/backend:stable
+    container_name: backend-prod
+    # Остальная конфигурация из docker-compose.traefik.prod.yml
+
+  frontend:
+    image: ghcr.io/aleksandrandreew-dev/novamedika-lts/frontend:stable
+    container_name: frontend-prod
+
+  postgres:
+    image: postgres:17
+    container_name: postgres-prod
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis-prod
+
+  celery_worker:
+    image: ghcr.io/aleksandrandreew-dev/novamedika-lts/backend:stable
+    container_name: celery-worker-prod
+
+networks:
+  traefik-public:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:

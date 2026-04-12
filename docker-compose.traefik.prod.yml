@@ -30,11 +30,29 @@ services:
       - "traefik.http.routers.traefik-dashboard.tls.certresolver=letsencrypt"
       - "traefik.http.routers.traefik-dashboard.middlewares=traefik-auth"
       - "traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_AUTH_USERS}"
+      # Security headers middleware
+      - "traefik.http.middlewares.security-headers.headers.customframeoptionsvalue=SAMEORIGIN"
+      - "traefik.http.middlewares.security-headers.headers.contenttypenosniff=true"
+      - "traefik.http.middlewares.security-headers.headers.referrerpolicy=strict-origin-when-cross-origin"
+      - "traefik.http.middlewares.security-headers.headers.xssprotection=1; mode=block"
+      - "traefik.http.middlewares.security-headers.headers.forcestsheader=true"
+      - "traefik.http.middlewares.security-headers.headers.stsseconds=31536000"
+      - "traefik.http.middlewares.security-headers.headers.stsincludesubdomains=true"
+      - "traefik.http.middlewares.security-headers.headers.stspreload=true"
+      - "traefik.http.middlewares.security-headers.headers.contentsecuritypolicy=default-src 'self'; script-src 'self' https://telegram.org; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://api.${DOMAIN}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+      - "traefik.http.middlewares.security-headers.headers.permissionspolicy=geolocation=(), microphone=(), camera=()"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.25"
+        reservations:
+          memory: 64M
     restart: unless-stopped
 
   backend:
     image: ghcr.io/aleksandrandreew-dev/novamedika-lts/backend:latest
-    user: "999:999"  # UID:GID appuser (backend на Debian slim)
+    user: "999:999"
     container_name: backend-prod
     env_file:
       - .env
@@ -52,24 +70,34 @@ services:
       - "traefik.http.routers.backend.entrypoints=websecure"
       - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
       - "traefik.http.services.backend.loadbalancer.server.port=8000"
+      - "traefik.http.routers.backend.middlewares=security-headers"
     volumes:
       - ./uploaded_csv:/app/uploaded_csv:rw
     networks:
       - traefik-public
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+          cpus: "1.50"
+        reservations:
+          memory: 384M
     restart: unless-stopped
 
   frontend:
     image: ghcr.io/aleksandrandreew-dev/novamedika-lts/frontend:latest
-    user: "100:102"  # UID:GID appuser (frontend на Alpine)
+    user: "100:102"
     container_name: frontend-prod
     environment:
       - VITE_API_URL=${VITE_API_URL}
@@ -83,8 +111,22 @@ services:
       - "traefik.http.routers.frontend-http.rule=Host(`spravka.novamedika.com`) || Host(`www.spravka.novamedika.com`)"
       - "traefik.http.routers.frontend-http.entrypoints=web"
       - "traefik.http.routers.frontend-http.middlewares=redirect-to-https"
+      - "traefik.http.routers.frontend.middlewares=security-headers"
     networks:
       - traefik-public
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: "0.25"
+        reservations:
+          memory: 32M
     restart: unless-stopped
 
   postgres:
@@ -94,20 +136,66 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
+    command: >
+      postgres
+      -c shared_buffers=512MB
+      -c effective_cache_size=2GB
+      -c work_mem=8MB
+      -c maintenance_work_mem=128MB
+      -c max_connections=50
+      -c max_worker_processes=2
+      -c max_parallel_workers_per_gather=1
+      -c checkpoint_timeout=10min
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c wal_level=replica
+      -c max_wal_senders=0
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - traefik-public
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+          cpus: "1.00"
+        reservations:
+          memory: 768M
     restart: unless-stopped
 
   redis:
     image: redis:7-alpine
     container_name: redis-prod
-    command: redis-server --requirepass ${REDIS_PASSWORD}
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 200mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --appendfsync everysec
     volumes:
       - redis_data:/data
     networks:
       - traefik-public
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.25"
+        reservations:
+          memory: 128M
     restart: unless-stopped
 
   celery_worker:
@@ -130,14 +218,14 @@ services:
       - CELERY_WORKER_CONCURRENCY=2
       - CELERY_WORKER_PREFETCH_MULTIPLIER=1
       - PYTHONPATH=/app/src
-      - CELERY_WORKER_MAX_TASKS_PER_CHILD=50  # Перезапускать worker после 50 задач
+      - CELERY_WORKER_MAX_TASKS_PER_CHILD=50
       - CELERY_TASK_ALWAYS_EAGER=False
     command:
       - /app/.venv/bin/celery
       - -A
       - tasks.celery_app
       - worker
-      - --loglevel=info
+      - --loglevel=warning
       - --concurrency=2
       - --pool=prefork
       - --without-gossip
@@ -146,61 +234,74 @@ services:
       - --task-events
       - --prefetch-multiplier=1
       - --max-tasks-per-child=50
+      - --max-memory-per-child=256000
     networks:
       - traefik-public
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "/app/.venv/bin/celery -A tasks.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
-      interval: 30s
-      timeout: 10s
+      interval: 60s
+      timeout: 15s
       retries: 3
-      start_period: 60s
+      start_period: 90s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.00"
+        reservations:
+          memory: 256M
     restart: unless-stopped
 
-  flower:
-    image: ghcr.io/aleksandrandreew-dev/novamedika-lts/backend:latest
-    container_name: flower-prod
-    user: "1000:1000"
-    env_file:
-      - .env
-    environment:
-      - ENVIRONMENT=production
-      - CORS_ORIGINS=${CORS_ORIGINS}
-      - PYTHONUNBUFFERED=1
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - REDIS_HOST=redis
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/0
-    command:
-      - /app/.venv/bin/celery
-      - -A
-      - tasks.celery_app  # ИЗМЕНИТЕ ЗДЕСЬ
-      - flower
-      - --port=5555
-      - --broker=redis://:${REDIS_PASSWORD}@redis:6379/0
-    networks:
-      - traefik-public
-    depends_on:
-      - redis
-      - celery_worker
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.flower.rule=Host(`flower.${DOMAIN}`)"
-      - "traefik.http.routers.flower.entrypoints=websecure"
-      - "traefik.http.routers.flower.tls.certresolver=letsencrypt"
-      - "traefik.http.services.flower.loadbalancer.server.port=5555"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5555/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    restart: unless-stopped
-
+  # Flower — закомментирован по умолчанию (экономия ресурсов ~150MB RAM)
+  # Для включения: раскомментировать и запустить docker compose up -d flower
+  # flower:
+  #   image: ghcr.io/aleksandrandreew-dev/novamedika-lts/backend:latest
+  #   container_name: flower-prod
+  #   user: "1000:1000"
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     - ENVIRONMENT=production
+  #     - REDIS_PASSWORD=${REDIS_PASSWORD}
+  #     - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+  #   command:
+  #     - /app/.venv/bin/celery
+  #     - -A
+  #     - tasks.celery_app
+  #     - flower
+  #     - --port=5555
+  #     - --broker=redis://:${REDIS_PASSWORD}@redis:6379/0
+  #   networks:
+  #     - traefik-public
+  #   depends_on:
+  #     - redis
+  #     - celery_worker
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.flower.rule=Host(`flower.${DOMAIN}`)"
+  #     - "traefik.http.routers.flower.entrypoints=websecure"
+  #     - "traefik.http.routers.flower.tls.certresolver=letsencrypt"
+  #     - "traefik.http.routers.flower.middlewares=security-headers"
+  #     - "traefik.http.services.flower.loadbalancer.server.port=5555"
+  #   healthcheck:
+  #     test: ["CMD", "wget", "-q", "--spider", "http://localhost:5555/"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 40s
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 256M
+  #         cpus: "0.25"
+  #       reservations:
+  #         memory: 128M
+  #   restart: unless-stopped
 
 
 networks:
@@ -210,4 +311,3 @@ networks:
 volumes:
   postgres_data:
   redis_data:
-  rabbitmq_data:

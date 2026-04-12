@@ -29,16 +29,14 @@ celery.conf.update(
     task_acks_late=True,
     broker_connection_retry_on_startup=True,
     worker_cancel_long_running_tasks_on_connection_loss=True,
-    # КРИТИЧЕСКИ ВАЖНЫЕ НАСТРОЙКИ ДЛЯ ASYNCPG
-    worker_max_tasks_per_child=50,  # Перезапуск worker после 50 задач для очистки памяти
-    worker_disable_rate_limits=True,
+    worker_max_tasks_per_child=50,
+    worker_disable_rate_limits=False,  # Включаем rate limiting для стабильности
     task_always_eager=False,
-    # Настройки для избежания конфликтов с БД
-    broker_pool_limit=None,
+    broker_pool_limit=10,  # Ограничиваем pool для экономии памяти
     result_backend_always_retry=True,
-    # Настройки для периодических задач
     beat_schedule_filename="celerybeat-schedule",
     beat_scheduler="celery.beat.PersistentScheduler",
+    worker_max_memory_per_child=256000,  # 256MB — перезапуск при превышении
 )
 
 # КРИТИЧЕСКИ ВАЖНО: Импортируем все задачи для регистрации
