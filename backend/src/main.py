@@ -83,22 +83,30 @@ async def lifespan(app: FastAPI):
             logger.error(f"Failed to set bot commands: {e}")
 
         # УСТАНОВКА WEBHOOK ПРИ ЗАПУСКЕ
+        # Проверяем текущий webhook, чтобы не вызывать flood control
         try:
             webhook_url = os.getenv("TELEGRAM_WEBHOOK_URL")
             secret_token = os.getenv("TELEGRAM_WEBHOOK_SECRET")
 
             if webhook_url:
-                webhook_config = {
-                    "url": webhook_url,
-                    "drop_pending_updates": True,
-                    "max_connections": 40,
-                }
+                # Проверяем, установлен ли уже нужный webhook
+                current_info = await bot.get_webhook_info()
+                current_url = current_info.url if hasattr(current_info, "url") else None
 
-                if secret_token:
-                    webhook_config["secret_token"] = secret_token
+                if current_url != webhook_url:
+                    webhook_config = {
+                        "url": webhook_url,
+                        "drop_pending_updates": True,
+                        "max_connections": 40,
+                    }
 
-                await bot.set_webhook(**webhook_config)
-                logger.info(f"Webhook set successfully: {webhook_url}")
+                    if secret_token:
+                        webhook_config["secret_token"] = secret_token
+
+                    await bot.set_webhook(**webhook_config)
+                    logger.info(f"Webhook set successfully: {webhook_url}")
+                else:
+                    logger.info(f"Webhook already set, skipping: {webhook_url}")
             else:
                 logger.warning(
                     "TELEGRAM_WEBHOOK_URL not set — bot will not receive updates"
