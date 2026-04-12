@@ -34,7 +34,7 @@ services:
       - "traefik.http.middlewares.security-headers.headers.customframeoptionsvalue=SAMEORIGIN"
       - "traefik.http.middlewares.security-headers.headers.contenttypenosniff=true"
       - "traefik.http.middlewares.security-headers.headers.referrerpolicy=strict-origin-when-cross-origin"
-      - "traefik.http.middlewares.security-headers.headers.xssprotection=1; mode=block"
+      - "traefik.http.middlewares.security-headers.headers.browserXssFilter=true"
       - "traefik.http.middlewares.security-headers.headers.forcestsheader=true"
       - "traefik.http.middlewares.security-headers.headers.stsseconds=31536000"
       - "traefik.http.middlewares.security-headers.headers.stsincludesubdomains=true"
