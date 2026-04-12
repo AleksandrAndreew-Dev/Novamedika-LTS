@@ -50,69 +50,80 @@ async def set_bot_commands(bot: Bot):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Инициализация бота при запуске
-    await init_models()
+    # Инициализация БД
+    try:
+        await init_models()
+        logger.info("Database initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}")
+        raise
+
+    # Инициализация бота (не критична для API — продолжаем без бота)
     bot, dp = await bot_manager.initialize()
 
-    if not bot or not dp:
-        logger.error("Failed to initialize bot")
-        return
+    if bot and dp:
+        logger.info("Bot initialized successfully")
+        dp.update.outer_middleware(DbMiddleware())
+        dp.update.outer_middleware(RoleMiddleware())
 
-    dp.update.outer_middleware(DbMiddleware())
-    dp.update.outer_middleware(RoleMiddleware())
+        # Порядок роутеров важен: специфичные handlers ДО общих (unknown_command)
+        dp.include_router(registration_router)
+        dp.include_router(qa_handlers_router)
+        dp.include_router(dialog_management_router)
+        dp.include_router(user_questions_router)
+        dp.include_router(clarify_router)
+        dp.include_router(common_router)
 
-    # Порядок роутеров важен: специфичные handlers ДО общих (unknown_command)
-    # unknown_command в common_router — это fallback, он должен быть последним
-    dp.include_router(registration_router)
-    dp.include_router(qa_handlers_router)
-    dp.include_router(dialog_management_router)
-    dp.include_router(user_questions_router)
-    dp.include_router(clarify_router)
-    dp.include_router(common_router)
+        # УСТАНОВКА КОМАНД БОТА
+        try:
+            await set_bot_commands(bot)
+            logger.info("Bot commands set successfully")
+        except Exception as e:
+            logger.error(f"Failed to set bot commands: {e}")
 
-    # УСТАНОВКА КОМАНД БОТА
-    try:
-        await set_bot_commands(bot)
-        logger.info("Bot commands set successfully")
-    except Exception as e:
-        logger.error(f"Failed to set bot commands: {e}")
+        # УСТАНОВКА WEBHOOK ПРИ ЗАПУСКЕ
+        try:
+            webhook_url = os.getenv("TELEGRAM_WEBHOOK_URL")
+            secret_token = os.getenv("TELEGRAM_WEBHOOK_SECRET")
 
-    # УСТАНОВКА WEBHOOK ПРИ ЗАПУСКЕ
-    try:
-        webhook_url = os.getenv("TELEGRAM_WEBHOOK_URL")
-        secret_token = os.getenv("TELEGRAM_WEBHOOK_SECRET")
+            if webhook_url:
+                webhook_config = {
+                    "url": webhook_url,
+                    "drop_pending_updates": True,
+                    "max_connections": 40,
+                }
 
-        if webhook_url:
-            webhook_config = {
-                "url": webhook_url,
-                "drop_pending_updates": True,
-                "max_connections": 40,
-            }
+                if secret_token:
+                    webhook_config["secret_token"] = secret_token
 
-            if secret_token:
-                webhook_config["secret_token"] = secret_token
+                await bot.set_webhook(**webhook_config)
+                logger.info(f"Webhook set successfully: {webhook_url}")
+            else:
+                logger.warning(
+                    "TELEGRAM_WEBHOOK_URL not set — bot will not receive updates"
+                )
 
-            await bot.set_webhook(**webhook_config)
-            logger.info(f"Webhook set successfully: {webhook_url}")
-        else:
-            logger.error("TELEGRAM_WEBHOOK_URL not set")
+        except Exception as e:
+            logger.error(f"Failed to set webhook: {e}")
 
-    except Exception as e:
-        logger.error(f"Failed to set webhook: {e}")
-
-    logger.info("Bot started successfully with webhook")
+        logger.info("Bot started successfully with webhook")
+    else:
+        logger.warning(
+            "Bot NOT initialized — API will work, but Telegram features are disabled"
+        )
 
     yield
 
     # Завершение работы бота
-    await bot_manager.shutdown()
+    if bot:
+        await bot_manager.shutdown()
 
-    # УДАЛЕНИЕ WEBHOOK ПРИ ЗАВЕРШЕНИИ
-    try:
-        await bot.delete_webhook(drop_pending_updates=True)
-        logger.info("Webhook deleted on shutdown")
-    except Exception as e:
-        logger.error(f"Error deleting webhook: {e}")
+        # УДАЛЕНИЕ WEBHOOK ПРИ ЗАВЕРШЕНИИ
+        try:
+            await bot.delete_webhook(drop_pending_updates=True)
+            logger.info("Webhook deleted on shutdown")
+        except Exception as e:
+            logger.error(f"Error deleting webhook: {e}")
 
 
 app = FastAPI(lifespan=lifespan, title="Novamedika Q&A Bot API")

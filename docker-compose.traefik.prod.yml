@@ -58,6 +58,7 @@ services:
       - .env
     environment:
       - ENVIRONMENT=production
+      - SECRET_KEY=${SECRET_KEY}
       - CORS_ORIGINS=${CORS_ORIGINS}
       - PYTHONUNBUFFERED=1
       - DATABASE_URL=${DATABASE_URL}
@@ -82,10 +83,10 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8000/health"]
-      interval: 30s
+      interval: 15s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      start_period: 120s
     deploy:
       resources:
         limits:
@@ -206,6 +207,7 @@ services:
       - .env
     environment:
       - ENVIRONMENT=production
+      - SECRET_KEY=${SECRET_KEY}
       - CORS_ORIGINS=${CORS_ORIGINS}
       - PYTHONUNBUFFERED=1
       - DATABASE_URL=${DATABASE_URL}
