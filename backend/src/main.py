@@ -3,8 +3,9 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -169,8 +170,10 @@ async def root():
     return {"status": "ok", "message": "Novamedika Q&A Bot API"}
 
 
-@app.get("/health")
-async def health_check():
+@app.api_route("/health", methods=["GET", "HEAD"])
+async def health_check(request: Request):
+    if request.method == "HEAD":
+        return JSONResponse(content={"status": "healthy"})
     return {"status": "healthy"}
 
 
