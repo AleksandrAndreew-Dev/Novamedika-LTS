@@ -97,6 +97,7 @@ services:
 
   frontend:
     image: ghcr.io/aleksandrandreew-dev/novamedika-lts/frontend:latest
+    user: "100:102"
     container_name: frontend-prod
     environment:
       - VITE_API_URL=${VITE_API_URL}
