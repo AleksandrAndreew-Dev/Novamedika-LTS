@@ -108,14 +108,14 @@ services:
       - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
       - "traefik.http.services.frontend.loadbalancer.server.port=80"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-      - "traefik.http.routers.frontend-http.rule=Host(`spravka.novamedika.com`) || Host(`www.spravka.novamedika.com`)"
+      - "traefik.http.routers.frontend-http.rule=Host(`spravka.novamedika.com`)"
       - "traefik.http.routers.frontend-http.entrypoints=web"
       - "traefik.http.routers.frontend-http.middlewares=redirect-to-https"
       - "traefik.http.routers.frontend.middlewares=security-headers"
     networks:
       - traefik-public
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80"]
       interval: 30s
       timeout: 10s
       retries: 3
