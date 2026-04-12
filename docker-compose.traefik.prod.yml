@@ -220,7 +220,7 @@ services:
       - CELERY_WORKER_CONCURRENCY=2
       - CELERY_WORKER_PREFETCH_MULTIPLIER=1
       - PYTHONPATH=/app/src
-      - CELERY_WORKER_MAX_TASKS_PER_CHILD=50
+      - CELERY_WORKER_MAX_TASKS_PER_CHILD=100  # Перезапускать worker после 100 задач
       - CELERY_TASK_ALWAYS_EAGER=False
     command:
       - /app/.venv/bin/celery
@@ -235,7 +235,7 @@ services:
       - --without-heartbeat
       - --task-events
       - --prefetch-multiplier=1
-      - --max-tasks-per-child=50
+      - --max-tasks-per-child=100
       - --max-memory-per-child=256000
     networks:
       - traefik-public

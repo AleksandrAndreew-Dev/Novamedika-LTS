@@ -29,7 +29,7 @@ celery.conf.update(
     task_acks_late=True,
     broker_connection_retry_on_startup=True,
     worker_cancel_long_running_tasks_on_connection_loss=True,
-    worker_max_tasks_per_child=50,
+    worker_max_tasks_per_child=100,
     worker_disable_rate_limits=False,  # Включаем rate limiting для стабильности
     task_always_eager=False,
     broker_pool_limit=10,  # Ограничиваем pool для экономии памяти

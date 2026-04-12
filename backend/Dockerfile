@@ -33,4 +33,4 @@ USER appuser
 EXPOSE 8000
 
 # Production: gunicorn с uvicorn workers (3 worker для 4 CPU)
-CMD ["/app/.venv/bin/gunicorn", "main:app", "-w", "3", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8000", "--preload", "--timeout", "120", "--graceful-timeout", "30", "--keep-alive", "5", "--access-logfile", "-", "--error-logfile", "-", "--log-level", "info"]
+CMD ["/app/.venv/bin/gunicorn", "main:app", "-w", "3", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8000", "--preload", "--timeout", "120", "--graceful-timeout", "30", "--keep-alive", "5", "--access-logfile", "-", "--error-logfile", "-", "--log-level", "warning", "--max-requests", "500", "--max-requests-jitter", "50"]
