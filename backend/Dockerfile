@@ -18,11 +18,8 @@ RUN groupadd -r appgroup && useradd -r -g appgroup appuser
 COPY pyproject.toml uv.lock ./
 
 # Install uv and dependencies
-RUN pip install --upgrade pip && pip install uv
+RUN pip install --upgrade pip --root-user-action=ignore && pip install uv --root-user-action=ignore
 RUN uv sync --frozen --no-cache
-
-# Install gunicorn для production
-RUN /app/.venv/bin/pip install gunicorn
 
 # Copy source code
 COPY src/ ./src/
