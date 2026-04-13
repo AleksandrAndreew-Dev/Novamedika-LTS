@@ -6,6 +6,11 @@ const ResultItemTelegram = React.memo(function ResultItemTelegram({
   formatDate,
   onBook,
 }) {
+  const mapQuery = encodeURIComponent(
+    `${item.pharmacy_name} №${item.pharmacy_number}, ${item.pharmacy_city}, ${item.pharmacy_address}`,
+  );
+  const mapUrl = `https://www.google.com/maps/search/?api=1&query=${mapQuery}`;
+
   return (
     <div
       className="border border-gray-300 rounded-lg p-4 hover:border-telegram-primary transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:ring-offset-2"
@@ -47,6 +52,15 @@ const ResultItemTelegram = React.memo(function ResultItemTelegram({
             {item.pharmacy_name} №{item.pharmacy_number}, {item.pharmacy_city},{" "}
             {item.pharmacy_address}
           </span>
+          <a
+            href={mapUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:text-blue-800 text-xs ml-2 whitespace-nowrap"
+            onClick={(e) => e.stopPropagation()}
+          >
+            📍 На карте
+          </a>
         </div>
         <div className="flex items-center">
           <svg

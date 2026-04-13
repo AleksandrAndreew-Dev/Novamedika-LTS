@@ -11,6 +11,11 @@ const BookingModal = React.memo(function BookingModal({
 
   const product = bookingState.modal.product;
 
+  const mapQuery = encodeURIComponent(
+    `${product.pharmacy_name} №${product.pharmacy_number}, ${product.pharmacy_city || ""}, ${product.pharmacy_address}`,
+  );
+  const mapUrl = `https://www.google.com/maps/search/?api=1&query=${mapQuery}`;
+
   const formatQuantity = (quantity) => {
     const num = parseFloat(quantity);
     if (isNaN(num)) return "0";
@@ -104,6 +109,33 @@ const BookingModal = React.memo(function BookingModal({
                   <p className="text-sm text-gray-600 mb-1">
                     Адрес: {product.pharmacy_address}
                   </p>
+                  <a
+                    href={mapUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 text-sm font-medium inline-flex items-center mb-1"
+                  >
+                    <svg
+                      className="w-4 h-4 mr-1"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                      />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                      />
+                    </svg>
+                    Посмотреть на карте
+                  </a>
                   <p className="text-sm text-gray-600 mb-1">
                     Телефон: {product.pharmacy_phone}
                   </p>
