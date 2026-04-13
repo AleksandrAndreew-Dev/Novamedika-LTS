@@ -2,7 +2,8 @@ import os
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError, ExpiredSignatureError
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -53,7 +54,9 @@ async def get_current_pharmacist(
         pharmacist_id: str = payload.get("sub")
         if pharmacist_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
-    except JWTError:
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
     result = await db.execute(
@@ -104,7 +107,9 @@ async def validate_refresh_token(token: str, db: AsyncSession) -> dict:
         user_id: str = payload.get("sub")
         if user_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
-    except JWTError:
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
     # Проверяем в БД что токен не отозван

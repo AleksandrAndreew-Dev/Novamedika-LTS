@@ -178,6 +178,20 @@ async def rate_limit_handler(request: Request, exc):
     )
 
 
+# Global exception handler — prevents leaking internals (SQL errors, paths, stack traces)
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    # Log full details for debugging (server-side only)
+    logger.exception(
+        f"Unhandled exception on {request.method} {request.url.path}: {exc}"
+    )
+    # Generic message for client — no internals leaked
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+    )
+
+
 # ДОБАВИТЬ CORS MIDDLEWARE
 origins = os.getenv("CORS_ORIGINS", "").split(",")
 if not origins or origins == [""]:
@@ -190,8 +204,13 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "OPTIONS"],
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "X-API-Key",
+        "X-Telegram-Bot-Api-Secret-Token",
+    ],
 )
 
 # Подключение API роутеров

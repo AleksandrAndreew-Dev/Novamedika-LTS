@@ -108,7 +108,10 @@ async def register_pharmacist(
 
     except Exception as e:
         await db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Pharmacist registration failed")
+        raise HTTPException(
+            status_code=500, detail="Registration failed. Please try again later."
+        )
 
 
 @router.post("/login/")
@@ -170,7 +173,10 @@ async def pharmacist_login(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Pharmacist login failed")
+        raise HTTPException(
+            status_code=500, detail="Login failed. Please try again later."
+        )
 
 
 @router.get("/me", response_model=PharmacistResponse)

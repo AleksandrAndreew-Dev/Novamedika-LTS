@@ -91,9 +91,9 @@ async def get_orders(
     pharmacy_id: Optional[uuid.UUID] = None,
     status: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    # api_key: str = Depends(get_api_key),  # Отключено — frontend публичный
+    api_key: str = Depends(get_api_key),
 ):
-    """Получение списка заказов с фильтрацией (без auth — публичный эндпоинт)"""
+    """Получение списка заказов с фильтрацией (требуется API Key)"""
     try:
         query = select(BookingOrder).options(selectinload(BookingOrder.pharmacy))
         if pharmacy_id:
@@ -143,9 +143,9 @@ async def get_order_by_id(
     request: Request,
     order_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    # api_key: str = Depends(get_api_key),  # Отключено — frontend публичный
+    api_key: str = Depends(get_api_key),
 ):
-    """Получение заказа по ID (без auth — публичный эндпоинт)"""
+    """Получение заказа по ID (требуется API Key)"""
     try:
         result = await db.execute(
             select(BookingOrder).where(BookingOrder.uuid == order_id)

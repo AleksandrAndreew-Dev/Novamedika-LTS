@@ -1,5 +1,6 @@
 # upload.py - обновленная версия
 import os
+import re
 from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends, Request
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import secrets
@@ -20,6 +21,9 @@ CORRECT_PASSWORD = os.getenv("CORRECT_PASSWORD")
 
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 ALLOWED_EXTENSIONS = {".csv"}
+
+# Safe pattern: only alphanumeric, hyphens, underscores allowed
+SAFE_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
 def authenticate_pharmacy(credentials: HTTPBasicCredentials = Depends(security)):
@@ -57,6 +61,18 @@ async def upload_file(
 ):
     """Загрузка CSV файла аптеки. Максимум 50MB, только CSV."""
 
+    # Sanitize path parameters — prevent path traversal
+    if not SAFE_NAME_PATTERN.match(pharmacy_name):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid pharmacy name. Only letters, numbers, hyphens, and underscores allowed.",
+        )
+    if not SAFE_NAME_PATTERN.match(pharmacy_number):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid pharmacy number. Only letters, numbers, hyphens, and underscores allowed.",
+        )
+
     # Проверка расширения файла (MIME type при upload часто application/octet-stream)
     filename = file.filename or ""
     ext = os.path.splitext(filename)[1].lower()
@@ -86,9 +102,21 @@ async def upload_file(
         )
 
         # Сохраняем с фиксированным именем (будет перезаписываться)
-        save_dir = "uploaded_csv"
+        save_dir = os.path.join(
+            os.path.dirname(__file__), "..", "..", "..", "uploaded_csv"
+        )
+        save_dir = os.path.realpath(save_dir)
         os.makedirs(save_dir, exist_ok=True)
-        file_path = os.path.join(save_dir, f"{pharmacy_name}_{pharmacy_number}.csv")
+        file_name = f"{pharmacy_name}_{pharmacy_number}.csv"
+        file_path = os.path.realpath(os.path.join(save_dir, file_name))
+
+        # Double-check: ensure file_path is within save_dir (defense in depth)
+        if not file_path.startswith(save_dir + os.sep):
+            logger.critical(f"Path traversal attempt blocked: {file_path}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid file path",
+            )
 
         # Просто перезаписываем файл
         with open(file_path, "wb") as f:
@@ -125,9 +153,11 @@ async def upload_file(
             "message": "File upload processing started",
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Upload error: {str(e)}", exc_info=True)
+        logger.error(f"Upload error", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error processing file: {str(e)}",
+            detail="Error processing file. Please try again or contact support.",
         )
