@@ -84,8 +84,19 @@ async def lifespan(app: FastAPI):
 
     if bot and dp:
         logger.info("Bot initialized successfully")
-        dp.update.outer_middleware(DbMiddleware())
-        dp.update.outer_middleware(RoleMiddleware())
+
+        # Register middleware on specific event types to avoid breaking FSM middleware chain
+        # outer_middleware breaks the internal data dict — use regular middleware instead
+        dp.message.middleware(DbMiddleware())
+        dp.message.middleware(RoleMiddleware())
+        dp.callback_query.middleware(DbMiddleware())
+        dp.callback_query.middleware(RoleMiddleware())
+        dp.inline_query.middleware(DbMiddleware())
+        dp.inline_query.middleware(RoleMiddleware())
+        dp.chosen_inline_result.middleware(DbMiddleware())
+        dp.chosen_inline_result.middleware(RoleMiddleware())
+        dp.poll.middleware(DbMiddleware())
+        dp.poll.middleware(RoleMiddleware())
 
         # Порядок роутеров важен: специфичные handlers ДО общих (unknown_command)
         dp.include_router(registration_router)
