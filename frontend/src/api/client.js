@@ -6,25 +6,61 @@ import { logger } from "../utils/logger";
 export const api = axios.create({
   baseURL: NORMALIZED_API_BASE,
   timeout: 15000,
+  headers: {
+    "Content-Type": "application/json",
+  },
 });
 
-// Добавляем интерцептор для обработки ошибок
+// Request interceptor — добавляем API key если есть
+api.interceptors.request.use(
+  (config) => {
+    const apiKey = import.meta.env.VITE_API_KEY;
+    if (apiKey) {
+      config.headers["X-API-KEY"] = apiKey;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error),
+);
+
+// Response interceptor — форматируем ошибки
+const ERROR_MESSAGES = {
+  400: "Неверный запрос. Проверьте введённые данные.",
+  401: "Требуется авторизация.",
+  403: "Доступ запрещён.",
+  404: "Ресурс не найден.",
+  413: "Файл слишком большой.",
+  429: "Слишком много запросов. Подождите немного.",
+  500: "Ошибка сервера. Попробуйте позже.",
+  502: "Сервер временно недоступен.",
+  503: "Сервер временно недоступен. Попробуйте позже.",
+};
+
+function getErrorMessage(error) {
+  if (error.response) {
+    const status = error.response.status;
+    const data = error.response.data;
+    // Берём сообщение от сервера если есть
+    const serverMsg = data?.detail || data?.message;
+    return serverMsg || ERROR_MESSAGES[status] || `Ошибка ${status}`;
+  }
+  if (error.request) {
+    return "Нет соединения с сервером. Проверьте интернет.";
+  }
+  return error.message || "Неизвестная ошибка";
+}
+
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    logger.error("API Error:", error);
+    const message = getErrorMessage(error);
+    logger.error(
+      `API Error [${error.response?.status || "network"}]: ${message}`,
+    );
 
-    if (error.response) {
-      logger.error(
-        "Response error:",
-        error.response.status,
-        error.response.data,
-      );
-    } else if (error.request) {
-      logger.error("Request error:", error.request);
-    } else {
-      logger.error("Error:", error.message);
-    }
+    // Добавляем human-readable сообщение к объекту ошибки
+    error.userMessage = message;
+    error.isApiError = !!error.response;
 
     return Promise.reject(error);
   },
@@ -37,6 +73,9 @@ export const bookingApi = {
     return response.data;
   },
 };
+
+// Экспортируем хелпер для получения сообщений ошибок
+export { getErrorMessage, ERROR_MESSAGES };
 
 // Экспортируем по умолчанию основной API клиент
 export default api;

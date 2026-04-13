@@ -1,11 +1,35 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import Search from "./components/Search";
 import TelegramWrapper from "./telegram/TelegramWrapper";
 import { TelegramProvider } from "./telegram/TelegramContext";
+import { api } from "./api/client";
 import "./App.css";
 
 function App() {
   const [showCookieBanner, setShowCookieBanner] = useState(false);
+  const [errorToast, setErrorToast] = useState(null);
+
+  // Глобальный обработчик API ошибок
+  const handleError = useCallback((error) => {
+    const message = error.userMessage || error.message;
+    setErrorToast(message);
+    // Автоматически скрываем через 5 секунд
+    setTimeout(() => setErrorToast(null), 5000);
+  }, []);
+
+  useEffect(() => {
+    // Добавляем глобальный обработчик на все API ошибки
+    const interceptor = api.interceptors.response.use(
+      (r) => r,
+      (error) => {
+        if (error.isApiError || error.userMessage) {
+          handleError(error);
+        }
+        return Promise.reject(error);
+      },
+    );
+    return () => api.interceptors.response.eject(interceptor);
+  }, [handleError]);
 
   useEffect(() => {
     // Показываем баннер cookies только если не в Telegram
@@ -59,6 +83,22 @@ function App() {
           )}
 
           <Search />
+
+          {/* Глобальный тост ошибок */}
+          {errorToast && (
+            <div className="fixed top-4 left-4 right-4 max-w-md mx-auto z-50 animate-slide-down">
+              <div className="bg-red-500 text-white rounded-xl shadow-lg p-4 flex items-center justify-between">
+                <span className="text-sm font-medium">{errorToast}</span>
+                <button
+                  onClick={() => setErrorToast(null)}
+                  className="ml-4 text-white hover:text-gray-200 transition-colors flex-shrink-0"
+                  aria-label="Закрыть"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </TelegramWrapper>
     </TelegramProvider>

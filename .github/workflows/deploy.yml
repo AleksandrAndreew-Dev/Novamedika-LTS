@@ -9,14 +9,16 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
-      tag:
-        description: "Docker image tag to deploy (e.g., v1.0.0-pre-audit)"
+      deploy_env:
+        description: "Deploy environment"
         required: false
-        default: "latest"
+        default: "production"
+        type: choice
+        options:
+          - production
 
 env:
   REGISTRY: ghcr.io
-  # Используем явный путь в lowercase
   IMAGE_NAME: aleksandrandreew-dev/novamedika-lts
   DOCKER_COMPOSE_FILE: docker-compose.traefik.prod.yml
   DOMAIN: spravka.novamedika.com
@@ -151,25 +153,10 @@ jobs:
           provenance: false
           sbom: false
 
-      - name: Prepare deployment files
-        run: |
-          # Создаем docker-compose.deploy.yml с правильными путями к образам
-          cp ${{ env.DOCKER_COMPOSE_FILE }} docker-compose.deploy.yml
-          # Приводим пути к нижнему регистру
-          sed -i "s|build:.*backend.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest|g" docker-compose.deploy.yml
-          sed -i "s|build:.*frontend.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest|g" docker-compose.deploy.yml
-
-      - name: Upload deployment artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: deployment-files
-          path: docker-compose.deploy.yml
-          retention-days: 1
-
   deploy-production:
     needs: build-and-push
     runs-on: [self-hosted, linux, novamedika-runner]
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch'
 
     environment: production
 
@@ -178,6 +165,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: deployment-files
+        continue-on-error: true
+
+      - name: Prepare deployment files
+        run: |
+          # Создаем docker-compose.deploy.yml с правильными путями к образам
+          cp ${{ env.DOCKER_COMPOSE_FILE }} docker-compose.deploy.yml
 
       - name: Upload compose to server
         uses: appleboy/scp-action@v0.1.2

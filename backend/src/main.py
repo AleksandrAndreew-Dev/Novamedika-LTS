@@ -8,7 +8,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand
-from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot.core import bot_manager
 from bot.handlers.clarify_handlers import router as clarify_router

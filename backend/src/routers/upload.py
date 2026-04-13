@@ -1,6 +1,5 @@
 # upload.py - обновленная версия
 import os
-import datetime
 from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends, Request
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import secrets
