@@ -57,8 +57,34 @@ def determine_chain(pharmacy_name: str) -> str:
     elif "эклини" in name_lower or "eklini" in name_lower:
         return "Эклиния"
     else:
-        # По умолчанию или можно добавить логику для определения по другим признакам
         return "Новамедика"
+
+
+def extract_district_from_address(address: str) -> str | None:
+    """
+    Извлекает район из строки адреса.
+    Поддерживаемые форматы:
+      - 'Минск-Фрунзенский, ул. ...'   → 'Фрунзенский р-н'
+      - 'Минск, Фрунзенский р-н, ...'   → 'Фрунзенский р-н'
+      - 'Минск, Фрунзенский район, ...'  → 'Фрунзенский р-н'
+    """
+    if not address:
+        return None
+
+    # Формат: Минск-Фрунзенский (город-район без пробелов)
+    match = re.match(r"^[А-Яа-яЁё\s]+-([А-Яа-яЁё]+)\b", address)
+    if match:
+        district = match.group(1).strip()
+        # Нормализуем: убираем окончания, добавляем "р-н"
+        return f"{district} р-н"
+
+    # Формат: Минск, Фрунзенский р-н / Фрунзенский район
+    match = re.search(r",\s*([А-Яа-яЁё]+\s+(?:р-н|район))\b", address)
+    if match:
+        district_raw = match.group(1).strip()
+        return district_raw.replace("район", "р-н")
+
+    return None
 
 
 @router.post("/load-pharmacies/")
@@ -107,6 +133,11 @@ async def load_pharmacies(
                         if existing_pharmacy.address != row["address"]:
                             existing_pharmacy.address = row["address"]
                             update_needed = True
+                        # Извлекаем район из адреса
+                        district = extract_district_from_address(row["address"])
+                        if district and existing_pharmacy.district != district:
+                            existing_pharmacy.district = district
+                            update_needed = True
                         if existing_pharmacy.phone != row["phone"]:
                             existing_pharmacy.phone = row["phone"]
                             update_needed = True
@@ -121,16 +152,19 @@ async def load_pharmacies(
                         if update_needed:
                             pharmacies_updated += 1
                     else:
+                        # Извлекаем район из адреса
+                        district = extract_district_from_address(row["address"])
                         # Создаем новую аптеку
                         pharmacy = Pharmacy(
                             uuid=uuid.uuid4(),
                             name=pharmacy_name,
                             pharmacy_number=pharmacy_number,
                             city=row["city"],
+                            district=district,
                             address=row["address"],
                             phone=row["phone"],
                             opening_hours=row["opening_hours"],
-                            chain=chain,  # Используем определенную сеть
+                            chain=chain,
                         )
                         db.add(pharmacy)
                         pharmacies_loaded += 1
@@ -345,6 +379,12 @@ async def update_pharmacy_info(
             if hasattr(pharmacy, field):
                 setattr(pharmacy, field, value)
 
+        # Авто-извлечение района из адреса
+        if pharmacy.address:
+            district = extract_district_from_address(pharmacy.address)
+            if district and not pharmacy.district:
+                pharmacy.district = district
+
         await db.commit()
         await db.refresh(pharmacy)
 
@@ -408,6 +448,7 @@ async def get_pharmacy_info(
             "name": pharmacy.name,
             "pharmacy_number": pharmacy.pharmacy_number,
             "city": pharmacy.city,
+            "district": pharmacy.district,
             "address": pharmacy.address,
             "phone": pharmacy.phone,
             "opening_hours": pharmacy.opening_hours,
