@@ -98,12 +98,31 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Log in to Container Registry
+      - name: Log in to Container Registry (with retry)
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+        # Retry up to 3 times on TLS/network errors
+        continue-on-error: true
+        id: docker-login
+
+      - name: Retry Docker login if failed
+        if: steps.docker-login.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "⚠️ First login attempt failed, retrying in 15 seconds..."
+          sleep 15
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+
+      - name: Second retry for Docker login if still failed
+        if: steps.docker-login.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "⚠️ Second login attempt failed, retrying in 30 seconds..."
+          sleep 30
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -115,7 +134,32 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=raw,value=${{ github.ref_name }},enable=${{ startsWith(github.ref, 'refs/tags/') }}
 
-      - name: Build and push backend image
+      - name: Build and push backend image (with retry)
+        id: build-backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: prod
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+          sbom: false
+        continue-on-error: true
+
+      - name: Retry backend push if failed
+        if: steps.build-backend.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "⚠️ Backend push failed, retrying in 20 seconds..."
+          sleep 20
+        continue-on-error: true
+
+      - name: Build and push backend image (retry attempt)
+        if: steps.build-backend.outcome == 'failure'
         uses: docker/build-push-action@v6
         with:
           context: ./backend
@@ -139,7 +183,32 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=raw,value=${{ github.ref_name }},enable=${{ startsWith(github.ref, 'refs/tags/') }}
 
-      - name: Build and push frontend image
+      - name: Build and push frontend image (with retry)
+        id: build-frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          target: prod
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+          sbom: false
+        continue-on-error: true
+
+      - name: Retry frontend push if failed
+        if: steps.build-frontend.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "⚠️ Frontend push failed, retrying in 20 seconds..."
+          sleep 20
+        continue-on-error: true
+
+      - name: Build and push frontend image (retry attempt)
+        if: steps.build-frontend.outcome == 'failure'
         uses: docker/build-push-action@v6
         with:
           context: ./frontend

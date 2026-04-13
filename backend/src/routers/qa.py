@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List, Optional
 import uuid
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from db.database import get_db
 from db.qa_models import User, Question, Answer, Pharmacist
@@ -16,6 +18,7 @@ from sqlalchemy.orm import selectinload  # ДОБАВИТЬ
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 
 async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncSession):
@@ -56,12 +59,14 @@ async def get_user_by_telegram_id(telegram_id: int, db: AsyncSession) -> User:
 
 # Эндпоинты
 @router.post("/questions/", response_model=QuestionResponse)
+@limiter.limit("20/minute")
 async def create_question(
+    request: Request,
     question: QuestionCreate,
     db: AsyncSession = Depends(get_db),
     api_key: str = Depends(get_api_key),
 ):
-    """Создать вопрос"""
+    """Создать вопрос (rate limit 20/min)"""
     try:
         user = await get_or_create_user(
             db,

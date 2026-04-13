@@ -16,13 +16,11 @@ _backend_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_backend_dir))  # /app/
 
 # Импортируем все модели
+# RefreshToken импортируется автоматически через qa_models.py → from .token_models import RefreshToken
 from src.db.base import Base
 from src.db.models import Pharmacy, Product
 from src.db.qa_models import User, Pharmacist, Question, Answer, DialogMessage
 from src.db.booking_models import BookingOrder, PharmacyAPIConfig, SyncLog
-
-# RefreshToken импортируется через qa_models → User.relationship
-from src.db.token_models import RefreshToken  # noqa: F401
 
 # Alembic Config object
 config = context.config

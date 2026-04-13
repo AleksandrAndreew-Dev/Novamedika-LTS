@@ -49,8 +49,13 @@ async def get_pharmacist_by_telegram_id(
 
 
 @router.post("/register-from-telegram/", response_model=PharmacistResponse)
-async def register_pharmacist(telegram_data: dict, db: AsyncSession = Depends(get_db)):
-    """Регистрация фармацевта с проверкой дубликатов"""
+@limiter.limit("5/minute")
+async def register_pharmacist(
+    request: Request,
+    telegram_data: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Регистрация фармацевта с проверкой дубликатов (rate limit 5/min)"""
     try:
         user = await get_or_create_user(
             db,

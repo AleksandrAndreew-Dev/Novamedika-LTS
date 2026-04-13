@@ -10,6 +10,7 @@ from utils.time_utils import get_utc_now_naive
 
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(PG_UUID(as_uuid=True), ForeignKey("qa_users.uuid"), nullable=False)
