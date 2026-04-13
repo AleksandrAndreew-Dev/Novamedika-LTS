@@ -23,21 +23,13 @@ _async_session_maker = None
 
 
 def get_engine():
-    global _engine
-    if _engine is None:
-        echo = os.getenv("SQL_ECHO", "false").lower() == "true"
-        _engine = create_async_engine(DATABASE_URL, echo=echo)
-    return _engine
+    """Get or create async engine (thread-safe lazy initialization)"""
+    return _get_or_create_engine()
 
 
 def get_async_sessionmaker():
-    global _async_session_maker
-    if _async_session_maker is None:
-        engine = get_engine()
-        _async_session_maker = async_sessionmaker(
-            engine, class_=AsyncSession, expire_on_commit=False
-        )
-    return _async_session_maker
+    """Get or create async sessionmaker (thread-safe lazy initialization)"""
+    return _get_or_create_sessionmaker()
 
 
 async def init_models():
@@ -63,9 +55,48 @@ async def get_async_connection():
     return await asyncpg.connect(ASYNCPG_DATABASE_URL)
 
 
-# Глобальные переменные для обратной совместимости
-engine = get_engine()
-async_session_maker = get_async_sessionmaker()
+# Глобальные переменные для обратной совместимости (ленивая инициализация)
+_engine = None
+_async_session_maker = None
+
+
+def _get_or_create_engine():
+    """Get or create engine (called lazily)"""
+    global _engine
+    if _engine is None:
+        echo = os.getenv("SQL_ECHO", "false").lower() == "true"
+        _engine = create_async_engine(DATABASE_URL, echo=echo)
+    return _engine
+
+
+def _get_or_create_sessionmaker():
+    """Get or create sessionmaker (called lazily)"""
+    global _async_session_maker
+    if _async_session_maker is None:
+        engine = _get_or_create_engine()
+        _async_session_maker = async_sessionmaker(
+            engine, class_=AsyncSession, expire_on_commit=False
+        )
+    return _async_session_maker
+
+
+# Properties for backward compatibility (lazy evaluation)
+class _LazyEngine:
+    """Proxy object that creates engine on first access"""
+
+    def __getattr__(self, name):
+        return getattr(_get_or_create_engine(), name)
+
+
+class _LazySessionMaker:
+    """Proxy object that creates sessionmaker on first access"""
+
+    def __getattr__(self, name):
+        return getattr(_get_or_create_sessionmaker(), name)
+
+
+engine = _LazyEngine()
+async_session_maker = _LazySessionMaker()
 
 
 # db/database.py - ДОБАВЬТЕ ЭТИ ФУНКЦИИ
@@ -119,3 +150,14 @@ def reset_engine():
         logger.info("Resetting engine after fork")
     _engine = None
     _async_session_maker = None
+
+
+# Переопределяем для явного вызова
+def get_or_create_engine():
+    """Public alias for lazy engine creation"""
+    return _get_or_create_engine()
+
+
+def get_or_create_sessionmaker():
+    """Public alias for lazy sessionmaker creation"""
+    return _get_or_create_sessionmaker()

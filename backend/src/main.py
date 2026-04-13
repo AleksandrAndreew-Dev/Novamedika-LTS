@@ -79,83 +79,107 @@ async def lifespan(app: FastAPI):
             "REGISTRATION_SECRET_WORD is NOT SET — pharmacist registration will be blocked"
         )
 
-    # Инициализация бота (не критична для API — продолжаем без бота)
-    bot, dp = await bot_manager.initialize()
+    # Инициализация бота — используем файл-лок для предотвращения多重 инициализации
+    # Только ПЕРВЫЙ worker инициализирует бота и устанавливает webhook
+    init_lock_file = "/tmp/bot_init_lock"
+    worker_pid = os.getpid()
 
-    if bot and dp:
-        logger.info("Bot initialized successfully")
-
-        # Register middleware on specific event types to avoid breaking FSM middleware chain
-        # outer_middleware breaks the internal data dict — use regular middleware instead
-        dp.message.middleware(DbMiddleware())
-        dp.message.middleware(RoleMiddleware())
-        dp.callback_query.middleware(DbMiddleware())
-        dp.callback_query.middleware(RoleMiddleware())
-        dp.inline_query.middleware(DbMiddleware())
-        dp.inline_query.middleware(RoleMiddleware())
-        dp.chosen_inline_result.middleware(DbMiddleware())
-        dp.chosen_inline_result.middleware(RoleMiddleware())
-        dp.poll.middleware(DbMiddleware())
-        dp.poll.middleware(RoleMiddleware())
-
-        # Порядок роутеров важен: специфичные handlers ДО общих (unknown_command)
-        dp.include_router(registration_router)
-        dp.include_router(qa_handlers_router)
-        dp.include_router(dialog_management_router)
-        dp.include_router(user_questions_router)
-        dp.include_router(clarify_router)
-        dp.include_router(common_router)
-
-        # УСТАНОВКА КОМАНД БОТА
+    # Проверяем, не инициализировал ли уже другой worker
+    if not os.path.exists(init_lock_file):
         try:
-            await set_bot_commands(bot)
-            logger.info("Bot commands set successfully")
-        except Exception as e:
-            logger.error(f"Failed to set bot commands: {e}")
-
-        # УСТАНОВКА WEBHOOK ПРИ ЗАПУСКЕ
-        # Проверяем текущий webhook, чтобы не вызывать flood control
-        try:
-            webhook_url = os.getenv("TELEGRAM_WEBHOOK_URL")
-            secret_token = os.getenv("TELEGRAM_WEBHOOK_SECRET")
-
-            if webhook_url:
-                # Проверяем, установлен ли уже нужный webhook
-                current_info = await bot.get_webhook_info()
-                current_url = current_info.url if hasattr(current_info, "url") else None
-
-                if current_url != webhook_url:
-                    webhook_config = {
-                        "url": webhook_url,
-                        "drop_pending_updates": True,
-                        "max_connections": 40,
-                    }
-
-                    if secret_token:
-                        webhook_config["secret_token"] = secret_token
-
-                    await bot.set_webhook(**webhook_config)
-                    logger.info(f"Webhook set successfully: {webhook_url}")
-                else:
-                    logger.info(f"Webhook already set, skipping: {webhook_url}")
-            else:
-                logger.warning(
-                    "TELEGRAM_WEBHOOK_URL not set — bot will not receive updates"
-                )
-
-        except Exception as e:
-            logger.error(f"Failed to set webhook: {e}")
-
-        logger.info("Bot started successfully with webhook")
+            # Atomically create lock file
+            fd = os.open(init_lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(fd)
+            should_init = True
+        except FileExistsError:
+            should_init = False
     else:
-        logger.warning(
-            "Bot NOT initialized — API will work, but Telegram features are disabled"
+        should_init = False
+
+    if should_init:
+        logger.info(f"Worker PID {worker_pid}: FIRST worker, initializing bot")
+
+        # Инициализация бота (не критична для API — продолжаем без бота)
+        bot, dp = await bot_manager.initialize()
+
+        if bot and dp:
+            logger.info("Bot initialized successfully")
+
+            # Register middleware on specific event types to avoid breaking FSM middleware chain
+            dp.message.middleware(DbMiddleware())
+            dp.message.middleware(RoleMiddleware())
+            dp.callback_query.middleware(DbMiddleware())
+            dp.callback_query.middleware(RoleMiddleware())
+            dp.inline_query.middleware(DbMiddleware())
+            dp.inline_query.middleware(RoleMiddleware())
+            dp.chosen_inline_result.middleware(DbMiddleware())
+            dp.chosen_inline_result.middleware(RoleMiddleware())
+            dp.poll.middleware(DbMiddleware())
+            dp.poll.middleware(RoleMiddleware())
+
+            # Порядок роутеров важен: специфичные handlers ДО общих (unknown_command)
+            dp.include_router(registration_router)
+            dp.include_router(qa_handlers_router)
+            dp.include_router(dialog_management_router)
+            dp.include_router(user_questions_router)
+            dp.include_router(clarify_router)
+            dp.include_router(common_router)
+
+            # УСТАНОВКА КОМАНД БОТА
+            try:
+                await set_bot_commands(bot)
+                logger.info("Bot commands set successfully")
+            except Exception as e:
+                logger.error(f"Failed to set bot commands: {e}")
+
+            # УСТАНОВКА WEBHOOK ПРИ ЗАПУСКЕ
+            try:
+                webhook_url = os.getenv("TELEGRAM_WEBHOOK_URL")
+                secret_token = os.getenv("TELEGRAM_WEBHOOK_SECRET")
+
+                if webhook_url:
+                    current_info = await bot.get_webhook_info()
+                    current_url = (
+                        current_info.url if hasattr(current_info, "url") else None
+                    )
+
+                    if current_url != webhook_url:
+                        webhook_config = {
+                            "url": webhook_url,
+                            "drop_pending_updates": True,
+                            "max_connections": 40,
+                        }
+
+                        if secret_token:
+                            webhook_config["secret_token"] = secret_token
+
+                        await bot.set_webhook(**webhook_config)
+                        logger.info(f"Webhook set successfully: {webhook_url}")
+                    else:
+                        logger.info(f"Webhook already set, skipping: {webhook_url}")
+                else:
+                    logger.warning(
+                        "TELEGRAM_WEBHOOK_URL not set — bot will not receive updates"
+                    )
+
+            except Exception as e:
+                logger.error(f"Failed to set webhook: {e}")
+
+            logger.info("Bot started successfully with webhook")
+        else:
+            logger.warning(
+                "Bot NOT initialized — API will work, but Telegram features are disabled"
+            )
+    else:
+        logger.info(
+            f"Worker PID {worker_pid}: bot already initialized by another worker, skipping"
         )
 
     yield
 
-    # Завершение работы бота
-    if bot:
+    # Завершение работы бота (только если этот worker инициализировал бота)
+    bot = bot_manager.get_bot()
+    if bot and should_init:
         await bot_manager.shutdown()
 
         # УДАЛЕНИЕ WEBHOOK ПРИ ЗАВЕРШЕНИИ

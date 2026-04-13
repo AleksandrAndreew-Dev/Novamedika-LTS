@@ -167,7 +167,7 @@ def sync_tabletka_pharmacies_task(self):
 async def _sync_tabletka_pharmacies_async():
     """Загружает данные с tabletka.by и обновляет аптеки в БД."""
     from tasks.tabletka_sync import fetch_all_pharmacies_from_tabletka
-    from db.database import get_session_maker
+    from db.database import async_session_maker
     from db.models import Pharmacy
     from sqlalchemy import select, and_
     import difflib
@@ -179,9 +179,7 @@ async def _sync_tabletka_pharmacies_async():
         logger.warning("No pharmacies fetched from tabletka.by")
         return {"status": "no_data"}
 
-    session_maker = get_session_maker()
-
-    async with session_maker() as session:
+    async with async_session_maker() as session:
         # 2. Загружаем все локальные аптеки
         result = await session.execute(select(Pharmacy))
         local_pharmacies = result.scalars().all()

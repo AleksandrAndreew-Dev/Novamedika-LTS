@@ -149,10 +149,19 @@ async def upload_file(
         # Запускаем задачу Celery
         from tasks.tasks_increment import process_csv_incremental
 
-        task = process_csv_incremental.delay(
-            content, pharmacy_name, pharmacy_number, district
-        )
-        logger.info(f"Celery task created: {task.id} (district={district})")
+        try:
+            task = process_csv_incremental.delay(
+                content, pharmacy_name, pharmacy_number, district
+            )
+            logger.info(f"Celery task created: {task.id} (district={district})")
+        except Exception as celery_error:
+            logger.error(
+                f"Failed to enqueue Celery task: {celery_error}", exc_info=True
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="CSV processing service unavailable. Please try again later.",
+            )
 
         return {
             "status": "success",
@@ -163,8 +172,8 @@ async def upload_file(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Upload error", exc_info=True)
+        logger.error(f"Upload error: {type(e).__name__}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error processing file. Please try again or contact support.",
+            detail=f"Error processing file: {type(e).__name__}",
         )
