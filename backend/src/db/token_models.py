@@ -2,6 +2,7 @@
 
 import uuid
 from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship
 from db.base import Base
 from utils.time_utils import get_utc_now_naive
@@ -11,7 +12,7 @@ class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String, ForeignKey("qa_users.uuid"), nullable=False)
+    user_id = Column(PG_UUID(as_uuid=True), ForeignKey("qa_users.uuid"), nullable=False)
     token = Column(Text, nullable=False, unique=True, index=True)
     expires_at = Column(DateTime, nullable=False)
     revoked = Column(Boolean, default=False, nullable=False)
