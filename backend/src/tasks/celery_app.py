@@ -53,3 +53,6 @@ from tasks import celery_worker_init
 
 # Регистрируем задачи
 celery.autodiscover_tasks(["tasks"])
+
+# Сигналы: автоматический запуск синхронизации при старте worker'а
+from tasks import celery_signals
