@@ -10,11 +10,10 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
 
-# Добавляем src в sys.path (относительно backend/)
+# Добавляем /app в sys.path (prepend_sys_path = . в alembic.ini уже делает это,
+# но для безопасности — явно добавляем родительскую директорию)
 _backend_dir = os.path.dirname(os.path.abspath(__file__))
-_src_dir = os.path.join(_backend_dir, "..", "src")
-sys.path.insert(0, _src_dir)
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(_backend_dir))  # /app/
 
 # Импортируем все модели
 from src.db.base import Base

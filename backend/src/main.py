@@ -65,8 +65,13 @@ async def lifespan(app: FastAPI):
         logger.critical(f"MISSING required env vars: {missing}")
         raise RuntimeError(f"Missing required env vars: {missing}")
 
-    # Alembic миграции применяются через entrypoint.sh — не нужно create_all()
-    logger.info("Database migrations handled by Alembic (entrypoint.sh)")
+    # Alembic миграции применяются через entrypoint.sh
+    # Fallback: если миграции ещё не применялись — create_all как страховка
+    try:
+        await init_models()
+        logger.info("Database tables ensured (fallback via create_all)")
+    except Exception as e:
+        logger.warning(f"create_all failed (may be normal if alembic already ran): {e}")
 
     # Предупреждение если REGISTRATION_SECRET_WORD не установлен
     if not os.getenv("REGISTRATION_SECRET_WORD"):
