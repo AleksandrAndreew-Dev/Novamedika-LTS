@@ -15,6 +15,9 @@ from sqlalchemy.orm import relationship
 from .base import Base
 from utils.time_utils import get_utc_now_naive
 
+# Импортируем RefreshToken для relationship (определён в token_models.py)
+from .token_models import RefreshToken
+
 
 class User(Base):
     __tablename__ = "qa_users"
