@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select, func, or_, text, case, and_, literal
 from sqlalchemy.orm import selectinload, joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,10 +9,13 @@ from datetime import datetime, timedelta
 
 from db.database import get_db
 from db.models import Pharmacy, Product
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from sqlalchemy.dialects.postgresql import TSVECTOR
 
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.get("/cities/")
@@ -53,7 +56,9 @@ def calculate_max_distance(search_query: str) -> int:
 
 
 @router.get("/search-fts/", response_model=dict)
+@limiter.limit("30/minute")
 async def search_full_text(
+    request: Request,
     q: str = Query(..., description="Поисковый запрос"),
     city: Optional[str] = Query(None),
     form: Optional[str] = Query(None),

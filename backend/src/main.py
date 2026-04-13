@@ -20,11 +20,16 @@ from bot.handlers import (
     dialog_management_router,
 )
 from bot.middleware.role_middleware import RoleMiddleware
-from db.database import init_models, async_session_maker
+from db.database import async_session_maker
 from bot.middleware.db import DbMiddleware
 
 from routers import booking_orders
 from routers import pharmacy_api
+
+# Rate limiting
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 # Настройка логирования
 logging.basicConfig(
@@ -32,6 +37,9 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# Инициализация rate limiter
+limiter = Limiter(key_func=get_remote_address)
 
 
 async def set_bot_commands(bot: Bot):
@@ -51,13 +59,21 @@ async def set_bot_commands(bot: Bot):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Инициализация БД
-    try:
-        await init_models()
-        logger.info("Database initialized")
-    except Exception as e:
-        logger.error(f"Failed to initialize database: {e}")
-        raise
+    # Проверка обязательных переменных окружения
+    required_env_vars = ["SECRET_KEY", "DATABASE_URL"]
+    missing = [v for v in required_env_vars if not os.getenv(v)]
+    if missing:
+        logger.critical(f"MISSING required env vars: {missing}")
+        raise RuntimeError(f"Missing required env vars: {missing}")
+
+    # Alembic миграции применяются через entrypoint.sh — не нужно create_all()
+    logger.info("Database migrations handled by Alembic (entrypoint.sh)")
+
+    # Предупреждение если REGISTRATION_SECRET_WORD не установлен
+    if not os.getenv("REGISTRATION_SECRET_WORD"):
+        logger.warning(
+            "REGISTRATION_SECRET_WORD is NOT SET — pharmacist registration will be blocked"
+        )
 
     # Инициализация бота (не критична для API — продолжаем без бота)
     bot, dp = await bot_manager.initialize()
@@ -136,6 +152,16 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan, title="Novamedika Q&A Bot API")
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc):
+    return JSONResponse(
+        status_code=429,
+        content={"error": "Слишком много запросов. Попробуйте позже."},
+    )
+
 
 # ДОБАВИТЬ CORS MIDDLEWARE
 origins = os.getenv("CORS_ORIGINS", "").split(",")

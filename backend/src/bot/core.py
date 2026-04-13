@@ -3,8 +3,10 @@ import asyncio
 import logging
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+import redis.asyncio as redis
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +25,30 @@ class BotManager:
 
     async def is_initialized(self):
         return self._bot is not None and self._dp is not None
+
+    async def _create_storage(self):
+        """Создает RedisStorage для FSM или fallback на MemoryStorage"""
+        redis_host = os.getenv("REDIS_HOST", "redis")
+        redis_password = os.getenv("REDIS_PASSWORD", "")
+        redis_db = 1  # DB 0 — Celery, DB 1 — Bot FSM
+
+        redis_url = f"redis://:{redis_password}@{redis_host}:6379/{redis_db}"
+
+        try:
+            # Пробуем подключиться к Redis
+            r = redis.from_url(redis_url, health_check_interval=10)
+            await r.ping()
+            await r.aclose()
+            logger.info(
+                f"Using RedisStorage for bot FSM: redis://{redis_host}:6379/{redis_db}"
+            )
+            return RedisStorage(redis_url)
+        except Exception as e:
+            logger.warning(
+                f"Redis unavailable for bot FSM ({e}), falling back to MemoryStorage. "
+                "FSM states will be lost on restart."
+            )
+            return MemoryStorage()
 
     async def ensure_initialized(self):
         if not await self.is_initialized():
@@ -50,8 +76,8 @@ class BotManager:
                 bot_info = await self._bot.get_me()
                 logger.info(f"Bot initialized successfully: @{bot_info.username}")
 
-                # Для production рекомендуется RedisStorage вместо MemoryStorage
-                storage = MemoryStorage()  # В будущем заменить на RedisStorage
+                # Production: RedisStorage для сохранения FSM состояний при рестарте
+                storage = await self._create_storage()
                 self._dp = Dispatcher(storage=storage)
 
                 return self._bot, self._dp

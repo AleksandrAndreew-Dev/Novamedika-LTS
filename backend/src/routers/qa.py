@@ -8,6 +8,7 @@ from db.database import get_db
 from db.qa_models import User, Question, Answer, Pharmacist
 from db.qa_schemas import QuestionCreate, QuestionResponse, AnswerBase, AnswerResponse
 from auth.auth import get_current_pharmacist
+from auth.security import get_api_key
 from services.user_service import get_or_create_user
 import logging
 from sqlalchemy.orm import selectinload  # ДОБАВИТЬ
@@ -55,7 +56,11 @@ async def get_user_by_telegram_id(telegram_id: int, db: AsyncSession) -> User:
 
 # Эндпоинты
 @router.post("/questions/", response_model=QuestionResponse)
-async def create_question(question: QuestionCreate, db: AsyncSession = Depends(get_db)):
+async def create_question(
+    question: QuestionCreate,
+    db: AsyncSession = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
     """Создать вопрос"""
     try:
         user = await get_or_create_user(
@@ -88,7 +93,9 @@ async def create_question(question: QuestionCreate, db: AsyncSession = Depends(g
 
 @router.get("/questions/", response_model=List[QuestionResponse])
 async def get_questions(
-    status: Optional[str] = None, db: AsyncSession = Depends(get_db)
+    status: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    api_key: str = Depends(get_api_key),
 ):
     """Получить все вопросы (с фильтром по статусу)"""
     try:
@@ -222,7 +229,11 @@ async def assign_question(
 
 
 @router.get("/users/{telegram_id}/questions", response_model=List[QuestionResponse])
-async def get_user_questions(telegram_id: int, db: AsyncSession = Depends(get_db)):
+async def get_user_questions(
+    telegram_id: int,
+    db: AsyncSession = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
     """Получить вопросы пользователя"""
     try:
         user = await get_user_by_telegram_id(telegram_id, db)
@@ -280,7 +291,10 @@ async def get_pharmacist_questions(
 
 
 @router.get("/questions/stats/")
-async def get_questions_stats(db: AsyncSession = Depends(get_db)):
+async def get_questions_stats(
+    db: AsyncSession = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
     """Статистика по вопросам"""
     try:
         # Общее количество вопросов

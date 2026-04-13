@@ -19,6 +19,7 @@ from db.booking_schemas import (
     OrderCancelRequest,
     OrderStatusUpdate,
 )
+from auth.security import get_api_key
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -28,6 +29,7 @@ router = APIRouter()
 async def create_booking_order(
     order_data: BookingOrderCreate,
     db: AsyncSession = Depends(get_db),
+    api_key: str = Depends(get_api_key),
 ):
     """Создание заказа бронирования"""
     try:
@@ -83,6 +85,7 @@ async def get_orders(
     pharmacy_id: Optional[uuid.UUID] = None,
     status: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
+    api_key: str = Depends(get_api_key),
 ):
     """Получение списка заказов с фильтрацией"""
     try:
@@ -133,6 +136,7 @@ async def get_orders(
 async def get_order_by_id(
     order_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    api_key: str = Depends(get_api_key),
 ):
     """Получение заказа по ID"""
     try:
@@ -158,6 +162,7 @@ async def update_order_status(
     order_id: uuid.UUID,
     update_data: OrderStatusUpdate,
     db: AsyncSession = Depends(get_db),
+    api_key: str = Depends(get_api_key),
 ):
     """Обновление статуса заказа с комментарием"""
     from routers.orders_helpers import send_order_status_notification
@@ -221,6 +226,7 @@ async def cancel_order(
     order_id: uuid.UUID,
     cancel_request: OrderCancelRequest,
     db: AsyncSession = Depends(get_db),
+    api_key: str = Depends(get_api_key),
 ):
     """Отмена заказа с причиной"""
     from routers.orders_helpers import send_order_status_notification

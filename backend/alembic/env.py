@@ -21,6 +21,7 @@ from src.db.base import Base
 from src.db.models import Pharmacy, Product
 from src.db.qa_models import User, Pharmacist, Question, Answer, DialogMessage
 from src.db.booking_models import BookingOrder, PharmacyAPIConfig, SyncLog
+from src.db.token_models import RefreshToken
 
 # Alembic Config object
 config = context.config

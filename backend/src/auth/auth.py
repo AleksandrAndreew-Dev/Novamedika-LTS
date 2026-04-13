@@ -1,5 +1,5 @@
-
 import os
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
@@ -12,14 +12,17 @@ from typing import Optional
 # Импорты из правильных мест
 from db.database import get_db
 from db.qa_models import Pharmacist, User
+from db.token_models import RefreshToken
 from utils.time_utils import get_utc_now_naive
 
 router = APIRouter()
 security = HTTPBearer()
 
-SECRET_KEY = os.getenv('SECRET_KEY')
+SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+REFRESH_TOKEN_EXPIRE_DAYS = 7
+
 
 def create_access_token(data: dict):
     to_encode = data.copy()
@@ -27,12 +30,26 @@ def create_access_token(data: dict):
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
+
+def create_refresh_token(data: dict):
+    """Создать refresh token с отдельным сроком жизни"""
+    to_encode = data.copy()
+    expire = get_utc_now_naive() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode.update({"exp": expire, "type": "refresh"})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
 async def get_current_pharmacist(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     try:
-        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM]
+        )
+        # Проверяем что это access token (не refresh)
+        if payload.get("type") == "refresh":
+            raise HTTPException(status_code=401, detail="Invalid token type")
         pharmacist_id: str = payload.get("sub")
         if pharmacist_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
@@ -52,3 +69,54 @@ async def get_current_pharmacist(
         raise HTTPException(status_code=401, detail="Pharmacist account is deactivated")
 
     return pharmacist
+
+
+async def store_refresh_token(token: str, user_id: str, db: AsyncSession):
+    """Сохранить refresh token в БД"""
+    expires_at = get_utc_now_naive() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    refresh_token = RefreshToken(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        token=token,
+        expires_at=expires_at,
+        revoked=False,
+    )
+    db.add(refresh_token)
+    await db.commit()
+    return refresh_token
+
+
+async def revoke_refresh_token(token: str, db: AsyncSession):
+    """Отозвать refresh token (logout)"""
+    result = await db.execute(select(RefreshToken).where(RefreshToken.token == token))
+    rt = result.scalar_one_or_none()
+    if rt:
+        rt.revoked = True
+        await db.commit()
+
+
+async def validate_refresh_token(token: str, db: AsyncSession) -> dict:
+    """Проверить refresh token: decode + проверить в БД"""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=401, detail="Invalid token type")
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    # Проверяем в БД что токен не отозван
+    result = await db.execute(
+        select(RefreshToken).where(
+            RefreshToken.token == token,
+            RefreshToken.revoked == False,
+            RefreshToken.expires_at > get_utc_now_naive(),
+        )
+    )
+    rt = result.scalar_one_or_none()
+    if not rt:
+        raise HTTPException(status_code=401, detail="Token revoked or expired")
+
+    return {"user_id": user_id}

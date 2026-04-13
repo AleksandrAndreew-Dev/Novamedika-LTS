@@ -139,7 +139,16 @@ async def cancel_registration(message: Message, state: FSMContext):
 async def process_secret_word(message: Message, state: FSMContext):
     """Проверка секретного слова"""
     secret_word = message.text.strip()
-    expected_secret = os.getenv("REGISTRATION_SECRET_WORD", "default_secret")
+    expected_secret = os.getenv("REGISTRATION_SECRET_WORD")
+
+    if not expected_secret:
+        logger.critical(
+            "REGISTRATION_SECRET_WORD is NOT SET — registration blocked for safety"
+        )
+        await message.answer(
+            "⚠️ Регистрация временно недоступна. Обратитесь к администратору."
+        )
+        return
 
     if secret_word != expected_secret:
         await message.answer("❌ Неверное секретное слово. Попробуйте еще раз:")

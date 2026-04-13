@@ -1,28 +1,42 @@
 # upload.py - обновленная версия
 import os
 import datetime
-from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends, Request
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import secrets
 import uuid
 
 import logging
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from tasks.tasks_increment import process_csv_incremental
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-security = HTTPBasic()  # обязательно
+security = HTTPBasic()
+limiter = Limiter(key_func=get_remote_address)
 
-CORRECT_USERNAME = os.getenv('CORRECT_USERNAME')
-CORRECT_PASSWORD = os.getenv('CORRECT_PASSWORD')
+CORRECT_USERNAME = os.getenv("CORRECT_USERNAME")
+CORRECT_PASSWORD = os.getenv("CORRECT_PASSWORD")
+
+MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+ALLOWED_CONTENT_TYPES = [
+    "text/csv",
+    "application/csv",
+    "application/vnd.ms-excel",
+    "text/plain",
+]
+
 
 def authenticate_pharmacy(credentials: HTTPBasicCredentials = Depends(security)):
     # Проверка конфигурации сервера
     if not CORRECT_USERNAME or not CORRECT_PASSWORD:
-        logger.error("Auth credentials not configured: CORRECT_USERNAME/CORRECT_PASSWORD missing")
+        logger.error(
+            "Auth credentials not configured: CORRECT_USERNAME/CORRECT_PASSWORD missing"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Server auth not configured"
+            detail="Server auth not configured",
         )
 
     # безопасное сравнение строк (no need to .encode)
@@ -37,23 +51,43 @@ def authenticate_pharmacy(credentials: HTTPBasicCredentials = Depends(security))
         )
     return credentials.username
 
+
 @router.post("/upload/{pharmacy_name}/{pharmacy_number}/")
+@limiter.limit("5/minute")
 async def upload_file(
-    pharmacy_name: str, pharmacy_number: str, file: UploadFile = File(...),
-    username: str = Depends(authenticate_pharmacy)  # Добавляем аутентификацию
+    request: Request,
+    pharmacy_name: str,
+    pharmacy_number: str,
+    file: UploadFile = File(...),
+    username: str = Depends(authenticate_pharmacy),
 ):
+    """Загрузка CSV файла аптеки. Максимум 50MB, только CSV."""
+
+    # Проверка MIME типа
+    if file.content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Неподдерживаемый тип файла: {file.content_type}. Разрешены только CSV",
+        )
 
     try:
-
         logger.info(
             f"Starting upload for pharmacy: {pharmacy_name}, number: {pharmacy_number}, user: {username}"
         )
-        logger.info(f"File: {file.filename}, size: {file.size}")
-
-
 
         # Читаем файл как байты
         file_bytes = await file.read()
+
+        # Проверка размера
+        if len(file_bytes) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"Файл слишком большой. Максимум: {MAX_FILE_SIZE // (1024*1024)}MB",
+            )
+
+        logger.info(
+            f"File: {file.filename}, size: {len(file_bytes)} bytes ({len(file_bytes) / 1024:.1f} KB)"
+        )
 
         # Сохраняем с фиксированным именем (будет перезаписываться)
         save_dir = "uploaded_csv"
@@ -61,7 +95,7 @@ async def upload_file(
         file_path = os.path.join(save_dir, f"{pharmacy_name}_{pharmacy_number}.csv")
 
         # Просто перезаписываем файл
-        with open(file_path, 'wb') as f:
+        with open(file_path, "wb") as f:
             f.write(file_bytes)
 
         # Пробуем разные кодировки
@@ -85,6 +119,7 @@ async def upload_file(
 
         # Запускаем задачу Celery
         from tasks.tasks_increment import process_csv_incremental
+
         task = process_csv_incremental.delay(content, pharmacy_name, pharmacy_number)
         logger.info(f"Celery task created: {task.id}")
 

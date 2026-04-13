@@ -1,0 +1,7 @@
+unknown flag: --all
+
+Usage:  gh run cancel [<run-id>] [flags]
+
+Flags:
+  --force   Force cancel a workflow run
+  

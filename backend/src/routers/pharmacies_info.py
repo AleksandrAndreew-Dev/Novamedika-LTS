@@ -16,6 +16,7 @@ from sqlalchemy.orm import joinedload
 from db.database import get_db
 from db.models import Pharmacy, Product
 from db.schemas import PharmacyUpdate
+from auth.security import get_admin_credentials
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -61,7 +62,10 @@ def determine_chain(pharmacy_name: str) -> str:
 
 
 @router.post("/load-pharmacies/")
-async def load_pharmacies(db: AsyncSession = Depends(get_db)):
+async def load_pharmacies(
+    db: AsyncSession = Depends(get_db),
+    admin: str = Depends(get_admin_credentials),
+):
     """Эндпоинт для загрузки данных аптек из CSV"""
     try:
         base_dir = Path(__file__).resolve().parent.parent
@@ -216,7 +220,10 @@ from sqlalchemy import text
 
 
 @router.delete("/clear-all-data/")
-async def clear_all_data(db: AsyncSession = Depends(get_db)):
+async def clear_all_data(
+    db: AsyncSession = Depends(get_db),
+    admin: str = Depends(get_admin_credentials),
+):
     """Очистка всех данных (продукты и аптеки)"""
     try:
         # Отключаем проверку внешних ключей для PostgreSQL
@@ -243,7 +250,10 @@ async def clear_all_data(db: AsyncSession = Depends(get_db)):
 
 
 @router.delete("/clear-all-products/")
-async def clear_all_products(db: AsyncSession = Depends(get_db)):
+async def clear_all_products(
+    db: AsyncSession = Depends(get_db),
+    admin: str = Depends(get_admin_credentials),
+):
     """Очистка всех данных (продукты и аптеки)"""
     try:
         # Отключаем проверку внешних ключей для PostgreSQL

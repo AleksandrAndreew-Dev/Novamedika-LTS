@@ -28,12 +28,21 @@ COPY src/ ./src/
 # Передаём права на директорию приложения пользователю
 RUN chown -R appuser:appgroup /app
 
+# Копируем alembic конфигурацию (на уровень выше src/)
+COPY alembic/ ./alembic/
+COPY alembic.ini ./
+
+# Копируем entrypoint скрипт
+COPY entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh && chown appuser:appgroup ./entrypoint.sh
+
 # Переключаемся на непривилегированного пользователя
 USER appuser
 
 EXPOSE 8000
 
+# Entry point: сначала миграции, потом команда из CMD
+ENTRYPOINT ["/app/entrypoint.sh"]
+
 # Production: gunicorn с uvicorn workers (3 worker для 4 CPU)
-# БЕЗ --preload — каждый worker инициализирует lifespan независимо
-# Но bot init защищён от повторных вызовов через getWebhookInfo
 CMD ["/app/.venv/bin/gunicorn", "main:app", "-w", "3", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8000", "--timeout", "120", "--graceful-timeout", "30", "--keep-alive", "5", "--access-logfile", "-", "--error-logfile", "-", "--log-level", "warning", "--max-requests", "500", "--max-requests-jitter", "50"]

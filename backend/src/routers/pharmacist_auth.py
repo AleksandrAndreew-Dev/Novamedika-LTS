@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
@@ -14,7 +14,19 @@ from db.qa_schemas import (
     UserResponse,
     PharmacyInfoSimple,
 )
-from auth.auth import create_access_token, get_current_pharmacist
+from auth.auth import (
+    create_access_token,
+    create_refresh_token,
+    get_current_pharmacist,
+    store_refresh_token,
+    revoke_refresh_token,
+    validate_refresh_token,
+)
+from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
 from utils.time_utils import get_utc_now_naive
 
 logger = logging.getLogger(__name__)
@@ -95,7 +107,12 @@ async def register_pharmacist(telegram_data: dict, db: AsyncSession = Depends(ge
 
 
 @router.post("/login/")
-async def pharmacist_login(telegram_user_id: int, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def pharmacist_login(
+    request: Request,
+    telegram_user_id: int,
+    db: AsyncSession = Depends(get_db),
+):
     """Логин фармацевта по Telegram ID (поддерживает несколько аптек)"""
     try:
         result = await db.execute(
@@ -124,19 +141,26 @@ async def pharmacist_login(telegram_user_id: int, db: AsyncSession = Depends(get
                 f"User {telegram_user_id} has {len(pharmacists)} active pharmacist profiles"
             )
 
-        # Создаем JWT токен
-        access_token = create_access_token(data={"sub": str(pharmacist.uuid)})
+        # Создаём JWT токены
+        token_data = {"sub": str(pharmacist.uuid), "type": "access"}
+        access_token = create_access_token(data=token_data)
+        refresh_token = create_refresh_token(data={"sub": str(pharmacist.uuid)})
+
+        # Сохраняем refresh token в БД
+        await store_refresh_token(refresh_token, str(pharmacist.uuid), db)
 
         return {
             "access_token": access_token,
+            "refresh_token": refresh_token,
             "token_type": "bearer",
+            "expires_in": 1800,  # 30 минут
             "pharmacist": PharmacistResponse(
                 uuid=pharmacist.uuid,
                 user=UserResponse.model_validate(pharmacist.user),
                 pharmacy_info=pharmacist.pharmacy_info,
                 is_active=pharmacist.is_active,
             ),
-            "total_pharmacies": len(pharmacists),  # Информация о количестве аптек
+            "total_pharmacies": len(pharmacists),
         }
     except HTTPException:
         raise
@@ -193,6 +217,54 @@ async def get_status(pharmacist: Pharmacist = Depends(get_current_pharmacist)):
         "is_active": pharmacist.is_active,
         "pharmacy_info": pharmacist.pharmacy_info,
     }
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+
+
+@router.post("/refresh/", response_model=TokenResponse)
+async def refresh_access_token(
+    request: RefreshTokenRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Получить новый access token по refresh token"""
+    # Валидируем refresh token
+    token_data = await validate_refresh_token(request.refresh_token, db)
+
+    # Создаём новый access token
+    new_access_token = create_access_token(
+        data={"sub": token_data["user_id"], "type": "access"}
+    )
+
+    return {
+        "access_token": new_access_token,
+        "token_type": "bearer",
+        "expires_in": 1800,
+    }
+
+
+@router.post("/logout/")
+async def logout(
+    request: RefreshTokenRequest,
+    db: AsyncSession = Depends(get_db),
+    pharmacist: Pharmacist = Depends(get_current_pharmacist),
+):
+    """Выход — отзыв refresh token"""
+    await revoke_refresh_token(request.refresh_token, db)
+
+    # Переводим фармацевта в офлайн
+    pharmacist.is_online = False
+    pharmacist.last_seen = get_utc_now_naive()
+    await db.commit()
+
+    return {"status": "success", "message": "Logged out successfully"}
 
 
 # В конце pharmacist_auth.py добавить:

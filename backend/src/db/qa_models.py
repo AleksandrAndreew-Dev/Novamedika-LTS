@@ -29,6 +29,9 @@ class User(Base):
     created_at = Column(DateTime, default=get_utc_now_naive)
 
     questions = relationship("Question", back_populates="user")
+    refresh_tokens = relationship(
+        "RefreshToken", back_populates="user", order_by="RefreshToken.created_at.desc()"
+    )
 
 
 class Pharmacist(Base):
