@@ -106,14 +106,11 @@ async def upload_file(
             f"File: {file.filename}, size: {len(file_bytes)} bytes ({len(file_bytes) / 1024:.1f} KB)"
         )
 
-        # Сохраняем с фиксированным именем (будет перезаписываться)
-        save_dir = os.path.join(
-            os.path.dirname(__file__), "..", "..", "..", "uploaded_csv"
-        )
-        save_dir = os.path.realpath(save_dir)
+        # Сохраняем в /app/uploaded_csv (смонтированный volume)
+        save_dir = "/app/uploaded_csv"
         os.makedirs(save_dir, exist_ok=True)
         file_name = f"{pharmacy_name}_{pharmacy_number}.csv"
-        file_path = os.path.realpath(os.path.join(save_dir, file_name))
+        file_path = os.path.join(save_dir, file_name)
 
         # Double-check: ensure file_path is within save_dir (defense in depth)
         if not file_path.startswith(save_dir + os.sep):
