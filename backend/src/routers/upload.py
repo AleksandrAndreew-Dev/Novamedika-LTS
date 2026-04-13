@@ -57,9 +57,14 @@ async def upload_file(
     pharmacy_name: str,
     pharmacy_number: str,
     file: UploadFile = File(...),
+    district: str | None = None,
     username: str = Depends(authenticate_pharmacy),
 ):
-    """Загрузка CSV файла аптеки. Максимум 50MB, только CSV."""
+    """Загрузка CSV файла аптеки. Максимум 50MB, только CSV.
+
+    Параметры:
+    - district: район аптеки (напр. 'Фрунзенский р-н') — извлекается из адреса tabletka.by
+    """
 
     # Sanitize path parameters — prevent path traversal
     if not SAFE_NAME_PATTERN.match(pharmacy_name):
@@ -144,8 +149,10 @@ async def upload_file(
         # Запускаем задачу Celery
         from tasks.tasks_increment import process_csv_incremental
 
-        task = process_csv_incremental.delay(content, pharmacy_name, pharmacy_number)
-        logger.info(f"Celery task created: {task.id}")
+        task = process_csv_incremental.delay(
+            content, pharmacy_name, pharmacy_number, district
+        )
+        logger.info(f"Celery task created: {task.id} (district={district})")
 
         return {
             "status": "success",

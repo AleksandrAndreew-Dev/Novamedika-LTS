@@ -155,12 +155,18 @@ def validate_numeric_value(
 
 @celery.task(bind=True, max_retries=3, soft_time_limit=3600)
 def process_csv_incremental(
-    self, file_content: str, pharmacy_name: str, pharmacy_number: str
+    self,
+    file_content: str,
+    pharmacy_name: str,
+    pharmacy_number: str,
+    district: str | None = None,
 ):
     """Синхронная обертка для асинхронной функции."""
     try:
         result = asyncio.run(
-            process_csv_incremental_async(file_content, pharmacy_name, pharmacy_number)
+            process_csv_incremental_async(
+                file_content, pharmacy_name, pharmacy_number, district
+            )
         )
         return result
     except Exception as e:
@@ -169,7 +175,10 @@ def process_csv_incremental(
 
 
 async def process_csv_incremental_async(
-    file_content: str, pharmacy_name: str, pharmacy_number: str
+    file_content: str,
+    pharmacy_name: str,
+    pharmacy_number: str,
+    district: str | None = None,
 ):
     # Создаём task-local engine + session (не унаследованный от fork)
     session_maker, engine = await get_task_session_maker()
@@ -204,6 +213,7 @@ async def process_csv_incremental_async(
                     pharmacy_number=str(pharmacy_number),
                     chain=normalized_name,
                     city="",
+                    district=district,
                     address="",
                     phone="",
                     opening_hours="",
