@@ -32,9 +32,10 @@ RUN chown -R appuser:appgroup /app
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
 
-# Копируем entrypoint скрипт
+# Копируем entrypoint скрипты
 COPY entrypoint.sh ./entrypoint.sh
-RUN chmod +x ./entrypoint.sh && chown appuser:appgroup ./entrypoint.sh
+COPY celery-entrypoint.sh ./celery-entrypoint.sh
+RUN chmod +x ./entrypoint.sh ./celery-entrypoint.sh && chown appuser:appgroup ./entrypoint.sh ./celery-entrypoint.sh
 
 # Переключаемся на непривилегированного пользователя
 USER appuser

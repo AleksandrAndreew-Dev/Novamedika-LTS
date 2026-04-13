@@ -219,8 +219,9 @@ services:
       - CELERY_WORKER_CONCURRENCY=2
       - CELERY_WORKER_PREFETCH_MULTIPLIER=1
       - PYTHONPATH=/app/src
-      - CELERY_WORKER_MAX_TASKS_PER_CHILD=100  # Перезапускать worker после 100 задач
+      - CELERY_WORKER_MAX_TASKS_PER_CHILD=100
       - CELERY_TASK_ALWAYS_EAGER=False
+    entrypoint: ["/app/celery-entrypoint.sh"]
     command:
       - /app/.venv/bin/celery
       - -A
