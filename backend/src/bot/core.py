@@ -35,14 +35,17 @@ class BotManager:
         redis_url = f"redis://:{redis_password}@{redis_host}:6379/{redis_db}"
 
         try:
-            # Пробуем подключиться к Redis
-            r = redis.from_url(redis_url, health_check_interval=10)
-            await r.ping()
-            await r.aclose()
+            # Создаем Redis клиент для FSM storage
+            redis_client = redis.from_url(
+                redis_url, health_check_interval=10, decode_responses=True
+            )
+            # Проверяем подключение
+            await redis_client.ping()
             logger.info(
                 f"Using RedisStorage for bot FSM: redis://{redis_host}:6379/{redis_db}"
             )
-            return RedisStorage(redis_url)
+            # Aiogram 3.x требует Redis объект, а не URL строку
+            return RedisStorage(redis_client)
         except Exception as e:
             logger.warning(
                 f"Redis unavailable for bot FSM ({e}), falling back to MemoryStorage. "
