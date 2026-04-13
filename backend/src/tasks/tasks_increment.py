@@ -154,6 +154,141 @@ def validate_numeric_value(
 
 
 @celery.task(bind=True, max_retries=3, soft_time_limit=3600)
+def sync_tabletka_pharmacies_task(self):
+    """Периодическая задача: синхронизация данных аптек с tabletka.by (3 раза/день)"""
+    try:
+        result = asyncio.run(_sync_tabletka_pharmacies_async())
+        return result
+    except Exception as e:
+        logger.error(f"Error in sync_tabletka_pharmacies_task: {str(e)}")
+        raise self.retry(exc=e, countdown=300)
+
+
+async def _sync_tabletka_pharmacies_async():
+    """Загружает данные с tabletka.by и обновляет аптеки в БД."""
+    from tasks.tabletka_sync import fetch_all_pharmacies_from_tabletka
+    from db.database import get_session_maker
+    from db.models import Pharmacy
+    from sqlalchemy import select, and_
+    import difflib
+
+    # 1. Получаем данные с tabletka.by
+    tabletka_pharmacies = await fetch_all_pharmacies_from_tabletka()
+
+    if not tabletka_pharmacies:
+        logger.warning("No pharmacies fetched from tabletka.by")
+        return {"status": "no_data"}
+
+    session_maker = get_session_maker()
+
+    async with session_maker() as session:
+        # 2. Загружаем все локальные аптеки
+        result = await session.execute(select(Pharmacy))
+        local_pharmacies = result.scalars().all()
+
+        updated_count = 0
+        matched_count = 0
+        unmatched_tabletka = []
+
+        for tp in tabletka_pharmacies:
+            # 3. Матчинг: ищем совпадение по адресу или телефону
+            matched_local = None
+
+            # Приоритет 1: точное совпадение телефона
+            if tp.phone:
+                clean_tabletka_phone = re.sub(r"[^\d+]", "", tp.phone)
+                for lp in local_pharmacies:
+                    if (
+                        lp.phone
+                        and re.sub(r"[^\d+]", "", lp.phone) == clean_tabletka_phone
+                    ):
+                        matched_local = lp
+                        break
+
+            # Приоритет 2: совпадение адреса (частичное)
+            if not matched_local and tp.address:
+                tabletka_addr_lower = tp.address.lower()
+                for lp in local_pharmacies:
+                    if lp.address:
+                        local_addr_lower = lp.address.lower()
+                        # Проверяем что ключевые слова адреса совпадают
+                        if any(
+                            word in local_addr_lower
+                            for word in tabletka_addr_lower.split()
+                            if len(word) > 3
+                        ):
+                            matched_local = lp
+                            break
+
+            # Приоритет 3: fuzzy match по названию + городу
+            if not matched_local and tp.name and tp.city:
+                for lp in local_pharmacies:
+                    if lp.city and lp.city.lower() == tp.city.lower():
+                        # Проверяем похожесть названий
+                        ratio = difflib.SequenceMatcher(
+                            None, tp.name.lower(), lp.name.lower()
+                        ).ratio()
+                        if ratio > 0.5:
+                            matched_local = lp
+                            break
+
+            if matched_local:
+                matched_count += 1
+                needs_update = False
+
+                # Обновляем district если не был установлен
+                if tp.district and not matched_local.district:
+                    matched_local.district = tp.district
+                    needs_update = True
+
+                # Обновляем phone если пустой
+                if tp.phone and not matched_local.phone:
+                    matched_local.phone = tp.phone
+                    needs_update = True
+
+                # Обновляем address если пустой
+                if tp.address and not matched_local.address:
+                    matched_local.address = tp.address
+                    needs_update = True
+
+                # Обновляем city если пустой
+                if tp.city and not matched_local.city:
+                    matched_local.city = tp.city
+                    needs_update = True
+
+                if needs_update:
+                    updated_count += 1
+                    logger.info(
+                        f"Matched tabletka ID {tp.tabletka_id} → "
+                        f"local {matched_local.name} №{matched_local.pharmacy_number}"
+                    )
+            else:
+                unmatched_tabletka.append(
+                    {
+                        "id": tp.tabletka_id,
+                        "name": tp.name,
+                        "address": tp.address,
+                    }
+                )
+
+        if updated_count > 0:
+            await session.commit()
+            logger.info(
+                f"Tabletka sync: {matched_count} matched, {updated_count} updated"
+            )
+        else:
+            logger.info(f"Tabletka sync: {matched_count} matched, no updates needed")
+
+        return {
+            "status": "success",
+            "total_tabletka": len(tabletka_pharmacies),
+            "matched": matched_count,
+            "updated": updated_count,
+            "unmatched": unmatched_tabletka,
+        }
+
+
+@celery.task(bind=True, max_retries=3, soft_time_limit=3600)
 def process_csv_incremental(
     self,
     file_content: str,

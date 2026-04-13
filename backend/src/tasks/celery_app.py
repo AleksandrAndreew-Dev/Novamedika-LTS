@@ -30,13 +30,21 @@ celery.conf.update(
     broker_connection_retry_on_startup=True,
     worker_cancel_long_running_tasks_on_connection_loss=True,
     worker_max_tasks_per_child=100,
-    worker_disable_rate_limits=False,  # Включаем rate limiting для стабильности
+    worker_disable_rate_limits=False,
     task_always_eager=False,
-    broker_pool_limit=10,  # Ограничиваем pool для экономии памяти
+    broker_pool_limit=10,
     result_backend_always_retry=True,
     beat_schedule_filename="celerybeat-schedule",
     beat_scheduler="celery.beat.PersistentScheduler",
-    worker_max_memory_per_child=256000,  # 256MB — перезапуск при превышении
+    worker_max_memory_per_child=256000,
+    # Периодические задачи
+    beat_schedule={
+        "sync-tabletka-pharmacies": {
+            "task": "tasks.tasks_increment.sync_tabletka_pharmacies_task",
+            "schedule": 28800,  # 8 часов = 3 раза в день
+            "options": {"expires": 3600},
+        },
+    },
 )
 
 # КРИТИЧЕСКИ ВАЖНО: Импортируем все задачи для регистрации
