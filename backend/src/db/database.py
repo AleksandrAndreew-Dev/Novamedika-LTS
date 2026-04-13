@@ -94,6 +94,10 @@ class _LazySessionMaker:
     def __getattr__(self, name):
         return getattr(_get_or_create_sessionmaker(), name)
 
+    def __call__(self, *args, **kwargs):
+        """Allow calling async_session_maker() directly — delegates to real sessionmaker"""
+        return _get_or_create_sessionmaker()(*args, **kwargs)
+
 
 engine = _LazyEngine()
 async_session_maker = _LazySessionMaker()
