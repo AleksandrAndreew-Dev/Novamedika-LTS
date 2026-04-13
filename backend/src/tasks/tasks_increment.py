@@ -165,12 +165,16 @@ def sync_tabletka_pharmacies_task(self):
 
 
 async def _sync_tabletka_pharmacies_async():
-    """Загружает данные с tabletka.by и обновляет аптеки в БД."""
+    """Загружает данные с tabletka.by и обновляет аптеки в БД.
+
+    Основной матчинг: по сети (Новамедика/Эклиния) + номеру аптеки.
+    Это самые надёжные параметры — адрес и телефон могут отличаться.
+    """
     from tasks.tabletka_sync import fetch_all_pharmacies_from_tabletka
     from db.database import get_async_sessionmaker
     from db.models import Pharmacy
-    from sqlalchemy import select, and_
-    import difflib
+    from sqlalchemy import select
+    import re
 
     # 1. Получаем данные с tabletka.by
     tabletka_pharmacies = await fetch_all_pharmacies_from_tabletka()
@@ -180,56 +184,71 @@ async def _sync_tabletka_pharmacies_async():
         return {"status": "no_data"}
 
     session_maker = get_async_sessionmaker()
+
+    # Маппинг названий tabletka.by → наши сети
+    NETWORK_MAP = {
+        "новамедика": "Новамедика",
+        "novamedika": "Новамедика",
+        "эклиния": "ЭКЛИНИЯ",
+        "ekliniya": "ЭКЛИНИЯ",
+    }
+
+    # Паттерн для извлечения номера: "Новамедика №7", "Аптека 7", "№7"
+    PHARMACY_NUMBER_PATTERN = re.compile(r"№\s*(\d+)")
+
     async with session_maker() as session:
         # 2. Загружаем все локальные аптеки
         result = await session.execute(select(Pharmacy))
         local_pharmacies = result.scalars().all()
+
+        # Строим индекс: (сеть_нижний, номер) → аптека
+        local_index = {}
+        for lp in local_pharmacies:
+            network_key = lp.name.lower().strip()
+            num_key = lp.pharmacy_number.strip()
+            local_index[(network_key, num_key)] = lp
 
         updated_count = 0
         matched_count = 0
         unmatched_tabletka = []
 
         for tp in tabletka_pharmacies:
-            # 3. Матчинг: ищем совпадение по адресу или телефону
-            matched_local = None
+            # Извлекаем сеть и номер из названия tabletka.by
+            tp_name_lower = tp.name.lower().strip()
 
-            # Приоритет 1: точное совпадение телефона
-            if tp.phone:
-                clean_tabletka_phone = re.sub(r"[^\d+]", "", tp.phone)
-                for lp in local_pharmacies:
-                    if (
-                        lp.phone
-                        and re.sub(r"[^\d+]", "", lp.phone) == clean_tabletka_phone
-                    ):
-                        matched_local = lp
-                        break
+            # Определяем сеть
+            matched_network = None
+            for key, value in NETWORK_MAP.items():
+                if key in tp_name_lower:
+                    matched_network = value
+                    break
 
-            # Приоритет 2: совпадение адреса (частичное)
-            if not matched_local and tp.address:
-                tabletka_addr_lower = tp.address.lower()
-                for lp in local_pharmacies:
-                    if lp.address:
-                        local_addr_lower = lp.address.lower()
-                        # Проверяем что ключевые слова адреса совпадают
-                        if any(
-                            word in local_addr_lower
-                            for word in tabletka_addr_lower.split()
-                            if len(word) > 3
-                        ):
-                            matched_local = lp
-                            break
+            if not matched_network:
+                # Не наша сеть — пропускаем
+                continue
 
-            # Приоритет 3: fuzzy match по названию + городу
-            if not matched_local and tp.name and tp.city:
-                for lp in local_pharmacies:
-                    if lp.city and lp.city.lower() == tp.city.lower():
-                        # Проверяем похожесть названий
-                        ratio = difflib.SequenceMatcher(
-                            None, tp.name.lower(), lp.name.lower()
-                        ).ratio()
-                        if ratio > 0.5:
-                            matched_local = lp
-                            break
+            # Извлекаем номер
+            number_match = PHARMACY_NUMBER_PATTERN.search(tp.name)
+            if not number_match:
+                # Номер не найден — пробуем найти в URL (/pharmacies/{id}/)
+                url_num_match = re.search(r"/pharmacies/(\d+)/", tp.url or "")
+                if url_num_match:
+                    tp_number = url_num_match.group(1)
+                else:
+                    unmatched_tabletka.append(
+                        {
+                            "id": tp.tabletka_id,
+                            "name": tp.name,
+                            "reason": "no pharmacy number found",
+                        }
+                    )
+                    continue
+            else:
+                tp_number = number_match.group(1)
+
+            # Ищем по (сеть, номер)
+            local_key = (matched_network.lower(), tp_number.strip())
+            matched_local = local_index.get(local_key)
 
             if matched_local:
                 matched_count += 1
@@ -255,28 +274,40 @@ async def _sync_tabletka_pharmacies_async():
                     matched_local.city = tp.city
                     needs_update = True
 
+                # Обновляем opening_hours если пустой
+                if tp.opening_hours and not matched_local.opening_hours:
+                    matched_local.opening_hours = tp.opening_hours
+                    needs_update = True
+
                 if needs_update:
                     updated_count += 1
                     logger.info(
-                        f"Matched tabletka ID {tp.tabletka_id} → "
-                        f"local {matched_local.name} №{matched_local.pharmacy_number}"
+                        f"Matched tabletka '{tp.name}' (ID {tp.tabletka_id}) → "
+                        f"local {matched_local.name} №{matched_local.pharmacy_number} "
+                        f"(district={tp.district}, city={tp.city})"
                     )
             else:
                 unmatched_tabletka.append(
                     {
                         "id": tp.tabletka_id,
                         "name": tp.name,
-                        "address": tp.address,
+                        "network": matched_network,
+                        "number": tp_number,
+                        "reason": f"not found in local DB (key: {matched_network}/{tp_number})",
                     }
                 )
 
         if updated_count > 0:
             await session.commit()
             logger.info(
-                f"Tabletka sync: {matched_count} matched, {updated_count} updated"
+                f"Tabletka sync: {matched_count} matched, {updated_count} updated, "
+                f"{len(unmatched_tabletka)} unmatched"
             )
         else:
-            logger.info(f"Tabletka sync: {matched_count} matched, no updates needed")
+            logger.info(
+                f"Tabletka sync: {matched_count} matched, no updates needed, "
+                f"{len(unmatched_tabletka)} unmatched"
+            )
 
         return {
             "status": "success",
