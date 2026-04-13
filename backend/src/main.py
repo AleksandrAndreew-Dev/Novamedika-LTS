@@ -19,7 +19,7 @@ from bot.handlers import (
     dialog_management_router,
 )
 from bot.middleware.role_middleware import RoleMiddleware
-from db.database import async_session_maker
+from db.database import async_session_maker, init_models
 from bot.middleware.db import DbMiddleware
 
 from routers import booking_orders
