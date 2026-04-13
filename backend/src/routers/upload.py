@@ -19,12 +19,7 @@ CORRECT_USERNAME = os.getenv("CORRECT_USERNAME")
 CORRECT_PASSWORD = os.getenv("CORRECT_PASSWORD")
 
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
-ALLOWED_CONTENT_TYPES = [
-    "text/csv",
-    "application/csv",
-    "application/vnd.ms-excel",
-    "text/plain",
-]
+ALLOWED_EXTENSIONS = {".csv"}
 
 
 def authenticate_pharmacy(credentials: HTTPBasicCredentials = Depends(security)):
@@ -62,11 +57,13 @@ async def upload_file(
 ):
     """Загрузка CSV файла аптеки. Максимум 50MB, только CSV."""
 
-    # Проверка MIME типа
-    if file.content_type not in ALLOWED_CONTENT_TYPES:
+    # Проверка расширения файла (MIME type при upload часто application/octet-stream)
+    filename = file.filename or ""
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Неподдерживаемый тип файла: {file.content_type}. Разрешены только CSV",
+            detail=f"Неподдерживаемый формат файла: {ext or 'нет расширения'}. Разрешены только CSV",
         )
 
     try:
