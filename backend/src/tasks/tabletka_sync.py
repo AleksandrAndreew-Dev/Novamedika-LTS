@@ -5,6 +5,7 @@
 - name, city, district, address, phone, opening_hours
 - Матчинг по адресу + телефону + названию
 """
+
 import re
 import logging
 import asyncio
@@ -17,7 +18,12 @@ from bs4 import BeautifulSoup
 logger = logging.getLogger(__name__)
 
 TABLETKA_BASE = "https://tabletka.by"
-TABLETKA_PHARMACIES_URL = f"{TABLETKA_BASE}/pharmacies/"
+TABLETKA_SEARCH_URL = (
+    f"{TABLETKA_BASE}/pharmacies/?&page={{page}}&str={{query}}&sort=name&sorttype=asc"
+)
+
+# Поисковые запросы для наших сетей
+SEARCH_QUERIES = ["новамедика", "эклиния"]
 
 # User-Agent для запросов
 USER_AGENT = (
@@ -30,6 +36,7 @@ USER_AGENT = (
 @dataclass
 class TabletkaPharmacy:
     """Данные аптеки с tabletka.by"""
+
     tabletka_id: str
     name: str
     url: str
@@ -62,7 +69,9 @@ def extract_district_from_address(address: str) -> Optional[str]:
 async def fetch_pharmacy_page(client: httpx.AsyncClient, url: str) -> Optional[str]:
     """Загружает HTML страницы аптеки."""
     try:
-        resp = await client.get(url, headers={"User-Agent": USER_AGENT}, follow_redirects=True)
+        resp = await client.get(
+            url, headers={"User-Agent": USER_AGENT}, follow_redirects=True
+        )
         resp.raise_for_status()
         return resp.text
     except httpx.HTTPError as e:
@@ -116,7 +125,9 @@ def parse_pharmacy_from_html(html: str, tabletka_id: str) -> Optional[TabletkaPh
                     city = city_match.group(1)
                     district = extract_district_from_address(full_address)
                     # Извлекаем улицу после города-района
-                    addr_part = re.sub(r"^[А-Яа-яЁё]+\s*[-–—][А-Яа-яЁё]+\s*,\s*", "", full_address)
+                    addr_part = re.sub(
+                        r"^[А-Яа-яЁё]+\s*[-–—][А-Яа-яЁё]+\s*,\s*", "", full_address
+                    )
                     if addr_part and "ул." in addr_part:
                         address = addr_part.strip()
                     else:
@@ -182,40 +193,68 @@ def parse_pharmacy_from_html(html: str, tabletka_id: str) -> Optional[TabletkaPh
 
 async def fetch_all_pharmacies_from_tabletka() -> list[TabletkaPharmacy]:
     """
-    Парсит каталог tabletka.by/pharmacies/ и загружает детальную информацию
-    по каждой аптеке.
+    Ищет аптеки наших сетей ("новамедика", "эклиния") на tabletka.by
+    через поиск и загружает детальную информацию по каждой.
     """
-    logger.info("Starting tabletka.by pharmacy sync")
+    logger.info("Starting tabletka.by pharmacy sync for our networks")
+
+    all_pharmacy_ids = set()
 
     async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-        # 1. Загружаем каталог
-        logger.info(f"Fetching catalog: {TABLETKA_PHARMACIES_URL}")
-        resp = await client.get(TABLETKA_PHARMACIES_URL, headers={"User-Agent": USER_AGENT})
-        resp.raise_for_status()
+        # 1. Для каждого поискового запроса парсим все страницы результатов
+        for query in SEARCH_QUERIES:
+            logger.info(f"Searching tabletka.by for: '{query}'")
+            page = 1
+            while True:
+                url = TABLETKA_SEARCH_URL.format(page=page, query=query)
+                logger.info(f"  Page {page}: {url}")
 
-        soup = BeautifulSoup(resp.text, "html.parser")
-        links = soup.select('a[href^="/pharmacies/"]')
+                resp = await client.get(url, headers={"User-Agent": USER_AGENT})
+                resp.raise_for_status()
+                soup = BeautifulSoup(resp.text, "html.parser")
 
-        # Уникальные IDs
-        seen_ids = set()
-        pharmacy_ids = []
+                # Ищем ссылки на аптеки: /pharmacies/{id}/
+                links = soup.select('a[href^="/pharmacies/"]')
+                page_ids = []
+                for link in links:
+                    href = link.get("href", "")
+                    match = re.search(r"/pharmacies/(\d+)/", href)
+                    if match:
+                        ph_id = match.group(1)
+                        if ph_id not in all_pharmacy_ids:
+                            all_pharmacy_ids.add(ph_id)
+                            page_ids.append(ph_id)
 
-        for link in links:
-            href = link.get("href", "")
-            match = re.search(r"/pharmacies/(\d+)/", href)
-            if match:
-                ph_id = match.group(1)
-                if ph_id not in seen_ids:
-                    seen_ids.add(ph_id)
-                    pharmacy_ids.append(ph_id)
+                logger.info(
+                    f"  Page {page}: found {len(page_ids)} new pharmacies "
+                    f"(total: {len(all_pharmacy_ids)})"
+                )
 
-        logger.info(f"Found {len(pharmacy_ids)} pharmacies in catalog")
+                # Проверяем есть ли кнопка "следующая страница"
+                has_next = False
+                pagination = soup.select('a[href*="page="]')
+                for link in pagination:
+                    href = link.get("href", "")
+                    try:
+                        p = int(re.search(r"page=(\d+)", href).group(1))
+                        if p > page:
+                            has_next = True
+                            break
+                    except (AttributeError, ValueError):
+                        pass
 
-        # 2. Загружаем каждую страницу
+                if not has_next:
+                    break
+                page += 1
+                await asyncio.sleep(1)
+
+        logger.info(f"Total unique pharmacies found: {len(all_pharmacy_ids)}")
+
+        # 2. Загружаем каждую страницу аптеки
         results = []
-        for i, ph_id in enumerate(pharmacy_ids, 1):
+        for i, ph_id in enumerate(sorted(all_pharmacy_ids, key=int), 1):
             url = f"{TABLETKA_BASE}/pharmacies/{ph_id}/"
-            logger.info(f"[{i}/{len(pharmacy_ids)}] Fetching: {url}")
+            logger.info(f"[{i}/{len(all_pharmacy_ids)}] Fetching: {url}")
 
             html = await fetch_pharmacy_page(client, url)
             if html:
@@ -228,7 +267,6 @@ async def fetch_all_pharmacies_from_tabletka() -> list[TabletkaPharmacy]:
                         f"address={pharmacy.address}, phone={pharmacy.phone}"
                     )
 
-            # Задержка чтобы не перегрузить сервер
             await asyncio.sleep(1.5)
 
         logger.info(f"Sync complete: {len(results)} pharmacies parsed from tabletka.by")
