@@ -5,10 +5,12 @@ import logging
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from db.database import get_db
 from db.models import Pharmacy, Product
@@ -23,15 +25,18 @@ from auth.security import get_api_key
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/orders", response_model=BookingOrderResponse)
+@limiter.limit("10/minute")
 async def create_booking_order(
+    request: Request,
     order_data: BookingOrderCreate,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(get_api_key),
+    # api_key: str = Depends(get_api_key),  # Отключено — frontend публичный, бронирование без auth
 ):
-    """Создание заказа бронирования"""
+    """Создание заказа бронирования (без auth — публичный эндпоинт для frontend, rate limit 10/min)"""
     try:
         pharmacy_result = await db.execute(
             select(Pharmacy).where(Pharmacy.uuid == order_data.pharmacy_id)
@@ -82,12 +87,13 @@ async def create_booking_order(
 
 @router.get("/orders", response_model=List[BookingOrderResponse])
 async def get_orders(
+    request: Request,
     pharmacy_id: Optional[uuid.UUID] = None,
     status: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(get_api_key),
+    # api_key: str = Depends(get_api_key),  # Отключено — frontend публичный
 ):
-    """Получение списка заказов с фильтрацией"""
+    """Получение списка заказов с фильтрацией (без auth — публичный эндпоинт)"""
     try:
         query = select(BookingOrder).options(selectinload(BookingOrder.pharmacy))
         if pharmacy_id:
@@ -134,11 +140,12 @@ async def get_orders(
 
 @router.get("/orders/{order_id}", response_model=BookingOrderResponse)
 async def get_order_by_id(
+    request: Request,
     order_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(get_api_key),
+    # api_key: str = Depends(get_api_key),  # Отключено — frontend публичный
 ):
-    """Получение заказа по ID"""
+    """Получение заказа по ID (без auth — публичный эндпоинт)"""
     try:
         result = await db.execute(
             select(BookingOrder).where(BookingOrder.uuid == order_id)
