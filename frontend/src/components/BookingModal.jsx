@@ -12,7 +12,7 @@ const BookingModal = React.memo(function BookingModal({
   const product = bookingState.modal.product;
 
   const mapQuery = encodeURIComponent(
-    `${product.pharmacy_name} №${product.pharmacy_number}, ${product.pharmacy_city || ""}, ${product.pharmacy_address}`,
+    `${product.pharmacy_name} №${product.pharmacy_number}, ${product.pharmacy_city || ""}${product.pharmacy_district ? `, ${product.pharmacy_district}` : ""}, ${product.pharmacy_address}`,
   );
   const mapUrl = `https://www.google.com/maps/search/?api=1&query=${mapQuery}`;
 
@@ -107,7 +107,13 @@ const BookingModal = React.memo(function BookingModal({
                     {product.pharmacy_name} №{product.pharmacy_number}
                   </p>
                   <p className="text-sm text-gray-600 mb-1">
-                    Адрес: {product.pharmacy_address}
+                    {product.pharmacy_city}
+                    {product.pharmacy_district && (
+                      <span className="text-gray-500">
+                        , {product.pharmacy_district}
+                      </span>
+                    )}
+                    , {product.pharmacy_address}
                   </p>
                   <a
                     href={mapUrl}

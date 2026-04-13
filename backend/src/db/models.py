@@ -1,10 +1,21 @@
 # db/models.py
 import uuid
-from sqlalchemy import Column, String, Date, ForeignKey, Numeric, DateTime, UniqueConstraint, Index, Boolean
+from sqlalchemy import (
+    Column,
+    String,
+    Date,
+    ForeignKey,
+    Numeric,
+    DateTime,
+    UniqueConstraint,
+    Index,
+    Boolean,
+)
 from sqlalchemy.dialects.postgresql import UUID, TSVECTOR
 from sqlalchemy.orm import relationship
 
 from .base import Base
+
 
 class Pharmacy(Base):
     __tablename__ = "pharmacies"
@@ -13,6 +24,7 @@ class Pharmacy(Base):
     name = Column(String(30), nullable=False)
     pharmacy_number = Column(String(100), nullable=False)
     city = Column(String(30), nullable=True)
+    district = Column(String(50), nullable=True)
     address = Column(String(255), nullable=True)
     phone = Column(String(100), nullable=True)
     opening_hours = Column(String(255), nullable=True)
@@ -20,12 +32,20 @@ class Pharmacy(Base):
 
     # Use string references to avoid circular imports
     products = relationship("Product", back_populates="pharmacy", lazy="select")
-    booking_orders = relationship("BookingOrder", back_populates="pharmacy", cascade="all, delete-orphan")
-    api_config = relationship("PharmacyAPIConfig", back_populates="pharmacy", uselist=False, cascade="all, delete-orphan")
+    booking_orders = relationship(
+        "BookingOrder", back_populates="pharmacy", cascade="all, delete-orphan"
+    )
+    api_config = relationship(
+        "PharmacyAPIConfig",
+        back_populates="pharmacy",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
-        UniqueConstraint('name', 'pharmacy_number', name='uq_pharmacy_name_number'),
+        UniqueConstraint("name", "pharmacy_number", name="uq_pharmacy_name_number"),
     )
+
 
 # db/models.py
 class Product(Base):
@@ -60,10 +80,10 @@ class Product(Base):
     pharmacy = relationship("Pharmacy", back_populates="products", lazy="select")
 
     __table_args__ = (
-        Index('idx_product_search_vector', 'search_vector', postgresql_using='gin'),
-        Index('idx_product_name_gin', 'name', postgresql_using='gin'),
-        Index('idx_product_manufacturer', 'manufacturer'),
-        Index('idx_product_form', 'form'),
-        Index('idx_product_price', 'price'),
-        Index('idx_product_is_removed', 'is_removed'),  # Добавить индекс
+        Index("idx_product_search_vector", "search_vector", postgresql_using="gin"),
+        Index("idx_product_name_gin", "name", postgresql_using="gin"),
+        Index("idx_product_manufacturer", "manufacturer"),
+        Index("idx_product_form", "form"),
+        Index("idx_product_price", "price"),
+        Index("idx_product_is_removed", "is_removed"),  # Добавить индекс
     )

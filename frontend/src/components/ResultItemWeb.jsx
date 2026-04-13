@@ -7,7 +7,7 @@ const ResultItemWeb = React.memo(function ResultItemWeb({
   onBook,
 }) {
   const mapQuery = encodeURIComponent(
-    `${item.pharmacy_name} №${item.pharmacy_number}, ${item.pharmacy_city}, ${item.pharmacy_address}`,
+    `${item.pharmacy_name} №${item.pharmacy_number}, ${item.pharmacy_city}${item.pharmacy_district ? `, ${item.pharmacy_district}` : ""}, ${item.pharmacy_address}`,
   );
   const mapUrl = `https://www.google.com/maps/search/?api=1&query=${mapQuery}`;
 
@@ -59,7 +59,11 @@ const ResultItemWeb = React.memo(function ResultItemWeb({
             </div>
           </div>
           <div className="text-gray-800 ml-7">
-            {item.pharmacy_address}, {item.pharmacy_city}
+            {item.pharmacy_city}
+            {item.pharmacy_district && (
+              <span className="text-gray-600">, {item.pharmacy_district}</span>
+            )}
+            , {item.pharmacy_address}
           </div>
           <div className="ml-7 mt-1">
             <a

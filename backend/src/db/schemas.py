@@ -54,6 +54,7 @@ class PharmacyRead(BaseModel):
     name: str
     pharmacy_number: str
     city: str
+    district: Optional[str] = None
     address: Optional[str] = None
     phone: Optional[str] = None
     opening_hours: Optional[str] = None
@@ -67,6 +68,7 @@ class PharmacyInfo(BaseModel):
     pharmacy_name: str
     pharmacy_number: str
     pharmacy_city: str
+    pharmacy_district: Optional[str] = None
     pharmacy_address: str
     pharmacy_phone: str
 
@@ -76,6 +78,7 @@ class GroupedProductResponse(BaseModel):
     form: str
     pharmacy_name: str
     pharmacy_city: str
+    pharmacy_district: Optional[str] = None
     pharmacy_address: str
     pharmacy_phone: str
     pharmacy_number: str
@@ -83,7 +86,7 @@ class GroupedProductResponse(BaseModel):
     quantity: float
     manufacturer: str
     country: str
-    working_hours: Optional[str] = "Уточняйте в аптеке" 
+    working_hours: Optional[str] = "Уточняйте в аптеке"
     pharmacies: List[PharmacyInfo]
     updated_at: datetime
 
@@ -107,6 +110,7 @@ class ProductPreview(BaseModel):
     price: float
     pharmacy_city: str
 
+
 class TwoStepSearchResponse(BaseModel):
     available_forms: List[str]
     preview_products: List[ProductPreview]
@@ -116,15 +120,18 @@ class TwoStepSearchResponse(BaseModel):
 
 class PharmacyUpdate(BaseModel):
     city: Optional[str] = None
+    district: Optional[str] = None
     address: Optional[str] = None
     phone: Optional[str] = None
     opening_hours: Optional[str] = None
+
 
 class PharmacyResponse(BaseModel):
     uuid: uuid.UUID
     name: str
     pharmacy_number: str
     city: Optional[str]
+    district: Optional[str] = None
     address: Optional[str]
     phone: Optional[str]
     opening_hours: Optional[str]

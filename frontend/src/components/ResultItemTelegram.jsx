@@ -7,7 +7,7 @@ const ResultItemTelegram = React.memo(function ResultItemTelegram({
   onBook,
 }) {
   const mapQuery = encodeURIComponent(
-    `${item.pharmacy_name} №${item.pharmacy_number}, ${item.pharmacy_city}, ${item.pharmacy_address}`,
+    `${item.pharmacy_name} №${item.pharmacy_number}, ${item.pharmacy_city}${item.pharmacy_district ? `, ${item.pharmacy_district}` : ""}, ${item.pharmacy_address}`,
   );
   const mapUrl = `https://www.google.com/maps/search/?api=1&query=${mapQuery}`;
 
@@ -49,8 +49,11 @@ const ResultItemTelegram = React.memo(function ResultItemTelegram({
             />
           </svg>
           <span>
-            {item.pharmacy_name} №{item.pharmacy_number}, {item.pharmacy_city},{" "}
-            {item.pharmacy_address}
+            {item.pharmacy_name} №{item.pharmacy_number}, {item.pharmacy_city}
+            {item.pharmacy_district && (
+              <span className="text-gray-600">, {item.pharmacy_district}</span>
+            )}
+            , {item.pharmacy_address}
           </span>
           <a
             href={mapUrl}

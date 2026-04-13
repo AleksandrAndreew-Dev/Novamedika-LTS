@@ -307,6 +307,7 @@ async def search_full_text(
                     "quantity": float(p.quantity) if p.quantity else 0.0,
                     "pharmacy_name": p.pharmacy.name if p.pharmacy else "Unknown",
                     "pharmacy_city": p.pharmacy.city if p.pharmacy else "Unknown",
+                    "pharmacy_district": p.pharmacy.district if p.pharmacy else None,
                     "pharmacy_address": p.pharmacy.address if p.pharmacy else "Unknown",
                     "pharmacy_phone": p.pharmacy.phone if p.pharmacy else "Unknown",
                     "pharmacy_number": (
@@ -479,6 +480,7 @@ async def search_full_text(
                 "quantity": float(p.quantity) if p.quantity else 0.0,
                 "pharmacy_name": p.pharmacy.name if p.pharmacy else "Unknown",
                 "pharmacy_city": p.pharmacy.city if p.pharmacy else "Unknown",
+                "pharmacy_district": p.pharmacy.district if p.pharmacy else None,
                 "pharmacy_address": p.pharmacy.address if p.pharmacy else "Unknown",
                 "pharmacy_phone": p.pharmacy.phone if p.pharmacy else "Unknown",
                 "pharmacy_number": p.pharmacy.pharmacy_number if p.pharmacy else "N/A",
