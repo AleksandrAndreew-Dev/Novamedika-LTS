@@ -278,11 +278,13 @@ async def _sync_tabletka_pharmacies_async():
                     if tp.address and matched_local.address != tp.address:
                         # Проверяем что адрес содержит улицу/проспект/бульвар/дом,
                         # а не только район (например "Минск-Фрунзенский" без улицы)
+                        # Достаточно любого из: ул., пр., бул., пер., д. + наличие цифры (номер дома)
                         has_street = re.search(
                             r"(ул\.|пр\.|бул\.|пер\.|д\.|корп\.|пом\.|сан\.)",
                             tp.address,
                         )
-                        if has_street:
+                        has_number = re.search(r"\d", tp.address)  # номер дома
+                        if has_street and has_number:
                             matched_local.address = tp.address
                             needs_update = True
                         elif matched_local.address:

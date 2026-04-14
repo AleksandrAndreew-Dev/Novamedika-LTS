@@ -209,11 +209,13 @@ def parse_pharmacy_from_html(html: str, tabletka_id: str) -> Optional[TabletkaPh
                 if city_match:
                     city = city_match.group(1)
                     district = extract_district_from_address(full_address)
+                    # Берём ВСЮ часть после "Город-Район, " — это и есть полный адрес
                     addr_part = re.sub(
                         r"^[А-Яа-яЁё]+\s*[-–—][А-Яа-яЁё]+\s*,\s*", "", full_address
-                    )
-                    if addr_part and "ул." in addr_part:
-                        address = addr_part.strip()
+                    ).strip()
+                    # Если что-то осталось — это адрес (улица, дом и т.д.)
+                    if addr_part:
+                        address = addr_part
                     else:
                         address = full_address
                 break
