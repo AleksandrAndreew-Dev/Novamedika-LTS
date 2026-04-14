@@ -254,28 +254,28 @@ async def _sync_tabletka_pharmacies_async():
                 matched_count += 1
                 needs_update = False
 
-                # Обновляем district если не был установлен
-                if tp.district and not matched_local.district:
+                # Обновляем district из tabletka.by (всегда, если есть данные)
+                if tp.district and matched_local.district != tp.district:
                     matched_local.district = tp.district
                     needs_update = True
 
-                # Обновляем phone если пустой
-                if tp.phone and not matched_local.phone:
+                # Обновляем phone из tabletka.by (всегда, если есть данные)
+                if tp.phone and matched_local.phone != tp.phone:
                     matched_local.phone = tp.phone
                     needs_update = True
 
-                # Обновляем address если пустой
-                if tp.address and not matched_local.address:
+                # Обновляем address из tabletka.by (всегда, если есть данные)
+                if tp.address and matched_local.address != tp.address:
                     matched_local.address = tp.address
                     needs_update = True
 
-                # Обновляем city если пустой
-                if tp.city and not matched_local.city:
+                # Обновляем city из tabletka.by (всегда, если есть данные)
+                if tp.city and matched_local.city != tp.city:
                     matched_local.city = tp.city
                     needs_update = True
 
-                # Обновляем opening_hours если пустой
-                if tp.opening_hours and not matched_local.opening_hours:
+                # Обновляем opening_hours из tabletka.by (всегда, если есть данные)
+                if tp.opening_hours and matched_local.opening_hours != tp.opening_hours:
                     matched_local.opening_hours = tp.opening_hours
                     needs_update = True
 
