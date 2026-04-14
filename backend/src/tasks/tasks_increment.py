@@ -279,10 +279,9 @@ async def _sync_tabletka_pharmacies_async():
                         matched_local.address = tp.address
                         needs_update = True
 
-                    # Обновляем city из tabletka.by (всегда, если есть данные)
-                    if tp.city and matched_local.city != tp.city:
-                        matched_local.city = tp.city
-                        needs_update = True
+                    # НЕ обновляем city из tabletka.by — city определяется из
+                    # правильного списка при upload CSV, а tabletka может парсить неверно
+                    # (например, пригороды как "Минск" вместо реального населённого пункта)
 
                     # Обновляем opening_hours из tabletka.by (всегда, если есть данные)
                     if (
