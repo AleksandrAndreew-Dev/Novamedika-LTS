@@ -196,13 +196,41 @@ def parse_pharmacy_from_html(html: str, tabletka_id: str) -> Optional[TabletkaPh
             phone = match.group(1).strip()
             break
 
-    # Ищем часы работы
-    for line in lines:
-        match = re.search(hours_pattern, line)
-        if match:
-            # Берём всю строку как часы работы
-            opening_hours = line.strip()
-            break
+    # Ищем часы работы — парсим весь блок расписания по дням
+    in_hours_block = False
+    hours_lines = []
+    day_pattern = re.compile(
+        r"^(Понедельник|Вторник|Среда|Четверг|Пятница|Суббота|Воскресенье)",
+        re.IGNORECASE,
+    )
+    time_pattern = re.compile(r"\d{1,2}[.:]\d{2}\s*[–-—]\s*\d{1,2}[.:]\d{2}")
+
+    for idx in range(len(lines) - 1):
+        line = lines[idx]
+
+        # Проверяем начало блока часов (первый день недели)
+        if not in_hours_block and day_pattern.match(line):
+            # Проверяем что следующая строка содержит время
+            if time_pattern.search(lines[idx + 1]):
+                in_hours_block = True
+                hours_lines = [line]
+                continue
+
+        # Если внутри блока — добавляем строки пока это дни или время
+        if in_hours_block:
+            if (
+                day_pattern.match(line)
+                or time_pattern.search(line)
+                or "Санитарный" in line
+            ):
+                hours_lines.append(line)
+            else:
+                # Блок закончился
+                in_hours_block = False
+
+    # Собираем часы работы в одну строку
+    if hours_lines:
+        opening_hours = " | ".join(hours_lines)
 
     # Ищем заведующего
     for line in lines:
