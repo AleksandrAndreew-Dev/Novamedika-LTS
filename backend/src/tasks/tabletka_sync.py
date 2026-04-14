@@ -186,66 +186,81 @@ def parse_pharmacy_from_html(html: str, tabletka_id: str) -> Optional[TabletkaPh
     opening_hours = None
     manager_name = None
 
-    address_patterns = [
-        r"(Минск[-–—][А-Яа-яЁё]+,\s*ул\.[^\n,]+)",
-        r"(Минск[-–—][А-Яа-яЁё]+[^\n,]*)",
-        r"(Гомель[-–—][А-Яа-яЁё]+[^\n,]*)",
-        r"(Брест[-–—][А-Яа-яЁё]+[^\n,]*)",
-        r"(Гродно[-–—][А-Яа-яЁё]+[^\n,]*)",
-        r"(Могилёв[-–—][А-Яа-яЁё]+[^\n,]*)",
-        r"(Витебск[-–—][А-Яа-яЁё]+[^\n,]*)",
-    ]
+    # ---------- 1. Поиск адреса через блок "Адрес" (самый надёжный) ----------
+    address_label = soup.find(string=re.compile(r"^Адрес$"))
+    if address_label:
+        parent = address_label.find_parent()
+        if parent:
+            addr_elem = parent.find_next_sibling()
+            if addr_elem and addr_elem.name in ["div", "p", "span", "td"]:
+                addr_text = addr_elem.get_text(strip=True)
+                if addr_text and len(addr_text) > 5:
+                    address = addr_text
+                    # Извлекаем город и район из полного адреса
+                    city_match = re.match(r"^([А-Яа-яЁё]+)\s*[-–—]", address)
+                    if city_match:
+                        city = city_match.group(1)
+                        district = extract_district_from_address(address)
+                    logger.debug(f"Address from block: {address}")
 
-    phone_pattern = r"(\+375[\d\s\-]+)"
-    manager_pattern = r"(?:Заведующий|Зав\.?)\s*[:.\s]*([А-Яа-яЁё][А-Яа-яЁё\s]+?(?:[А-Яа-яЁё]\.)?\s*[А-Яа-яЁё]+)"
+    # ---------- 2. Если не нашли, ищем через регулярные выражения (расширенные) ----------
+    if not address:
+        # Паттерны, захватывающие не только улицу, но и номер дома, корпус, помещение
+        address_patterns = [
+            r"(Минск[-–—][А-Яа-яЁё]+,\s*ул\.[^,\n]+(?:,\s*[^,\n]+)*)",  # до конца строки
+            r"(Минск[-–—][А-Яа-яЁё]+[^\n,]*)",
+            r"(Гомель[-–—][А-Яа-яЁё]+,\s*ул\.[^,\n]+(?:,\s*[^,\n]+)*)",
+            r"(Гомель[-–—][А-Яа-яЁё]+[^\n,]*)",
+            r"(Брест[-–—][А-Яа-яЁё]+,\s*ул\.[^,\n]+(?:,\s*[^,\n]+)*)",
+            r"(Брест[-–—][А-Яа-яЁё]+[^\n,]*)",
+            r"(Гродно[-–—][А-Яа-яЁё]+,\s*ул\.[^,\n]+(?:,\s*[^,\n]+)*)",
+            r"(Гродно[-–—][А-Яа-яЁё]+[^\n,]*)",
+            r"(Могилёв[-–—][А-Яа-яЁё]+,\s*ул\.[^,\n]+(?:,\s*[^,\n]+)*)",
+            r"(Могилёв[-–—][А-Яа-яЁё]+[^\n,]*)",
+            r"(Витебск[-–—][А-Яа-яЁё]+,\s*ул\.[^,\n]+(?:,\s*[^,\n]+)*)",
+            r"(Витебск[-–—][А-Яа-яЁё]+[^\n,]*)",
+        ]
 
-    # Ищем адрес — собираем ВСЕ совпадения, выбираем самый полный
-    address_candidates = []
-    for line in lines:
-        for pattern in address_patterns:
-            match = re.search(pattern, line)
-            if match:
-                full_address = match.group(1).strip()
-                city_match = re.match(r"^([А-Яа-яЁё]+)\s*[-–—]", full_address)
-                if city_match:
-                    city = city_match.group(1)
-                    district = extract_district_from_address(full_address)
-                    # Берём ВСЮ часть после "Город-Район, " — это и есть полный адрес
-                    addr_part = re.sub(
-                        r"^[А-Яа-яЁё]+\s*[-–—][А-Яа-яЁё]+\s*,\s*", "", full_address
-                    ).strip()
-                    # Если что-то осталось — это адрес (улица, дом и т.д.)
-                    if addr_part:
-                        address_candidates.append(addr_part)
-                    else:
-                        address_candidates.append(full_address)
+        address_candidates = []
+        for line in lines:
+            for pattern in address_patterns:
+                match = re.search(pattern, line)
+                if match:
+                    full_address = match.group(1).strip()
+                    city_match = re.match(r"^([А-Яа-яЁё]+)\s*[-–—]", full_address)
+                    if city_match:
+                        city = city_match.group(1)
+                        district = extract_district_from_address(full_address)
+                        # Убираем "Город-Район, " чтобы оставить чистый адрес
+                        addr_part = re.sub(
+                            r"^[А-Яа-яЁё]+\s*[-–—][А-Яа-яЁё]+\s*,\s*", "", full_address
+                        ).strip()
+                        if addr_part:
+                            address_candidates.append(addr_part)
+                        else:
+                            address_candidates.append(full_address)
 
-    # Выбираем самый полный адрес (с улицей И номером дома)
-    for candidate in address_candidates:
-        has_street = re.search(
-            r"(ул\.|пр\.|бул\.|пер\.|д\.|корп\.|пом\.|сан\.)", candidate
-        )
-        has_number = re.search(r"\d", candidate)
-        if has_street and has_number:
-            address = candidate
-            break
+        # Выбираем самый полный кандидат (с улицей и номером)
+        for candidate in address_candidates:
+            if re.search(
+                r"(ул\.|пр\.|бул\.|пер\.|д\.|корп\.|пом\.|сан\.)", candidate
+            ) and re.search(r"\d", candidate):
+                address = candidate
+                break
+        if not address and address_candidates:
+            address = address_candidates[0]
 
-    # Если не нашли полный — берём первый кандидат
-    if not address and address_candidates:
-        address = address_candidates[0]
-
-    # Fallback: пробуем извлечь из meta description (там часто полный адрес)
+    # ---------- 3. Fallback: meta description ----------
     if not address or not re.search(r"(ул\.|пр\.|бул\.|пер\.|д\.)", address or ""):
         meta_desc = soup.find("meta", attrs={"name": "description"})
         if meta_desc and meta_desc.get("content"):
             content = meta_desc["content"]
-            # Ищем паттерн "адрес: ..." или "Город-Район, ул. ..."
             addr_match = re.search(
-                r"(?:адрес:\s*)?([А-Яа-яЁё]+[-–—][А-Яа-яЁёё]+,\s*ул\.[^\n,]+)", content
+                r"(?:адрес:\s*)?([А-Яа-яЁё]+[-–—][А-Яа-яЁёё]+,\s*ул\.[^,\n]+(?:,\s*[^,\n]+)*)",
+                content,
             )
             if addr_match:
                 candidate = addr_match.group(1).strip()
-                # Проверяем что есть номер дома
                 if re.search(r"\d", candidate):
                     city_match = re.match(r"^([А-Яа-яЁё]+)\s*[-–—]", candidate)
                     if city_match:
@@ -256,18 +271,17 @@ def parse_pharmacy_from_html(html: str, tabletka_id: str) -> Optional[TabletkaPh
                         ).strip()
                         if addr_part:
                             address = addr_part
-                            logger.debug(
-                                f"Got address from meta description: {address}"
-                            )
+                            logger.debug(f"Address from meta description: {address}")
 
-    # Ищем телефон
+    # ---------- Поиск телефона ----------
+    phone_pattern = r"(\+375[\d\s\-]+)"
     for line in lines:
         match = re.search(phone_pattern, line)
         if match:
             phone = match.group(1).strip()
             break
 
-    # Ищем часы работы — парсим весь блок расписания по дням
+    # ---------- Поиск часов работы ----------
     in_hours_block = False
     hours_lines = []
     day_pattern = re.compile(
@@ -301,14 +315,15 @@ def parse_pharmacy_from_html(html: str, tabletka_id: str) -> Optional[TabletkaPh
     if hours_lines:
         opening_hours = _format_hours_compact(hours_lines)
 
-    # Ищем заведующего
+    # ---------- Поиск заведующего ----------
+    manager_pattern = r"(?:Заведующий|Зав\.?)\s*[:.\s]*([А-Яа-яЁё][А-Яа-яЁё\s]+?(?:[А-Яа-яЁё]\.)?\s*[А-Яа-яЁё]+)"
     for line in lines:
         if "Заведующий" in line or "Зав." in line:
             manager_match = re.search(manager_pattern, line)
             if manager_match:
                 manager_name = manager_match.group(1).strip()
 
-    # Пытаемся извлечь из meta description
+    # ---------- Fallback для города и района, если ещё не определены ----------
     if not city and not address:
         meta_desc = soup.find("meta", attrs={"name": "description"})
         if meta_desc and meta_desc.get("content"):
