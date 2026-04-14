@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 import httpx
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 logger = logging.getLogger(__name__)
 
@@ -93,14 +93,58 @@ def extract_district_from_address(address: str) -> Optional[str]:
         return match.group(1).strip().replace("район", "р-н")
 
     if "Минск" in address:
-        street_match = re.search(r"ул\.\s*([А-Яа-яЁё]+)", address)
+        street_match = re.search(
+            r"(ул\.|пр\.|бул\.|пер\.|наб\.)\s*([А-Яа-яЁё]+)", address
+        )
         if street_match:
-            street = street_match.group(1).strip()
+            street = street_match.group(2).strip()
             for known_street, district in MINSK_STREET_TO_DISTRICT.items():
                 if street.lower().startswith(known_street[:4].lower()):
                     return f"{district} р-н"
 
     return None
+
+
+def extract_city_district_address(full_address: str):
+    """
+    Из полного адреса вида "Минск-Фрунзенский, пер. 2-й Тимошенко, 3-235"
+    возвращает (city, district, clean_address).
+    """
+    city = None
+    district = None
+    clean_address = None
+
+    # Ищем город и район в начале: "Город-Район" или "Город, Район"
+    match = re.match(r"^([А-Яа-яЁё]+)\s*[-–—]\s*([А-Яа-яЁё]+)", full_address)
+    if match:
+        city = match.group(1).strip()
+        district = f"{match.group(2).strip()} р-н"
+        # Удаляем "Город-Район, " из начала
+        clean_address = re.sub(
+            r"^[А-Яа-яЁё]+\s*[-–—][А-Яа-яЁё]+\s*,\s*", "", full_address
+        ).strip()
+    else:
+        # Возможно, запись через запятую: "Минск, Фрунзенский р-н, ..."
+        match_comma = re.match(
+            r"^([А-Яа-яЁё]+),\s*([А-Яа-яЁё]+(?:\s+р-н)?)", full_address
+        )
+        if match_comma:
+            city = match_comma.group(1).strip()
+            district_raw = match_comma.group(2).strip()
+            if not district_raw.endswith("р-н"):
+                district_raw += " р-н"
+            district = district_raw
+            clean_address = re.sub(
+                r"^[А-Яа-яЁё]+,\s*[А-Яа-яЁё]+(?:\s+р-н)?,\s*", "", full_address
+            ).strip()
+        else:
+            # Не удалось выделить город и район — берём весь адрес как есть
+            clean_address = full_address
+
+    if not clean_address:
+        clean_address = full_address
+
+    return city, district, clean_address
 
 
 def _format_hours_compact(hours_lines: list[str]) -> str:
@@ -187,91 +231,68 @@ def parse_pharmacy_from_html(html: str, tabletka_id: str) -> Optional[TabletkaPh
     manager_name = None
 
     # ---------- 1. Поиск адреса через блок "Адрес" (самый надёжный) ----------
-    address_label = soup.find(string=re.compile(r"^Адрес$"))
-    if address_label:
-        parent = address_label.find_parent()
-        if parent:
-            addr_elem = parent.find_next_sibling()
-            if addr_elem and addr_elem.name in ["div", "p", "span", "td"]:
-                addr_text = addr_elem.get_text(strip=True)
-                if addr_text and len(addr_text) > 5:
-                    address = addr_text
-                    # Извлекаем город и район из полного адреса
-                    city_match = re.match(r"^([А-Яа-яЁё]+)\s*[-–—]", address)
-                    if city_match:
-                        city = city_match.group(1)
-                        district = extract_district_from_address(address)
-                    logger.debug(f"Address from block: {address}")
+    # Ищем элемент, который содержит текст "Адрес" (часто это <div> или <p>)
+    address_label = None
+    for elem in soup.find_all(["div", "p", "span", "td", "th"]):
+        if elem.get_text(strip=True) == "Адрес":
+            address_label = elem
+            break
 
-    # ---------- 2. Если не нашли, ищем через регулярные выражения (расширенные) ----------
+    if address_label:
+        # Берём следующий элемент (sibling) или родителя
+        addr_elem = address_label.find_next_sibling()
+        if addr_elem and isinstance(addr_elem, Tag):
+            full_address = addr_elem.get_text(strip=True)
+            if full_address and len(full_address) > 5:
+                city, district, address = extract_city_district_address(full_address)
+                logger.debug(
+                    f"Address from block: full='{full_address}', city={city}, district={district}, address={address}"
+                )
+
+    # ---------- 2. Если не нашли, ищем через регулярные выражения ----------
     if not address:
-        # Паттерны, захватывающие не только улицу, но и номер дома, корпус, помещение
-        address_patterns = [
-            r"(Минск[-–—][А-Яа-яЁё]+,\s*ул\.[^,\n]+(?:,\s*[^,\n]+)*)",  # до конца строки
+        # Паттерны для полного адреса (включая город и район)
+        full_address_patterns = [
+            r"(Минск[-–—][А-Яа-яЁё]+,\s*(?:ул\.|пр\.|бул\.|пер\.|наб\.|площадь)[^,\n]+(?:,\s*[^,\n]+)*)",
             r"(Минск[-–—][А-Яа-яЁё]+[^\n,]*)",
-            r"(Гомель[-–—][А-Яа-яЁё]+,\s*ул\.[^,\n]+(?:,\s*[^,\n]+)*)",
+            r"(Гомель[-–—][А-Яа-яЁё]+,\s*(?:ул\.|пр\.|бул\.|пер\.|наб\.|площадь)[^,\n]+(?:,\s*[^,\n]+)*)",
             r"(Гомель[-–—][А-Яа-яЁё]+[^\n,]*)",
-            r"(Брест[-–—][А-Яа-яЁё]+,\s*ул\.[^,\n]+(?:,\s*[^,\n]+)*)",
+            r"(Брест[-–—][А-Яа-яЁё]+,\s*(?:ул\.|пр\.|бул\.|пер\.|наб\.|площадь)[^,\n]+(?:,\s*[^,\n]+)*)",
             r"(Брест[-–—][А-Яа-яЁё]+[^\n,]*)",
-            r"(Гродно[-–—][А-Яа-яЁё]+,\s*ул\.[^,\n]+(?:,\s*[^,\n]+)*)",
+            r"(Гродно[-–—][А-Яа-яЁё]+,\s*(?:ул\.|пр\.|бул\.|пер\.|наб\.|площадь)[^,\n]+(?:,\s*[^,\n]+)*)",
             r"(Гродно[-–—][А-Яа-яЁё]+[^\n,]*)",
-            r"(Могилёв[-–—][А-Яа-яЁё]+,\s*ул\.[^,\n]+(?:,\s*[^,\n]+)*)",
+            r"(Могилёв[-–—][А-Яа-яЁё]+,\s*(?:ул\.|пр\.|бул\.|пер\.|наб\.|площадь)[^,\n]+(?:,\s*[^,\n]+)*)",
             r"(Могилёв[-–—][А-Яа-яЁё]+[^\n,]*)",
-            r"(Витебск[-–—][А-Яа-яЁё]+,\s*ул\.[^,\n]+(?:,\s*[^,\n]+)*)",
+            r"(Витебск[-–—][А-Яа-яЁё]+,\s*(?:ул\.|пр\.|бул\.|пер\.|наб\.|площадь)[^,\n]+(?:,\s*[^,\n]+)*)",
             r"(Витебск[-–—][А-Яа-яЁё]+[^\n,]*)",
         ]
 
-        address_candidates = []
         for line in lines:
-            for pattern in address_patterns:
+            for pattern in full_address_patterns:
                 match = re.search(pattern, line)
                 if match:
                     full_address = match.group(1).strip()
-                    city_match = re.match(r"^([А-Яа-яЁё]+)\s*[-–—]", full_address)
-                    if city_match:
-                        city = city_match.group(1)
-                        district = extract_district_from_address(full_address)
-                        # Убираем "Город-Район, " чтобы оставить чистый адрес
-                        addr_part = re.sub(
-                            r"^[А-Яа-яЁё]+\s*[-–—][А-Яа-яЁё]+\s*,\s*", "", full_address
-                        ).strip()
-                        if addr_part:
-                            address_candidates.append(addr_part)
-                        else:
-                            address_candidates.append(full_address)
-
-        # Выбираем самый полный кандидат (с улицей и номером)
-        for candidate in address_candidates:
-            if re.search(
-                r"(ул\.|пр\.|бул\.|пер\.|д\.|корп\.|пом\.|сан\.)", candidate
-            ) and re.search(r"\d", candidate):
-                address = candidate
+                    city, district, address = extract_city_district_address(
+                        full_address
+                    )
+                    if address:
+                        break
+            if address:
                 break
-        if not address and address_candidates:
-            address = address_candidates[0]
 
     # ---------- 3. Fallback: meta description ----------
-    if not address or not re.search(r"(ул\.|пр\.|бул\.|пер\.|д\.)", address or ""):
+    if not address:
         meta_desc = soup.find("meta", attrs={"name": "description"})
         if meta_desc and meta_desc.get("content"):
             content = meta_desc["content"]
             addr_match = re.search(
-                r"(?:адрес:\s*)?([А-Яа-яЁё]+[-–—][А-Яа-яЁёё]+,\s*ул\.[^,\n]+(?:,\s*[^,\n]+)*)",
+                r"(?:адрес:\s*)?([А-Яа-яЁё]+[-–—][А-Яа-яЁёё]+,\s*(?:ул\.|пр\.|бул\.|пер\.|наб\.|площадь)[^,\n]+(?:,\s*[^,\n]+)*)",
                 content,
             )
             if addr_match:
-                candidate = addr_match.group(1).strip()
-                if re.search(r"\d", candidate):
-                    city_match = re.match(r"^([А-Яа-яЁё]+)\s*[-–—]", candidate)
-                    if city_match:
-                        city = city_match.group(1)
-                        district = extract_district_from_address(candidate)
-                        addr_part = re.sub(
-                            r"^[А-Яа-яЁё]+\s*[-–—][А-Яа-яЁё]+\s*,\s*", "", candidate
-                        ).strip()
-                        if addr_part:
-                            address = addr_part
-                            logger.debug(f"Address from meta description: {address}")
+                full_address = addr_match.group(1).strip()
+                city, district, address = extract_city_district_address(full_address)
+                logger.debug(f"Address from meta description: {address}")
 
     # ---------- Поиск телефона ----------
     phone_pattern = r"(\+375[\d\s\-]+)"
