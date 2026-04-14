@@ -1,5 +1,6 @@
 # db/database.py
 import os
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 import asyncpg
 import logging
@@ -38,6 +39,12 @@ async def init_models():
         engine = get_engine()
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            # Миграция: увеличиваем opening_hours с 255 до 500
+            await conn.execute(
+                sa.text(
+                    "ALTER TABLE pharmacies ALTER COLUMN opening_hours TYPE VARCHAR(500)"
+                )
+            )
             logger.info("Database models initialized successfully")
     except Exception as e:
         logger.error(f"Error initializing models: {e}")

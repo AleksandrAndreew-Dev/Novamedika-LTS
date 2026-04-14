@@ -27,7 +27,7 @@ class Pharmacy(Base):
     district = Column(String(50), nullable=True)
     address = Column(String(255), nullable=True)
     phone = Column(String(100), nullable=True)
-    opening_hours = Column(String(255), nullable=True)
+    opening_hours = Column(String(500), nullable=True)
     chain = Column(String(50), nullable=False)
 
     # Use string references to avoid circular imports
