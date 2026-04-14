@@ -205,24 +205,28 @@ def parse_pharmacy_from_html(html: str, tabletka_id: str) -> Optional[TabletkaPh
     )
     time_pattern = re.compile(r"\d{1,2}[.:]\d{2}\s*[–-—]\s*\d{1,2}[.:]\d{2}")
 
+    def _is_hours_value(text: str) -> bool:
+        """Проверяет что строка — это время, 'выходной' или санитарная информация."""
+        return (
+            time_pattern.search(text)
+            or "выходной" in text.lower()
+            or "Санитарн" in text
+        )
+
     for idx in range(len(lines) - 1):
         line = lines[idx]
 
         # Проверяем начало блока часов (первый день недели)
         if not in_hours_block and day_pattern.match(line):
-            # Проверяем что следующая строка содержит время
-            if time_pattern.search(lines[idx + 1]):
+            # Проверяем что следующая строка содержит время, выходной или санитарную инфу
+            if _is_hours_value(lines[idx + 1]):
                 in_hours_block = True
                 hours_lines = [line]
                 continue
 
         # Если внутри блока — добавляем строки пока это дни или время
         if in_hours_block:
-            if (
-                day_pattern.match(line)
-                or time_pattern.search(line)
-                or "Санитарный" in line
-            ):
+            if day_pattern.match(line) or _is_hours_value(line):
                 hours_lines.append(line)
             else:
                 # Блок закончился
