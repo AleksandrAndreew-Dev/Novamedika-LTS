@@ -254,6 +254,14 @@ async def _sync_tabletka_pharmacies_async():
                 matched_count += 1
                 needs_update = False
 
+                # Логируем что нашли совпадение
+                logger.debug(
+                    f"Matched: tabletka '{tp.name}' → local '{matched_local.name}' "
+                    f"#{matched_local.pharmacy_number}"
+                )
+                logger.debug(f"  tabletka hours: '{tp.opening_hours}'")
+                logger.debug(f"  local hours:    '{matched_local.opening_hours}'")
+
                 # Обновляем district из tabletka.by (всегда, если есть данные)
                 if tp.district and matched_local.district != tp.district:
                     matched_local.district = tp.district
@@ -286,6 +294,8 @@ async def _sync_tabletka_pharmacies_async():
                         f"local {matched_local.name} №{matched_local.pharmacy_number} "
                         f"(district={tp.district}, city={tp.city})"
                     )
+                    if tp.opening_hours:
+                        logger.info(f"  opening_hours: '{tp.opening_hours}'")
             else:
                 unmatched_tabletka.append(
                     {
@@ -303,6 +313,9 @@ async def _sync_tabletka_pharmacies_async():
                 f"Tabletka sync: {matched_count} matched, {updated_count} updated, "
                 f"{len(unmatched_tabletka)} unmatched"
             )
+            # Логируем unmatched для отладки
+            for u in unmatched_tabletka[:5]:
+                logger.info(f"  Unmatched: {u['name']} — {u.get('reason', '')}")
         else:
             logger.info(
                 f"Tabletka sync: {matched_count} matched, no updates needed, "
