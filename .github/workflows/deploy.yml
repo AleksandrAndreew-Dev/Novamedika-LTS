@@ -270,8 +270,8 @@ jobs:
               exit 2
             fi
 
-            # Бэкап перед обновлением
-            cp docker-compose.traefik.prod.yml "docker-compose.traefik.prod.yml.backup.$(date +%Y%m%d_%H%M%S)"
+            # Бэкап текущей версии (один, перезаписывается)
+            cp docker-compose.traefik.prod.yml docker-compose.traefik.prod.yml.backup
 
             # Стартуем безопасно: останов, pull, up
             docker compose -f docker-compose.traefik.prod.yml down || true
