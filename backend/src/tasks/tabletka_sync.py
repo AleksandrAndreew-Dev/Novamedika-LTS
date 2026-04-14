@@ -3,13 +3,12 @@
 
 Парсит https://tabletka.by/pharmacies/ и обновляет информацию в БД:
 - name, city, district, address, phone, opening_hours
-- Матчинг по адресу + телефону + названию
 """
 
 import re
 import logging
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 import httpx
@@ -22,10 +21,8 @@ TABLETKA_SEARCH_URL = (
     f"{TABLETKA_BASE}/pharmacies/?&page={{page}}&str={{query}}&sort=name&sorttype=asc"
 )
 
-# Поисковые запросы для наших сетей
 SEARCH_QUERIES = ["новамедика", "эклиния"]
 
-# User-Agent для запросов
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -45,14 +42,13 @@ class TabletkaPharmacy:
     address: Optional[str] = None
     phone: Optional[str] = None
     opening_hours: Optional[str] = None
-    manager_name: Optional[str] = None  # Заведующий
+    manager_name: Optional[str] = None
 
 
-# Маппинг улиц Минска к районам (для извлечения когда район не указан явно)
 MINSK_STREET_TO_DISTRICT = {
     "Платонова": "Первомайский",
     "Богдановича": "Первомайский",
-    "Независимости": "Первомайский",  # часть
+    "Независимости": "Первомайский",
     "Лесная": "Первомайский",
     "Калиновского": "Первомайский",
     "Хоружей": "Советский",
@@ -88,17 +84,14 @@ def extract_district_from_address(address: str) -> Optional[str]:
     if not address:
         return None
 
-    # Формат: Минск-Фрунзенский
     match = re.match(r"^([А-Яа-яЁё]+)\s*[-–—]\s*([А-Яа-яЁё]+)\b", address)
     if match:
         return f"{match.group(2).strip()} р-н"
 
-    # Формат: Минск, Фрунзенский р-н
     match = re.search(r",\s*([А-Яа-яЁё]+\s+(?:р-н|район))\b", address)
     if match:
         return match.group(1).strip().replace("район", "р-н")
 
-    # Формат: ул. Платонова → извлекаем улицу и ищем в маппинге
     if "Минск" in address:
         street_match = re.search(r"ул\.\s*([А-Яа-яЁё]+)", address)
         if street_match:
@@ -108,6 +101,59 @@ def extract_district_from_address(address: str) -> Optional[str]:
                     return f"{district} р-н"
 
     return None
+
+
+def _format_hours_compact(hours_lines: list[str]) -> str:
+    """Форматирует расписание: 'Пн-Пт 9:00-20:00, Сб-Вс 10:00-18:00'."""
+    DAY_SHORT = {
+        "понедельник": "Пн",
+        "вторник": "Вт",
+        "среда": "Ср",
+        "четверг": "Чт",
+        "пятница": "Пт",
+        "суббота": "Сб",
+        "воскресенье": "Вс",
+    }
+    DAY_ORDER = list(DAY_SHORT.keys())
+
+    schedule: list[tuple[str, str]] = []
+    current_day = None
+    for line in hours_lines:
+        line_lower = line.lower().strip()
+        matched_day = None
+        for full_day in DAY_ORDER:
+            if line_lower.startswith(full_day):
+                matched_day = full_day
+                break
+        if matched_day:
+            current_day = matched_day
+        elif current_day:
+            val = line.strip()
+            if val.startswith("|"):
+                val = val[1:].strip()
+            schedule.append((current_day, val))
+            current_day = None
+
+    if not schedule:
+        return " | ".join(hours_lines)
+
+    groups: list[tuple[str, str, str]] = []
+    for day, time_val in schedule:
+        if groups and groups[-1][2] == time_val:
+            groups[-1] = (groups[-1][0], day, time_val)
+        else:
+            groups.append((day, day, time_val))
+
+    parts: list[str] = []
+    for start_day, end_day, time_val in groups:
+        s = DAY_SHORT.get(start_day, start_day[:2])
+        e = DAY_SHORT.get(end_day, end_day[:2])
+        if s == e:
+            parts.append(f"{s} {time_val}")
+        else:
+            parts.append(f"{s}-{e} {time_val}")
+
+    return ", ".join(parts)
 
 
 async def fetch_pharmacy_page(client: httpx.AsyncClient, url: str) -> Optional[str]:
@@ -127,11 +173,9 @@ def parse_pharmacy_from_html(html: str, tabletka_id: str) -> Optional[TabletkaPh
     """Парсит страницу аптеки и извлекает информацию."""
     soup = BeautifulSoup(html, "html.parser")
 
-    # Заголовок — обычно название аптеки
     title_el = soup.find("h1") or soup.find("h2")
     name = title_el.get_text(strip=True) if title_el else ""
 
-    # Ищем адрес — обычно в блоке с контактами
     full_text = soup.get_text(separator="\n")
     lines = [l.strip() for l in full_text.split("\n") if l.strip()]
 
@@ -142,7 +186,6 @@ def parse_pharmacy_from_html(html: str, tabletka_id: str) -> Optional[TabletkaPh
     opening_hours = None
     manager_name = None
 
-    # Паттерны для поиска
     address_patterns = [
         r"(Минск[-–—][А-Яа-яЁё]+,\s*ул\.[^\n,]+)",
         r"(Минск[-–—][А-Яа-яЁё]+[^\n,]*)",
@@ -154,7 +197,6 @@ def parse_pharmacy_from_html(html: str, tabletka_id: str) -> Optional[TabletkaPh
     ]
 
     phone_pattern = r"(\+375[\d\s\-]+)"
-    hours_pattern = r"(\d{1,2}[.:]\d{2}\s*[–-]\s*\d{1,2}[.:]\d{2})"
     manager_pattern = r"(?:Заведующий|Зав\.?)\s*[:.\s]*([А-Яа-яЁё][А-Яа-яЁё\s]+?(?:[А-Яа-яЁё]\.)?\s*[А-Яа-яЁё]+)"
 
     # Ищем адрес
@@ -163,12 +205,10 @@ def parse_pharmacy_from_html(html: str, tabletka_id: str) -> Optional[TabletkaPh
             match = re.search(pattern, line)
             if match:
                 full_address = match.group(1).strip()
-                # Разбираем город/район/адрес
                 city_match = re.match(r"^([А-Яа-яЁё]+)\s*[-–—]", full_address)
                 if city_match:
                     city = city_match.group(1)
                     district = extract_district_from_address(full_address)
-                    # Извлекаем улицу после города-района
                     addr_part = re.sub(
                         r"^[А-Яа-яЁё]+\s*[-–—][А-Яа-яЁё]+\s*,\s*", "", full_address
                     )
@@ -178,7 +218,6 @@ def parse_pharmacy_from_html(html: str, tabletka_id: str) -> Optional[TabletkaPh
                         address = full_address
                 break
 
-    # Если адрес не найден — ищем просто адрес с улицей
     if not address:
         for line in lines:
             if "ул." in line or "пр." in line or "бул." in line:
@@ -206,7 +245,6 @@ def parse_pharmacy_from_html(html: str, tabletka_id: str) -> Optional[TabletkaPh
     time_pattern = re.compile(r"\d{1,2}[.:]\d{2}\s*[–-—]\s*\d{1,2}[.:]\d{2}")
 
     def _is_hours_value(text: str) -> bool:
-        """Проверяет что строка — это время, 'выходной' или санитарная информация."""
         return (
             time_pattern.search(text)
             or "выходной" in text.lower()
@@ -216,25 +254,20 @@ def parse_pharmacy_from_html(html: str, tabletka_id: str) -> Optional[TabletkaPh
     for idx in range(len(lines) - 1):
         line = lines[idx]
 
-        # Проверяем начало блока часов (первый день недели)
         if not in_hours_block and day_pattern.match(line):
-            # Проверяем что следующая строка содержит время, выходной или санитарную инфу
             if _is_hours_value(lines[idx + 1]):
                 in_hours_block = True
                 hours_lines = [line]
                 continue
 
-        # Если внутри блока — добавляем строки пока это дни или время
         if in_hours_block:
             if day_pattern.match(line) or _is_hours_value(line):
                 hours_lines.append(line)
             else:
-                # Блок закончился
                 in_hours_block = False
 
-    # Собираем часы работы в одну строку
     if hours_lines:
-        opening_hours = " | ".join(hours_lines)
+        opening_hours = _format_hours_compact(hours_lines)
 
     # Ищем заведующего
     for line in lines:
@@ -243,9 +276,8 @@ def parse_pharmacy_from_html(html: str, tabletka_id: str) -> Optional[TabletkaPh
             if manager_match:
                 manager_name = manager_match.group(1).strip()
 
-    # Если ничего не нашли — пытаемся извлечь из полного текста
+    # Пытаемся извлечь из meta description
     if not city and not address:
-        # Попробуем найти адрес через meta description или structured data
         meta_desc = soup.find("meta", attrs={"name": "description"})
         if meta_desc and meta_desc.get("content"):
             content = meta_desc["content"]
@@ -268,16 +300,12 @@ def parse_pharmacy_from_html(html: str, tabletka_id: str) -> Optional[TabletkaPh
 
 
 async def fetch_all_pharmacies_from_tabletka() -> list[TabletkaPharmacy]:
-    """
-    Ищет аптеки наших сетей ("новамедика", "эклиния") на tabletka.by
-    через поиск и загружает детальную информацию по каждой.
-    """
+    """Ищет аптеки наших сетей на tabletka.by."""
     logger.info("Starting tabletka.by pharmacy sync for our networks")
 
     all_pharmacy_ids = set()
 
     async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-        # 1. Для каждого поискового запроса парсим все страницы результатов
         for query in SEARCH_QUERIES:
             logger.info(f"Searching tabletka.by for: '{query}'")
             page = 1
@@ -289,7 +317,6 @@ async def fetch_all_pharmacies_from_tabletka() -> list[TabletkaPharmacy]:
                 resp.raise_for_status()
                 soup = BeautifulSoup(resp.text, "html.parser")
 
-                # Ищем ссылки на аптеки: /pharmacies/{id}/
                 links = soup.select('a[href^="/pharmacies/"]')
                 page_ids = []
                 for link in links:
@@ -306,7 +333,6 @@ async def fetch_all_pharmacies_from_tabletka() -> list[TabletkaPharmacy]:
                     f"(total: {len(all_pharmacy_ids)})"
                 )
 
-                # Проверяем есть ли кнопка "следующая страница"
                 has_next = False
                 pagination = soup.select('a[href*="page="]')
                 for link in pagination:
@@ -326,7 +352,6 @@ async def fetch_all_pharmacies_from_tabletka() -> list[TabletkaPharmacy]:
 
         logger.info(f"Total unique pharmacies found: {len(all_pharmacy_ids)}")
 
-        # 2. Загружаем каждую страницу аптеки
         results = []
         for i, ph_id in enumerate(sorted(all_pharmacy_ids, key=int), 1):
             url = f"{TABLETKA_BASE}/pharmacies/{ph_id}/"
