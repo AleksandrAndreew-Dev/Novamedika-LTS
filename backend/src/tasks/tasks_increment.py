@@ -193,8 +193,9 @@ async def _sync_tabletka_pharmacies_async():
         "ekliniya": "ЭКЛИНИЯ",
     }
 
-    # Паттерн для извлечения номера: "Новамедика №7", "Аптека 7", "№7"
-    PHARMACY_NUMBER_PATTERN = re.compile(r"№\s*(\d+)")
+    # Паттерн для извлечения номера: "Новамедика №7", "Аптека N2", "N 7", "№7"
+    # Поддерживаем и символ №, и латинскую N (как на tabletka.by)
+    PHARMACY_NUMBER_PATTERN = re.compile(r"(?:№|N)\s*(\d+)", re.IGNORECASE)
 
     async with session_maker() as session:
         # 2. Загружаем все локальные аптеки
