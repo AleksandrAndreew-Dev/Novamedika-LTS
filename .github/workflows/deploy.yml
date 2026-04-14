@@ -236,19 +236,16 @@ jobs:
           name: deployment-files
         continue-on-error: true
 
-      - name: Prepare deployment files
-        run: |
-          # Создаем docker-compose.deploy.yml с правильными путями к образам
-          cp ${{ env.DOCKER_COMPOSE_FILE }} docker-compose.deploy.yml
-
-      - name: Upload compose to server
+      - name: Upload docker-compose.traefik.prod.yml to server
         uses: appleboy/scp-action@v0.1.2
         with:
           host: ${{ secrets.PRODUCTION_SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: docker-compose.deploy.yml
+          source: docker-compose.traefik.prod.yml
           target: /opt/novamedika-prod/
+          strip_components: 0
+          overwrite: true
 
       - name: Deploy to production
         uses: appleboy/ssh-action@v1.0.3
@@ -266,17 +263,20 @@ jobs:
             # Логинимся в GHCR (PAT хранится в secrets.GHCR_PAT)
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ secrets.GHCR_USER }} --password-stdin
 
-            # Проверим, что docker-compose.deploy.yml есть
-            if [ ! -f docker-compose.deploy.yml ]; then
-              echo "ERROR: docker-compose.deploy.yml not found in $DEPLOY_DIR"
+            # Проверим, что docker-compose.traefik.prod.yml есть
+            if [ ! -f docker-compose.traefik.prod.yml ]; then
+              echo "ERROR: docker-compose.traefik.prod.yml not found in $DEPLOY_DIR"
               ls -la
               exit 2
             fi
 
+            # Бэкап перед обновлением
+            cp docker-compose.traefik.prod.yml "docker-compose.traefik.prod.yml.backup.$(date +%Y%m%d_%H%M%S)"
+
             # Стартуем безопасно: останов, pull, up
-            docker-compose -f docker-compose.deploy.yml down || true
-            docker-compose -f docker-compose.deploy.yml pull
-            docker-compose -f docker-compose.deploy.yml up -d
+            docker compose -f docker-compose.traefik.prod.yml down || true
+            docker compose -f docker-compose.traefik.prod.yml pull
+            docker compose -f docker-compose.traefik.prod.yml up -d
 
             # Небольшая задержка, затем проверка здоровья сервисов
             sleep 60
