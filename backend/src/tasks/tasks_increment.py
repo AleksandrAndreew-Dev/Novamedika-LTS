@@ -274,10 +274,25 @@ async def _sync_tabletka_pharmacies_async():
                         matched_local.phone = tp.phone
                         needs_update = True
 
-                    # Обновляем address из tabletka.by (всегда, если есть данные)
+                    # Обновляем address из tabletka.by (только если содержит улицу/дом)
                     if tp.address and matched_local.address != tp.address:
-                        matched_local.address = tp.address
-                        needs_update = True
+                        # Проверяем что адрес содержит улицу/проспект/бульвар/дом,
+                        # а не только район (например "Минск-Фрунзенский" без улицы)
+                        has_street = re.search(
+                            r"(ул\.|пр\.|бул\.|пер\.|д\.|корп\.|пом\.|сан\.)",
+                            tp.address,
+                        )
+                        if has_street:
+                            matched_local.address = tp.address
+                            needs_update = True
+                        elif matched_local.address:
+                            # У нас есть полный адрес, tabletka — только район — не перезаписываем
+                            logger.debug(
+                                f"Skipping address update for "
+                                f"{matched_local.name} #{matched_local.pharmacy_number}: "
+                                f"tabletka='{tp.address}' (no street), "
+                                f"keeping='{matched_local.address}'"
+                            )
 
                     # НЕ обновляем city из tabletka.by — city определяется из
                     # правильного списка при upload CSV, а tabletka может парсить неверно
