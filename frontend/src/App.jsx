@@ -1,24 +1,44 @@
 import React, { useEffect, useState, useCallback } from "react";
 import Search from "./components/Search";
+import PrivacyPolicy from "./components/PrivacyPolicy";
 import TelegramWrapper from "./telegram/TelegramWrapper";
 import { TelegramProvider } from "./telegram/TelegramContext";
+import {
+  useSessionTimeout,
+  SessionTimeoutWarning,
+} from "./hooks/useSessionTimeout";
 import { api } from "./api/client";
 import "./App.css";
 
 function App() {
   const [showCookieBanner, setShowCookieBanner] = useState(false);
   const [errorToast, setErrorToast] = useState(null);
+  const [page, setPage] = useState(window.location.pathname);
+
+  // Блокировка сеанса при бездействии (30 минут)
+  const { showWarning, secondsLeft, extendSession } = useSessionTimeout(30);
+
+  // Отслеживаем изменение pathname (кнопки назад/вперёд)
+  useEffect(() => {
+    const onPopState = () => setPage(window.location.pathname);
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  // Функция навигации без перезагрузки
+  const navigateTo = useCallback((path) => {
+    window.history.pushState(null, "", path);
+    setPage(path);
+  }, []);
 
   // Глобальный обработчик API ошибок
   const handleError = useCallback((error) => {
     const message = error.userMessage || error.message;
     setErrorToast(message);
-    // Автоматически скрываем через 5 секунд
     setTimeout(() => setErrorToast(null), 5000);
   }, []);
 
   useEffect(() => {
-    // Добавляем глобальный обработчик на все API ошибки
     const interceptor = api.interceptors.response.use(
       (r) => r,
       (error) => {
@@ -32,7 +52,6 @@ function App() {
   }, [handleError]);
 
   useEffect(() => {
-    // Показываем баннер cookies только если не в Telegram
     const isInTelegram = window.Telegram?.WebApp;
     if (
       window.location.protocol === "https:" &&
@@ -50,10 +69,21 @@ function App() {
       "cookies_accepted=true; max-age=31536000; path=/; Secure; SameSite=Lax";
   };
 
+  // Роутинг по pathname
+  if (page === "/privacy-policy") {
+    return <PrivacyPolicy />;
+  }
+
   return (
     <TelegramProvider>
       <TelegramWrapper>
         <div className="App">
+          <SessionTimeoutWarning
+            showWarning={showWarning}
+            secondsLeft={secondsLeft}
+            onExtend={extendSession}
+          />
+
           {showCookieBanner && (
             <div className="fixed bottom-4 left-4 right-4 bg-white rounded-2xl shadow-lg border border-telegram-border z-50 max-w-md mx-auto">
               <div className="p-4">
@@ -71,10 +101,10 @@ function App() {
                       Принять
                     </button>
                     <a
-                      href="/cookie-policy"
+                      href="/privacy-policy"
                       className="text-telegram-primary hover:text-blue-600 font-medium py-2 text-sm"
                     >
-                      Подробнее
+                      Политика конфиденциальности
                     </a>
                   </div>
                 </div>
@@ -84,7 +114,6 @@ function App() {
 
           <Search />
 
-          {/* Глобальный тост ошибок */}
           {errorToast && (
             <div className="fixed top-4 left-4 right-4 max-w-md mx-auto z-50 animate-slide-down">
               <div className="bg-red-500 text-white rounded-xl shadow-lg p-4 flex items-center justify-between">

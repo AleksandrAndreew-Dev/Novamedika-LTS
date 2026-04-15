@@ -520,6 +520,12 @@ export default function Search() {
                   Условия использования
                 </a>
                 <a
+                  href="/privacy-policy"
+                  className="text-telegram-primary hover:text-blue-600 transition-colors"
+                >
+                  Конфиденциальность
+                </a>
+                <a
                   href="/cookie-policy"
                   className="text-telegram-primary hover:text-blue-600 transition-colors"
                 >
