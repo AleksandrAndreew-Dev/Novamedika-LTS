@@ -9,6 +9,7 @@ from aiogram.enums import ParseMode
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 class BotManager:
     def __init__(self):
         self.bot: Bot | None = None
@@ -20,13 +21,17 @@ class BotManager:
         redis_host = os.getenv("REDIS_HOST", "redis")
         redis_port = int(os.getenv("REDIS_PORT", 6379))
         redis_db = int(os.getenv("REDIS_DB", 1))
+        redis_password = os.getenv("REDIS_PASSWORD", None)
 
         from redis.asyncio import Redis
+
+        # Создаем клиент Redis с учетом пароля
         redis_client = Redis(
             host=redis_host,
             port=redis_port,
             db=redis_db,
-            decode_responses=False
+            password=redis_password,  # <-- Добавлено
+            decode_responses=False,
         )
 
         try:
@@ -48,7 +53,9 @@ class BotManager:
             return None, None
 
         try:
-            self.bot = Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+            self.bot = Bot(
+                token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+            )
             self._storage = await self._create_storage()
             self.dp = Dispatcher(storage=self._storage)
 
@@ -68,6 +75,7 @@ class BotManager:
         if self.bot:
             await self.bot.session.close()
         logger.info("Bot session closed")
+
 
 # Глобальный экземпляр менеджера бота
 bot_manager = BotManager()
