@@ -23,7 +23,7 @@ router = APIRouter()
 async def telegram_webhook(request: Request):
     """Webhook endpoint для Telegram бота"""
     try:
-        # Проверяем секретный токен для безопасности
+        # Проверка секретного токена
         secret_token = os.getenv("TELEGRAM_WEBHOOK_SECRET")
         if secret_token:
             received_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
@@ -31,11 +31,14 @@ async def telegram_webhook(request: Request):
                 logger.warning("Invalid secret token")
                 return {"status": "error", "detail": "Unauthorized"}
 
-        bot, dp = await bot_manager.initialize()
+        # ✅ Используем уже инициализированные bot и dp
+        bot = bot_manager.get_bot()
+        dp = bot_manager.get_dp()
         if not bot or not dp:
-            raise HTTPException(status_code=500, detail="Bot not configured")
+            logger.error("Bot or dispatcher not initialized in bot_manager")
+            raise HTTPException(status_code=503, detail="Bot service not ready")
 
-        # Получаем обновление от Telegram
+        # Получение JSON
         try:
             update_data = await request.json()
         except json.JSONDecodeError as e:
@@ -45,39 +48,25 @@ async def telegram_webhook(request: Request):
 
         update = Update(**update_data)
 
-        # Log incoming update for debugging
-        update_type = "unknown"
-        chat_id = None
-        user_id = None
+        # Логирование типа обновления (улучшенная версия)
         if update.message:
-            update_type = "message"
-            chat_id = update.message.chat.id
-            user_id = update.message.from_user.id
             logger.info(
-                f"📨 Webhook: Message from user {user_id} in chat {chat_id}: '{update.message.text[:50] if update.message.text else 'NO TEXT'}'"
+                f"📨 Webhook: Message from user {update.message.from_user.id}: '{update.message.text[:50] if update.message.text else 'NO TEXT'}'"
             )
         elif update.callback_query:
-            update_type = "callback_query"
-            chat_id = (
-                update.callback_query.message.chat.id
-                if update.callback_query.message
-                else None
-            )
-            user_id = update.callback_query.from_user.id
             logger.info(
-                f"📨 Webhook: Callback from user {user_id}: '{update.callback_query.data}'"
+                f"📨 Webhook: Callback from user {update.callback_query.from_user.id}: '{update.callback_query.data}'"
             )
         elif update.edited_message:
-            update_type = "edited_message"
-            chat_id = update.edited_message.chat.id
-            user_id = update.edited_message.from_user.id
-            logger.info(f"📨 Webhook: Edited message from user {user_id}")
+            logger.info(
+                f"📨 Webhook: Edited message from user {update.edited_message.from_user.id}"
+            )
         else:
             logger.info(
-                f"📨 Webhook: Unknown update type: {update.model_dump().keys()}"
+                f"📨 Webhook: Update id={update.update_id}, type={update.event_type}"
             )
 
-        # Обрабатываем обновление через диспетчер
+        # Обработка обновления
         try:
             result = await dp.feed_update(bot, update)
             if result:
