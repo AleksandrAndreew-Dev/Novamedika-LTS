@@ -78,9 +78,15 @@ class RoleMiddleware(BaseMiddleware):
             pharmacist = await get_pharmacist_by_telegram_id(user_id, db)
         except Exception as e:
             logger.error(f"Error in role middleware user processing for {user_id}: {e}")
-            logger.error(e)
-            pharmacist = None
+            # В случае ошибки БД создаем "фейкового" пользователя, чтобы хендлер не упал
+            # Или лучше пробросить ошибку, если это критично
             user = None
+            pharmacist = None
+
+        if not user:
+            logger.warning(f"User {user_id} not found or created. Skipping message.")
+            # Можно ответить пользователю, но лучше просто пропустить, чтобы не спамить
+            return
 
         logger.info(
             f"RoleMiddleware: User {user_id} - is_pharmacist: {pharmacist is not None}"
