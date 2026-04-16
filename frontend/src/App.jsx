@@ -116,7 +116,7 @@ function App() {
                 <span className="text-sm font-medium">{errorToast}</span>
                 <button
                   onClick={() => setErrorToast(null)}
-                  className="ml-4 text-white hover:text-gray-200 transition-colors shrink-0"
+                  className="ml-4 text-white hover:text-gray-200 transition-colors flex-shrink-0"
                   aria-label="Закрыть"
                 >
                   ✕

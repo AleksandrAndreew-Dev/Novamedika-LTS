@@ -45,13 +45,57 @@ async def telegram_webhook(request: Request):
 
         update = Update(**update_data)
 
+        # Log incoming update for debugging
+        update_type = "unknown"
+        chat_id = None
+        user_id = None
+        if update.message:
+            update_type = "message"
+            chat_id = update.message.chat.id
+            user_id = update.message.from_user.id
+            logger.info(
+                f"📨 Webhook: Message from user {user_id} in chat {chat_id}: '{update.message.text[:50] if update.message.text else 'NO TEXT'}'"
+            )
+        elif update.callback_query:
+            update_type = "callback_query"
+            chat_id = (
+                update.callback_query.message.chat.id
+                if update.callback_query.message
+                else None
+            )
+            user_id = update.callback_query.from_user.id
+            logger.info(
+                f"📨 Webhook: Callback from user {user_id}: '{update.callback_query.data}'"
+            )
+        elif update.edited_message:
+            update_type = "edited_message"
+            chat_id = update.edited_message.chat.id
+            user_id = update.edited_message.from_user.id
+            logger.info(f"📨 Webhook: Edited message from user {user_id}")
+        else:
+            logger.info(
+                f"📨 Webhook: Unknown update type: {update.model_dump().keys()}"
+            )
+
         # Обрабатываем обновление через диспетчер
-        await dp.feed_webhook_update(bot=bot, update=update)
+        try:
+            result = await dp.feed_update(bot, update)
+            if result:
+                logger.info(f"✅ Update {update.update_id} handled successfully")
+            else:
+                logger.warning(
+                    f"⚠️ Update {update.update_id} was NOT handled by any handler"
+                )
+        except Exception as e:
+            logger.error(
+                f"❌ Error processing update {update.update_id}: {e}", exc_info=True
+            )
+            raise
 
         return {"status": "ok"}
 
     except Exception as e:
-        logger.error(f"Webhook processing error: {str(e)}")
+        logger.error(f"Webhook processing error: {str(e)}", exc_info=True)
         return {"status": "error", "detail": str(e)}
 
 

@@ -353,9 +353,16 @@ async def unknown_command(
     state: FSMContext,
 ):
     """Обработка текста — сначала пытаемся создать вопрос, иначе ошибка"""
+    logger.info(
+        f"unknown_command handler triggered for user {user.telegram_id}, text: '{message.text[:50]}'"
+    )
+
     handled = await try_create_question(message, db, user, is_pharmacist, state)
     if not handled:
+        logger.info(f"try_create_question returned False for user {user.telegram_id}")
         await message.answer(
             "❓ Неизвестная команда.\n\n"
             "Используйте /start для главного меню или /help для справки.",
         )
+    else:
+        logger.info(f"try_create_question handled message for user {user.telegram_id}")

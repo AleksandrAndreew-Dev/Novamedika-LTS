@@ -42,6 +42,9 @@ class RoleMiddleware(BaseMiddleware):
         """Основной обработчик middleware"""
         db = data.get("db")
         if not db:
+            logger.error(
+                "Database session not found in data - middleware cannot proceed"
+            )
             raise RuntimeError("Database session not found in data")
 
         user_id = None
@@ -55,29 +58,44 @@ class RoleMiddleware(BaseMiddleware):
                 from_user = event.callback_query.from_user
             elif event.poll:
                 # Для Poll нет from_user, пропускаем middleware
+                logger.debug("Poll update - skipping role middleware")
                 return await handler(event, data)
+            elif event.edited_message:
+                from_user = event.edited_message.from_user
             else:
                 # Неизвестный тип обновления, пропускаем
+                logger.debug(
+                    f"Unknown update type: {type(event)} - skipping role middleware"
+                )
                 return await handler(event, data)
         elif isinstance(event, (Message, CallbackQuery)):
             from_user = event.from_user
         elif isinstance(event, Poll):
             # Для Poll нет from_user, пропускаем middleware
+            logger.debug("Poll event - skipping role middleware")
             return await handler(event, data)
         else:
             # Неизвестный тип события, пропускаем
+            logger.debug(
+                f"Unknown event type: {type(event)} - skipping role middleware"
+            )
             return await handler(event, data)
 
         if not from_user:
+            logger.warning("No from_user in event - skipping role middleware")
             return await handler(event, data)
 
         user_id = from_user.id
+        logger.debug(f"RoleMiddleware processing user {user_id}")
 
         try:
             user = await get_or_create_user(db, telegram_id=user_id)
             pharmacist = await get_pharmacist_by_telegram_id(user_id, db)
         except Exception as e:
-            logger.error(f"Error in role middleware user processing for {user_id}: {e}")
+            logger.error(
+                f"Error in role middleware user processing for {user_id}: {e}",
+                exc_info=True,
+            )
             # В случае ошибки БД создаем "фейкового" пользователя, чтобы хендлер не упал
             # Или лучше пробросить ошибку, если это критично
             user = None
