@@ -1,34 +1,26 @@
-import React, { useEffect, useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
+import "./App.css";
 import Search from "./components/Search";
 import PrivacyPolicy from "./components/PrivacyPolicy";
-import TelegramWrapper from "./telegram/TelegramWrapper";
+import SessionTimeoutWarning from "./components/SessionTimeoutWarning";
+import useSessionTimeout from "./hooks/useSessionTimeout";
 import { TelegramProvider } from "./telegram/TelegramContext";
-import {
-  useSessionTimeout,
-  SessionTimeoutWarning,
-} from "./hooks/useSessionTimeout";
+import TelegramWrapper from "./telegram/TelegramWrapper";
 import { api } from "./api/client";
-import "./App.css";
 
 function App() {
-  const [showCookieBanner, setShowCookieBanner] = useState(false);
-  const [errorToast, setErrorToast] = useState(null);
   const [page, setPage] = useState(window.location.pathname);
+  const [errorToast, setErrorToast] = useState(null);
+  const [showCookieBanner, setShowCookieBanner] = useState(false);
 
-  // Блокировка сеанса при бездействии (30 минут)
+  // Инициализация хука таймаута (30 минут)
   const { showWarning, secondsLeft, extendSession } = useSessionTimeout(30);
 
-  // Отслеживаем изменение pathname (кнопки назад/вперёд)
+  // Отслеживаем изменение pathname (кнопки назад/вперёд в браузере)
   useEffect(() => {
     const onPopState = () => setPage(window.location.pathname);
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, []);
-
-  // Функция навигации без перезагрузки
-  const navigateTo = useCallback((path) => {
-    window.history.pushState(null, "", path);
-    setPage(path);
   }, []);
 
   // Глобальный обработчик API ошибок
@@ -69,7 +61,7 @@ function App() {
       "cookies_accepted=true; max-age=31536000; path=/; Secure; SameSite=Lax";
   };
 
-  // Роутинг по pathname
+  // Простой роутинг по pathname
   if (page === "/privacy-policy") {
     return <PrivacyPolicy />;
   }
@@ -78,12 +70,14 @@ function App() {
     <TelegramProvider>
       <TelegramWrapper>
         <div className="App">
+          {/* Компонент предупреждения о таймауте */}
           <SessionTimeoutWarning
             showWarning={showWarning}
             secondsLeft={secondsLeft}
             onExtend={extendSession}
           />
 
+          {/* Баннер cookies */}
           {showCookieBanner && (
             <div className="fixed bottom-4 left-4 right-4 bg-white rounded-2xl shadow-lg border border-telegram-border z-50 max-w-md mx-auto">
               <div className="p-4">
@@ -112,8 +106,10 @@ function App() {
             </div>
           )}
 
+          {/* Основной компонент поиска */}
           <Search />
 
+          {/* Тост с ошибками */}
           {errorToast && (
             <div className="fixed top-4 left-4 right-4 max-w-md mx-auto z-50 animate-slide-down">
               <div className="bg-red-500 text-white rounded-xl shadow-lg p-4 flex items-center justify-between">
