@@ -70,7 +70,9 @@ export default function Toast({ message, type = 'info', onClose, duration = 3000
     }
   };
 
-  useEffect(() => {
+  // Вызываем haptic feedback при монтировании компонента
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  React.useEffect(() => {
     handleHapticFeedback();
   }, []);
 
