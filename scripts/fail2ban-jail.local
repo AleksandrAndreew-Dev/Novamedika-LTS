@@ -1,0 +1,73 @@
+# Fail2Ban Configuration for NovaMedika2
+# Installation: apt install fail2ban
+# Copy to: /etc/fail2ban/jail.local
+
+[DEFAULT]
+# Ban hosts for 2 hours
+bantime = 7200
+
+# Find time window (10 minutes)
+findtime = 600
+
+# Maximum retry attempts
+maxretry = 5
+
+# Action to take (ban IP via iptables)
+action = %(action_mw)s
+
+# Email notifications (optional, uncomment if needed)
+# destemail = admin@novamedika.com
+# sender = fail2ban@novamedika.com
+# mta = sendmail
+
+# Ignore localhost
+ignoreip = 127.0.0.1/8 ::1
+
+# ==================== SSH Protection ====================
+[sshd]
+enabled = true
+port = ssh
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = 3
+bantime = 86400  # 24 hours for SSH brute force
+findtime = 3600
+
+# ==================== Traefik/Web Authentication ====================
+[traefik-auth]
+enabled = true
+port = http,https
+filter = traefik-auth
+logpath = /var/log/traefik/*.log
+maxretry = 5
+bantime = 3600  # 1 hour
+findtime = 600
+
+# ==================== Nginx Bot Search ====================
+[nginx-botsearch]
+enabled = true
+port = http,https
+filter = nginx-botsearch
+logpath = /var/log/nginx/access.log
+maxretry = 2
+bantime = 86400  # 24 hours for bots
+findtime = 3600
+
+# ==================== HTTP Basic Auth ====================
+[http-auth]
+enabled = true
+port = http,https
+filter = http-auth
+logpath = /var/log/traefik/*.log
+maxretry = 5
+bantime = 3600
+findtime = 600
+
+# ==================== Recidive (Repeat Offenders) ====================
+[recidive]
+enabled = true
+filter = recidive
+logpath = /var/log/fail2ban.log
+bantime = 604800  # 1 week ban
+findtime = 86400  # 1 day
+maxretry = 3
