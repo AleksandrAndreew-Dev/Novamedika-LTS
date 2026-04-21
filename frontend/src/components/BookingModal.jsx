@@ -238,7 +238,7 @@ const BookingModal = React.memo(function BookingModal({
                       </svg>
                     </button>
                     
-                    {/* Поле ввода количества */}
+                    {/* Поле ввода количества - стандартное поведение без автовыделения */}
                     <input
                       type="number"
                       min="1"
@@ -258,16 +258,6 @@ const BookingModal = React.memo(function BookingModal({
                         if (e.target.value === '' || parseInt(e.target.value) < 1) {
                           onQuantityChange('1');
                         }
-                      }}
-                      onFocus={(e) => {
-                        // Выделяем весь текст при фокусе для удобной замены
-                        setTimeout(() => {
-                          e.target.select();
-                        }, 0);
-                      }}
-                      onClick={(e) => {
-                        // Дополнительно выделяем текст при клике (для мобильных)
-                        e.target.select();
                       }}
                       disabled={bookingState.loading}
                       className="flex-1 min-w-[60px] px-3 py-3 sm:px-4 sm:py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 transition-all duration-200 text-center font-semibold text-lg touch-manipulation"
@@ -295,7 +285,7 @@ const BookingModal = React.memo(function BookingModal({
                   
                   <div className="flex items-center justify-between mt-2">
                     <p className="text-xs text-gray-500">
-                      Нажмите +/- или введите значение
+                      Используйте +/- или введите число
                     </p>
                     <p className="text-sm font-semibold text-blue-600">
                       Итого: {calculateTotalPrice()} Br
