@@ -208,7 +208,35 @@ export default function PrivacyPolicy() {
 
           <section>
             <h2 className="text-lg font-bold text-telegram-primary mb-3">
-              8. Трансграничная передача
+              8. Внешние сервисы и ссылки
+            </h2>
+            <div className="space-y-2 text-sm leading-relaxed">
+              <p>
+                Сервис содержит ссылки на внешние ресурсы, которые открываются по инициативе пользователя:
+              </p>
+              <ul className="list-disc list-inside space-y-1 ml-2">
+                <li>
+                  <strong>Картографические сервисы</strong> (Google Maps, Yandex Maps, OpenStreetMap) — для отображения расположения аптек
+                </li>
+              </ul>
+              <p className="mt-2">
+                При переходе на внешние ресурсы:
+              </p>
+              <ul className="list-disc list-inside space-y-1 ml-2">
+                <li>Переход осуществляется по явной инициативе пользователя (клик по ссылке)</li>
+                <li>Ссылки открываются в новой вкладке браузера с атрибутами безопасности</li>
+                <li>Передаются только публичные данные (адреса аптек)</li>
+                <li><strong>Персональные данные пользователей НЕ передаются</strong> внешним сервисам</li>
+              </ul>
+              <p className="mt-2 text-gray-600">
+                Оператор не контролирует политику конфиденциальности внешних сервисов. Пользователям рекомендуется ознакомиться с их политиками перед использованием.
+              </p>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-bold text-telegram-primary mb-3">
+              9. Трансграничная передача
             </h2>
             <div className="text-sm leading-relaxed">
               <p>
@@ -221,7 +249,7 @@ export default function PrivacyPolicy() {
 
           <section>
             <h2 className="text-lg font-bold text-telegram-primary mb-3">
-              9. Контактные данные
+              10. Контактные данные
             </h2>
             <div className="text-sm leading-relaxed">
               <p>
@@ -246,7 +274,7 @@ export default function PrivacyPolicy() {
 
           <section>
             <h2 className="text-lg font-bold text-telegram-primary mb-3">
-              10. Изменения в Политике
+              11. Изменения в Политике
             </h2>
             <div className="text-sm leading-relaxed">
               <p>
@@ -259,7 +287,7 @@ export default function PrivacyPolicy() {
 
           <div className="pt-4 border-t text-sm text-gray-500">
             <p>
-              Версия: 1.0 | Дата вступления в силу: 15 апреля 2026 г.
+              Версия: 1.1 | Дата обновления: 21 апреля 2026 г.
             </p>
             <p className="mt-1">
               Документ составлен в соответствии с Законом Республики Беларусь

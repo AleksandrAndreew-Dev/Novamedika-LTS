@@ -502,61 +502,64 @@ export default function Search() {
         </div>
       </div>
 
-      {!isTelegram && (
-        <div className="bg-white border-t border-telegram-border mt-8">
-          <div className="max-w-4xl mx-auto py-6 px-4">
-            <div className="space-y-4">
-              <div className="flex flex-wrap justify-center gap-4 text-sm">
-                <a
-                  href="/"
-                  className="text-telegram-primary hover:text-blue-600 transition-colors"
-                >
-                  Поиск
-                </a>
-                <a
-                  href="/terms"
-                  className="text-telegram-primary hover:text-blue-600 transition-colors"
-                >
-                  Условия использования
-                </a>
-                <a
-                  href="/privacy-policy"
-                  className="text-telegram-primary hover:text-blue-600 transition-colors"
-                >
-                  Конфиденциальность
-                </a>
-                <a
-                  href="/cookie-policy"
-                  className="text-telegram-primary hover:text-blue-600 transition-colors"
-                >
-                  Cookie
-                </a>
-                <a
-                  href="/pharmacies-nearby"
-                  className="text-telegram-primary hover:text-blue-600 transition-colors"
-                >
-                  Аптеки рядом
-                </a>
-                <a
-                  href="/contacts"
-                  className="text-telegram-primary hover:text-blue-600 transition-colors"
-                >
-                  Контакты
-                </a>
-                <a
-                  href="/help"
-                  className="text-telegram-primary hover:text-blue-600 transition-colors"
-                >
-                  Помощь
-                </a>
-              </div>
-              <div className="text-center text-gray-700 text-sm">
-                &#169;2025 Novamedika.com
-              </div>
+      {/* Footer - показываем и в Telegram, и вне его */}
+      <div className="bg-white border-t border-telegram-border mt-8">
+        <div className="max-w-4xl mx-auto py-6 px-4">
+          <div className="space-y-4">
+            <div className="flex flex-wrap justify-center gap-4 text-sm">
+              <a
+                href="/"
+                className="text-telegram-primary hover:text-blue-600 transition-colors"
+              >
+                Поиск
+              </a>
+              <a
+                href="/terms"
+                className="text-telegram-primary hover:text-blue-600 transition-colors"
+              >
+                Условия использования
+              </a>
+              <a
+                href="/privacy-policy"
+                className="text-telegram-primary hover:text-blue-600 transition-colors"
+              >
+                Конфиденциальность
+              </a>
+              {!isTelegram && (
+                <>
+                  <a
+                    href="/cookie-policy"
+                    className="text-telegram-primary hover:text-blue-600 transition-colors"
+                  >
+                    Cookie
+                  </a>
+                  <a
+                    href="/pharmacies-nearby"
+                    className="text-telegram-primary hover:text-blue-600 transition-colors"
+                  >
+                    Аптеки рядом
+                  </a>
+                </>
+              )}
+              <a
+                href="/contacts"
+                className="text-telegram-primary hover:text-blue-600 transition-colors"
+              >
+                Контакты
+              </a>
+              <a
+                href="/help"
+                className="text-telegram-primary hover:text-blue-600 transition-colors"
+              >
+                Помощь
+              </a>
+            </div>
+            <div className="text-center text-gray-700 text-sm">
+              &#169;2025 Novamedika.com
             </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
