@@ -221,21 +221,70 @@ const BookingModal = React.memo(function BookingModal({
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Количество упаковок *
                   </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={bookingState.modal.quantity}
-                    onChange={(e) => onQuantityChange(e.target.value)}
-                    disabled={bookingState.loading}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 transition-all duration-200"
-                    placeholder="Введите количество"
-                  />
-                  <p className="text-xs text-gray-500 mt-2">
-                    Итоговая сумма:{" "}
-                    <strong className="text-blue-600">
-                      {calculateTotalPrice()} Br
-                    </strong>
-                  </p>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newQty = Math.max(1, bookingState.modal.quantity - 1);
+                        onQuantityChange(newQty.toString());
+                      }}
+                      disabled={bookingState.loading || bookingState.modal.quantity <= 1}
+                      className="w-12 h-12 flex items-center justify-center bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all duration-200 border border-gray-300"
+                    >
+                      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                      </svg>
+                    </button>
+                    
+                    <input
+                      type="number"
+                      min="1"
+                      value={bookingState.modal.quantity === 1 ? '' : bookingState.modal.quantity}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === '') {
+                          onQuantityChange('');
+                        } else {
+                          const num = parseInt(value);
+                          if (!isNaN(num) && num >= 1) {
+                            onQuantityChange(value);
+                          }
+                        }
+                      }}
+                      onBlur={(e) => {
+                        if (e.target.value === '' || parseInt(e.target.value) < 1) {
+                          onQuantityChange('1');
+                        }
+                      }}
+                      onFocus={(e) => e.target.select()}
+                      disabled={bookingState.loading}
+                      className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 transition-all duration-200 text-center font-semibold text-lg"
+                      placeholder="1"
+                    />
+                    
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newQty = bookingState.modal.quantity + 1;
+                        onQuantityChange(newQty.toString());
+                      }}
+                      disabled={bookingState.loading}
+                      className="w-12 h-12 flex items-center justify-center bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all duration-200 shadow-md"
+                    >
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                    </button>
+                  </div>
+                  
+                  <div className="flex items-center justify-between mt-2">
+                    <p className="text-xs text-gray-500">
+                      Нажмите для изменения или введите своё значение
+                    </p>
+                    <p className="text-sm font-semibold text-blue-600">
+                      Итого: {calculateTotalPrice()} Br
+                    </p>
+                  </div>
                 </div>
 
                 <div className="flex gap-3 pt-4">
