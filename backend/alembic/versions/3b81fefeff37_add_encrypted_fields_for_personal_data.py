@@ -25,10 +25,8 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-def upgrade() -> None:
-    """Добавить зашифрованные поля и перенести данные"""
-    
-    # === Шаг 1: Добавить новые зашифрованные поля ===
+def _add_columns_only() -> None:
+    """Добавить только колонки для зашифрованных данных (без шифрования)"""
     
     # Для таблицы qa_users
     op.add_column('qa_users', sa.Column('telegram_id_encrypted', sa.String(255), nullable=True))
@@ -43,8 +41,10 @@ def upgrade() -> None:
     
     # Создаем индекс для telegram_id_encrypted в booking_orders
     op.create_index('idx_booking_orders_telegram_id_encrypted', 'booking_orders', ['telegram_id_encrypted'])
-    
-    # === Шаг 2: Зашифровать существующие данные ===
+
+
+def _encrypt_existing_data() -> None:
+    """Зашифровать существующие данные (требует pgcrypto)"""
     
     # Шифрование данных в qa_users
     op.execute("""
@@ -83,6 +83,32 @@ def upgrade() -> None:
         )
         WHERE telegram_id IS NOT NULL
     """)
+
+
+def upgrade() -> None:
+    """Добавить зашифрованные поля и перенести данные"""
+    
+    # === Шаг 0: Проверить наличие расширения pgcrypto ===
+    # Если расширение не установлено, пропускаем шифрование (будет выполнено позже)
+    connection = op.get_bind()
+    result = connection.execute(
+        sa.text("SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'pgcrypto')")
+    )
+    pgcrypto_installed = result.scalar()
+    
+    if not pgcrypto_installed:
+        print("⚠️  WARNING: pgcrypto extension not installed. Skipping encryption migration.")
+        print("   To enable encryption later, run: CREATE EXTENSION IF NOT EXISTS pgcrypto;")
+        print("   Then re-run this migration or manually encrypt existing data.")
+        # Добавляем только колонки без данных, шифрование будет выполнено позже
+        _add_columns_only()
+        return
+    
+    # === Шаг 1: Добавить новые зашифрованные поля ===
+    _add_columns_only()
+    
+    # === Шаг 2: Зашифровать существующие данные ===
+    _encrypt_existing_data()
 
 
 def downgrade() -> None:
