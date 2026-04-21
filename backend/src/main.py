@@ -117,6 +117,19 @@ async def lifespan(app: FastAPI):
             dp.poll.middleware(DbMiddleware())
             dp.poll.middleware(RoleMiddleware())
 
+            # Глобальный обработчик ошибок для всех апдейтов
+            @dp.errors()
+            async def errors_handler(event, exception):
+                """Глобальный обработчик ошибок в хендлерах"""
+                logger.error(
+                    f"❌ Handler error: {type(exception).__name__}: {exception}",
+                    exc_info=True,
+                    extra={
+                        'event_type': type(event).__name__,
+                    }
+                )
+                return True
+
             # Порядок роутеров важен: специфичные handlers ДО общих (unknown_command)
             dp.include_router(registration_router)
             dp.include_router(qa_handlers_router)

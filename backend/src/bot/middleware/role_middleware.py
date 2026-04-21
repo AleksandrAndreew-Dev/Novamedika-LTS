@@ -115,4 +115,11 @@ class RoleMiddleware(BaseMiddleware):
         data["pharmacist"] = pharmacist
         data["is_pharmacist"] = pharmacist is not None
 
+        logger.debug(
+            f"RoleMiddleware: Injected dependencies for user {user_id}: "
+            f"user_uuid={user.uuid if user else None}, "
+            f"pharmacist_uuid={pharmacist.uuid if pharmacist else None}, "
+            f"is_pharmacist={pharmacist is not None}"
+        )
+
         return await handler(event, data)

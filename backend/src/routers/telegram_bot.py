@@ -69,12 +69,29 @@ async def telegram_webhook(request: Request):
         # Обработка обновления
         try:
             result = await dp.feed_update(bot, update)
-            if result:
+            # В aiogram 3.x feed_update возвращает None если хендлер не найден
+            # или результат выполнения хендлера
+            if result is not None and result is not False:
                 logger.info(f"✅ Update {update.update_id} handled successfully")
             else:
                 logger.warning(
                     f"⚠️ Update {update.update_id} was NOT handled by any handler"
                 )
+                # Детальное логирование для отладки
+                if update.callback_query:
+                    cb = update.callback_query
+                    logger.warning(
+                        f"   📋 Unhandled Callback: data='{cb.data}', "
+                        f"user_id={cb.from_user.id}, "
+                        f"message_id={cb.message.message_id if cb.message else None}"
+                    )
+                elif update.message:
+                    msg = update.message
+                    logger.warning(
+                        f"   💬 Unhandled Message: text='{msg.text[:100]}', "
+                        f"user_id={msg.from_user.id}, "
+                        f"content_type={msg.content_type}"
+                    )
         except Exception as e:
             logger.error(
                 f"❌ Error processing update {update.update_id}: {e}", exc_info=True

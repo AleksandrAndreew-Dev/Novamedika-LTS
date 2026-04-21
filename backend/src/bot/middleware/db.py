@@ -34,5 +34,7 @@ class DbMiddleware(BaseMiddleware):
                 return result
             except Exception as e:
                 await session.rollback()
-                logger.error(f"Error in handler: {e}")
+                logger.error(f"Error in handler: {e}", exc_info=True)
                 raise
+            finally:
+                await session.close()
