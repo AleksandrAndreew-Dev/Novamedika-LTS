@@ -13,7 +13,19 @@ Full-stack приложение (FastAPI + React) с интеграцией Tele
 
 - `backend/` — Серверная часть, логика бота и фоновые задачи. Использует `uv`.
 - `frontend/` — Клиентская часть на React.
-- `oac/` — Документация и политики для аттестации ОАЦ РБ (Класс 3-ин).
+- `oac/` — **Документация и политики для аттестации ОАЦ РБ (Класс 3-ин)**
+  - `docs/` — 13 документов compliance (01-act-class-3in.md ... 13-vuln-scan-reglament.md)
+  - `guides/` — Руководства и инструкции для персонала
+  - `audits/` — Отчеты об аудитах и проверках
+  - `planning/` — Планы и дорожные карты
+  - `requirements/` — Детализированные требования
+  - `DOCUMENTS-ORGANIZATION-RULES.md` — Правила организации документов
+  - `QUICK-REFERENCE.md` — Шпаргалка для быстрого доступа
+- `origin-docs/` — **Оригинальные нормативные документы**
+  - `449.md` — Указ Президента № 449
+  - `195.md` — Приказ ОАЦ № 195
+  - `zakon 99-3.pdf` — Закон № 99-З
+  - `NORMATIVNYE-DOKUMENTY-REGISTER.md` — Полный реестр с анализом
 - `traefic/` — Конфигурация динамического роутинга и сертификатов.
 - `uploaded_csv/` — Хранилище данных для синхронизации аптек.
 
@@ -51,20 +63,34 @@ npm run prod:restart # Перезапуск всех контейнеров
 - ✅ Политика обработки персональных данных (Закон №99-З)
 - ✅ API для реализации прав субъектов ПД (доступ, изменение, удаление, экспорт)
 
-### 📊 Статус соответствия ОАЦ: 45% → 95%+ (план)
+### 📊 Статус соответствия ОАЦ
 
 **Полная документация по compliance:**
 
 | Документ | Описание | Ссылка |
 |----------|----------|--------|
-| **Полный аудит** | Детальный анализ всех 40+ требований ОАЦ | [oac-audit.md](oac-audit.md) |
-| **Краткая сводка** | Executive summary для руководства | [oac-audit-summary.md](oac-audit-summary.md) |
-| **Чек-лист** | 115 задач для отслеживания прогресса | [oac-compliance-checklist.md](oac-compliance-checklist.md) |
-| **Бесплатные решения** | Как сэкономить $3,800/год с open-source | [OAC-FREE-SOLUTIONS.md](OAC-FREE-SOLUTIONS.md) |
-| **Шпаргалка** | Быстрый старт с бесплатными инструментами | [OAC-FREE-SOLUTIONS-CHEATSHEET.md](OAC-FREE-SOLUTIONS-CHEATSHEET.md) |
-| **Визуальный прогресс** | Графики и dashboard готовности | [OAC-VISUAL-PROGRESS.md](OAC-VISUAL-PROGRESS.md) |
-| **Для команды** | Briefing документ для всех ролей | [OAC-AUDIT-SUMMARY-FOR-TEAM.md](OAC-AUDIT-SUMMARY-FOR-TEAM.md) |
-| **Навигация ОАЦ** | Полный гид по документации | [oac/README.md](oac/README.md) |
+| **Нормативная база** | Законы, указы, приказы ОАЦ | [origin-docs/](origin-docs/) |
+| **Реестр документов** | Полный реестр с анализом | [NORMATIVNYE-DOKUMENTY-REGISTER.md](origin-docs/NORMATIVNYE-DOKUMENTY-REGISTER.md) |
+| **Документы compliance** | 13 документов для аттестации | [oac/docs/](oac/docs/) |
+| **Руководства** | Инструкции для персонала | [oac/guides/](oac/guides/) |
+| **Правила организации** | Как работать с документами ОАЦ | [DOCUMENTS-ORGANIZATION-RULES.md](oac/DOCUMENTS-ORGANIZATION-RULES.md) |
+| **Шпаргалка** | Быстрый справочник | [QUICK-REFERENCE.md](oac/QUICK-REFERENCE.md) |
+| **Журнал изменений** | История обновлений | [CHANGELOG.md](oac/CHANGELOG.md) |
+
+### 💡 Ключевые документы
+
+- **Политика конфиденциальности:** [`oac/docs/04-privacy-policy.md`](oac/docs/04-privacy-policy.md)
+- **Техническое задание на СЗИ:** [`oac/docs/06-tech-spec.md`](oac/docs/06-tech-spec.md)
+- **Политика шифрования:** [`oac/docs/10-encryption-policy.md`](oac/docs/10-encryption-policy.md)
+- **Руководство по шифрованию:** [`oac/guides/ENCRYPTION-IMPLEMENTATION-GUIDE.md`](oac/guides/ENCRYPTION-IMPLEMENTATION-GUIDE.md)
+- **Продакшн шифрование:** [`oac/docs/PRODUCTION-DEPLOYMENT-ENCRYPTION.md`](oac/docs/PRODUCTION-DEPLOYMENT-ENCRYPTION.md)
+
+### 🛠️ Инструменты проверки
+
+```bash
+# Проверить наличие всех нормативных документов
+py oac/check_normative_docs.py
+```
 
 ### 💰 Экономия с бесплатными решениями
 

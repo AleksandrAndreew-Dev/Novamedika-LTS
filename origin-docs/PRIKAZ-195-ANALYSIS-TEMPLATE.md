@@ -93,7 +93,15 @@
    - [ ] Управление ключами
    - [ ] Мониторинг ИБ
 
-3. **Обновить отчет о статусе:**
+3. **Проверка соответствия текущей реализации**
+
+Изучите следующие документы проекта и отметьте соответствие:
+
+- [ ] `../oac/docs/` - Документы compliance проекта
+- [ ] `OAC-COMPLIANCE-STATUS-REPORT.md` - Отчет о статусе реализации
+- [ ] `REQUIRED-DOCUMENTS-FOR-COMPLIANCE.md` - Полный список требований
+
+4. **Обновить отчет о статусе:**
    - [ ] `OAC-COMPLIANCE-STATUS-REPORT.md`
    - [ ] `REQUIRED-DOCUMENTS-FOR-COMPLIANCE.md`
 
@@ -109,7 +117,7 @@
 
 ### Вариант 2: Использование OCR
 Если PDF является сканом изображений:
-```bash
+```
 # Установите Tesseract OCR
 # Windows: https://github.com/UB-Mannheim/tesseract/wiki
 

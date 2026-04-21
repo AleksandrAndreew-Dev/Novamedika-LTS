@@ -91,15 +91,15 @@
 
 ---
 
-## 🔗 Ссылки на использование в проекте
+## 📊 Документы проекта NovaMedika2
 
-Эти документы являются основой для следующих файлов проекта:
+Следующие документы разработаны для обеспечения соответствия требованиям:
 
-- `REQUIRED-DOCUMENTS-FOR-COMPLIANCE.md` - Полный список требований
-- `OAC-COMPLIANCE-STATUS-REPORT.md` - Отчет о статусе реализации
-- `oac/docs/*` - Все документы для аттестации класса 3-ин
-- `ENCRYPTION-IMPLEMENTATION-GUIDE.md` - Руководство по шифрованию
-- `PRODUCTION-DEPLOYMENT-ENCRYPTION.md` - Инструкция по развертыванию шифрования
+- [`REQUIRED-DOCUMENTS-FOR-COMPLIANCE.md`](REQUIRED-DOCUMENTS-FOR-COMPLIANCE.md) - Полный список требований
+- [`OAC-COMPLIANCE-STATUS-REPORT.md`](OAC-COMPLIANCE-STATUS-REPORT.md) - Отчет о статусе реализации
+- [`../oac/docs/`](../oac/docs/) - Документы compliance проекта (13 документов)
+- [`../oac/guides/ENCRYPTION-IMPLEMENTATION-GUIDE.md`](../oac/guides/ENCRYPTION-IMPLEMENTATION-GUIDE.md) - Руководство по шифрованию
+- [`../oac/docs/PRODUCTION-DEPLOYMENT-ENCRYPTION.md`](../oac/docs/PRODUCTION-DEPLOYMENT-ENCRYPTION.md) - Инструкция по развертыванию шифрования
 
 ---
 
