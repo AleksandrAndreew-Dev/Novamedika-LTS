@@ -1,5 +1,3 @@
-
-
 services:
   traefik:
     image: traefik:v3.0
@@ -37,6 +35,9 @@ services:
     - PYTHONUNBUFFERED=1
     - DATABASE_URL=postgresql+asyncpg://novamedika:novamedika@postgres:5432/novamedika_dev
     - PYTHONPATH=/app/src
+    # Ключ шифрования для персональных данных (ОАЦ compliance)
+    # В production используйте настоящий безопасный ключ!
+    - ENCRYPTION_KEY=novamedika-dev-encryption-key-32bytes!!
     # Указываем путь к виртуальному окружению uv
     - VIRTUAL_ENV=/app/.venv
     - PATH=/app/.venv/bin:/usr/local/bin:/usr/bin:/bin

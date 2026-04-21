@@ -32,6 +32,12 @@ class BookingOrder(Base):
 
     quantity = Column(Integer, nullable=False)
     customer_name = Column(String(100), nullable=False)
+    
+    # Зашифрованные поля (новые)
+    customer_phone_encrypted = Column(String(255), nullable=True)
+    telegram_id_encrypted = Column(String(255), nullable=True, index=True)
+    
+    # Старые поля (оставляем для обратной совместимости во время миграции)
     customer_phone = Column(String(20), nullable=False)
     status = Column(String(50), default="pending", nullable=False)
     scheduled_pickup = Column(DateTime(timezone=True), nullable=True)
@@ -45,6 +51,35 @@ class BookingOrder(Base):
 
     pharmacy = relationship("Pharmacy", back_populates="booking_orders", lazy="select")
     product = relationship("Product", lazy="select")
+    
+    # Методы для работы с зашифрованными данными
+    def set_customer_phone(self, phone: str):
+        """Установить зашифрованный телефон клиента"""
+        from utils.encryption import encrypt_value
+        if phone is not None:
+            self.customer_phone_encrypted = encrypt_value(phone)
+            self.customer_phone = phone  # Оставляем для обратной совместимости
+    
+    def get_customer_phone(self) -> str:
+        """Получить расшифрованный телефон клиента"""
+        from utils.encryption import decrypt_value
+        if self.customer_phone_encrypted:
+            return decrypt_value(self.customer_phone_encrypted)
+        return self.customer_phone  # Fallback на незашифрованное поле
+    
+    def set_telegram_id(self, telegram_id: int):
+        """Установить зашифрованный telegram_id"""
+        from utils.encryption import encrypt_bigint
+        if telegram_id is not None:
+            self.telegram_id_encrypted = encrypt_bigint(telegram_id)
+            self.telegram_id = telegram_id  # Оставляем для обратной совместимости
+    
+    def get_telegram_id(self) -> int:
+        """Получить расшифрованный telegram_id"""
+        from utils.encryption import decrypt_bigint
+        if self.telegram_id_encrypted:
+            return decrypt_bigint(self.telegram_id_encrypted)
+        return self.telegram_id  # Fallback на незашифрованное поле
 
     __table_args__ = (
         Index('idx_booking_status', 'status'),

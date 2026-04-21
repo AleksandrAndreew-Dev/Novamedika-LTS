@@ -23,16 +23,52 @@ class User(Base):
     __tablename__ = "qa_users"
 
     uuid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    
+    # Зашифрованные поля (новые)
+    telegram_id_encrypted = Column(String(255), unique=True, nullable=True, index=True)
+    phone_encrypted = Column(String(255), nullable=True)
+    
+    # Старые поля (оставляем для обратной совместимости во время миграции)
     telegram_id = Column(BigInteger, unique=True, nullable=True)
     telegram_username = Column(String(100), nullable=True)
     first_name = Column(String(100), nullable=True)
     last_name = Column(String(100), nullable=True)
     phone = Column(String(20), nullable=True)
+    
     user_type = Column(String(20), default="customer")  # customer, pharmacist
     created_at = Column(DateTime, default=get_utc_now_naive)
 
     questions = relationship("Question", back_populates="user")
     refresh_tokens = relationship("RefreshToken", back_populates="user")
+    
+    # Методы для работы с зашифрованными данными
+    def set_telegram_id(self, telegram_id: int):
+        """Установить зашифрованный telegram_id"""
+        from utils.encryption import encrypt_bigint
+        if telegram_id is not None:
+            self.telegram_id_encrypted = encrypt_bigint(telegram_id)
+            self.telegram_id = telegram_id  # Оставляем для обратной совместимости
+    
+    def get_telegram_id(self) -> int:
+        """Получить расшифрованный telegram_id"""
+        from utils.encryption import decrypt_bigint
+        if self.telegram_id_encrypted:
+            return decrypt_bigint(self.telegram_id_encrypted)
+        return self.telegram_id  # Fallback на незашифрованное поле
+    
+    def set_phone(self, phone: str):
+        """Установить зашифрованный телефон"""
+        from utils.encryption import encrypt_value
+        if phone is not None:
+            self.phone_encrypted = encrypt_value(phone)
+            self.phone = phone  # Оставляем для обратной совместимости
+    
+    def get_phone(self) -> str:
+        """Получить расшифрованный телефон"""
+        from utils.encryption import decrypt_value
+        if self.phone_encrypted:
+            return decrypt_value(self.phone_encrypted)
+        return self.phone  # Fallback на незашифрованное поле
 
 
 class Pharmacist(Base):

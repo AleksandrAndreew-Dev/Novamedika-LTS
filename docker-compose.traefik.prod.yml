@@ -74,6 +74,10 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - FRONTEND_URL=https://spravka.novamedika.com
+      # Ключ шифрования для персональных данных (ОАЦ compliance)
+      # Генерируйте безопасный ключ: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.backend.rule=Host(`api.${DOMAIN}`)"
