@@ -38,6 +38,12 @@ def get_pharmacist_inline_keyboard():
                     web_app=WebAppInfo(url=webapp_url),
                 )
             ],
+            [
+                InlineKeyboardButton(
+                    text="🔒 Политика конфиденциальности",
+                    callback_data="show_privacy_policy"
+                )
+            ],
         ],
     )
 
@@ -71,6 +77,12 @@ def get_user_inline_keyboard():
                 InlineKeyboardButton(
                     text="🔍 Поиск лекарств",
                     web_app=WebAppInfo(url=webapp_url),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔒 Политика конфиденциальности",
+                    callback_data="show_privacy_policy"
                 )
             ],
         ],
