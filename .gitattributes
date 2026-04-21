@@ -1,0 +1,134 @@
+# Правила обработки файлов в Git для проекта Novaamedika2
+# Предотвращает проблемы с окончанием строк (CRLF/LF) на разных платформах
+
+# ============================================================================
+# Текстовые файлы - использовать LF (Unix-style) на всех платформах
+# ============================================================================
+
+# Markdown документы
+*.md text eol=lf
+
+# Python скрипты
+*.py text eol=lf
+
+# Конфигурационные файлы
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.ini text eol=lf
+*.cfg text eol=lf
+*.conf text eol=lf
+
+# Docker файлы
+Dockerfile text eol=lf
+docker-compose*.yml text eol=lf
+
+# Скрипты оболочки
+*.sh text eol=lf
+*.bash text eol=lf
+
+# JavaScript/TypeScript
+*.js text eol=lf
+*.jsx text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.mjs text eol=lf
+
+# CSS и препроцессоры
+*.css text eol=lf
+*.scss text eol=lf
+*.sass text eol=lf
+*.less text eol=lf
+
+# HTML
+*.html text eol=lf
+*.htm text eol=lf
+
+# SQL и миграции
+*.sql text eol=lf
+
+# Текстовые шаблоны
+*.txt text eol=lf
+*.text text eol=lf
+
+# Файлы окружения
+.env text eol=lf
+.env.* text eol=lf
+
+# Git файлы
+.gitignore text eol=lf
+.gitattributes text eol=lf
+
+# CI/CD конфигурации
+.github/**/*.yml text eol=lf
+.github/**/*.yaml text eol=lf
+
+# ============================================================================
+# Бинарные файлы - НЕ преобразовывать окончания строк
+# ============================================================================
+
+# PDF документы
+*.pdf binary
+
+# Word документы
+*.doc binary
+*.docx binary
+*.xls binary
+*.xlsx binary
+*.ppt binary
+*.pptx binary
+
+# Изображения
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.svg binary
+*.ico binary
+*.bmp binary
+*.webp binary
+
+# Архивы
+*.zip binary
+*.tar binary
+*.gz binary
+*.rar binary
+*.7z binary
+
+# Шрифты
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.otf binary
+
+# Видео и аудио
+*.mp4 binary
+*.avi binary
+*.mov binary
+*.mp3 binary
+*.wav binary
+*.ogg binary
+
+# Исполняемые файлы
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+
+# База данных SQLite
+*.db binary
+*.sqlite binary
+*.sqlite3 binary
+
+# pickle и другие сериализованные данные
+*.pkl binary
+*.pickle binary
+
+# ============================================================================
+# Автоопределение для остальных текстовых файлов
+# ============================================================================
+
+# Все остальные файлы, не указанные выше
+* text=auto
