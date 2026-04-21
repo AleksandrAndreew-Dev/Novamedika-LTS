@@ -3,6 +3,7 @@ import "./App.css";
 import Search from "./components/Search";
 import PrivacyPolicy from "./components/PrivacyPolicy";
 import SessionTimeoutWarning from "./components/SessionTimeoutWarning";
+import Toast from "./components/Toast";
 import useSessionTimeout from "./hooks/useSessionTimeout";
 import { TelegramProvider } from "./telegram/TelegramContext";
 import TelegramWrapper from "./telegram/TelegramWrapper";
@@ -10,7 +11,7 @@ import { api } from "./api/client";
 
 function App() {
   const [page, setPage] = useState(window.location.pathname);
-  const [errorToast, setErrorToast] = useState(null);
+  const [toast, setToast] = useState(null); // { message, type }
   const [showCookieBanner, setShowCookieBanner] = useState(false);
 
   // Инициализация хука таймаута (30 минут)
@@ -26,8 +27,7 @@ function App() {
   // Глобальный обработчик API ошибок
   const handleError = useCallback((error) => {
     const message = error.userMessage || error.message;
-    setErrorToast(message);
-    setTimeout(() => setErrorToast(null), 5000);
+    setToast({ message, type: 'error' });
   }, []);
 
   useEffect(() => {
@@ -59,6 +59,9 @@ function App() {
     localStorage.setItem("cookiesAccepted", "true");
     document.cookie =
       "cookies_accepted=true; max-age=31536000; path=/; Secure; SameSite=Lax";
+    
+    // Показываем success toast
+    setToast({ message: 'Настройки cookies сохранены', type: 'success' });
   };
 
   // Простой роутинг по pathname
@@ -109,20 +112,14 @@ function App() {
           {/* Основной компонент поиска */}
           <Search />
 
-          {/* Тост с ошибками */}
-          {errorToast && (
-            <div className="fixed top-4 left-4 right-4 max-w-md mx-auto z-50 animate-slide-down">
-              <div className="bg-red-500 text-white rounded-xl shadow-lg p-4 flex items-center justify-between">
-                <span className="text-sm font-medium">{errorToast}</span>
-                <button
-                  onClick={() => setErrorToast(null)}
-                  className="ml-4 text-white hover:text-gray-200 transition-colors flex-shrink-0"
-                  aria-label="Закрыть"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
+          {/* Toast уведомления */}
+          {toast && (
+            <Toast
+              message={toast.message}
+              type={toast.type}
+              onClose={() => setToast(null)}
+              duration={toast.type === 'error' ? 5000 : 3000}
+            />
           )}
         </div>
       </TelegramWrapper>

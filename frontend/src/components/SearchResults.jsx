@@ -6,6 +6,7 @@ import BookingModal from "./BookingModal";
 import ResultItemTelegram from "./ResultItemTelegram";
 import ResultItemWeb from "./ResultItemWeb";
 import SearchResultsPagination from "./SearchResultsPagination";
+import SkeletonList from "./SkeletonList";
 
 export default function SearchResults({
   results,
@@ -225,115 +226,69 @@ export default function SearchResults({
             </h3>
           </div>
 
-          {loading && (
-            <div className="space-y-4 mb-6" aria-live="polite">
-              {[1, 2, 3].map((item) => (
-                <div
-                  key={item}
-                  className="bg-white border border-gray-200 rounded-xl p-6"
-                >
-                  <div className="animate-pulse space-y-4">
-                    <div className="flex space-x-4">
-                      <div className="rounded-full bg-gray-300 h-12 w-12"></div>
-                      <div className="flex-1 space-y-2">
-                        <div className="h-4 bg-gray-300 rounded w-3/4"></div>
-                        <div className="h-3 bg-gray-300 rounded w-1/2"></div>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="h-4 bg-gray-300 rounded"></div>
-                      <div className="h-4 bg-gray-300 rounded w-5/6"></div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              <div className="text-center text-gray-800 text-sm">
-                Загрузка результатов...
-              </div>
-            </div>
-          )}
-
-          {isTelegram ? (
-            <div
-              className="space-y-3"
-              role="list"
-              aria-label="Результаты поиска лекарств"
-            >
-              {groupedResults.map((item, index) => (
-                <ResultItemTelegram
-                  key={index}
-                  item={item}
-                  formatQuantity={formatQuantity}
-                  formatDate={formatDate}
-                  onBook={openBookingModal}
-                />
-              ))}
+          {loading ? (
+            <SkeletonList count={5} />
+          ) : groupedResults.length === 0 ? (
+            <div className="text-center py-12">
+              <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-gray-500 text-lg">Ничего не найдено</p>
+              <p className="text-gray-400 text-sm mt-2">Попробуйте изменить параметры поиска</p>
             </div>
           ) : (
-            <div
-              className="space-y-4"
-              role="list"
-              aria-label="Результаты поиска лекарств"
-            >
-              {groupedResults.map((item, index) => (
-                <ResultItemWeb
-                  key={index}
-                  item={item}
-                  formatQuantity={formatQuantity}
-                  formatDate={formatDate}
-                  onBook={openBookingModal}
-                />
-              ))}
-            </div>
-          )}
+            <>
+              {isTelegram ? (
+                <div
+                  className="space-y-3"
+                  role="list"
+                  aria-label="Результаты поиска лекарств"
+                >
+                  {groupedResults.map((item, index) => (
+                    <ResultItemTelegram
+                      key={index}
+                      item={item}
+                      formatQuantity={formatQuantity}
+                      formatDate={formatDate}
+                      onBook={openBookingModal}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div
+                  className="space-y-4"
+                  role="list"
+                  aria-label="Результаты поиска лекарств"
+                >
+                  {groupedResults.map((item, index) => (
+                    <ResultItemWeb
+                      key={index}
+                      item={item}
+                      formatQuantity={formatQuantity}
+                      formatDate={formatDate}
+                      onBook={openBookingModal}
+                    />
+                  ))}
+                </div>
+              )}
 
-          {groupedResults.length === 0 && !loading && (
-            <div className="text-center py-12" role="status">
-              <div className="text-gray-600 mb-4">
-                <svg
-                  className="w-16 h-16 md:w-20 md:h-20 mx-auto"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1}
-                    d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-              </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
-                В выбранной аптеке нет этого препарата
-              </h3>
-              <p className="text-gray-800 text-sm mb-6">
-                Попробуйте выбрать другую форму или изменить параметры поиска
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <button
-                  onClick={onBackToForms}
-                  className="bg-telegram-primary text-gray-900 font-medium py-3 px-6 rounded-lg transition-colors hover:bg-blue-600 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:ring-offset-2 min-h-[44px]"
-                >
-                  Выбрать другую форму
-                </button>
-                <button
-                  onClick={onNewSearch}
-                  className="bg-gray-100 text-gray-800 font-medium py-3 px-6 rounded-lg transition-colors hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:ring-offset-2 min-h-[44px]"
-                >
-                  Новый поиск
-                </button>
-              </div>
-            </div>
+              <SearchResultsPagination
+                pagination={pagination}
+                onPageChange={onPageChange}
+                loading={loading}
+              />
+            </>
           )}
-
-          <SearchResultsPagination
-            pagination={pagination}
-            onPageChange={onPageChange}
-            loading={loading}
-          />
         </div>
       </div>
+
+      {/* Pagination */}
+      {pagination && pagination.total_pages > 1 && !loading && (
+        <SearchResultsPagination
+          pagination={pagination}
+          onPageChange={onPageChange}
+        />
+      )}
     </div>
   );
 }
