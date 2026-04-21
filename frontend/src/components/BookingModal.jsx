@@ -221,7 +221,8 @@ const BookingModal = React.memo(function BookingModal({
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Количество упаковок *
                   </label>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    {/* Кнопка уменьшения */}
                     <button
                       type="button"
                       onClick={() => {
@@ -229,21 +230,23 @@ const BookingModal = React.memo(function BookingModal({
                         onQuantityChange(newQty.toString());
                       }}
                       disabled={bookingState.loading || bookingState.modal.quantity <= 1}
-                      className="w-12 h-12 flex items-center justify-center bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all duration-200 border border-gray-300"
+                      className="min-w-[48px] min-h-[48px] sm:w-12 sm:h-12 flex-shrink-0 flex items-center justify-center bg-gray-100 hover:bg-gray-200 active:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all duration-200 border border-gray-300 touch-manipulation"
+                      aria-label="Уменьшить количество"
                     >
-                      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                      <svg className="w-6 h-6 sm:w-5 sm:h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M20 12H4" />
                       </svg>
                     </button>
                     
+                    {/* Поле ввода количества */}
                     <input
                       type="number"
                       min="1"
-                      value={bookingState.modal.quantity === 1 ? '' : bookingState.modal.quantity}
+                      value={bookingState.modal.quantity}
                       onChange={(e) => {
                         const value = e.target.value;
                         if (value === '') {
-                          onQuantityChange('');
+                          onQuantityChange('1');
                         } else {
                           const num = parseInt(value);
                           if (!isNaN(num) && num >= 1) {
@@ -258,10 +261,13 @@ const BookingModal = React.memo(function BookingModal({
                       }}
                       onFocus={(e) => e.target.select()}
                       disabled={bookingState.loading}
-                      className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 transition-all duration-200 text-center font-semibold text-lg"
+                      className="flex-1 min-w-[60px] px-3 py-3 sm:px-4 sm:py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 transition-all duration-200 text-center font-semibold text-lg touch-manipulation"
                       placeholder="1"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                     />
                     
+                    {/* Кнопка увеличения */}
                     <button
                       type="button"
                       onClick={() => {
@@ -269,17 +275,18 @@ const BookingModal = React.memo(function BookingModal({
                         onQuantityChange(newQty.toString());
                       }}
                       disabled={bookingState.loading}
-                      className="w-12 h-12 flex items-center justify-center bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all duration-200 shadow-md"
+                      className="min-w-[48px] min-h-[48px] sm:w-12 sm:h-12 flex-shrink-0 flex items-center justify-center bg-blue-500 hover:bg-blue-600 active:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all duration-200 shadow-md touch-manipulation"
+                      aria-label="Увеличить количество"
                     >
-                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      <svg className="w-6 h-6 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
                       </svg>
                     </button>
                   </div>
                   
                   <div className="flex items-center justify-between mt-2">
                     <p className="text-xs text-gray-500">
-                      Нажмите для изменения или введите своё значение
+                      Нажмите +/- или введите значение
                     </p>
                     <p className="text-sm font-semibold text-blue-600">
                       Итого: {calculateTotalPrice()} Br
