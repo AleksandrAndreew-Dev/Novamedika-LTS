@@ -259,7 +259,16 @@ const BookingModal = React.memo(function BookingModal({
                           onQuantityChange('1');
                         }
                       }}
-                      onFocus={(e) => e.target.select()}
+                      onFocus={(e) => {
+                        // Выделяем весь текст при фокусе для удобной замены
+                        setTimeout(() => {
+                          e.target.select();
+                        }, 0);
+                      }}
+                      onClick={(e) => {
+                        // Дополнительно выделяем текст при клике (для мобильных)
+                        e.target.select();
+                      }}
                       disabled={bookingState.loading}
                       className="flex-1 min-w-[60px] px-3 py-3 sm:px-4 sm:py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 transition-all duration-200 text-center font-semibold text-lg touch-manipulation"
                       placeholder="1"
