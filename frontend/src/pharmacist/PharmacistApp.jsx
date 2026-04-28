@@ -9,12 +9,16 @@ import { logger } from './utils/logger';
 // Component to handle URL token authentication
 function TokenAuthHandler() {
   const [searchParams] = useSearchParams();
-  const { loginWithToken } = useAuth();
+  const { loginWithToken, isAuthenticated } = useAuth();
 
   useEffect(() => {
     const token = searchParams.get('token');
     
-    if (token) {
+    console.log('[TokenAuthHandler] Checking for token in URL...');
+    console.log('[TokenAuthHandler] Token found:', !!token);
+    console.log('[TokenAuthHandler] Already authenticated:', isAuthenticated);
+    
+    if (token && !isAuthenticated) {
       logger.info('Found token in URL, attempting auto-login');
       
       // Attempt to login with the token from URL
@@ -26,11 +30,18 @@ function TokenAuthHandler() {
         })
         .catch((err) => {
           logger.error('Auto-login failed:', err);
+          console.error('[TokenAuthHandler] Error details:', {
+            status: err.response?.status,
+            data: err.response?.data,
+            message: err.message
+          });
           // Token is invalid or expired, redirect to login
           window.location.href = '/login';
         });
+    } else if (!token) {
+      console.log('[TokenAuthHandler] No token in URL, checking localStorage...');
     }
-  }, [searchParams, loginWithToken]);
+  }, [searchParams, loginWithToken, isAuthenticated]);
 
   return null; // This component doesn't render anything
 }
