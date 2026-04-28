@@ -212,6 +212,7 @@ export default function PharmacistContent() {
     );
   }
 
+  // Show basic loading state
   if (loading || !tokenProcessed) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -220,6 +221,8 @@ export default function PharmacistContent() {
     );
   }
 
+  // If authenticated, show the dashboard even if verification is pending
+  // The DashboardStats component now handles its own errors gracefully
   return (
     <MainLayout>
       <div className="flex h-screen bg-gray-50">
@@ -242,6 +245,17 @@ export default function PharmacistContent() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Telegram ID</label>
                     <p className="mt-1 text-lg">{user?.telegram_id || 'Не указано'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Статус</label>
+                    <p className="mt-1 text-lg">
+                      {user?.is_active ? 'Активен' : 'Не активен'}
+                      {user?.is_online && ' • Онлайн'}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Аптека</label>
+                    <p className="mt-1 text-lg">{user?.pharmacy_info?.name || 'Не указана'}</p>
                   </div>
                 </div>
               </div>

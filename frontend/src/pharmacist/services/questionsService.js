@@ -198,6 +198,28 @@ class QuestionsService {
       throw error;
     }
   }
+
+  /**
+   * Simple verification that pharmacist is properly registered
+   * This is more reliable than complex dashboard queries
+   * @returns {Promise<boolean>} True if pharmacist is verified
+   */
+  async verifyPharmacistRegistration() {
+    try {
+      // Try to get basic profile info - this should always work if authenticated
+      const response = await apiClient.get('/api/pharmacist/me');
+      
+      // Check if we got valid pharmacist data
+      if (response.data && response.data.uuid && response.data.user) {
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      logger.error('Failed to verify pharmacist registration:', error);
+      return false;
+    }
+  }
 }
 
 export const questionsService = new QuestionsService();
