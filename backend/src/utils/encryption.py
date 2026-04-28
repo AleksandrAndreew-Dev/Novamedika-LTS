@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 def get_encryption_key() -> bytes:
     """
-    Получить ключ шифрования из环境变量 ENCRYPTION_KEY.
+    Получить ключ шифрования из环境 переменной ENCRYPTION_KEY.
     Если ключ не задан, генерирует новый (только для разработки!).
     
     Returns:
@@ -52,13 +52,18 @@ def get_encryption_key() -> bytes:
 
 def get_fernet_cipher() -> Fernet:
     """
-    Создать экземпляр Fernet cipher с ключом из环境变量.
+    Создать экземпляр Fernet cipher с ключом из environment переменной.
     
     Returns:
         Fernet: Экземпляр шифра
     """
-    key = get_encryption_key()
-    return Fernet(key)
+    # Получаем уже декодированный 32-байтовый ключ
+    key_bytes = get_encryption_key()
+    
+    # Fernet ожидает URL-safe base64-encoded ключ (строку или bytes в base64 формате)
+    # Но get_encryption_key() уже возвращает decoded bytes, поэтому нужно перекодировать обратно
+    key_b64 = base64.urlsafe_b64encode(key_bytes)
+    return Fernet(key_b64)
 
 
 def encrypt_value(value: str) -> str:
