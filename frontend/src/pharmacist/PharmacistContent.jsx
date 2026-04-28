@@ -58,8 +58,6 @@ export default function PharmacistContent() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [tokenProcessed, setTokenProcessed] = useState(false);
   const [tokenProcessingError, setTokenProcessingError] = useState(null);
-  const [pharmacistVerified, setPharmacistVerified] = useState(false);
-  const [verificationError, setVerificationError] = useState(null);
 
   // Проверяем наличие токена в URL при загрузке
   useEffect(() => {
@@ -118,7 +116,7 @@ export default function PharmacistContent() {
   }, [isAuthenticated, loginWithToken, tokenProcessed]);
 
   // Determine the actual error to display
-  const displayError = tokenProcessingError || error || verificationError;
+  const displayError = tokenProcessingError || error;
 
   // Если есть ошибка аутентификации - показываем сообщение об ошибке
   if (!loading && displayError && !isAuthenticated) {
