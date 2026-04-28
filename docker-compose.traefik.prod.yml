@@ -328,3 +328,14 @@ services:
         reservations:
           memory: 256M
     restart: unless-stopped
+
+# Network definition
+networks:
+  traefik-public:
+    driver: bridge
+    name: novamedika-prod_traefik-public
+
+# Volume definition
+volumes:
+  postgres_data:
+  redis_data:
