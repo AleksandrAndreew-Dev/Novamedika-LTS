@@ -197,6 +197,7 @@ export function AuthProvider({ children }) {
     checkAuth,
   };
 
+  // Return the provider component
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
