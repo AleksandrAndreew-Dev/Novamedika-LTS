@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:pharmacist": "vite build --mode pharmacist",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -16,7 +15,6 @@
     "axios": "^1.15.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "react-router-dom": "^6.20.0",
     "tailwindcss": "^4.1.17"
   },
   "devDependencies": {

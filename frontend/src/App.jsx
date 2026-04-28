@@ -8,11 +8,15 @@ import useSessionTimeout from "./hooks/useSessionTimeout";
 import { TelegramProvider } from "./telegram/TelegramContext";
 import TelegramWrapper from "./telegram/TelegramWrapper";
 import { api } from "./api/client";
+import PharmacistDashboard from "./pharmacist/PharmacistDashboard";
 
 function App() {
   const [page, setPage] = useState(window.location.pathname);
   const [toast, setToast] = useState(null); // { message, type }
   const [showCookieBanner, setShowCookieBanner] = useState(false);
+
+  // Проверяем, это pharmacist dashboard или обычный поиск
+  const isPharmacistMode = window.location.pathname.startsWith('/pharmacist');
 
   // Инициализация хука таймаута (30 минут)
   const { showWarning, secondsLeft, extendSession } = useSessionTimeout(30);
@@ -63,6 +67,11 @@ function App() {
     // Показываем success toast
     setToast({ message: 'Настройки cookies сохранены', type: 'success' });
   };
+
+  // Если режим фармацевта - показываем dashboard
+  if (isPharmacistMode) {
+    return <PharmacistDashboard />;
+  }
 
   // Простой роутинг по pathname
   if (page === "/privacy-policy") {

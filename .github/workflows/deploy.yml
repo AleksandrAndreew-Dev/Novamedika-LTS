@@ -199,7 +199,7 @@ jobs:
           sbom: false
           build-args: |
             VITE_API_URL=https://api.${{ env.DOMAIN }}
-        continue-on-error: true
+            VITE_WS_URL=wss://api.${{ env.DOMAIN }}/api/pharmacist/ws/pharmacist
 
       - name: Retry frontend push if failed
         if: steps.build-frontend.outcome == 'failure'
@@ -225,6 +225,7 @@ jobs:
           sbom: false
           build-args: |
             VITE_API_URL=https://api.${{ env.DOMAIN }}
+            VITE_WS_URL=wss://api.${{ env.DOMAIN }}/api/pharmacist/ws/pharmacist
 
       - name: Extract metadata (tags, labels) for Docker Pharmacist WebApp
         id: meta-pharmacist
@@ -299,3 +300,14 @@ jobs:
           target: /opt/novamedika-prod/
           strip_components: 0
           overwrite: true
+
+      - name: Deploy to production server
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.PRODUCTION_SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd /opt/novamedika-prod/
+            docker-compose -f docker-compose.traefik.prod.yml pull
+            docker-compose -f docker-compose.traefik.prod.yml up -d

@@ -121,8 +121,10 @@ services:
         max-file: "3"
     environment:
       - VITE_API_URL=${VITE_API_URL}
+      - VITE_WS_URL=${VITE_WS_URL_PHARMACIST}
     labels:
       - "traefik.enable=true"
+      # Основной сайт - поиск лекарств
       - "traefik.http.routers.frontend.rule=Host(`spravka.novamedika.com`) || Host(`www.spravka.novamedika.com`)"
       - "traefik.http.routers.frontend.entrypoints=websecure"
       - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
@@ -132,41 +134,12 @@ services:
       - "traefik.http.routers.frontend-http.entrypoints=web"
       - "traefik.http.routers.frontend-http.middlewares=redirect-to-https"
       - "traefik.http.routers.frontend.middlewares=security-headers"
-    networks:
-      - traefik-public
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-    deploy:
-      resources:
-        limits:
-          memory: 64M
-          cpus: "0.25"
-        reservations:
-          memory: 32M
-    restart: unless-stopped
-
-  pharmacist_webapp:
-    image: ghcr.io/aleksandrandreew-dev/novamedika-lts/pharmacist-webapp:latest
-    container_name: pharmacist-webapp-prod
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    environment:
-      - VITE_API_URL=${VITE_API_URL}
-      - VITE_WS_URL=${VITE_WS_URL_PHARMACIST}
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.pharmacist-webapp.rule=Host(`pharmacist.spravka.novamedika.com`)"
-      - "traefik.http.routers.pharmacist-webapp.entrypoints=websecure"
-      - "traefik.http.routers.pharmacist-webapp.tls.certresolver=letsencrypt"
-      - "traefik.http.services.pharmacist-webapp.loadbalancer.server.port=80"
-      - "traefik.http.routers.pharmacist-webapp.middlewares=security-headers"
+      # Pharmacist dashboard - на том же образе
+      - "traefik.http.routers.pharmacist.rule=Host(`pharmacist.spravka.novamedika.com`)"
+      - "traefik.http.routers.pharmacist.entrypoints=websecure"
+      - "traefik.http.routers.pharmacist.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.pharmacist.service=frontend"
+      - "traefik.http.routers.pharmacist.middlewares=security-headers"
     networks:
       - traefik-public
     healthcheck:
