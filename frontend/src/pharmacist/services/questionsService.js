@@ -158,6 +158,33 @@ class QuestionsService {
   }
 
   /**
+   * Get dashboard statistics (alias for getConsultationStats)
+   * @returns {Promise<Object>} Statistics data with newQuestions, inProgress, completedToday, avgResponseTime
+   */
+  async getDashboardStats() {
+    try {
+      const response = await apiClient.get('/api/pharmacist/consultations/stats');
+      
+      // Transform backend response to match frontend expectations
+      return {
+        newQuestions: response.data.pending_count || 0,
+        inProgress: response.data.in_progress_count || 0,
+        completedToday: response.data.completed_today || 0,
+        avgResponseTime: Math.round(response.data.avg_response_time_minutes || 0)
+      };
+    } catch (error) {
+      logger.error('Failed to fetch dashboard stats:', error);
+      // Return default stats if API fails
+      return {
+        newQuestions: 0,
+        inProgress: 0,
+        completedToday: 0,
+        avgResponseTime: 0
+      };
+    }
+  }
+
+  /**
    * Get consultation statistics
    * @param {Object} params - Date range filters
    * @returns {Promise<Object>} Statistics data
