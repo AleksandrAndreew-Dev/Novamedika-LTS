@@ -17,7 +17,7 @@ from sqlalchemy import select, func
 
 from utils.time_utils import get_utc_now_naive
 from db.qa_models import User, Pharmacist, Question, Answer
-from bot.handlers.common_handlers import get_pharmacist_inline_keyboard
+from bot.handlers.common_handlers import get_pharmacist_inline_keyboard, get_pharmacist_inline_keyboard_with_token
 from bot.keyboards.qa_keyboard import make_question_keyboard
 from bot.services.dialog_service import DialogService
 from bot.services.notification_service import get_online_pharmacists
@@ -29,14 +29,18 @@ router = Router()
 
 @router.message(Command("online"))
 async def set_online(
-    message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist
+    message: Message, 
+    db: AsyncSession, 
+    is_pharmacist: bool, 
+    pharmacist: Pharmacist,
+    user: User | None = None,
 ):
     """Установка статуса онлайн для фармацевта с проверкой ожидающих вопросов"""
     logger.info(
         f"Command /online from user {message.from_user.id}, is_pharmacist: {is_pharmacist}"
     )
 
-    if not is_pharmacist or not pharmacist:
+    if not is_pharmacist or not pharmacist or not user:
         logger.warning(
             f"User {message.from_user.id} is not pharmacist but tried to use /online"
         )
@@ -57,12 +61,18 @@ async def set_online(
         pending_count = result.scalar() or 0
 
         if pending_count > 0:
+            # Используем клавиатуру с JWT токеном
+            keyboard = get_pharmacist_inline_keyboard_with_token(
+                telegram_id=int(user.telegram_id),
+                pharmacist_uuid=str(pharmacist.uuid)
+            )
+            
             await message.answer(
                 f"🟢 <b>Вы теперь онлайн!</b>\n\n"
                 f"Ожидающих вопросов: {pending_count}\n"
                 "Как придет уведомление — нажмите «💬 Ответить»",
                 parse_mode="HTML",
-                reply_markup=get_pharmacist_inline_keyboard(),
+                reply_markup=keyboard,
             )
 
             result = await db.execute(
@@ -84,10 +94,16 @@ async def set_online(
                     reply_markup=make_question_keyboard(question.uuid),
                 )
         else:
+            # Используем клавиатуру с JWT токеном
+            keyboard = get_pharmacist_inline_keyboard_with_token(
+                telegram_id=int(user.telegram_id),
+                pharmacist_uuid=str(pharmacist.uuid)
+            )
+            
             await message.answer(
                 "🟢 <b>Вы теперь онлайн!</b>\n\n"
                 "Как только пользователь задаст вопрос — вы получите уведомление.",
-                reply_markup=get_pharmacist_inline_keyboard(),
+                reply_markup=keyboard,
             )
 
     except Exception as e:
@@ -100,14 +116,18 @@ async def set_online(
 
 @router.message(Command("offline"))
 async def set_offline(
-    message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist
+    message: Message, 
+    db: AsyncSession, 
+    is_pharmacist: bool, 
+    pharmacist: Pharmacist,
+    user: User | None = None,
 ):
     """Установка статуса офлайн для фармацевта"""
     logger.info(
         f"Command /offline from user {message.from_user.id}, is_pharmacist: {is_pharmacist}"
     )
 
-    if not is_pharmacist or not pharmacist:
+    if not is_pharmacist or not pharmacist or not user:
         logger.warning(
             f"User {message.from_user.id} is not pharmacist but tried to use /offline"
         )
@@ -124,10 +144,16 @@ async def set_offline(
             f"Pharmacist {message.from_user.id} successfully set offline status"
         )
 
+        # Используем клавиатуру с JWT токеном
+        keyboard = get_pharmacist_inline_keyboard_with_token(
+            telegram_id=int(user.telegram_id),
+            pharmacist_uuid=str(pharmacist.uuid)
+        )
+        
         await message.answer(
             "✅ Вы теперь офлайн.",
             parse_mode="HTML",
-            reply_markup=get_pharmacist_inline_keyboard(),
+            reply_markup=keyboard,
         )
 
     except Exception as e:

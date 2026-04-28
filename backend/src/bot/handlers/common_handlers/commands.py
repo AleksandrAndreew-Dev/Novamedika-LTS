@@ -32,6 +32,49 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
+@router.message(Command("start"))
+async def cmd_start(
+    message: Message, 
+    db: AsyncSession, 
+    user: User, 
+    is_pharmacist: bool,
+    pharmacist: Pharmacist | None = None,
+):
+    """Главная команда /start - показывает главное меню"""
+    logger.info(f"Command /start from user {message.from_user.id}, is_pharmacist: {is_pharmacist}")
+    
+    if is_pharmacist and pharmacist:
+        # Фармацевт - показываем панель с JWT токеном
+        keyboard = get_pharmacist_inline_keyboard_with_token(
+            telegram_id=int(user.telegram_id),
+            pharmacist_uuid=str(pharmacist.uuid)
+        )
+        
+        status_text = "🟢 Онлайн" if pharmacist.is_online else "🔴 Офлайн"
+        pharmacy_name = pharmacist.pharmacy_info.get("name", "Не указана")
+        
+        await message.answer(
+            f"👨‍⚕️ <b>Добро пожаловать, {pharmacist.pharmacy_info.get('first_name', 'Фармацевт')}!</b>\n\n"
+            f"🏥 {pharmacy_name}\n"
+            f"📊 Статус: {status_text}\n\n"
+            "Выберите действие:",
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
+    else:
+        # Обычный пользователь
+        await message.answer(
+            "👋 <b>Добро пожаловать в NovoMedika!</b>\n\n"
+            "💊 Я помогу вам найти лекарства и ответить на вопросы.\n\n"
+            "Вы можете:\n"
+            "• Написать вопрос фармацевту прямо в чат\n"
+            "• Использовать кнопки ниже для быстрого доступа\n\n"
+            "Для справки используйте /help",
+            parse_mode="HTML",
+            reply_markup=get_user_inline_keyboard(),
+        )
+
+
 @router.message(Command("hide_keyboard"))
 async def hide_keyboard(message: Message):
     """Скрыть reply-клавиатуру"""
@@ -118,58 +161,6 @@ async def cmd_history(
     except Exception as e:
         logger.error(f"Error in cmd_history: {e}")
         await message.answer("❌ Ошибка при загрузке истории диалогов")
-
-
-@router.message(Command("start"))
-async def cmd_start(
-    message: Message,
-    state: FSMContext,
-    db: AsyncSession,
-    is_pharmacist: bool,
-    pharmacist: Pharmacist | None = None,
-):
-    """Упрощенный старт"""
-    await state.clear()
-
-    if is_pharmacist and pharmacist:
-        status_text = "🟢 Онлайн" if pharmacist.is_online else "🔴 Офлайн"
-        pharmacy_name = pharmacist.pharmacy_info.get("name", "Не указана")
-
-        # Получаем user из pharmacist
-        user_result = await db.execute(
-            select(User).where(User.uuid == pharmacist.user_id)
-        )
-        user_obj = user_result.scalar_one_or_none()
-
-        # Генерируем клавиатуру с JWT токеном
-        keyboard = get_pharmacist_inline_keyboard_with_token(
-            telegram_id=int(user_obj.telegram_id) if user_obj else None,
-            pharmacist_uuid=str(pharmacist.uuid)
-        )
-
-        await message.answer(
-            f"👨‍⚕️ <b>Панель фармацевта</b>\n\n"
-            f"🏥 {pharmacy_name}\n"
-            f"📊 Статус: {status_text}\n\n"
-            "Выберите действие:",
-            parse_mode="HTML",
-            reply_markup=keyboard,
-        )
-    else:
-        full_message_text = (
-            "👋 <b>Лучше спросите в аптеке!</b>\n\n"
-            "💊 <b>Консультация профессионального фармацевта</b>\n\n"
-            "Просто напишите в чат, например:\n"
-            '<i>"Что можно принять от головной боли?"</i>\n\n'
-            "Или выберите действие:"
-        )
-
-        await message.answer(
-            full_message_text,
-            parse_mode="HTML",
-            reply_markup=get_user_inline_keyboard(),
-        )
-
 
 @router.message(Command("search"))
 async def show_search_webapp_command(message: Message, is_pharmacist: bool):
@@ -258,16 +249,27 @@ async def cmd_continue(
 
 
 @router.message(Command("help"))
-async def cmd_help(message: Message, is_pharmacist: bool):
+async def cmd_help(
+    message: Message, 
+    is_pharmacist: bool,
+    user: User | None = None,
+    pharmacist: Pharmacist | None = None,
+):
     """Подробная справка с кнопками"""
-    if is_pharmacist:
+    if is_pharmacist and pharmacist and user:
+        # Используем клавиатуру с JWT токеном
+        keyboard = get_pharmacist_inline_keyboard_with_token(
+            telegram_id=int(user.telegram_id),
+            pharmacist_uuid=str(pharmacist.uuid)
+        )
+        
         await message.answer(
             "👨‍⚕️ <b>Как отвечать на вопросы?</b>\n\n"
             "1. Нажмите «🟢 Перейти в онлайн»\n"
             "2. Как придет уведомление — нажмите «💬 Ответить»\n"
             "3. Напишите ответ пользователю",
             parse_mode="HTML",
-            reply_markup=get_pharmacist_inline_keyboard(),
+            reply_markup=keyboard,
         )
     else:
         await message.answer(

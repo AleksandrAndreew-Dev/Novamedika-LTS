@@ -17,6 +17,7 @@ from db.qa_models import User, Question
 from bot.handlers.qa_states import UserQAStates
 from bot.handlers.common_handlers.keyboards import (
     get_pharmacist_inline_keyboard,
+    get_pharmacist_inline_keyboard_with_token,
     get_user_inline_keyboard,
 )
 from bot.handlers.user_question_handlers.commands import cmd_my_questions
@@ -58,22 +59,36 @@ async def pharmacist_button_fallback(
         pharmacist.is_online = True
         pharmacist.last_seen = get_utc_now_naive()
         await db.commit()
+        
+        # Используем клавиатуру с JWT токеном
+        keyboard = get_pharmacist_inline_keyboard_with_token(
+            telegram_id=int(user.telegram_id),
+            pharmacist_uuid=str(pharmacist.uuid)
+        )
+        
         await message.answer(
             "🟢 <b>Вы теперь онлайн!</b>\n\n"
             "Вы будете получать уведомления о новых вопросах.",
             parse_mode="HTML",
-            reply_markup=get_pharmacist_inline_keyboard(),
+            reply_markup=keyboard,
         )
 
     elif action == "go_offline":
         pharmacist.is_online = False
         pharmacist.last_seen = get_utc_now_naive()
         await db.commit()
+        
+        # Используем клавиатуру с JWT токеном
+        keyboard = get_pharmacist_inline_keyboard_with_token(
+            telegram_id=int(user.telegram_id),
+            pharmacist_uuid=str(pharmacist.uuid)
+        )
+        
         await message.answer(
             "🔴 <b>Вы теперь офлайн.</b>\n\n"
             "Вы не будете получать уведомления о новых вопросах.",
             parse_mode="HTML",
-            reply_markup=get_pharmacist_inline_keyboard(),
+            reply_markup=keyboard,
         )
 
     elif action == "view_questions":
@@ -100,13 +115,19 @@ async def pharmacist_button_fallback(
         await message.answer(text, parse_mode="HTML")
 
     elif action == "pharmacist_help":
+        # Используем клавиатуру с JWT токеном
+        keyboard = get_pharmacist_inline_keyboard_with_token(
+            telegram_id=int(user.telegram_id),
+            pharmacist_uuid=str(pharmacist.uuid)
+        )
+        
         await message.answer(
             "👨‍⚕️ <b>Как отвечать на вопросы?</b>\n\n"
             "1. Нажмите «🟢 Перейти в онлайн»\n"
             "2. Как придёт уведомление — нажмите «💬 Ответить»\n"
             "3. Напишите ответ пользователю",
             parse_mode="HTML",
-            reply_markup=get_pharmacist_inline_keyboard(),
+            reply_markup=keyboard,
         )
 
 
