@@ -1,5 +1,5 @@
 import React from 'react';
-import { AuthProvider } from './hooks/useAuth.js';
+import { AuthProvider } from './components/auth/AuthProvider';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import PharmacistContent from './PharmacistContent';
 
