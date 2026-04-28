@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth } from './hooks/useAuth';
 import DashboardStats from './components/dashboard/DashboardStats';
 import QuestionsList from './components/consultations/QuestionsList';
 import Sidebar from './components/layout/Sidebar';
