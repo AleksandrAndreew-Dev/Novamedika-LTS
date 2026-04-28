@@ -64,22 +64,44 @@ export function useAuth() {
       setIsLoading(true);
       setError(null);
       
-      console.log('[useAuth] Setting access token...');
-      // Save the token
+      console.log('[useAuth] 🔄 Starting login with token...');
+      console.log('[useAuth] Token length:', token?.length);
+      
+      // Save the token to localStorage - interceptor will pick it up
+      console.log('[useAuth] Setting access token in localStorage...');
       authService.setAccessToken(token);
       
-      console.log('[useAuth] Fetching pharmacist profile...');
-      // Get profile after setting token
+      // Verify token was saved
+      const savedToken = localStorage.getItem('pharmacist_access_token');
+      console.log('[useAuth] Token saved to localStorage:', !!savedToken);
+      
+      console.log('[useAuth] Fetching pharmacist profile from /api/pharmacist/me...');
+      // Get profile after setting token - interceptor will add Authorization header
       const profile = await authService.getProfile();
+      
+      console.log('[useAuth] ✅ Profile fetched successfully:', profile.user?.first_name, profile.user?.telegram_id);
       setPharmacist(profile);
       setIsAuthenticated(true);
       
-      console.log('[useAuth] Login with token successful:', profile.user?.first_name);
+      console.log('[useAuth] ✅ Login with token successful');
       return profile;
     } catch (err) {
-      console.error('[useAuth] Login with token failed:', err);
-      console.error('[useAuth] Error details:', err.response?.data || err.message);
-      setError(err.response?.data?.detail || 'Ошибка аутентификации.');
+      console.error('[useAuth] ❌ Login with token failed:', err);
+      console.error('[useAuth] Error status:', err.response?.status);
+      console.error('[useAuth] Error data:', err.response?.data);
+      console.error('[useAuth] Error message:', err.message);
+      
+      // Check if it's an authentication error
+      if (err.response?.status === 401) {
+        console.error('[useAuth] ⚠️ Token is invalid or expired');
+        setError('Токен недействителен или истек. Пожалуйста, войдите снова через Telegram.');
+      } else if (err.response?.status === 403) {
+        console.error('[useAuth] ⚠️ Access forbidden - no token sent');
+        setError('Ошибка доступа. Токен не был отправлен.');
+      } else {
+        setError(err.response?.data?.detail || 'Ошибка аутентификации.');
+      }
+      
       throw err;
     } finally {
       setIsLoading(false);

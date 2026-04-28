@@ -8,7 +8,9 @@ export const authService = {
    */
   setAccessToken(accessToken) {
     localStorage.setItem('pharmacist_access_token', accessToken);
-    api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
+    // NOTE: Don't set api.defaults.headers here - the interceptor in client.js
+    // will automatically add the Authorization header from localStorage for each request.
+    // This avoids conflicts and ensures consistency.
   },
 
   /**
@@ -69,7 +71,8 @@ export const authService = {
       // Clear local storage regardless of API call success
       localStorage.removeItem('pharmacist_access_token');
       localStorage.removeItem('pharmacist_refresh_token');
-      delete api.defaults.headers.common['Authorization'];
+      // NOTE: Don't delete api.defaults.headers here - the interceptor will
+      // automatically stop adding Authorization header when localStorage is empty.
     }
   },
 

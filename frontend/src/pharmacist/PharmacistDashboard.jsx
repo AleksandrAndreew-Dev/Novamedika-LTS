@@ -13,33 +13,45 @@ export default function PharmacistDashboard() {
   // Проверяем наличие токена в URL при загрузке
   useEffect(() => {
     const processUrlToken = async () => {
-      if (tokenProcessed || isAuthenticated) return;
+      if (tokenProcessed || isAuthenticated) {
+        console.log('[PharmacistDashboard] Skipping token processing - already processed or authenticated');
+        return;
+      }
 
       // Получаем токен из URL параметров
       const urlParams = new URLSearchParams(window.location.search);
       const token = urlParams.get('token');
 
+      console.log('[PharmacistDashboard] Checking for token in URL...');
+      console.log('[PharmacistDashboard] Token found:', !!token);
+      console.log('[PharmacistDashboard] isAuthenticated:', isAuthenticated);
+      console.log('[PharmacistDashboard] tokenProcessed:', tokenProcessed);
+
       if (token) {
         try {
           console.log('[PharmacistDashboard] Found JWT token in URL, attempting to login...');
+          console.log('[PharmacistDashboard] Token length:', token.length);
+          
           await loginWithToken(token);
           
           // Удаляем токен из URL для безопасности
           window.history.replaceState({}, document.title, window.location.pathname);
           setTokenProcessed(true);
-          console.log('[PharmacistDashboard] Token login successful');
+          console.log('[PharmacistDashboard] ✅ Token login successful, URL cleaned');
         } catch (error) {
-          console.error('[PharmacistDashboard] Failed to login with token from URL:', error);
-          console.error('[PharmacistDashboard] Error details:', error.response?.data || error.message);
+          console.error('[PharmacistDashboard] ❌ Failed to login with token from URL:', error);
+          console.error('[PharmacistDashboard] Error response:', error.response?.status, error.response?.data);
+          console.error('[PharmacistDashboard] Error message:', error.message);
           setTokenProcessed(true);
         }
       } else {
         console.log('[PharmacistDashboard] No token in URL, checking localStorage...');
         const storedToken = localStorage.getItem('pharmacist_access_token');
         if (storedToken) {
-          console.log('[PharmacistDashboard] Found token in localStorage, will attempt auto-login via useAuth hook');
+          console.log('[PharmacistDashboard] ✅ Found token in localStorage (length:', storedToken.length + ')');
+          console.log('[PharmacistDashboard] useAuth hook will handle auto-login');
         } else {
-          console.log('[PharmacistDashboard] No token found in localStorage either');
+          console.log('[PharmacistDashboard] ⚠️ No token found in localStorage either');
         }
         setTokenProcessed(true);
       }
