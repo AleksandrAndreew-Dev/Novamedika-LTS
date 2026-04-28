@@ -17,30 +17,39 @@ export function useAuth() {
   const checkAuth = async () => {
     try {
       if (authService.isAuthenticated()) {
+        console.log('[useAuth] Found token in localStorage, verifying...');
         // Try to get profile to verify token is valid
         const profile = await authService.getProfile();
         setPharmacist(profile);
         setIsAuthenticated(true);
+        console.log('[useAuth] Token is valid, user authenticated:', profile.user?.first_name);
       } else {
+        console.log('[useAuth] No token found in localStorage');
         setIsAuthenticated(false);
         setPharmacist(null);
       }
     } catch (err) {
-      logger.error('Auth check failed:', err);
+      console.error('[useAuth] Auth check failed:', err);
+      console.error('[useAuth] Error details:', err.response?.data || err.message);
+      
       // Token might be expired, try to refresh
       const refreshToken = authService.getRefreshToken();
       if (refreshToken) {
+        console.log('[useAuth] Attempting to refresh token...');
         try {
           await authService.refresh(refreshToken);
           const profile = await authService.getProfile();
           setPharmacist(profile);
           setIsAuthenticated(true);
+          console.log('[useAuth] Token refresh successful');
         } catch (refreshErr) {
-          logger.error('Token refresh failed:', refreshErr);
+          console.error('[useAuth] Token refresh failed:', refreshErr);
+          console.error('[useAuth] Refresh error details:', refreshErr.response?.data || refreshErr.message);
           setIsAuthenticated(false);
           setPharmacist(null);
         }
       } else {
+        console.log('[useAuth] No refresh token available, user not authenticated');
         setIsAuthenticated(false);
         setPharmacist(null);
       }
@@ -55,18 +64,21 @@ export function useAuth() {
       setIsLoading(true);
       setError(null);
       
+      console.log('[useAuth] Setting access token...');
       // Save the token
       authService.setAccessToken(token);
       
+      console.log('[useAuth] Fetching pharmacist profile...');
       // Get profile after setting token
       const profile = await authService.getProfile();
       setPharmacist(profile);
       setIsAuthenticated(true);
       
-      logger.info('Login with token successful');
+      console.log('[useAuth] Login with token successful:', profile.user?.first_name);
       return profile;
     } catch (err) {
-      logger.error('Login with token failed:', err);
+      console.error('[useAuth] Login with token failed:', err);
+      console.error('[useAuth] Error details:', err.response?.data || err.message);
       setError(err.response?.data?.detail || 'Ошибка аутентификации.');
       throw err;
     } finally {

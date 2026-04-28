@@ -21,17 +21,26 @@ export default function PharmacistDashboard() {
 
       if (token) {
         try {
-          console.log('Found JWT token in URL, attempting to login...');
+          console.log('[PharmacistDashboard] Found JWT token in URL, attempting to login...');
           await loginWithToken(token);
           
           // Удаляем токен из URL для безопасности
           window.history.replaceState({}, document.title, window.location.pathname);
           setTokenProcessed(true);
+          console.log('[PharmacistDashboard] Token login successful');
         } catch (error) {
-          console.error('Failed to login with token from URL:', error);
+          console.error('[PharmacistDashboard] Failed to login with token from URL:', error);
+          console.error('[PharmacistDashboard] Error details:', error.response?.data || error.message);
           setTokenProcessed(true);
         }
       } else {
+        console.log('[PharmacistDashboard] No token in URL, checking localStorage...');
+        const storedToken = localStorage.getItem('pharmacist_access_token');
+        if (storedToken) {
+          console.log('[PharmacistDashboard] Found token in localStorage, will attempt auto-login via useAuth hook');
+        } else {
+          console.log('[PharmacistDashboard] No token found in localStorage either');
+        }
         setTokenProcessed(true);
       }
     };

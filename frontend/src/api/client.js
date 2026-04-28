@@ -11,13 +11,21 @@ export const api = axios.create({
   },
 });
 
-// Request interceptor — добавляем API key если есть
+// Request interceptor — добавляем API key и Authorization token если есть
 api.interceptors.request.use(
   (config) => {
+    // Добавляем API key если есть
     const apiKey = import.meta.env.VITE_API_KEY;
     if (apiKey) {
       config.headers["X-API-KEY"] = apiKey;
     }
+    
+    // Добавляем токен авторизации для фармацевта если есть в localStorage
+    const pharmacistToken = localStorage.getItem('pharmacist_access_token');
+    if (pharmacistToken && !config.headers['Authorization']) {
+      config.headers['Authorization'] = `Bearer ${pharmacistToken}`;
+    }
+    
     return config;
   },
   (error) => Promise.reject(error),
