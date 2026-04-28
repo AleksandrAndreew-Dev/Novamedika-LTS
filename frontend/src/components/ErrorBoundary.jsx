@@ -23,6 +23,32 @@ class ErrorBoundary extends React.Component {
     }
   };
 
+  // Helper function to determine error type and provide specific guidance
+  getErrorMessage = () => {
+    const { error } = this.state;
+    
+    if (!error) return "Произошла ошибка при загрузке компонента.";
+    
+    // Check for common error patterns
+    if (error.message?.includes('auth') || error.message?.includes('token')) {
+      return "Ошибка аутентификации. Попробуйте открыть панель заново из Telegram.";
+    }
+    
+    if (error.message?.includes('network') || error.message?.includes('Network')) {
+      return "Ошибка сети. Проверьте подключение к интернету и попробуйте снова.";
+    }
+    
+    if (error.message?.includes('401') || error.message?.includes('403')) {
+      return "Ошибка доступа. Пожалуйста, откройте панель заново из Telegram.";
+    }
+    
+    if (error.message?.includes('404')) {
+      return "Ресурс не найден. Возможно, изменился адрес страницы.";
+    }
+    
+    return "Произошла ошибка при загрузке компонента. Попробуйте обновить страницу.";
+  };
+
   render() {
     if (this.state.hasError) {
       if (this.props.fallback) {
@@ -51,21 +77,29 @@ class ErrorBoundary extends React.Component {
               Что-то пошло не так
             </h2>
             <p className="text-gray-600 text-sm mb-6">
-              Произошла ошибка при загрузке компонента. Попробуйте обновить
-              страницу.
+              {this.getErrorMessage()}
             </p>
             <div className="flex flex-col gap-3">
               <button
                 onClick={this.handleReset}
                 className="bg-telegram-primary text-gray-900 font-medium py-3 px-6 rounded-lg transition-colors hover:bg-blue-600 min-h-[44px]"
               >
-                Попробовать снова
+                Повторить попытку
               </button>
               <button
                 onClick={() => window.location.reload()}
                 className="bg-gray-100 text-gray-800 font-medium py-3 px-6 rounded-lg transition-colors hover:bg-gray-200 min-h-[44px]"
               >
                 Обновить страницу
+              </button>
+              <button
+                onClick={() => {
+                  // Redirect to main Telegram bot
+                  window.open('https://t.me/novamedika_bot', '_blank');
+                }}
+                className="bg-gray-100 text-gray-800 font-medium py-3 px-6 rounded-lg transition-colors hover:bg-gray-200 min-h-[44px]"
+              >
+                На главную (Telegram)
               </button>
             </div>
             {import.meta.env.DEV && this.state.error && (
@@ -75,6 +109,12 @@ class ErrorBoundary extends React.Component {
                 </summary>
                 <pre className="text-xs text-red-600 bg-red-50 p-3 rounded mt-2 overflow-auto max-h-40">
                   {this.state.error.toString()}
+                  {this.state.errorInfo?.componentStack && (
+                    <div className="mt-2">
+                      <strong>Stack:</strong>
+                      {this.state.errorInfo.componentStack}
+                    </div>
+                  )}
                 </pre>
               </details>
             )}
