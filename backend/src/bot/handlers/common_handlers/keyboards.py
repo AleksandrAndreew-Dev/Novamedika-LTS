@@ -157,3 +157,60 @@ def get_pharmacist_inline_keyboard():
             ],
         ],
     )
+
+
+def get_user_inline_keyboard():
+    """Inline-клавиатура пользователя"""
+    webapp_url = os.getenv("FRONTEND_URL", "https://spravka.novamedika.com")
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="❓ Задать вопрос", callback_data="ask_question"
+                ),
+                InlineKeyboardButton(
+                    text="📋 Мои вопросы", callback_data="my_questions"
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📜 История", callback_data="my_questions_from_completed"
+                ),
+                InlineKeyboardButton(text="❓ Помощь", callback_data="user_help"),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="👨‍⚕️ Я фармацевт / Регистрация",
+                    callback_data="i_am_pharmacist",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔍 Поиск лекарств",
+                    web_app=WebAppInfo(url=webapp_url),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔒 Политика конфиденциальности",
+                    callback_data="show_privacy_policy"
+                )
+            ],
+        ],
+    )
+
+
+def get_webapp_only_keyboard():
+    """Reply-клавиатура только с WebApp (inline не поддерживает WebAppInfo)"""
+    webapp_url = os.getenv("FRONTEND_URL", "https://spravka.novamedika.com")
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(
+                    text="🔍 Поиск лекарств",
+                    web_app=WebAppInfo(url=webapp_url),
+                )
+            ]
+        ],
+        resize_keyboard=True,
+    )
