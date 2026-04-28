@@ -227,61 +227,6 @@ jobs:
             VITE_API_URL=https://api.${{ env.DOMAIN }}
             VITE_WS_URL=wss://api.${{ env.DOMAIN }}/api/pharmacist/ws/pharmacist
 
-      - name: Extract metadata (tags, labels) for Docker Pharmacist WebApp
-        id: meta-pharmacist
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/pharmacist-webapp
-          tags: |
-            type=sha,prefix=
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=${{ github.ref_name }},enable=${{ startsWith(github.ref, 'refs/tags/') }}
-
-      - name: Build and push pharmacist webapp image (with retry)
-        id: build-pharmacist
-        uses: docker/build-push-action@v6
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile.pharmacist
-          target: prod
-          push: true
-          tags: ${{ steps.meta-pharmacist.outputs.tags }}
-          labels: ${{ steps.meta-pharmacist.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          provenance: false
-          sbom: false
-          build-args: |
-            VITE_API_URL=https://api.${{ env.DOMAIN }}
-            VITE_WS_URL=wss://api.${{ env.DOMAIN }}/api/pharmacist/ws/pharmacist
-        continue-on-error: true
-
-      - name: Retry pharmacist webapp push if failed
-        if: steps.build-pharmacist.outcome == 'failure'
-        shell: bash
-        run: |
-          echo "⚠️ Pharmacist webapp push failed, retrying in 20 seconds..."
-          sleep 20
-        continue-on-error: true
-
-      - name: Build and push pharmacist webapp image (retry attempt)
-        if: steps.build-pharmacist.outcome == 'failure'
-        uses: docker/build-push-action@v6
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile.pharmacist
-          target: prod
-          push: true
-          tags: ${{ steps.meta-pharmacist.outputs.tags }}
-          labels: ${{ steps.meta-pharmacist.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          provenance: false
-          sbom: false
-          build-args: |
-            VITE_API_URL=https://api.${{ env.DOMAIN }}
-            VITE_WS_URL=wss://api.${{ env.DOMAIN }}/api/pharmacist/ws/pharmacist
-
   deploy-production:
     needs: build-and-push
     runs-on: [self-hosted, linux, novamedika-runner]
