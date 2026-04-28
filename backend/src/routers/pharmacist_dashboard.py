@@ -17,7 +17,6 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/api/pharmacist",
     tags=["Pharmacist Dashboard"],
 )
 
