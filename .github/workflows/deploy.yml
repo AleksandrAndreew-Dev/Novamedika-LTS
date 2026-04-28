@@ -197,6 +197,8 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: false
           sbom: false
+          build-args: |
+            VITE_API_URL=https://api.${{ env.DOMAIN }}
         continue-on-error: true
 
       - name: Retry frontend push if failed
@@ -221,6 +223,8 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: false
           sbom: false
+          build-args: |
+            VITE_API_URL=https://api.${{ env.DOMAIN }}
 
       - name: Extract metadata (tags, labels) for Docker Pharmacist WebApp
         id: meta-pharmacist
@@ -246,6 +250,9 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: false
           sbom: false
+          build-args: |
+            VITE_API_URL=https://api.${{ env.DOMAIN }}
+            VITE_WS_URL=wss://api.${{ env.DOMAIN }}/api/pharmacist/ws/pharmacist
         continue-on-error: true
 
       - name: Retry pharmacist webapp push if failed
@@ -270,6 +277,9 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: false
           sbom: false
+          build-args: |
+            VITE_API_URL=https://api.${{ env.DOMAIN }}
+            VITE_WS_URL=wss://api.${{ env.DOMAIN }}/api/pharmacist/ws/pharmacist
 
   deploy-production:
     needs: build-and-push
