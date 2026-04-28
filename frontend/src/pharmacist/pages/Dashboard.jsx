@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { questionsService } from '../services/questionsService';
 import { logger } from '../../utils/logger';
+import MainLayout from '../components/layout/MainLayout';
 
 export default function Dashboard() {
   const { pharmacist } = useAuth();
