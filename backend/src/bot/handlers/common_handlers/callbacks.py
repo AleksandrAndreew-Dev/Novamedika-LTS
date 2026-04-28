@@ -20,6 +20,7 @@ from bot.handlers.qa_states import UserQAStates
 from bot.handlers.registration import RegistrationStates
 from bot.handlers.common_handlers.keyboards import (
     get_pharmacist_inline_keyboard,
+    get_pharmacist_inline_keyboard_with_token,
     get_user_inline_keyboard,
 )
 from utils.time_utils import get_utc_now_naive
@@ -31,16 +32,25 @@ router = Router()
 
 @router.callback_query(F.data == "back_to_main")
 async def back_to_main_callback(
-    callback: CallbackQuery, state: FSMContext, is_pharmacist: bool, user: User
+    callback: CallbackQuery, 
+    state: FSMContext, 
+    is_pharmacist: bool, 
+    user: User,
+    pharmacist: Pharmacist | None = None
 ):
     """Возврат в главное меню"""
     await state.clear()
 
-    if is_pharmacist:
+    if is_pharmacist and pharmacist:
+        # Генерируем клавиатуру с JWT токеном
+        keyboard = get_pharmacist_inline_keyboard_with_token(
+            telegram_id=int(user.telegram_id),
+            pharmacist_uuid=str(pharmacist.uuid)
+        )
         await callback.message.answer(
             "👨‍⚕️ <b>Панель фармацевта</b>\n\n" "Выберите действие:",
             parse_mode="HTML",
-            reply_markup=get_pharmacist_inline_keyboard(),
+            reply_markup=keyboard,
         )
     else:
         await callback.message.answer(
@@ -59,7 +69,7 @@ async def back_to_pharmacist_main_callback(
     state: FSMContext,
     is_pharmacist: bool,
     user: User,
-    pharmacist: object,
+    pharmacist: Pharmacist,
 ):
     """Возврат в панель фармацевта"""
     await state.clear()
@@ -71,13 +81,19 @@ async def back_to_pharmacist_main_callback(
     status_text = "🟢 Онлайн" if pharmacist.is_online else "🔴 Офлайн"
     pharmacy_name = pharmacist.pharmacy_info.get("name", "Не указана")
 
+    # Генерируем клавиатуру с JWT токеном
+    keyboard = get_pharmacist_inline_keyboard_with_token(
+        telegram_id=int(user.telegram_id),
+        pharmacist_uuid=str(pharmacist.uuid)
+    )
+
     await callback.message.answer(
         f"👨‍⚕️ <b>Панель фармацевта</b>\n\n"
         f"🏥 {pharmacy_name}\n"
         f"📊 Статус: {status_text}\n\n"
         "Выберите действие:",
         parse_mode="HTML",
-        reply_markup=get_pharmacist_inline_keyboard(),
+        reply_markup=keyboard,
     )
     await callback.answer()
 
@@ -182,7 +198,8 @@ async def go_online_callback(
     callback: CallbackQuery,
     db: AsyncSession,
     is_pharmacist: bool,
-    pharmacist: object,
+    pharmacist: Pharmacist,
+    user: User,
 ):
     """Перейти в онлайн"""
     if not is_pharmacist or not pharmacist:
@@ -193,11 +210,17 @@ async def go_online_callback(
     pharmacist.last_seen = get_utc_now_naive()
     await db.commit()
 
+    # Генерируем клавиатуру с JWT токеном
+    keyboard = get_pharmacist_inline_keyboard_with_token(
+        telegram_id=int(user.telegram_id),
+        pharmacist_uuid=str(pharmacist.uuid)
+    )
+
     await callback.message.answer(
         "🟢 <b>Вы теперь онлайн!</b>\n\n"
         "Вы будете получать уведомления о новых вопросах.",
         parse_mode="HTML",
-        reply_markup=get_pharmacist_inline_keyboard(),
+        reply_markup=keyboard,
     )
     await callback.answer()
 
@@ -207,7 +230,8 @@ async def go_offline_callback(
     callback: CallbackQuery,
     db: AsyncSession,
     is_pharmacist: bool,
-    pharmacist: object,
+    pharmacist: Pharmacist,
+    user: User,
 ):
     """Перейти в офлайн"""
     if not is_pharmacist or not pharmacist:
@@ -218,11 +242,17 @@ async def go_offline_callback(
     pharmacist.last_seen = get_utc_now_naive()
     await db.commit()
 
+    # Генерируем клавиатуру с JWT токеном
+    keyboard = get_pharmacist_inline_keyboard_with_token(
+        telegram_id=int(user.telegram_id),
+        pharmacist_uuid=str(pharmacist.uuid)
+    )
+
     await callback.message.answer(
         "🔴 <b>Вы теперь офлайн.</b>\n\n"
         "Вы не будете получать уведомления о новых вопросах.",
         parse_mode="HTML",
-        reply_markup=get_pharmacist_inline_keyboard(),
+        reply_markup=keyboard,
     )
     await callback.answer()
 

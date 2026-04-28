@@ -3,21 +3,26 @@ import { api } from '../../api/client';
 
 export const authService = {
   /**
+   * Set access token directly (for URL-based authentication)
+   * @param {string} accessToken - JWT access token
+   */
+  setAccessToken(accessToken) {
+    localStorage.setItem('pharmacist_access_token', accessToken);
+    api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
+  },
+
+  /**
    * Login pharmacist
    * @param {Object} credentials - Login credentials
-   * @param {string} credentials.telegram_id - Telegram ID
-   * @param {string} credentials.password - Password
+   * @param {number} credentials.telegram_id - Telegram ID
    * @returns {Promise<{access_token: string, refresh_token: string}>}
    */
   async login(credentials) {
     const response = await api.post('/api/pharmacist/login/', credentials);
     
     if (response.data.access_token) {
-      localStorage.setItem('pharmacist_access_token', response.data.access_token);
+      this.setAccessToken(response.data.access_token);
       localStorage.setItem('pharmacist_refresh_token', response.data.refresh_token);
-      
-      // Set default auth header for future requests
-      api.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`;
     }
     
     return response.data;
@@ -35,8 +40,7 @@ export const authService = {
       });
       
       if (response.data.access_token) {
-        localStorage.setItem('pharmacist_access_token', response.data.access_token);
-        api.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`;
+        this.setAccessToken(response.data.access_token);
       }
       
       return response.data;

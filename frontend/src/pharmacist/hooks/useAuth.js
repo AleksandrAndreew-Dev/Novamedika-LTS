@@ -49,6 +49,31 @@ export function useAuth() {
     }
   };
 
+  // Login with JWT token directly (from URL or other source)
+  const loginWithToken = useCallback(async (token) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Save the token
+      authService.setAccessToken(token);
+      
+      // Get profile after setting token
+      const profile = await authService.getProfile();
+      setPharmacist(profile);
+      setIsAuthenticated(true);
+      
+      logger.info('Login with token successful');
+      return profile;
+    } catch (err) {
+      logger.error('Login with token failed:', err);
+      setError(err.response?.data?.detail || 'Ошибка аутентификации.');
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   // Login function
   const login = useCallback(async (credentials) => {
     try {
@@ -102,8 +127,6 @@ export function useAuth() {
         ...prev,
         is_online: isOnline,
       }));
-      
-      logger.info(`Online status updated: ${isOnline}`);
     } catch (err) {
       logger.error('Failed to update online status:', err);
       throw err;
@@ -126,8 +149,10 @@ export function useAuth() {
     isAuthenticated,
     isLoading,
     pharmacist,
+    user: pharmacist, // Alias for compatibility
     error,
     login,
+    loginWithToken, // New function for token-based login
     logout,
     setOnlineStatus,
     refreshProfile,

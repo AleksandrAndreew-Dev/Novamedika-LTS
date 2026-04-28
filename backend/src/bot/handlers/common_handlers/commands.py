@@ -20,6 +20,7 @@ from db.qa_models import User, Question, Pharmacist
 from bot.handlers.qa_states import UserQAStates
 from bot.handlers.common_handlers.keyboards import (
     get_pharmacist_inline_keyboard,
+    get_pharmacist_inline_keyboard_with_token,
     get_user_inline_keyboard,
     get_webapp_only_keyboard,
 )
@@ -125,7 +126,7 @@ async def cmd_start(
     state: FSMContext,
     db: AsyncSession,
     is_pharmacist: bool,
-    pharmacist: object,
+    pharmacist: Pharmacist | None = None,
 ):
     """Упрощенный старт"""
     await state.clear()
@@ -134,13 +135,25 @@ async def cmd_start(
         status_text = "🟢 Онлайн" if pharmacist.is_online else "🔴 Офлайн"
         pharmacy_name = pharmacist.pharmacy_info.get("name", "Не указана")
 
+        # Получаем user из pharmacist
+        user_result = await db.execute(
+            select(User).where(User.uuid == pharmacist.user_id)
+        )
+        user_obj = user_result.scalar_one_or_none()
+
+        # Генерируем клавиатуру с JWT токеном
+        keyboard = get_pharmacist_inline_keyboard_with_token(
+            telegram_id=int(user_obj.telegram_id) if user_obj else None,
+            pharmacist_uuid=str(pharmacist.uuid)
+        )
+
         await message.answer(
             f"👨‍⚕️ <b>Панель фармацевта</b>\n\n"
             f"🏥 {pharmacy_name}\n"
             f"📊 Статус: {status_text}\n\n"
             "Выберите действие:",
             parse_mode="HTML",
-            reply_markup=get_pharmacist_inline_keyboard(),
+            reply_markup=keyboard,
         )
     else:
         full_message_text = (

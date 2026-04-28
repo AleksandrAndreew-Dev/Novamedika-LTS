@@ -1,6 +1,8 @@
 """Фабрики клавиатур для бота."""
 
 import os
+from datetime import timedelta
+from urllib.parse import urlencode
 
 from aiogram.types import (
     ReplyKeyboardMarkup,
@@ -10,9 +12,95 @@ from aiogram.types import (
     WebAppInfo,
 )
 
+from auth.auth import create_access_token
+
+
+def generate_pharmacist_webapp_url(telegram_id: int, pharmacist_uuid: str | None = None) -> str:
+    """Генерирует URL для WebApp с JWT токеном
+    
+    Args:
+        telegram_id: Telegram ID фармацевта
+        pharmacist_uuid: UUID фармацевта (опционально)
+    
+    Returns:
+        URL с JWT токеном в query параметрах
+    """
+    # Создаем JWT токен с данными фармацевта
+    token_data = {
+        "telegram_id": telegram_id,
+        "role": "pharmacist",
+    }
+    if pharmacist_uuid:
+        token_data["pharmacist_uuid"] = pharmacist_uuid
+    
+    access_token = create_access_token(data=token_data)
+    
+    # Базовый URL
+    base_url = os.getenv(
+        "PHARMACIST_DASHBOARD_URL", 
+        "https://pharmacist.spravka.novamedika.com"
+    )
+    
+    # Добавляем токен как query параметр
+    params = {"token": access_token}
+    query_string = urlencode(params)
+    
+    return f"{base_url}?{query_string}"
+
+
+def get_pharmacist_inline_keyboard_with_token(telegram_id: int, pharmacist_uuid: str | None = None):
+    """Inline-клавиатура фармацевта с JWT токеном в WebApp URL
+    
+    Args:
+        telegram_id: Telegram ID фармацевта
+        pharmacist_uuid: UUID фармацевта (опционально)
+    """
+    webapp_url = os.getenv("FRONTEND_URL", "https://spravka.novamedika.com")
+    # Генерируем URL с токеном
+    pharmacist_dashboard_url = generate_pharmacist_webapp_url(telegram_id, pharmacist_uuid)
+    
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🟢 Онлайн", callback_data="go_online"),
+                InlineKeyboardButton(text="⚫ Офлайн", callback_data="go_offline"),
+            ],
+            [
+                InlineKeyboardButton(text="📋 Вопросы", callback_data="view_questions"),
+                InlineKeyboardButton(
+                    text="📊 Статистика", callback_data="questions_stats"
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📜 История", callback_data="my_questions_from_completed"
+                ),
+                InlineKeyboardButton(text="❓ Помощь", callback_data="pharmacist_help"),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="💼 Панель фармацевта",
+                    web_app=WebAppInfo(url=pharmacist_dashboard_url),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔍 Поиск лекарств",
+                    web_app=WebAppInfo(url=webapp_url),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔒 Политика конфиденциальности",
+                    callback_data="show_privacy_policy"
+                )
+            ],
+        ],
+    )
+
 
 def get_pharmacist_inline_keyboard():
-    """Inline-клавиатура фармацевта"""
+    """Inline-клавиатура фармацевта (без токена - для обратной совместимости)"""
     webapp_url = os.getenv("FRONTEND_URL", "https://spravka.novamedika.com")
     # URL для Pharmacist Dashboard (консультации)
     pharmacist_dashboard_url = os.getenv(
