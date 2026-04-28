@@ -9,6 +9,7 @@ export default function PharmacistContent() {
   const { isAuthenticated, user, loading, loginWithToken, error } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [tokenProcessed, setTokenProcessed] = useState(false);
+  const [tokenProcessingError, setTokenProcessingError] = useState(null);
 
   // Проверяем наличие токена в URL при загрузке
   useEffect(() => {
@@ -37,11 +38,16 @@ export default function PharmacistContent() {
           // Удаляем токен из URL для безопасности
           window.history.replaceState({}, document.title, window.location.pathname);
           setTokenProcessed(true);
+          setTokenProcessingError(null);
           console.log('[PharmacistContent] ✅ Token login successful, URL cleaned');
         } catch (error) {
           console.error('[PharmacistContent] ❌ Failed to login with token from URL:', error);
           console.error('[PharmacistContent] Error response:', error.response?.status, error.response?.data);
           console.error('[PharmacistContent] Error message:', error.message);
+          
+          // Set specific error for token processing failure
+          const errorMessage = error.userMessage || error.response?.data?.detail || 'Ошибка аутентификации. Токен недействителен или фармацевт не найден.';
+          setTokenProcessingError(errorMessage);
           setTokenProcessed(true);
         }
       } else {
@@ -54,14 +60,18 @@ export default function PharmacistContent() {
           console.log('[PharmacistContent] ⚠️ No token found in localStorage either');
         }
         setTokenProcessed(true);
+        setTokenProcessingError(null);
       }
     };
 
     processUrlToken();
   }, [isAuthenticated, loginWithToken, tokenProcessed]);
 
+  // Determine the actual error to display
+  const displayError = tokenProcessingError || error;
+
   // Если есть ошибка аутентификации - показываем сообщение об ошибке
-  if (!loading && error && !isAuthenticated) {
+  if (!loading && displayError && !isAuthenticated) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full border-l-4 border-red-500">
@@ -85,7 +95,7 @@ export default function PharmacistContent() {
               Ошибка аутентификации
             </h2>
             <p className="text-gray-600 text-sm mb-4">
-              {error}
+              {displayError}
             </p>
           </div>
 

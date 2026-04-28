@@ -54,6 +54,8 @@ function AuthProvider({ children }) {
           // Set specific error message for user
           if (refreshErr.response?.status === 401) {
             setError('Сессия истекла. Пожалуйста, войдите снова через Telegram.');
+          } else {
+            setError(refreshErr.userMessage || 'Ошибка обновления сессии. Попробуйте войти снова.');
           }
         }
       } else {
@@ -112,6 +114,8 @@ function AuthProvider({ children }) {
       localStorage.removeItem('pharmacist_access_token');
       localStorage.removeItem('pharmacist_refresh_token');
       
+      let errorMessage = 'Ошибка аутентификации. ';
+      
       // Check if it's an authentication error
       if (err.response?.status === 401) {
         console.error('[AuthProvider] ⚠️ Token is invalid, expired, or pharmacist not found');
@@ -125,17 +129,33 @@ function AuthProvider({ children }) {
         } catch (decodeErr) {
           console.error('[AuthProvider] Failed to decode token:', decodeErr);
         }
-        setError('Токен недействителен или фармацевт не найден. Пожалуйста, войдите снова через Telegram.');
+        
+        // Use specific error message from backend if available
+        const backendDetail = err.response?.data?.detail;
+        if (backendDetail) {
+          if (backendDetail.includes('expired')) {
+            errorMessage += 'Срок действия токена истёк. Пожалуйста, откройте панель заново из Telegram.';
+          } else if (backendDetail.includes('not found') || backendDetail.includes('Фармацевт не найден')) {
+            errorMessage += 'Фармацевт не найден в системе. Обратитесь к администратору.';
+          } else if (backendDetail.includes('deactivated') || backendDetail.includes('деактивирован')) {
+            errorMessage += 'Ваш аккаунт деактивирован. Обратитесь к администратору.';
+          } else {
+            errorMessage += backendDetail;
+          }
+        } else {
+          errorMessage += 'Токен недействителен или фармацевт не найден. Пожалуйста, откройте панель заново из Telegram.';
+        }
       } else if (err.response?.status === 403) {
         console.error('[AuthProvider] ⚠️ Access forbidden - no token sent');
-        setError('Ошибка доступа. Токен не был отправлен.');
+        errorMessage += 'Ошибка доступа. Токен не был отправлен.';
       } else if (err.response?.status === 0) {
         console.error('[AuthProvider] ⚠️ Network error - check API connectivity');
-        setError('Ошибка сети. Проверьте подключение к интернету.');
+        errorMessage += 'Ошибка сети. Проверьте подключение к интернету и попробуйте снова.';
       } else {
-        setError(err.response?.data?.detail || 'Ошибка аутентификации. Попробуйте позже.');
+        errorMessage += (err.userMessage || err.response?.data?.detail || 'Попробуйте позже.');
       }
       
+      setError(errorMessage);
       throw err;
     } finally {
       setIsLoading(false);
@@ -159,7 +179,7 @@ function AuthProvider({ children }) {
       return data;
     } catch (err) {
       logger.error('Login failed:', err);
-      setError(err.response?.data?.detail || 'Ошибка входа. Проверьте данные.');
+      setError(err.userMessage || err.response?.data?.detail || 'Ошибка входа. Проверьте данные.');
       throw err;
     } finally {
       setIsLoading(false);
