@@ -97,11 +97,19 @@ async def cmd_ask(message: Message):
 @router.callback_query(F.data == "my_questions_callback")
 async def cmd_my_questions(
     update: Union[Message, CallbackQuery],
-    db: AsyncSession,
-    user: User,
-    is_pharmacist: bool,
+    db: AsyncSession | None = None,
+    user: User | None = None,
+    is_pharmacist: bool | None = None,
 ):
     """Показать все вопросы пользователя или фармацевта с пагинацией"""
+    if not db or not user or is_pharmacist is None:
+        logger.error("Missing required dependencies in cmd_my_questions")
+        if isinstance(update, CallbackQuery):
+            await update.answer("❌ Ошибка сервера", show_alert=True)
+        else:
+            await update.answer("❌ Ошибка сервера")
+        return
+        
     if isinstance(update, CallbackQuery):
         message = update.message
         is_callback = True
@@ -152,11 +160,16 @@ async def cmd_my_questions(
 async def cmd_done(
     message: Message,
     state: FSMContext,
-    is_pharmacist: bool,
-    user: User,
-    db: AsyncSession,
+    is_pharmacist: bool | None = None,
+    user: User | None = None,
+    db: AsyncSession | None = None,
 ):
     """Завершение диалога через /done - теперь с обновлением БД"""
+    if not db or not user or is_pharmacist is None:
+        logger.error("Missing required dependencies in cmd_done")
+        await message.answer("❌ Ошибка сервера")
+        return
+        
     logger.info(
         f"Command /done from user {message.from_user.id}, is_pharmacist: {is_pharmacist}"
     )

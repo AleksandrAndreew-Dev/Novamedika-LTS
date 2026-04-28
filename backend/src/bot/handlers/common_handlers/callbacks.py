@@ -34,12 +34,17 @@ router = Router()
 async def back_to_main_callback(
     callback: CallbackQuery, 
     state: FSMContext, 
-    is_pharmacist: bool, 
-    user: User,
+    is_pharmacist: bool | None = None, 
+    user: User | None = None,
     pharmacist: Pharmacist | None = None
 ):
     """Возврат в главное меню"""
     await state.clear()
+
+    if not user or is_pharmacist is None:
+        logger.error("Missing required dependencies in back_to_main_callback")
+        await callback.answer("❌ Ошибка сервера", show_alert=True)
+        return
 
     if is_pharmacist and pharmacist:
         # Генерируем клавиатуру с JWT токеном
@@ -67,15 +72,15 @@ async def back_to_main_callback(
 async def back_to_pharmacist_main_callback(
     callback: CallbackQuery,
     state: FSMContext,
-    is_pharmacist: bool,
-    user: User,
-    pharmacist: Pharmacist,
+    is_pharmacist: bool | None = None,
+    user: User | None = None,
+    pharmacist: Pharmacist | None = None,
 ):
     """Возврат в панель фармацевта"""
     await state.clear()
 
-    if not is_pharmacist or not pharmacist:
-        await callback.answer("❌ Вы не фармацевт", show_alert=True)
+    if not user or not is_pharmacist or not pharmacist:
+        await callback.answer("❌ Вы не фармацевт или ошибка сервера", show_alert=True)
         return
 
     status_text = "🟢 Онлайн" if pharmacist.is_online else "🔴 Офлайн"
@@ -100,9 +105,17 @@ async def back_to_pharmacist_main_callback(
 
 @router.callback_query(F.data == "questions_stats")
 async def questions_stats_callback(
-    callback: CallbackQuery, db: AsyncSession, user: User, is_pharmacist: bool
+    callback: CallbackQuery, 
+    db: AsyncSession | None = None, 
+    user: User | None = None, 
+    is_pharmacist: bool | None = None
 ):
     """Показать статистику по вопросам"""
+    if not db or not user or is_pharmacist is None:
+        logger.error("Missing required dependencies in questions_stats_callback")
+        await callback.answer("❌ Ошибка сервера", show_alert=True)
+        return
+        
     if is_pharmacist:
         await callback.answer(
             "❌ Эта функция доступна только пользователям", show_alert=True
@@ -196,14 +209,14 @@ async def i_am_pharmacist_callback(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "go_online")
 async def go_online_callback(
     callback: CallbackQuery,
-    db: AsyncSession,
-    is_pharmacist: bool,
+    db: AsyncSession | None = None,
+    is_pharmacist: bool | None = None,
     pharmacist: Pharmacist | None = None,
     user: User | None = None,
 ):
     """Перейти в онлайн"""
-    if not is_pharmacist or not pharmacist or not user:
-        await callback.answer("❌ Вы не фармацевт", show_alert=True)
+    if not db or not user or not is_pharmacist or not pharmacist:
+        await callback.answer("❌ Ошибка сервера. Попробуйте позже.", show_alert=True)
         return
 
     pharmacist.is_online = True
@@ -228,14 +241,14 @@ async def go_online_callback(
 @router.callback_query(F.data == "go_offline")
 async def go_offline_callback(
     callback: CallbackQuery,
-    db: AsyncSession,
-    is_pharmacist: bool,
+    db: AsyncSession | None = None,
+    is_pharmacist: bool | None = None,
     pharmacist: Pharmacist | None = None,
     user: User | None = None,
 ):
     """Перейти в офлайн"""
-    if not is_pharmacist or not pharmacist or not user:
-        await callback.answer("❌ Вы не фармацевт", show_alert=True)
+    if not db or not user or not is_pharmacist or not pharmacist:
+        await callback.answer("❌ Ошибка сервера. Попробуйте позже.", show_alert=True)
         return
 
     pharmacist.is_online = False
@@ -261,11 +274,16 @@ async def go_offline_callback(
 async def continue_user_dialog_callback(
     callback: CallbackQuery,
     state: FSMContext,
-    db: AsyncSession,
-    user: User,
-    is_pharmacist: bool,
+    db: AsyncSession | None = None,
+    user: User | None = None,
+    is_pharmacist: bool | None = None,
 ):
     """Продолжить диалог пользователя"""
+    if not db or not user or is_pharmacist is None:
+        logger.error("Missing required dependencies in continue_user_dialog_callback")
+        await callback.answer("❌ Ошибка сервера", show_alert=True)
+        return
+        
     if is_pharmacist:
         await callback.answer(
             "❌ Эта функция доступна только пользователям", show_alert=True
@@ -307,11 +325,16 @@ async def continue_user_dialog_callback(
 @router.callback_query(F.data == "view_questions")
 async def view_questions_callback(
     callback: CallbackQuery,
-    db: AsyncSession,
-    user: User,
-    is_pharmacist: bool,
+    db: AsyncSession | None = None,
+    user: User | None = None,
+    is_pharmacist: bool | None = None,
 ):
     """Просмотреть вопросы"""
+    if not db or not user or is_pharmacist is None:
+        logger.error("Missing required dependencies in view_questions_callback")
+        await callback.answer("❌ Ошибка сервера", show_alert=True)
+        return
+        
     from bot.handlers.user_question_handlers.commands import cmd_my_questions
 
     await cmd_my_questions(callback, db, user, is_pharmacist)
@@ -332,9 +355,17 @@ async def ask_question_callback(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "my_questions")
 async def my_questions_callback(
-    callback: CallbackQuery, db: AsyncSession, user: User, is_pharmacist: bool
+    callback: CallbackQuery, 
+    db: AsyncSession | None = None, 
+    user: User | None = None, 
+    is_pharmacist: bool | None = None
 ):
     """Мои вопросы"""
+    if not db or not user or is_pharmacist is None:
+        logger.error("Missing required dependencies in my_questions_callback")
+        await callback.answer("❌ Ошибка сервера", show_alert=True)
+        return
+        
     from bot.handlers.user_question_handlers.commands import cmd_my_questions
 
     await cmd_my_questions(callback, db, user, is_pharmacist)
@@ -383,9 +414,16 @@ async def pharmacist_help_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data == "system_status")
 async def system_status_callback(
-    callback: CallbackQuery, db: AsyncSession, is_pharmacist: bool
+    callback: CallbackQuery, 
+    db: AsyncSession | None = None, 
+    is_pharmacist: bool | None = None
 ):
     """Статус системы через кнопку"""
+    if not db or is_pharmacist is None:
+        logger.error("Missing required dependencies in system_status_callback")
+        await callback.answer("❌ Ошибка сервера", show_alert=True)
+        return
+        
     from bot.handlers.qa_handlers.commands import debug_status
 
     await debug_status(callback, db, is_pharmacist)
@@ -393,9 +431,17 @@ async def system_status_callback(
 
 @router.callback_query(F.data == "clarify_question")
 async def clarify_question_callback(
-    callback: CallbackQuery, state: FSMContext, db: AsyncSession, user: User
+    callback: CallbackQuery, 
+    state: FSMContext, 
+    db: AsyncSession | None = None, 
+    user: User | None = None
 ):
     """Уточнение вопроса через кнопку"""
+    if not db or not user:
+        logger.error("Missing required dependencies in clarify_question_callback")
+        await callback.answer("❌ Ошибка сервера", show_alert=True)
+        return
+        
     from bot.handlers.clarify_handlers import clarify_command_handler
 
     await clarify_command_handler(callback, state, db, user)
@@ -403,9 +449,17 @@ async def clarify_question_callback(
 
 @router.callback_query(F.data == "my_questions_from_completed")
 async def my_questions_from_completed_callback(
-    callback: CallbackQuery, db: AsyncSession, user: User, is_pharmacist: bool
+    callback: CallbackQuery, 
+    db: AsyncSession | None = None, 
+    user: User | None = None, 
+    is_pharmacist: bool | None = None
 ):
     """Обработка кнопки 'Мои вопросы' из завершенного диалога"""
+    if not db or not user or is_pharmacist is None:
+        logger.error("Missing required dependencies in my_questions_from_completed_callback")
+        await callback.answer("❌ Ошибка сервера", show_alert=True)
+        return
+        
     from bot.handlers.user_question_handlers.commands import cmd_my_questions
 
     await cmd_my_questions(callback, db, user, is_pharmacist)

@@ -166,9 +166,17 @@ async def set_offline(
 
 @router.message(Command("export_history"))
 async def cmd_export_history(
-    message: Message, db: AsyncSession, user: User, is_pharmacist: bool
+    message: Message, 
+    db: AsyncSession | None = None, 
+    user: User | None = None, 
+    is_pharmacist: bool | None = None
 ):
     """Экспорт истории диалогов"""
+    if not db or not user or is_pharmacist is None:
+        logger.error("Missing required dependencies in cmd_export_history")
+        await message.answer("❌ Ошибка сервера")
+        return
+        
     try:
         if is_pharmacist:
             result = await db.execute(
@@ -214,9 +222,17 @@ async def cmd_export_history(
 
 @router.message(Command("status"))
 async def cmd_status(
-    message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist
+    message: Message, 
+    db: AsyncSession | None = None, 
+    is_pharmacist: bool | None = None, 
+    pharmacist: Pharmacist | None = None
 ):
     """Показать статус фармацевта"""
+    if not db or is_pharmacist is None:
+        logger.error("Missing required dependencies in cmd_status")
+        await message.answer("❌ Ошибка сервера")
+        return
+        
     logger.info(
         f"Command /status from user {message.from_user.id}, is_pharmacist: {is_pharmacist}"
     )
@@ -244,9 +260,17 @@ async def cmd_status(
 
 @router.message(Command("questions"))
 async def cmd_questions(
-    message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist
+    message: Message, 
+    db: AsyncSession | None = None, 
+    is_pharmacist: bool | None = None, 
+    pharmacist: Pharmacist | None = None
 ):
     """Показать вопросы - новые сверху"""
+    if not db or is_pharmacist is None:
+        logger.error("Missing required dependencies in cmd_questions")
+        await message.answer("❌ Ошибка сервера")
+        return
+        
     if not is_pharmacist or not pharmacist:
         await message.answer("❌ Эта команда доступна только фармацевтам")
         return
@@ -389,9 +413,17 @@ async def cmd_questions(
 
 @router.message(Command("release_question"))
 async def cmd_release_question(
-    message: Message, db: AsyncSession, is_pharmacist: bool, pharmacist: Pharmacist
+    message: Message, 
+    db: AsyncSession | None = None, 
+    is_pharmacist: bool | None = None, 
+    pharmacist: Pharmacist | None = None
 ):
     """Освободить вопрос, если не можешь ответить"""
+    if not db or is_pharmacist is None:
+        logger.error("Missing required dependencies in cmd_release_question")
+        await message.answer("❌ Ошибка сервера")
+        return
+        
     if not is_pharmacist or not pharmacist:
         await message.answer("❌ Эта команда доступна только фармацевтам")
         return

@@ -35,12 +35,17 @@ router = Router()
 @router.message(Command("start"))
 async def cmd_start(
     message: Message, 
-    db: AsyncSession, 
-    user: User, 
-    is_pharmacist: bool,
+    db: AsyncSession | None = None, 
+    user: User | None = None, 
+    is_pharmacist: bool | None = None,
     pharmacist: Pharmacist | None = None,
 ):
     """Главная команда /start - показывает главное меню"""
+    if not db or not user or is_pharmacist is None:
+        logger.error(f"Missing required dependencies for /start command")
+        await message.answer("❌ Ошибка сервера. Попробуйте позже.")
+        return
+        
     logger.info(f"Command /start from user {message.from_user.id}, is_pharmacist: {is_pharmacist}")
     
     if is_pharmacist and pharmacist:
@@ -86,9 +91,17 @@ async def hide_keyboard(message: Message):
 
 @router.message(Command("history"))
 async def cmd_history(
-    message: Message, db: AsyncSession, user: User, is_pharmacist: bool
+    message: Message, 
+    db: AsyncSession | None = None, 
+    user: User | None = None, 
+    is_pharmacist: bool | None = None
 ):
     """Показать историю всех диалогов"""
+    if not db or not user or is_pharmacist is None:
+        logger.error("Missing required dependencies in cmd_history")
+        await message.answer("❌ Ошибка сервера")
+        return
+        
     try:
         if is_pharmacist:
             result = await db.execute(
@@ -162,9 +175,15 @@ async def cmd_history(
         logger.error(f"Error in cmd_history: {e}")
         await message.answer("❌ Ошибка при загрузке истории диалогов")
 
+
 @router.message(Command("search"))
-async def show_search_webapp_command(message: Message, is_pharmacist: bool):
+async def show_search_webapp_command(message: Message, is_pharmacist: bool | None = None):
     """Обработка текстовой команды /search"""
+    if is_pharmacist is None:
+        logger.error("Missing required dependencies in show_search_webapp_command")
+        await message.answer("❌ Ошибка сервера")
+        return
+        
     if is_pharmacist:
         await message.answer("🔍 Используйте /questions для работы с вопросами")
         return
@@ -179,11 +198,16 @@ async def show_search_webapp_command(message: Message, is_pharmacist: bool):
 async def cmd_continue(
     message: Message,
     state: FSMContext,
-    db: AsyncSession,
-    user: User,
-    is_pharmacist: bool,
+    db: AsyncSession | None = None,
+    user: User | None = None,
+    is_pharmacist: bool | None = None,
 ):
     """Продолжить активный диалог"""
+    if not db or not user or is_pharmacist is None:
+        logger.error("Missing required dependencies in cmd_continue")
+        await message.answer("❌ Ошибка сервера")
+        return
+        
     if is_pharmacist:
         await message.answer(
             "👨‍⚕️ Вы фармацевт. Используйте /questions для работы с вопросами."
@@ -251,12 +275,17 @@ async def cmd_continue(
 @router.message(Command("help"))
 async def cmd_help(
     message: Message, 
-    is_pharmacist: bool,
+    is_pharmacist: bool | None = None,
     user: User | None = None,
     pharmacist: Pharmacist | None = None,
 ):
     """Подробная справка с кнопками"""
-    if is_pharmacist and pharmacist and user:
+    if is_pharmacist is None or not user:
+        logger.error("Missing required dependencies in cmd_help")
+        await message.answer("❌ Ошибка сервера")
+        return
+        
+    if is_pharmacist and pharmacist:
         # Используем клавиатуру с JWT токеном
         keyboard = get_pharmacist_inline_keyboard_with_token(
             telegram_id=int(user.telegram_id),
@@ -288,11 +317,16 @@ async def cmd_help(
 async def cmd_complete(
     message: Message,
     state: FSMContext,
-    db: AsyncSession,
-    user: User,
-    is_pharmacist: bool,
+    db: AsyncSession | None = None,
+    user: User | None = None,
+    is_pharmacist: bool | None = None,
 ):
     """Команда для завершения консультации пользователем"""
+    if not db or not user or is_pharmacist is None:
+        logger.error("Missing required dependencies in cmd_complete")
+        await message.answer("❌ Ошибка сервера")
+        return
+        
     if is_pharmacist:
         await message.answer(
             "👨‍⚕️ Вы фармацевт. Используйте /end_dialog для завершения диалогов."
@@ -360,8 +394,13 @@ async def universal_cancel(message: Message, state: FSMContext):
 
 
 @router.message(Command("privacy"))
-async def cmd_privacy(message: Message, is_pharmacist: bool):
+async def cmd_privacy(message: Message, is_pharmacist: bool | None = None):
     """Показать политику конфиденциальности"""
+    if is_pharmacist is None:
+        logger.error("Missing required dependencies in cmd_privacy")
+        await message.answer("❌ Ошибка сервера")
+        return
+        
     privacy_text = (
         "🔒 <b>Политика конфиденциальности</b>\n\n"
         "Мы заботимся о защите ваших персональных данных.\n\n"
