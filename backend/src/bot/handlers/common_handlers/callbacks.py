@@ -215,9 +215,13 @@ async def go_online_callback(
     user: User | None = None,
 ):
     """Перейти в онлайн"""
+    logger.info(f"go_online_callback called for user {callback.from_user.id}")
+    logger.info(f"Dependencies: db={db is not None}, user={user is not None}, is_pharmacist={is_pharmacist}, pharmacist={pharmacist is not None}")
+    
     if not db or not user or not is_pharmacist or not pharmacist:
+        logger.error(f"Missing dependencies: db={bool(db)}, user={bool(user)}, is_pharmacist={is_pharmacist}, pharmacist={bool(pharmacist)}")
         await callback.answer("❌ Ошибка сервера. Попробуйте позже.", show_alert=True)
-        return
+        return True  # Явно возвращаем True чтобы aiogram понял что handler обработал update
 
     pharmacist.is_online = True
     pharmacist.last_seen = get_utc_now_naive()
@@ -247,9 +251,13 @@ async def go_offline_callback(
     user: User | None = None,
 ):
     """Перейти в офлайн"""
+    logger.info(f"go_offline_callback called for user {callback.from_user.id}")
+    logger.info(f"Dependencies: db={db is not None}, user={user is not None}, is_pharmacist={is_pharmacist}, pharmacist={pharmacist is not None}")
+    
     if not db or not user or not is_pharmacist or not pharmacist:
+        logger.error(f"Missing dependencies: db={bool(db)}, user={bool(user)}, is_pharmacist={is_pharmacist}, pharmacist={bool(pharmacist)}")
         await callback.answer("❌ Ошибка сервера. Попробуйте позже.", show_alert=True)
-        return
+        return True  # Явно возвращаем True чтобы aiogram понял что handler обработал update
 
     pharmacist.is_online = False
     pharmacist.last_seen = get_utc_now_naive()
@@ -455,14 +463,18 @@ async def my_questions_from_completed_callback(
     is_pharmacist: bool | None = None
 ):
     """Обработка кнопки 'Мои вопросы' из завершенного диалога"""
+    logger.info(f"my_questions_from_completed_callback called for user {callback.from_user.id}")
+    logger.info(f"Dependencies: db={db is not None}, user={user is not None}, is_pharmacist={is_pharmacist}")
+    
     if not db or not user or is_pharmacist is None:
-        logger.error("Missing required dependencies in my_questions_from_completed_callback")
+        logger.error(f"Missing dependencies: db={bool(db)}, user={bool(user)}, is_pharmacist={is_pharmacist}")
         await callback.answer("❌ Ошибка сервера", show_alert=True)
-        return
+        return True  # Явно возвращаем True чтобы aiogram понял что handler обработал update
         
     from bot.handlers.user_question_handlers.commands import cmd_my_questions
 
     await cmd_my_questions(callback, db, user, is_pharmacist)
+    return True  # Явно возвращаем True
 
 
 @router.callback_query(F.data == "start_registration")

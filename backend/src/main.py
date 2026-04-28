@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand
+from aiogram.utils.callback_answer import CallbackAnswerMiddleware
 
 from bot.core import bot_manager
 from bot.handlers.clarify_handlers import router as clarify_router
@@ -95,6 +96,8 @@ async def lifespan(app: FastAPI):
         dp.message.middleware(RoleMiddleware())
         dp.callback_query.middleware(DbMiddleware())
         dp.callback_query.middleware(RoleMiddleware())
+        # Automatically answer all callback queries to prevent "unhandled" warnings
+        dp.callback_query.middleware(CallbackAnswerMiddleware())
         dp.inline_query.middleware(DbMiddleware())
         dp.inline_query.middleware(RoleMiddleware())
         dp.chosen_inline_result.middleware(DbMiddleware())
