@@ -279,12 +279,6 @@ jobs:
     environment: production
 
     steps:
-      - name: Download deployment artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: deployment-files
-        continue-on-error: true
-
       - name: Upload docker-compose.traefik.prod.yml to server
         uses: appleboy/scp-action@v0.1.2
         with:
@@ -295,59 +289,3 @@ jobs:
           target: /opt/novamedika-prod/
           strip_components: 0
           overwrite: true
-
-      - name: Deploy to production
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.PRODUCTION_SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
-            set -euo pipefail
-
-            # Рабочая директория (существует на сервере)
-            DEPLOY_DIR="/opt/novamedika-prod"
-            cd "$DEPLOY_DIR"
-
-            # Логинимся в GHCR (PAT хранится в secrets.GHCR_PAT)
-            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ secrets.GHCR_USER }} --password-stdin
-
-            # Проверим, что docker-compose.traefik.prod.yml есть
-            if [ ! -f docker-compose.traefik.prod.yml ]; then
-              echo "ERROR: docker-compose.traefik.prod.yml not found in $DEPLOY_DIR"
-              ls -la
-              exit 2
-            fi
-
-            # Бэкап текущей версии (один, перезаписывается)
-            cp docker-compose.traefik.prod.yml docker-compose.traefik.prod.yml.backup
-
-            # Стартуем безопасно: останов, pull, up
-            docker compose -f docker-compose.traefik.prod.yml down || true
-            docker compose -f docker-compose.traefik.prod.yml pull
-            docker compose -f docker-compose.traefik.prod.yml up -d
-
-            # Небольшая задержка, затем проверка здоровья сервисов
-            sleep 60
-            set +e
-            docker exec backend-prod curl -f http://localhost:8000/health || { echo "backend health failed"; exit 3; }
-            docker exec frontend-prod curl -f http://localhost:80/ || { echo "frontend health failed"; exit 4; }
-            docker exec pharmacist-webapp-prod curl -f http://localhost:80/ || { echo "pharmacist webapp health failed"; exit 5; }
-            set -e
-
-            sleep 30
-
-            CELERY_STATUS=$(docker inspect -f '{{.State.Status}}' celery-worker-prod)
-            if [ "$CELERY_STATUS" != "running" ]; then
-              echo "celery container status is '$CELERY_STATUS', expected 'running'"
-              exit 6
-            fi
-
-            # Очистка
-            docker system prune -af || true
-
-            echo "✅ Deployment completed successfully!"
-            echo "✅ Services deployed:"
-            echo "   - Backend API: https://api.spravka.novamedika.com"
-            echo "   - Frontend: https://spravka.novamedika.com"
-            echo "   - Pharmacist WebApp: https://pharmacist.spravka.novamedika.com"
