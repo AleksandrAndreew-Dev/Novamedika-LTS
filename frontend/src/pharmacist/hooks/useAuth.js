@@ -1,6 +1,5 @@
 // Authentication hook for pharmacist dashboard
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/authService';
 import { logger } from '../../utils/logger';
 
@@ -9,7 +8,6 @@ export function useAuth() {
   const [isLoading, setIsLoading] = useState(true);
   const [pharmacist, setPharmacist] = useState(null);
   const [error, setError] = useState(null);
-  const navigate = useNavigate();
 
   // Check authentication status on mount
   useEffect(() => {
@@ -86,11 +84,13 @@ export function useAuth() {
       setError(null);
       
       logger.info('Logout successful');
-      navigate('/login');
+      
+      // Redirect to login page using window.location
+      window.location.href = '/pharmacist/login';
     } catch (err) {
       logger.error('Logout error:', err);
     }
-  }, [navigate]);
+  }, []);
 
   // Update online status
   const setOnlineStatus = useCallback(async (isOnline) => {
