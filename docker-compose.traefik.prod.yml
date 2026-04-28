@@ -104,10 +104,10 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1024M
-          cpus: "1.50"
+          memory: 4096M
+          cpus: "2.00"
         reservations:
-          memory: 384M
+          memory: 2048M
     restart: unless-stopped
 
   frontend:
@@ -171,10 +171,10 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
     command: >
       postgres
-      -c shared_buffers=512MB
-      -c effective_cache_size=2GB
-      -c work_mem=8MB
-      -c maintenance_work_mem=128MB
+      -c shared_buffers=1024MB
+      -c effective_cache_size=3GB
+      -c work_mem=16MB
+      -c maintenance_work_mem=256MB
       -c max_connections=50
       -c max_worker_processes=2
       -c max_parallel_workers_per_gather=1
