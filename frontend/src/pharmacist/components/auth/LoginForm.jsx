@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { useAuth } from '../hooks/useAuth.jsx';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth.js';
 import { logger } from '../../utils/logger';
 
 export default function LoginForm() {

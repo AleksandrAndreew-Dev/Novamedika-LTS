@@ -1,5 +1,6 @@
-import React from 'react';
-import { useAuth } from '../../hooks/useAuth.jsx';
+import React, { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../hooks/useAuth.js';
 
 export default function Sidebar() {
   const location = useLocation();
