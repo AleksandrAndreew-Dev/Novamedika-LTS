@@ -245,6 +245,7 @@ from routers import (
     search,
     upload,
     pharmacies_info,
+    pharmacist_dashboard,
 )
 
 app.include_router(pharmacist_auth.router, tags=["auth"])
@@ -255,6 +256,7 @@ app.include_router(upload.router, tags=["upload"])
 app.include_router(pharmacies_info.router, tags=["pharmacies"])
 app.include_router(booking_orders.router, tags=["booking"])
 app.include_router(pharmacy_api.router, tags=["pharmacy-api"])
+app.include_router(pharmacist_dashboard.router, tags=["pharmacist-dashboard"])
 
 
 @app.get("/")

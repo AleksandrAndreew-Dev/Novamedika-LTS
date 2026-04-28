@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useCallback } from 'react';
 
 /**
  * Toast Notification Component
@@ -50,7 +50,7 @@ export default function Toast({ message, type = 'info', onClose, duration = 3000
   };
 
   // Haptic feedback для Telegram Web App
-  const handleHapticFeedback = () => {
+  const handleHapticFeedback = useCallback(() => {
     if (window.Telegram?.WebApp?.HapticFeedback) {
       const feedbackType = {
         success: 'notificationOccurred',
@@ -68,13 +68,12 @@ export default function Toast({ message, type = 'info', onClose, duration = 3000
 
       window.Telegram.WebApp.HapticFeedback[feedbackType](intensity);
     }
-  };
+  }, [type]);
 
   // Вызываем haptic feedback при монтировании компонента
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  React.useEffect(() => {
+  useEffect(() => {
     handleHapticFeedback();
-  }, []);
+  }, [handleHapticFeedback]);
 
   return (
     <div 

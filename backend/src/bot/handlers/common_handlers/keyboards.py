@@ -14,6 +14,12 @@ from aiogram.types import (
 def get_pharmacist_inline_keyboard():
     """Inline-клавиатура фармацевта"""
     webapp_url = os.getenv("FRONTEND_URL", "https://spravka.novamedika.com")
+    # URL для Pharmacist Dashboard (консультации)
+    pharmacist_dashboard_url = os.getenv(
+        "PHARMACIST_DASHBOARD_URL", 
+        "https://pharmacist.spravka.novamedika.com"
+    )
+    
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -31,6 +37,12 @@ def get_pharmacist_inline_keyboard():
                     text="📜 История", callback_data="my_questions_from_completed"
                 ),
                 InlineKeyboardButton(text="❓ Помощь", callback_data="pharmacist_help"),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="💼 Панель фармацевта",
+                    web_app=WebAppInfo(url=pharmacist_dashboard_url),
+                )
             ],
             [
                 InlineKeyboardButton(
