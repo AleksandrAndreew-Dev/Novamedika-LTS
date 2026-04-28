@@ -198,11 +198,11 @@ async def go_online_callback(
     callback: CallbackQuery,
     db: AsyncSession,
     is_pharmacist: bool,
-    pharmacist: Pharmacist,
-    user: User,
+    pharmacist: Pharmacist | None = None,
+    user: User | None = None,
 ):
     """Перейти в онлайн"""
-    if not is_pharmacist or not pharmacist:
+    if not is_pharmacist or not pharmacist or not user:
         await callback.answer("❌ Вы не фармацевт", show_alert=True)
         return
 
@@ -230,11 +230,11 @@ async def go_offline_callback(
     callback: CallbackQuery,
     db: AsyncSession,
     is_pharmacist: bool,
-    pharmacist: Pharmacist,
-    user: User,
+    pharmacist: Pharmacist | None = None,
+    user: User | None = None,
 ):
     """Перейти в офлайн"""
-    if not is_pharmacist or not pharmacist:
+    if not is_pharmacist or not pharmacist or not user:
         await callback.answer("❌ Вы не фармацевт", show_alert=True)
         return
 
