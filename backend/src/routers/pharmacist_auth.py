@@ -192,6 +192,20 @@ async def get_current_pharmacist_info(
     )
 
 
+# Alias for backwards compatibility with frontend
+@router.get("/profile", response_model=PharmacistResponse)
+async def get_current_pharmacist_profile(
+    pharmacist: Pharmacist = Depends(get_current_pharmacist),
+):
+    """Получение профиля текущего фармацевта (alias для /me)"""
+    return PharmacistResponse(
+        uuid=pharmacist.uuid,
+        user=UserResponse.model_validate(pharmacist.user),
+        pharmacy_info=pharmacist.pharmacy_info,
+        is_active=pharmacist.is_active,
+    )
+
+
 # Новые эндпоинты для управления онлайн статусом
 @router.post("/online")
 async def set_online(
