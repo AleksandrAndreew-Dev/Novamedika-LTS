@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { AuthProvider } from './hooks/useAuth';
+import React from 'react';
+import { AuthProvider } from './hooks/useAuth.jsx';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import PharmacistContent from './PharmacistContent';
 

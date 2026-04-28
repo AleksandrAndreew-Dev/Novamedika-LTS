@@ -1,7 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import MainLayout from '../components/layout/MainLayout';
-import { useAuth } from '../hooks/useAuth';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../hooks/useAuth.jsx';
 import { questionsService } from '../services/questionsService';
 import { logger } from '../../utils/logger';
 

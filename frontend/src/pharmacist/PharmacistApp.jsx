@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
-import { AuthProvider, useAuth } from './hooks/useAuth';
+import { AuthProvider, useAuth } from './hooks/useAuth.jsx';
 import Dashboard from './pharmacist/pages/Dashboard';
 import Login from './pharmacist/components/auth/Login';
 import ProtectedRoute from './pharmacist/components/auth/ProtectedRoute';
