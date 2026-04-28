@@ -23,7 +23,7 @@ ENV VITE_WS_URL=$VITE_WS_URL
 RUN npm run build
 
 # Production stage
-FROM nginx:alpine
+FROM nginx:alpine AS prod
 
 # Copy built assets from builder
 COPY --from=builder /app/dist /usr/share/nginx/html
