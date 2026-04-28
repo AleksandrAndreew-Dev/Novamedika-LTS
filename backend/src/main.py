@@ -217,7 +217,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # ДОБАВИТЬ CORS MIDDLEWARE
-origins = os.getenv("CORS_ORIGINS", "").split(",")
+origins = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "").split(",")]
 if not origins or origins == [""]:
     origins = [
         "http://localhost:3000",

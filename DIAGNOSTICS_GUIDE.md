@@ -259,24 +259,24 @@ watch -n 30 './agent/diagnostics.sh pharmacist'
 
 ## ✅ Чеклист перед деплоем
 
-Перед каждым деплоем Pharmacist WebApp запустите:
+Перед каждым деплоем запустите:
 
 ```bash
 # 1. Проверьте текущее состояние
-./agent/diagnostics.sh pharmacist
+./agent/diagnostics.sh all
 
-# 2. Задеплойте новую версию
+# 2. Задеплойте новую версию (включая Traefik!)
 produp
 
-# 3. Подождите 2 минуты
+# 3. Подождите 2 минуты для стабилизации
 sleep 120
 
 # 4. Проверьте после деплоя
-./agent/diagnostics.sh pharmacist
+./agent/diagnostics.sh all
 
 # 5. Сравните результаты
-diff <(cat agent/server-logs/*_pharmacist-webapp.txt | head -50) \
-     <(./agent/diagnostics.sh pharmacist 2>&1 | head -50)
+diff <(cat agent/server-logs/*_status.txt | head -50) \
+     <(./agent/diagnostics.sh status 2>&1 | head -50)
 ```
 
 ---

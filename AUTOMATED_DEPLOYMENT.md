@@ -1,8 +1,8 @@
-# 🚀 Автоматический Деплой Pharmacist WebApp
+# 🚀 Автоматический Деплой
 
 ## ✅ Настроено CI/CD
 
-GitHub Actions workflow автоматически собирает и деплоит Pharmacist WebApp при каждом `git push` в ветку `main`.
+GitHub Actions workflow автоматически собирает и деплоит приложение при каждом `git push` в ветку `main`.
 
 ---
 
@@ -33,15 +33,13 @@ GitHub Actions Workflow
 │ 2. Сборка Docker образов│
 │    - Backend            │
 │    - Frontend           │
-│    - Pharmacist WebApp  │ ← НОВОЕ
+│      (включает оба сайта)│
 └───────────┬─────────────┘
             ↓
 ┌─────────────────────────┐
 │ 3. Push в GHCR          │
 │    ghcr.io/.../backend  │
 │    ghcr.io/.../frontend │
-│    ghcr.io/.../         │ ← НОВОЕ
-│       pharmacist-webapp │
 └───────────┬─────────────┘
             ↓
 ┌─────────────────────────┐
@@ -54,7 +52,6 @@ GitHub Actions Workflow
 │ 5. Health Checks        │
 │    - Backend API        │
 │    - Frontend           │
-│    - Pharmacist WebApp  │ ← НОВОЕ
 │    - Celery Worker      │
 └───────────┬─────────────┘
             ↓
@@ -65,35 +62,56 @@ GitHub Actions Workflow
 
 ## 🔧 Что было добавлено в workflow
 
-### 1. Сборка Pharmacist WebApp образа
+### 1. Единый Frontend образ
+
+Система использует **один frontend образ** для обслуживания обоих сайтов:
+- `spravka.novamedika.com` (основной сайт)
+- `pharmacist.spravka.novamedika.com` (панель фармацевта)
+
+Маршрутизация осуществляется через Traefik по HTTP Host header.
 
 ```yaml
-- name: Extract metadata for Docker Pharmacist WebApp
-  id: meta-pharmacist
-  uses: docker/metadata-action@v5
+- name: Build and push frontend image
+  uses: docker/build-push-action@v6
   with:
-    images: ghcr.io/aleksandrandreew-dev/novamedika-lts/pharmacist-webapp
-    tags: |
-      type=sha,prefix=
-      type=raw,value=latest
+    context: ./frontend
+    file: ./frontend/Dockerfile
+    push: true
+    tags: ${{ steps.meta-frontend.outputs.tags }}
+    build-args: |
+      VITE_API_URL=https://api.spravka.novamedika.com
+      VITE_WS_URL=wss://api.spravka.novamedika.com/api/pharmacist/ws/pharmacist
 ```
 
 ### 2. Build & Push с retry логикой
 
+Автоматические повторные попытки при сетевых ошибках:
+
 ```yaml
-- name: Build and push pharmacist webapp image
+- name: Build and push backend image (with retry)
+  id: build-backend
   uses: docker/build-push-action@v6
   with:
-    context: ./frontend
-    file: ./frontend/Dockerfile.pharmacist
+    context: ./backend
+    file: ./backend/Dockerfile
     push: true
-    tags: ${{ steps.meta-pharmacist.outputs.tags }}
+  continue-on-error: true
+
+- name: Retry backend push if failed
+  if: steps.build-backend.outcome == 'failure'
+  shell: bash
+  run: |
+    echo "⚠️ Backend push failed, retrying in 20 seconds..."
+    sleep 20
 ```
 
 ### 3. Health Check при деплое
 
+Проверка здоровья всех сервисов после деплоя:
+
 ```bash
-docker exec pharmacist-webapp-prod curl -f http://localhost:80/ || exit 5
+docker exec backend-prod curl -f http://localhost:8000/health || exit 5
+docker exec frontend-prod wget -q --spider http://localhost:80 || exit 5
 ```
 
 ---
@@ -126,12 +144,12 @@ git push origin main
 
 ```bash
 # Проверьте доступность сервисов
-curl -I https://pharmacist.spravka.novamedika.com
 curl -I https://spravka.novamedika.com
+curl -I https://pharmacist.spravka.novamedika.com
 curl -I https://api.spravka.novamedika.com/health
 
 # Или откройте в браузере
-open https://pharmacist.spravka.novamedika.com
+open https://spravka.novamedika.com
 ```
 
 ---
@@ -142,15 +160,15 @@ open https://pharmacist.spravka.novamedika.com
 
 При push в `main`:
 ```
-ghcr.io/aleksandrandreew-dev/novamedika-lts/pharmacist-webapp:latest
-ghcr.io/aleksandrandreew-dev/novamedika-lts/pharmacist-webapp:<commit-sha>
+ghcr.io/aleksandrandreew-dev/novamedika-lts/frontend:latest
+ghcr.io/aleksandrandreew-dev/novamedika-lts/frontend:<commit-sha>
 ```
 
 При создании тега `v1.0.0`:
 ```
-ghcr.io/aleksandrandreew-dev/novamedika-lts/pharmacist-webapp:latest
-ghcr.io/aleksandrandreew-dev/novamedika-lts/pharmacist-webapp:v1.0.0
-ghcr.io/aleksandrandreew-dev/novamedika-lts/pharmacist-webapp:<commit-sha>
+ghcr.io/aleksandrandreew-dev/novamedika-lts/frontend:latest
+ghcr.io/aleksandrandreew-dev/novamedika-lts/frontend:v1.0.0
+ghcr.io/aleksandrandreew-dev/novamedika-lts/frontend:<commit-sha>
 ```
 
 ---
@@ -188,8 +206,8 @@ ghcr.io/aleksandrandreew-dev/novamedika-lts/pharmacist-webapp:<commit-sha>
 
 **Решение:**
 1. Подождите 2-3 минуты (сервис может запускаться)
-2. Проверьте логи: `docker logs pharmacist-webapp-prod`
-3. Проверьте Traefik routing: `docker logs traefik-prod | grep pharmacist`
+2. Проверьте логи: `docker logs frontend-prod`
+3. Проверьте Traefik routing: `docker logs traefik-prod`
 
 ---
 
@@ -228,11 +246,11 @@ GitHub → Repository → Actions → Deploy to Production
 ### Логи на сервере
 
 ```bash
-# Pharmacist WebApp
-ssh user@server "docker logs -f pharmacist-webapp-prod"
+# Frontend (оба сайта)
+ssh user@server "docker logs -f frontend-prod"
 
 # Traefik (routing)
-ssh user@server "docker logs -f traefik-prod | grep pharmacist"
+ssh user@server "docker logs -f traefik-prod"
 
 # Backend API
 ssh user@server "docker logs -f backend-prod"
@@ -250,10 +268,10 @@ ssh user@server "docker logs -f backend-prod"
 ## 🎉 Готово!
 
 Теперь при каждом `git push origin main`:
-1. ✅ Автоматически собирается Pharmacist WebApp
+1. ✅ Автоматически собирается единый Frontend образ (для обоих сайтов)
 2. ✅ Pushится в GitHub Container Registry
 3. ✅ Деплоится на production сервер
 4. ✅ Проверяется health check
-5. ✅ Доступен по адресу `https://pharmacist.spravka.novamedika.com`
+5. ✅ Доступны адреса `https://spravka.novamedika.com` и `https://pharmacist.spravka.novamedika.com`
 
 **Просто делайте `git push` - всё остальное автоматизировано!** 🚀

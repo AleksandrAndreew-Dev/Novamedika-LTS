@@ -16,7 +16,11 @@ function App() {
   const [showCookieBanner, setShowCookieBanner] = useState(false);
 
   // Проверяем, это pharmacist dashboard или обычный поиск
-  const isPharmacistMode = window.location.pathname.startsWith('/pharmacist');
+  // Определяем по поддомену ИЛИ по пути
+  const hostname = window.location.hostname;
+  const isPharmacistSubdomain = hostname.startsWith('pharmacist.') || hostname === 'pharmacist.spravka.novamedika.com';
+  const isPharmacistPath = window.location.pathname.startsWith('/pharmacist');
+  const isPharmacistMode = isPharmacistSubdomain || isPharmacistPath;
 
   // Инициализация хука таймаута (30 минут)
   const { showWarning, secondsLeft, extendSession } = useSessionTimeout(30);
