@@ -494,3 +494,18 @@ async def show_privacy_policy_callback(callback: CallbackQuery):
     )
 
     await callback.message.answer(privacy_text, parse_mode="HTML", reply_markup=keyboard)
+
+
+@router.callback_query()
+async def unmatched_callback(callback: CallbackQuery):
+    """Catch-all для callback'ов, которые не совпали ни с одним handler"""
+    logger.warning(
+        f"Unmatched callback from user {callback.from_user.id}: "
+        f"data='{callback.data}', "
+        f"message_id={callback.message.message_id if callback.message else None}"
+    )
+    
+    await callback.answer(
+        "❌ Действие не распознано. Пожалуйста, обновите меню командой /start.",
+        show_alert=True
+    )

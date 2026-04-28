@@ -430,3 +430,67 @@ async def unknown_command(
         )
     else:
         logger.info(f"try_create_question handled message for user {user.telegram_id}")
+
+
+@router.message()
+async def unmatched_message(message: Message):
+    """Catch-all для сообщений, которые не совпали ни с одним handler"""
+    logger.warning(
+        f"Unmatched message from user {message.from_user.id}: "
+        f"text='{message.text[:100] if message.text else 'NO TEXT'}', "
+        f"content_type={message.content_type}"
+    )
+    
+    # Проверяем, есть ли уже активный диалог
+    from aiogram.fsm.context import FSMContext
+    from aiogram.fsm.state import State
+    
+    # Если это не команда и не текст (например, фото, документ и т.д.)
+    if not message.text or message.text.startswith('/'):
+        return  # Пропускаем команды - они обрабатываются другими handlers
+    
+    await message.answer(
+        "❓ <b>Сообщение не распознано</b>\n\n"
+        "Пожалуйста, используйте одну из команд:\n"
+        "/start - Главное меню\n"
+        "/help - Помощь\n"
+        "/search - Поиск лекарств\n"
+        "/history - История диалогов\n\n"
+        "Или просто напишите ваш вопрос фармацевту 💊"
+    )
+
+
+@router.message(Command("test_deps"))
+async def test_dependencies(
+    message: Message,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    user: User | None = None,
+    pharmacist: Pharmacist | None = None,
+):
+    """Тестовый handler для проверки инъекции зависимостей из middleware"""
+    logger.info("=" * 80)
+    logger.info("TEST DEPENDENCIES HANDLER TRIGGERED")
+    logger.info(f"  - db session: {'✅ PRESENT' if db else '❌ MISSING'}")
+    logger.info(f"  - is_pharmacist: {is_pharmacist}")
+    logger.info(f"  - user: {'✅ PRESENT' if user else '❌ MISSING'} (uuid={user.uuid if user else None})")
+    logger.info(f"  - pharmacist: {'✅ PRESENT' if pharmacist else '❌ MISSING'} (uuid={pharmacist.uuid if pharmacist else None})")
+    logger.info("=" * 80)
+    
+    status_lines = [
+        f"База данных: {'✅ OK' if db else '❌ ERROR'}",
+        f"Фармацевт: {'✅ Да' if is_pharmacist else '❌ Нет'}",
+        f"User UUID: {user.uuid if user else 'N/A'}",
+        f"Pharmacist UUID: {pharmacist.uuid if pharmacist else 'N/A'}",
+    ]
+    
+    all_ok = db and user
+    status_icon = "✅" if all_ok else "❌"
+    
+    await message.answer(
+        f"{status_icon} <b>Проверка зависимостей</b>\n\n"
+        + "\n".join(status_lines)
+        + "\n\n"
+        + ("Все зависимости инжектированы корректно!" if all_ok else "⚠️ Обнаружены проблемы с инъекцией зависимостей"),
+        parse_mode="HTML",
+    )

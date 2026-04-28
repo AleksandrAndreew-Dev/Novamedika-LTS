@@ -106,20 +106,24 @@ class RoleMiddleware(BaseMiddleware):
             # Можно ответить пользователю, но лучше просто пропустить, чтобы не спамить
             return
 
+        is_pharmacist = pharmacist is not None
         logger.info(
-            f"RoleMiddleware: User {user_id} - is_pharmacist: {pharmacist is not None}"
+            f"RoleMiddleware: User {user_id} - is_pharmacist: {is_pharmacist}"
         )
 
         # Добавляем данные в контекст
         data["user"] = user
         data["pharmacist"] = pharmacist
-        data["is_pharmacist"] = pharmacist is not None
+        data["is_pharmacist"] = is_pharmacist
 
         logger.debug(
             f"RoleMiddleware: Injected dependencies for user {user_id}: "
             f"user_uuid={user.uuid if user else None}, "
             f"pharmacist_uuid={pharmacist.uuid if pharmacist else None}, "
-            f"is_pharmacist={pharmacist is not None}"
+            f"is_pharmacist={is_pharmacist}"
         )
 
-        return await handler(event, data)
+        logger.debug(f"RoleMiddleware: Calling handler with injected data")
+        result = await handler(event, data)
+        logger.debug(f"RoleMiddleware: Handler returned result: {result is not None}")
+        return result

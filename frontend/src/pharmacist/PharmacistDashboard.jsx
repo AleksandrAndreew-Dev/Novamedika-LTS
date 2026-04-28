@@ -31,9 +31,9 @@ export default function PharmacistDashboard() {
         try {
           console.log('[PharmacistDashboard] Found JWT token in URL, attempting to login...');
           console.log('[PharmacistDashboard] Token length:', token.length);
-          
+
           await loginWithToken(token);
-          
+
           // Удаляем токен из URL для безопасности
           window.history.replaceState({}, document.title, window.location.pathname);
           setTokenProcessed(true);
@@ -83,7 +83,7 @@ export default function PharmacistDashboard() {
             </div>
             <h2 className="text-2xl font-bold text-gray-900">Вход для фармацевтов</h2>
           </div>
-          
+
           <div className="space-y-4">
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <p className="text-sm text-green-800 mb-3">
@@ -95,7 +95,7 @@ export default function PharmacistDashboard() {
                 <li>WebApp откроется автоматически с вашим токеном</li>
               </ol>
             </div>
-            
+
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <p className="text-sm text-blue-800 mb-2">
                 <strong>Если автоматический вход не сработал:</strong>

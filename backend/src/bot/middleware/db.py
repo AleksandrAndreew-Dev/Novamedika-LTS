@@ -26,15 +26,21 @@ class DbMiddleware(BaseMiddleware):
         event: Union[Update, Message, CallbackQuery, Poll],
         data: Dict[str, Any],
     ) -> Any:
+        logger.debug(f"DbMiddleware: Starting for event type={type(event).__name__}")
+        
         async with async_session_maker() as session:
             data["db"] = session
+            logger.debug("DbMiddleware: Injected 'db' session into data dict")
+            
             try:
                 result = await handler(event, data)
+                logger.debug("DbMiddleware: Handler executed successfully, committing transaction")
                 await session.commit()
                 return result
             except Exception as e:
+                logger.error(f"DbMiddleware: Rolling back due to error: {e}", exc_info=True)
                 await session.rollback()
-                logger.error(f"Error in handler: {e}", exc_info=True)
                 raise
             finally:
+                logger.debug("DbMiddleware: Closing database session")
                 await session.close()
