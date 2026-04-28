@@ -78,7 +78,7 @@ export const authService = {
    * @returns {Promise<Object>}
    */
   async getProfile() {
-    const response = await api.get('/api/pharmacist/profile');
+    const response = await api.get('/api/pharmacist/me');
     return response.data;
   },
 
