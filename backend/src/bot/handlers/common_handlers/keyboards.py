@@ -20,15 +20,21 @@ def generate_pharmacist_webapp_url(telegram_id: int, pharmacist_uuid: str | None
     
     Args:
         telegram_id: Telegram ID фармацевта
-        pharmacist_uuid: UUID фармацевта (опционально)
+        pharmacist_uuid: UUID фармацевта (обязательно для корректной работы)
     
     Returns:
         URL с JWT токеном в query параметрах
+        
+    Raises:
+        ValueError: Если pharmacist_uuid не предоставлен
     """
+    if not pharmacist_uuid:
+        raise ValueError("pharmacist_uuid is required for WebApp authentication")
+    
     # Создаем JWT токен с данными фармацевта
-    # IMPORTANT: Backend expects 'sub' field for get_current_pharmacist dependency
+    # IMPORTANT: Backend expects 'sub' field containing pharmacist UUID for get_current_pharmacist dependency
     token_data = {
-        "sub": pharmacist_uuid if pharmacist_uuid else str(telegram_id),  # Use 'sub' for pharmacist UUID
+        "sub": pharmacist_uuid,  # Must be pharmacist UUID, not telegram_id
         "telegram_id": telegram_id,
         "role": "pharmacist",
         "type": "access",  # Mark as access token type
@@ -54,8 +60,12 @@ def get_pharmacist_inline_keyboard_with_token(telegram_id: int, pharmacist_uuid:
     
     Args:
         telegram_id: Telegram ID фармацевта
-        pharmacist_uuid: UUID фармацевта (опционально)
+        pharmacist_uuid: UUID фармацевта (обязательно)
     """
+    if not pharmacist_uuid:
+        # Fallback to non-token keyboard if pharmacist_uuid is missing (should not happen in normal flow)
+        return get_pharmacist_inline_keyboard()
+        
     webapp_url = os.getenv("FRONTEND_URL", "https://spravka.novamedika.com")
     # Генерируем URL с токеном
     pharmacist_dashboard_url = generate_pharmacist_webapp_url(telegram_id, pharmacist_uuid)
@@ -146,49 +156,4 @@ def get_pharmacist_inline_keyboard():
                 )
             ],
         ],
-    )
-
-
-def get_user_inline_keyboard():
-    """Inline-клавиатура пользователя"""
-    webapp_url = os.getenv("FRONTEND_URL", "https://spravka.novamedika.com")
-    
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="💬 Задать вопрос фармацевту",
-                    web_app=WebAppInfo(url=webapp_url),
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🔍 Поиск лекарств",
-                    web_app=WebAppInfo(url=webapp_url),
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🔒 Политика конфиденциальности",
-                    callback_data="show_privacy_policy"
-                )
-            ],
-        ],
-    )
-
-
-def get_webapp_only_keyboard():
-    """Клавиатура только с WebApp кнопкой (для пользователей без регистрации)"""
-    webapp_url = os.getenv("FRONTEND_URL", "https://spravka.novamedika.com")
-    
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [
-                KeyboardButton(
-                    text="💊 Спросить фармацевта",
-                    web_app=WebAppInfo(url=webapp_url),
-                )
-            ]
-        ],
-        resize_keyboard=True,
     )

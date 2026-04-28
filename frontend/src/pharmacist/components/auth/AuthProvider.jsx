@@ -50,6 +50,11 @@ function AuthProvider({ children }) {
           console.error('[AuthProvider] Refresh error details:', refreshErr.response?.data || refreshErr.message);
           setIsAuthenticated(false);
           setPharmacist(null);
+          
+          // Set specific error message for user
+          if (refreshErr.response?.status === 401) {
+            setError('Сессия истекла. Пожалуйста, войдите снова через Telegram.');
+          }
         }
       } else {
         console.log('[AuthProvider] No refresh token available, user not authenticated');
@@ -70,6 +75,11 @@ function AuthProvider({ children }) {
       console.log('[AuthProvider] 🔄 Starting login with token...');
       console.log('[AuthProvider] Token length:', token?.length);
       
+      // Validate token structure before proceeding
+      if (!token || typeof token !== 'string') {
+        throw new Error('Invalid token format');
+      }
+      
       // Save the token to localStorage - interceptor will pick it up
       console.log('[AuthProvider] Setting access token in localStorage...');
       authService.setAccessToken(token);
@@ -77,6 +87,10 @@ function AuthProvider({ children }) {
       // Verify token was saved
       const savedToken = localStorage.getItem('pharmacist_access_token');
       console.log('[AuthProvider] Token saved to localStorage:', !!savedToken);
+      
+      if (!savedToken) {
+        throw new Error('Failed to save token to localStorage');
+      }
       
       console.log('[AuthProvider] Fetching pharmacist profile from /api/pharmacist/me...');
       // Get profile after setting token - interceptor will add Authorization header
@@ -94,15 +108,32 @@ function AuthProvider({ children }) {
       console.error('[AuthProvider] Error data:', err.response?.data);
       console.error('[AuthProvider] Error message:', err.message);
       
+      // Clear invalid token from localStorage
+      localStorage.removeItem('pharmacist_access_token');
+      localStorage.removeItem('pharmacist_refresh_token');
+      
       // Check if it's an authentication error
       if (err.response?.status === 401) {
-        console.error('[AuthProvider] ⚠️ Token is invalid or expired');
-        setError('Токен недействителен или истек. Пожалуйста, войдите снова через Telegram.');
+        console.error('[AuthProvider] ⚠️ Token is invalid, expired, or pharmacist not found');
+        // Decode token to get more info (for debugging)
+        try {
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          console.log('[AuthProvider] Token payload:', payload);
+          if (payload.sub) {
+            console.log(`[AuthProvider] Looking for pharmacist with UUID: ${payload.sub}`);
+          }
+        } catch (decodeErr) {
+          console.error('[AuthProvider] Failed to decode token:', decodeErr);
+        }
+        setError('Токен недействителен или фармацевт не найден. Пожалуйста, войдите снова через Telegram.');
       } else if (err.response?.status === 403) {
         console.error('[AuthProvider] ⚠️ Access forbidden - no token sent');
         setError('Ошибка доступа. Токен не был отправлен.');
+      } else if (err.response?.status === 0) {
+        console.error('[AuthProvider] ⚠️ Network error - check API connectivity');
+        setError('Ошибка сети. Проверьте подключение к интернету.');
       } else {
-        setError(err.response?.data?.detail || 'Ошибка аутентификации.');
+        setError(err.response?.data?.detail || 'Ошибка аутентификации. Попробуйте позже.');
       }
       
       throw err;
@@ -200,5 +231,4 @@ function AuthProvider({ children }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-// Export both the component and the context
-export { AuthProvider, AuthContext };
+export { AuthContext, AuthProvider };
