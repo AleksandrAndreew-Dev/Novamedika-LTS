@@ -248,7 +248,7 @@ from routers import (
     pharmacist_dashboard,
 )
 
-app.include_router(pharmacist_auth.router, tags=["auth"])
+app.include_router(pharmacist_auth.router, prefix="/api/pharmacist", tags=["auth"])
 app.include_router(qa.router, tags=["qa"])
 app.include_router(telegram_bot.router, tags=["bot"])
 app.include_router(search.router, tags=["search"])
@@ -256,7 +256,7 @@ app.include_router(upload.router, tags=["upload"])
 app.include_router(pharmacies_info.router, tags=["pharmacies"])
 app.include_router(booking_orders.router, tags=["booking"])
 app.include_router(pharmacy_api.router, tags=["pharmacy-api"])
-app.include_router(pharmacist_dashboard.router, tags=["pharmacist-dashboard"])
+app.include_router(pharmacist_dashboard.router, prefix="/api/pharmacist", tags=["pharmacist-dashboard"])
 
 
 @app.get("/")
