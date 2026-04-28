@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { questionsService } from '../../services/questionsService';
 
 export default function QuestionsList() {
@@ -6,11 +6,7 @@ export default function QuestionsList() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all'); // all, new, in_progress, completed
 
-  useEffect(() => {
-    loadQuestions();
-  }, [filter]);
-
-  const loadQuestions = async () => {
+  const loadQuestions = useCallback(async () => {
     try {
       setLoading(true);
       const data = await questionsService.getQuestions(filter);
@@ -20,7 +16,11 @@ export default function QuestionsList() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter]);
+
+  useEffect(() => {
+    loadQuestions();
+  }, [loadQuestions]);
 
   const getStatusBadge = (status) => {
     const badges = {
