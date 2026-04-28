@@ -13,20 +13,20 @@ RUN npm ci && \
 # Copy source code
 COPY . .
 
-# Build the application with production env vars
+# Build the pharmacist application with production env vars
 ARG VITE_API_URL=https://api.spravka.novamedika.com
-ARG VITE_WS_URL=wss://api.spravka.novamedika.com/ws/pharmacist
+ARG VITE_WS_URL=wss://api.spravka.novamedika.com/api/pharmacist/ws/pharmacist
 
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_WS_URL=$VITE_WS_URL
 
-RUN npm run build
+RUN npm run build:pharmacist
 
 # Production stage
 FROM nginx:alpine AS prod
 
-# Copy built assets from builder
-COPY --from=builder /app/dist /usr/share/nginx/html
+# Copy built assets from builder (pharmacist-specific dist)
+COPY --from=builder /app/dist-pharmacist /usr/share/nginx/html
 
 # Copy custom nginx configuration
 COPY nginx-pharmacist.conf /etc/nginx/conf.d/default.conf
