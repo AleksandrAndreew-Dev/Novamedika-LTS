@@ -44,7 +44,8 @@ services:
       - "traefik.http.middlewares.security-headers.headers.stsseconds=31536000"
       - "traefik.http.middlewares.security-headers.headers.stsincludesubdomains=true"
       - "traefik.http.middlewares.security-headers.headers.stspreload=true"
-      - "traefik.http.middlewares.security-headers.headers.contentsecuritypolicy=default-src 'self'; script-src 'self' https://telegram.org; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://api.${DOMAIN}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+      # Разрешаем загрузку ресурсов для Swagger UI (/docs)
+      - "traefik.http.middlewares.security-headers.headers.contentsecuritypolicy=default-src 'self'; script-src 'self' https://telegram.org https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: blob:; font-src 'self' https://cdn.jsdelivr.net; connect-src 'self' https://api.${DOMAIN}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
       - "traefik.http.middlewares.security-headers.headers.permissionspolicy=geolocation=(), microphone=(), camera=()"
     deploy:
       resources:
