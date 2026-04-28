@@ -262,11 +262,17 @@ async def root():
     return {"status": "ok", "message": "Novamedika Q&A Bot API"}
 
 
-@app.api_route("/health", methods=["GET", "HEAD"])
-async def health_check(request: Request):
-    if request.method == "HEAD":
-        return JSONResponse(content={"status": "healthy"})
+@app.get("/health", response_model=dict)
+async def health_check():
+    """Health check endpoint for load balancers and monitoring."""
     return {"status": "healthy"}
+
+
+@app.head("/health")
+async def health_check_head():
+    """HEAD request for health check (lightweight)."""
+    from fastapi.responses import Response
+    return Response(status_code=200)
 
 
 if __name__ == "__main__":
