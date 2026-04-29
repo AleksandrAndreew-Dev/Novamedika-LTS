@@ -1,7 +1,9 @@
 import React from 'react';
+import { Routes, Route } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
 import DashboardStats from './components/dashboard/DashboardStats';
 import QuestionsList from './components/consultations/QuestionsList';
+import ConsultationChat from './components/consultations/ConsultationChat';
 import MainLayout from './components/layout/MainLayout';
 
 export default function PharmacistContent() {
@@ -71,36 +73,41 @@ export default function PharmacistContent() {
 
   return (
     <MainLayout>
-      {/* Main Content - без дублирования Sidebar */}
+      {/* Main Content with Routing */}
       <div className="flex-1 overflow-auto">
-        <div className="p-6">
-          <DashboardStats />
-          <QuestionsList />
-          <div className="bg-white rounded-lg shadow p-6 mt-6">
-            <h2 className="text-2xl font-bold mb-4">Профиль фармацевта</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Имя</label>
-                <p className="mt-1 text-lg">{user?.user?.first_name || user?.name || 'Не указано'}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Telegram ID</label>
-                <p className="mt-1 text-lg">{user?.user?.telegram_id || user?.telegram_id || 'Не указано'}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Статус</label>
-                <p className="mt-1 text-lg">
-                  {user?.is_active ? 'Активен' : 'Не активен'}
-                  {user?.is_online && ' • Онлайн'}
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Аптека</label>
-                <p className="mt-1 text-lg">{user?.pharmacy_info?.name || 'Не указана'}</p>
+        <Routes>
+          <Route path="/" element={
+            <div className="p-6">
+              <DashboardStats />
+              <QuestionsList />
+              <div className="bg-white rounded-lg shadow p-6 mt-6">
+                <h2 className="text-2xl font-bold mb-4">Профиль фармацевта</h2>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Имя</label>
+                    <p className="mt-1 text-lg">{user?.user?.first_name || user?.name || 'Не указано'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Telegram ID</label>
+                    <p className="mt-1 text-lg">{user?.user?.telegram_id || user?.telegram_id || 'Не указано'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Статус</label>
+                    <p className="mt-1 text-lg">
+                      {user?.is_active ? 'Активен' : 'Не активен'}
+                      {user?.is_online && ' • Онлайн'}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Аптека</label>
+                    <p className="mt-1 text-lg">{user?.pharmacy_info?.name || 'Не указана'}</p>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
+          } />
+          <Route path="/questions/:questionId" element={<ConsultationChat />} />
+        </Routes>
       </div>
     </MainLayout>
   );

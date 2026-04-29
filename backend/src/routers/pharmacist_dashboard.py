@@ -1,6 +1,6 @@
 """Router for Pharmacist WebApp Dashboard - Consultations Management"""
 
-from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 from sqlalchemy.orm import selectinload
@@ -334,7 +334,7 @@ async def get_consultation_stats(
         select(func.count()).where(
             and_(
                 Question.status == "completed",
-                Question.updated_at >= today_start
+                Question.created_at >= today_start
             )
         )
     )
@@ -343,7 +343,7 @@ async def get_consultation_stats(
     # Average response time (simplified - last 7 days)
     week_ago = datetime.utcnow() - timedelta(days=7)
     avg_time_result = await db.execute(
-        select(func.avg(Question.updated_at - Question.created_at)).where(
+        select(func.avg(Question.answered_at - Question.created_at)).where(
             and_(
                 Question.status.in_(["answered", "completed"]),
                 Question.created_at >= week_ago
@@ -359,6 +359,122 @@ async def get_consultation_stats(
         completed_today=completed_today,
         avg_response_time_minutes=round(avg_response_time, 2),
     )
+
+
+# Update online status endpoint
+@router.put("/online")
+async def update_online_status(
+    online: bool = Body(..., embed=True),
+    pharmacist: Pharmacist = Depends(get_current_pharmacist),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update pharmacist online status"""
+    pharmacist.is_online = online
+    pharmacist.last_seen = datetime.utcnow()
+    await db.commit()
+    return {"status": "ok", "is_online": online}
+
+
+# Dialog endpoints for chat functionality
+class SendMessageRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=2000)
+
+
+class DialogMessageResponse(BaseModel):
+    uuid: str
+    question_id: str
+    sender: str  # "pharmacist" or "user"
+    text: str
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+@router.get("/questions/{question_id}/dialog", response_model=List[DialogMessageResponse])
+async def get_dialog(
+    question_id: str,
+    pharmacist: Pharmacist = Depends(get_current_pharmacist),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get dialog messages for a specific question"""
+    # Verify pharmacist is assigned to this question
+    question_result = await db.execute(
+        select(Question).where(Question.uuid == question_id)
+    )
+    question = question_result.scalar_one_or_none()
+    
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+    
+    # Check if pharmacist is assigned or can access this question
+    if question.assigned_to != pharmacist.uuid and question.taken_by != pharmacist.uuid:
+        raise HTTPException(status_code=403, detail="Not assigned to this question")
+    
+    # Get dialog messages
+    messages_result = await db.execute(
+        select(DialogMessage)
+        .where(DialogMessage.question_id == question_id)
+        .order_by(DialogMessage.created_at)
+    )
+    messages = messages_result.scalars().all()
+    
+    return messages
+
+
+@router.post("/questions/{question_id}/dialog", response_model=DialogMessageResponse)
+async def send_message(
+    question_id: str,
+    data: SendMessageRequest,
+    pharmacist: Pharmacist = Depends(get_current_pharmacist),
+    db: AsyncSession = Depends(get_db)
+):
+    """Send message in consultation dialog (from Web App)"""
+    from main import app
+    
+    # Verify pharmacist is assigned to this question
+    question_result = await db.execute(
+        select(Question).where(Question.uuid == question_id)
+    )
+    question = question_result.scalar_one_or_none()
+    
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+    
+    # Check assignment
+    if question.assigned_to != pharmacist.uuid and question.taken_by != pharmacist.uuid:
+        raise HTTPException(status_code=403, detail="Not assigned to this question")
+    
+    # Save message to database
+    msg = DialogMessage(
+        question_id=question_id,
+        sender="pharmacist",
+        text=data.text,
+        created_at=datetime.utcnow()
+    )
+    db.add(msg)
+    await db.commit()
+    await db.refresh(msg)
+    
+    # Send message to user via Telegram bot
+    try:
+        bot = app.state.bot
+        user_result = await db.execute(
+            select(User).where(User.uuid == question.user_id)
+        )
+        user = user_result.scalar_one_or_none()
+        
+        if user and user.telegram_id:
+            await bot.send_message(
+                chat_id=user.telegram_id,
+                text=f"💊 *Ответ фармацевта:*\n{data.text}",
+                parse_mode="Markdown"
+            )
+    except Exception as e:
+        logger.error(f"Failed to send message to user via bot: {e}")
+        # Don't fail the request if bot message fails
+    
+    return msg
 
 
 # WebSocket endpoint for real-time updates

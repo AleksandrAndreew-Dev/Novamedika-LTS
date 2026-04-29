@@ -220,6 +220,55 @@ class QuestionsService {
       return false;
     }
   }
+
+  /**
+   * Get dialog messages for a specific question
+   * @param {string} questionId - Question UUID
+   * @returns {Promise<Array>} List of dialog messages
+   */
+  async getDialog(questionId) {
+    try {
+      const response = await apiClient.get(`/api/pharmacist/questions/${questionId}/dialog`);
+      return response.data;
+    } catch (error) {
+      logger.error(`Failed to fetch dialog for question ${questionId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send message in consultation dialog
+   * @param {string} questionId - Question UUID
+   * @param {string} text - Message text
+   * @returns {Promise<Object>} Created message
+   */
+  async sendMessage(questionId, text) {
+    try {
+      const response = await apiClient.post(
+        `/api/pharmacist/questions/${questionId}/dialog`,
+        { text }
+      );
+      return response.data;
+    } catch (error) {
+      logger.error(`Failed to send message to question ${questionId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update pharmacist online status
+   * @param {boolean} isOnline - Online status
+   * @returns {Promise<Object>} Updated status
+   */
+  async updateOnlineStatus(isOnline) {
+    try {
+      const response = await apiClient.put('/api/pharmacist/online', { online: isOnline });
+      return response.data;
+    } catch (error) {
+      logger.error('Failed to update online status:', error);
+      throw error;
+    }
+  }
 }
 
 export const questionsService = new QuestionsService();
