@@ -6,12 +6,12 @@ import Sidebar from './components/layout/Sidebar';
 import MainLayout from './components/layout/MainLayout';
 
 export default function PharmacistContent() {
-  const { user, loading } = useAuth();
+  const { isAuthenticated, user, loading } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
 
   // If not authenticated and not loading, this shouldn't be reached due to ProtectedRoute
   // but we add a fallback just in case
-  if (!loading && !useAuth().isAuthenticated) {
+  if (!loading && !isAuthenticated) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
