@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -267,10 +268,11 @@ async def root():
     return {"status": "ok", "message": "Novamedika Q&A Bot API"}
 
 
-@app.get("/health", response_model=dict)
+# Add health check endpoint
+@app.get("/health")
 async def health_check():
-    """Health check endpoint for load balancers and monitoring."""
-    return {"status": "healthy"}
+    """Health check endpoint for Docker"""
+    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
 
 
 @app.head("/health")

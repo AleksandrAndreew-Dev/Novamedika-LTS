@@ -26,9 +26,27 @@ api.interceptors.request.use(
       config.headers['Authorization'] = `Bearer ${pharmacistToken}`;
     }
     
+    // Log outgoing requests for debugging
+    logger.debug(`API Request: ${config.method?.toUpperCase()} ${config.url}`, {
+      baseURL: config.baseURL,
+      headers: Object.keys(config.headers || {}).reduce((acc, key) => {
+        // Don't log sensitive headers
+        if (key.toLowerCase() === 'authorization') {
+          acc[key] = '[REDACTED]';
+        } else {
+          acc[key] = config.headers[key];
+        }
+        return acc;
+      }, {}),
+      data: config.data,
+    });
+    
     return config;
   },
-  (error) => Promise.reject(error),
+  (error) => {
+    logger.error('API Request Error:', error);
+    return Promise.reject(error);
+  },
 );
 
 // Response interceptor — форматируем ошибки
@@ -59,11 +77,26 @@ function getErrorMessage(error) {
 }
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Log successful responses for debugging
+    logger.debug(`API Response: ${response.config.method?.toUpperCase()} ${response.config.url} - ${response.status}`, {
+      status: response.status,
+      data: response.data,
+    });
+    return response;
+  },
   (error) => {
     const message = getErrorMessage(error);
     logger.error(
       `API Error [${error.response?.status || "network"}]: ${message}`,
+      {
+        url: error.config?.url,
+        method: error.config?.method,
+        baseURL: error.config?.baseURL,
+        status: error.response?.status,
+        responseData: error.response?.data,
+        errorMessage: error.message,
+      }
     );
 
     // Добавляем human-readable сообщение к объекту ошибки

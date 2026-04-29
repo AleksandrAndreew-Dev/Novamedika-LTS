@@ -22,7 +22,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 security = HTTPBearer()
 
+# Validate SECRET_KEY at module level
 SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY environment variable is required")
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
@@ -71,7 +75,8 @@ async def get_current_pharmacist(
     if pharmacist is None:
         raise HTTPException(status_code=401, detail="Pharmacist not found")
 
-    if not pharmacist.is_active:
+    # Check if pharmacist is active (handle SQLAlchemy column properly)
+    if not getattr(pharmacist, 'is_active', False):
         raise HTTPException(status_code=401, detail="Pharmacist account is deactivated")
 
     return pharmacist
@@ -89,85 +94,69 @@ async def store_refresh_token(token: str, user_id: str, db: AsyncSession):
         )
     )
     
-    try:
-        # Создаем новый токен
-        expires_at = get_utc_now_naive() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-        refresh_token = RefreshToken(
-            id=str(uuid.uuid4()),
-            user_id=user_id,
-            token=token,
-            expires_at=expires_at,
-            revoked=False,
-        )
-        db.add(refresh_token)
-        await db.commit()
-        return refresh_token
-    except IntegrityError as e:
-        # Если возникла ошибка уникальности (конкурентный запрос),
-        # откатываем и проверяем, существует ли уже токен
-        await db.rollback()
-        
-        # Проверяем, существует ли уже этот токен
-        result = await db.execute(
-            select(RefreshToken).where(RefreshToken.token == token)
-        )
-        existing_token = result.scalar_one_or_none()
-        
-        if existing_token:
-            # Токен уже существует (создан другим запросом), возвращаем его
-            logger.info(f"Refresh token already exists for user {user_id}, using existing token")
-            return existing_token
-        else:
-            # Другая ошибка уникальности, пробуем еще раз
-            logger.warning(f"IntegrityError during token creation, retrying: {e}")
-            
-            # Повторяем попытку
+    # Добавляем уникальный идентификатор к токену для предотвращения дублирования
+    # Это особенно важно при параллельных запросах
+    jti = str(uuid.uuid4())
+    unique_token = f"{token}_{jti}"
+    
+    max_attempts = 3
+    for attempt in range(max_attempts):
+        try:
+            # Создаем новый токен
             expires_at = get_utc_now_naive() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
             refresh_token = RefreshToken(
                 id=str(uuid.uuid4()),
                 user_id=user_id,
-                token=token,
+                token=unique_token,  # Используем уникальный токен
                 expires_at=expires_at,
                 revoked=False,
             )
             db.add(refresh_token)
             await db.commit()
+            await db.refresh(refresh_token)
             return refresh_token
+            
+        except IntegrityError as e:
+            await db.rollback()
+            logger.warning(f"IntegrityError on attempt {attempt + 1} for user {user_id}: {e}")
+            if attempt == max_attempts - 1:
+                logger.error(f"Failed to create unique refresh token after {max_attempts} attempts for user {user_id}")
+                raise HTTPException(status_code=500, detail="Unable to generate unique refresh token")
+            # Генерируем новый уникальный токен для следующей попытки
+            jti = str(uuid.uuid4())
+            unique_token = f"{token}_{jti}"
 
 
 async def revoke_refresh_token(token: str, db: AsyncSession):
-    """Отозвать refresh token (logout)"""
-    result = await db.execute(select(RefreshToken).where(RefreshToken.token == token))
+    """Отозвать refresh token по токену"""
+    result = await db.execute(
+        select(RefreshToken).where(RefreshToken.token == token)
+    )
     rt = result.scalar_one_or_none()
     if rt:
         rt.revoked = True
         await db.commit()
 
 
-async def validate_refresh_token(token: str, db: AsyncSession) -> dict:
-    """Проверить refresh token: decode + проверить в БД"""
+async def validate_refresh_token(token: str, db: AsyncSession):
+    """Проверить валидность refresh token"""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        if payload.get("type") != "refresh":
-            raise HTTPException(status_code=401, detail="Invalid token type")
         user_id: str = payload.get("sub")
         if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
-    except ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token has expired")
-    except InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+            return None
+    except (ExpiredSignatureError, InvalidTokenError):
+        return None
 
-    # Проверяем в БД что токен не отозван
+    # Проверяем наличие в БД и статус отзыва
     result = await db.execute(
         select(RefreshToken).where(
             RefreshToken.token == token,
-            RefreshToken.revoked == False,
-            RefreshToken.expires_at > get_utc_now_naive(),
+            RefreshToken.revoked == False
         )
     )
     rt = result.scalar_one_or_none()
     if not rt:
-        raise HTTPException(status_code=401, detail="Token revoked or expired")
+        return None
 
-    return {"user_id": user_id}
+    return user_id

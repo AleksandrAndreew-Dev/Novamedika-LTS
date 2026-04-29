@@ -1,6 +1,9 @@
 // Pharmacist authentication service
 import { api } from '../../api/client';
 
+// Login state management to prevent race conditions
+let loginPromise = null;
+
 export const authService = {
   /**
    * Set session token directly 
@@ -18,6 +21,12 @@ export const authService = {
    * @returns {Promise<{session_token: string}>}
    */
   async loginWithTelegram() {
+    // Prevent concurrent login attempts by returning existing promise if login is in progress
+    if (loginPromise) {
+      console.log('[authService] Login already in progress, returning existing promise');
+      return loginPromise;
+    }
+    
     // Check if we're in Telegram environment
     if (!window.Telegram?.WebApp) {
       throw new Error('Not in Telegram WebApp environment. Please open from Telegram bot.');
@@ -30,15 +39,24 @@ export const authService = {
       throw new Error('Telegram initData not available. Please reload the WebApp.');
     }
     
-    const response = await api.post('/api/pharmacist/login/telegram/', {
+    // Create and store the login promise
+    loginPromise = api.post('/api/pharmacist/login/telegram/', {
       initData: initData
+    }).then(response => {
+      if (response.data.session_token) {
+        this.setSessionToken(response.data.session_token);
+      }
+      
+      // Clear the login promise after successful completion
+      loginPromise = null;
+      return response.data;
+    }).catch(error => {
+      // Clear the login promise on error
+      loginPromise = null;
+      throw error;
     });
     
-    if (response.data.session_token) {
-      this.setSessionToken(response.data.session_token);
-    }
-    
-    return response.data;
+    return loginPromise;
   },
 
   /**
@@ -54,6 +72,8 @@ export const authService = {
     } finally {
       // Clear local storage regardless of API call success
       localStorage.removeItem('pharmacist_session_token');
+      // Clear any pending login promise
+      loginPromise = null;
     }
   },
 

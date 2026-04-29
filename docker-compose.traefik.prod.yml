@@ -78,7 +78,12 @@ services:
       # Ключ шифрования для персональных данных (ОАЦ compliance)
       # Генерируйте безопасный ключ: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
-
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.backend.rule=Host(`api.${DOMAIN}`)"
@@ -95,12 +100,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8000/health"]
-      interval: 15s
-      timeout: 10s
-      retries: 3
-      start_period: 120s
     deploy:
       resources:
         limits:
@@ -122,6 +121,8 @@ services:
     environment:
       - VITE_API_URL=${VITE_API_URL}
       - VITE_WS_URL=${VITE_WS_URL_PHARMACIST}
+    depends_on:
+      - backend
     labels:
       - "traefik.enable=true"
       # Основной сайт - поиск лекарств (все пути кроме /pharmacist)

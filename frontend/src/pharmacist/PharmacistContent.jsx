@@ -59,19 +59,21 @@ export default function PharmacistContent() {
   const [tokenProcessed, setTokenProcessed] = useState(false);
   const [tokenProcessingError, setTokenProcessingError] = useState(null);
   const authInProgressRef = useRef(false); // Prevent concurrent auth attempts
+  const [isLoggingIn, setIsLoggingIn] = useState(false); // New state to track login process
 
   // Проверяем наличие токена в URL при загрузке (DEPRECATED) или используем Telegram SDK
   useEffect(() => {
     const processAuth = async () => {
       // Prevent concurrent authentication attempts
-      if (tokenProcessed || isAuthenticated || authInProgressRef.current) {
+      if (tokenProcessed || isAuthenticated || authInProgressRef.current || isLoggingIn) {
         console.log('[PharmacistContent] Skipping auth processing - already processed, authenticated, or in progress');
-        console.log('[PharmacistContent] tokenProcessed:', tokenProcessed, 'isAuthenticated:', isAuthenticated, 'authInProgress:', authInProgressRef.current);
+        console.log('[PharmacistContent] tokenProcessed:', tokenProcessed, 'isAuthenticated:', isAuthenticated, 'authInProgress:', authInProgressRef.current, 'isLoggingIn:', isLoggingIn);
         return;
       }
 
       // Mark authentication as in progress
       authInProgressRef.current = true;
+      setIsLoggingIn(true);
 
       console.log('[PharmacistContent] Starting authentication process...');
       console.log('[PharmacistContent] isAuthenticated:', isAuthenticated);
@@ -129,13 +131,17 @@ export default function PharmacistContent() {
         setTokenProcessingError(errorMessage);
         setTokenProcessed(true);
       } finally {
-        // Reset the flag after authentication completes (success or failure)
+        // Reset the flags after authentication completes (success or failure)
         authInProgressRef.current = false;
+        setIsLoggingIn(false);
       }
     };
 
-    processAuth();
-  }, [isAuthenticated, loginWithToken, loginWithTelegram, tokenProcessed]);
+    // Only process auth if we're not already logging in
+    if (!isLoggingIn) {
+      processAuth();
+    }
+  }, [isAuthenticated, loginWithToken, loginWithTelegram, tokenProcessed, isLoggingIn]);
 
   // Determine the actual error to display
   const displayError = tokenProcessingError || error;
@@ -282,11 +288,14 @@ export default function PharmacistContent() {
     );
   }
 
-  // Show basic loading state
-  if (loading || !tokenProcessed) {
+  // Show loading state during authentication
+  if (loading || isLoggingIn) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Аутентификация...</p>
+        </div>
       </div>
     );
   }
