@@ -292,11 +292,11 @@ export default function PharmacistContent() {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Имя</label>
-                    <p className="mt-1 text-lg">{user?.name || 'Не указано'}</p>
+                    <p className="mt-1 text-lg">{user?.user?.first_name || user?.name || 'Не указано'}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Telegram ID</label>
-                    <p className="mt-1 text-lg">{user?.telegram_id || 'Не указано'}</p>
+                    <p className="mt-1 text-lg">{user?.user?.telegram_id || user?.telegram_id || 'Не указано'}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Статус</label>

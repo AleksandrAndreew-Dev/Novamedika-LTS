@@ -22,7 +22,8 @@ from auth.auth import (
     revoke_refresh_token,
     validate_refresh_token,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from typing import Optional
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -31,6 +32,14 @@ from utils.time_utils import get_utc_now_naive
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+class PharmacistLoginRequest(BaseModel):
+    """Модель запроса для логина фармацевта"""
+    telegram_user_id: int = Field(..., description="Telegram ID пользователя")
+    first_name: Optional[str] = Field(None, description="Имя из Telegram")
+    last_name: Optional[str] = Field(None, description="Фамилия из Telegram")
+    telegram_username: Optional[str] = Field(None, description="Username из Telegram")
 
 
 # Новая функция для получения фармацевта по Telegram ID
@@ -118,7 +127,7 @@ async def register_pharmacist(
 @limiter.limit("10/minute")
 async def pharmacist_login(
     request: Request,
-    telegram_user_id: int,
+    login_data: PharmacistLoginRequest,
     db: AsyncSession = Depends(get_db),
 ):
     """Логин фармацевта по Telegram ID (поддерживает несколько аптек)"""
@@ -127,7 +136,7 @@ async def pharmacist_login(
             select(Pharmacist)
             .join(User, Pharmacist.user_id == User.uuid)
             .options(selectinload(Pharmacist.user))
-            .where(User.telegram_id == telegram_user_id)
+            .where(User.telegram_id == login_data.telegram_user_id)
             .where(Pharmacist.is_active == True)
         )
         pharmacists = result.scalars().all()
@@ -137,6 +146,28 @@ async def pharmacist_login(
 
         # Берем первого активного фармацевта
         pharmacist = pharmacists[0]
+        
+        # Обновляем данные пользователя из Telegram, если они предоставлены
+        user = pharmacist.user
+        updated_fields = []
+        
+        if login_data.first_name and user.first_name != login_data.first_name:
+            user.first_name = login_data.first_name
+            updated_fields.append("first_name")
+            
+        if login_data.last_name and user.last_name != login_data.last_name:
+            user.last_name = login_data.last_name
+            updated_fields.append("last_name")
+            
+        if login_data.telegram_username and user.telegram_username != login_data.telegram_username:
+            user.telegram_username = login_data.telegram_username
+            updated_fields.append("telegram_username")
+        
+        # Сохраняем изменения, если были обновления
+        if updated_fields:
+            logger.info(f"Updated user fields for telegram_id {login_data.telegram_user_id}: {updated_fields}")
+            await db.commit()
+            await db.refresh(user)
 
         # Обновляем статус онлайн и время последней активности
         pharmacist.is_online = True
@@ -146,7 +177,7 @@ async def pharmacist_login(
         # Если нужно, можно вернуть список всех аптек для выбора
         if len(pharmacists) > 1:
             logger.info(
-                f"User {telegram_user_id} has {len(pharmacists)} active pharmacist profiles"
+                f"User {login_data.telegram_user_id} has {len(pharmacists)} active pharmacist profiles"
             )
 
         # Создаём JWT токены

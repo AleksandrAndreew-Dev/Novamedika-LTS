@@ -138,11 +138,11 @@ export default function DashboardStats() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <p className="text-sm text-gray-600">Имя</p>
-            <p className="font-medium">{user?.name || 'Не указано'}</p>
+            <p className="font-medium">{user?.user?.first_name || user?.name || 'Не указано'}</p>
           </div>
           <div>
             <p className="text-sm text-gray-600">Telegram ID</p>
-            <p className="font-medium">{user?.telegram_id || 'Не указано'}</p>
+            <p className="font-medium">{user?.user?.telegram_id || user?.telegram_id || 'Не указано'}</p>
           </div>
           <div>
             <p className="text-sm text-gray-600">Статус</p>
@@ -153,9 +153,7 @@ export default function DashboardStats() {
           </div>
           <div>
             <p className="text-sm text-gray-600">Аптека</p>
-            <p className="font-medium">
-              {user?.pharmacy_info?.name || 'Не указана'}
-            </p>
+            <p className="font-medium">{user?.pharmacy_info?.name || 'Не указана'}</p>
           </div>
         </div>
       </div>

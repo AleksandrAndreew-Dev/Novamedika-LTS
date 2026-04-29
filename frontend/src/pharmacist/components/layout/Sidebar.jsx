@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function Sidebar() {
@@ -130,13 +130,13 @@ export default function Sidebar() {
               <div className="flex-shrink-0">
                 <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
                   <span className="text-blue-600 font-semibold">
-                    {pharmacist?.pharmacy_info?.first_name?.[0] || 'Ф'}
+                    {pharmacist?.user?.first_name?.[0] || pharmacist?.pharmacy_info?.name?.[0] || 'Ф'}
                   </span>
                 </div>
               </div>
               <div className="ml-3 flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">
-                  {pharmacist?.pharmacy_info?.first_name} {pharmacist?.pharmacy_info?.last_name}
+                  {pharmacist?.user?.first_name || pharmacist?.user?.telegram_username || 'Фармацевт'} {pharmacist?.user?.last_name || ''}
                 </p>
                 <p className="text-xs text-gray-500 truncate">
                   {pharmacist?.pharmacy_info?.chain} №{pharmacist?.pharmacy_info?.number}
