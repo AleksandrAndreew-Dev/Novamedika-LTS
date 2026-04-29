@@ -33,13 +33,13 @@ function App() {
 
   // Сохраняем режим в localStorage при первом определении
   useEffect(() => {
-    if (isPharmacistMode && !savedMode) {
+    if (isPharmacistMode) {
       localStorage.setItem('app_mode', 'pharmacist');
-    } else if (!isPharmacistMode && savedMode === 'pharmacist') {
+    } else {
       // Если пользователь перешел на основной сайт, очищаем режим
       localStorage.removeItem('app_mode');
     }
-  }, [isPharmacistMode, savedMode]);
+  }, [isPharmacistMode]);
 
   // Инициализация хука таймаута (30 минут)
   const { showWarning, secondsLeft, extendSession } = useSessionTimeout(30);

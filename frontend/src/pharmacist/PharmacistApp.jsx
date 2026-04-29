@@ -10,7 +10,7 @@ import { logger } from '../utils/logger';
 // Component to handle URL token authentication (Legacy) and Telegram validation
 function TokenAuthHandler() {
   const [searchParams] = useSearchParams();
-  const { loginWithTelegram, loginWithToken, isAuthenticated, pharmacist } = useAuth();
+  const { loginWithToken, isAuthenticated, pharmacist } = useAuth();
   const [authError, setAuthError] = useState(null);
   const loginInProgressRef = useRef(false);
 
