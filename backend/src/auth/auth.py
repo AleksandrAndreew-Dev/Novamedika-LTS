@@ -6,7 +6,7 @@ import jwt
 from jwt import InvalidTokenError, ExpiredSignatureError
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 from typing import Optional
 
@@ -75,7 +75,16 @@ async def get_current_pharmacist(
 
 
 async def store_refresh_token(token: str, user_id: str, db: AsyncSession):
-    """Сохранить refresh token в БД"""
+    """Сохранить refresh token в БД (удаляет старые активные токены пользователя)"""
+    # Удаляем все активные токены пользователя перед созданием нового
+    await db.execute(
+        delete(RefreshToken).where(
+            RefreshToken.user_id == user_id,
+            RefreshToken.revoked == False
+        )
+    )
+    
+    # Создаем новый токен
     expires_at = get_utc_now_naive() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     refresh_token = RefreshToken(
         id=str(uuid.uuid4()),

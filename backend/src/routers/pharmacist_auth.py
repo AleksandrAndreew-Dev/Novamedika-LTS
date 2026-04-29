@@ -191,7 +191,7 @@ async def pharmacist_login(
         access_token = create_access_token(data=token_data)
         refresh_token = create_refresh_token(data={"sub": str(pharmacist.user_id)})
 
-        # Сохраняем refresh token в БД
+        # Сохраняем refresh token в БД (функция теперь удаляет старые токены автоматически)
         await store_refresh_token(refresh_token, str(pharmacist.user_id), db)
 
         return {
@@ -319,7 +319,7 @@ async def telegram_webapp_login(
             "role": "pharmacist",
         })
         
-        # Сохраняем refresh token в БД
+        # Сохраняем refresh token в БД (функция теперь удаляет старые токены автоматически)
         await store_refresh_token(refresh_token, str(pharmacist.user_id), db)
         
         logger.info(f"✅ Telegram login successful for pharmacist user_id={pharmacist.user_id}, pharmacist_uuid={pharmacist.uuid}")
@@ -335,6 +335,12 @@ async def telegram_webapp_login(
         raise
     except Exception as e:
         logger.exception("Telegram WebApp login failed")
+        # Проверяем тип ошибки для более точного сообщения
+        if "duplicate key" in str(e).lower() or "unique" in str(e).lower():
+            raise HTTPException(
+                status_code=500,
+                detail="Database error during token creation. Please try again."
+            )
         raise HTTPException(
             status_code=500,
             detail="Login failed. Please try again later."
