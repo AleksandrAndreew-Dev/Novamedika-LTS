@@ -149,6 +149,12 @@ async def lifespan(app: FastAPI):
                                 "url": webhook_url,
                                 "drop_pending_updates": True,
                                 "max_connections": 40,
+                                # Ограничиваем типы обновлений для уменьшения нагрузки и устранения warning'ов
+                                "allowed_updates": [
+                                    "message",           # Текстовые сообщения
+                                    "callback_query",    # Inline кнопки
+                                    "my_chat_member",    # Изменения статуса чата (блокировка/разблокировка)
+                                ],
                             }
 
                             if secret_token:
@@ -156,6 +162,7 @@ async def lifespan(app: FastAPI):
 
                             await bot.set_webhook(**webhook_config)
                             logger.info(f"Webhook set successfully: {webhook_url}")
+                            logger.info(f"Allowed updates: {webhook_config['allowed_updates']}")
                         else:
                             logger.info(f"Webhook already set, skipping: {webhook_url}")
                     else:

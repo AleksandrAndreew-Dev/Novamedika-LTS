@@ -9,7 +9,7 @@ export default function QuestionsList() {
   // Enhanced debugging - log component mount
   useEffect(() => {
     console.log('[QuestionsList] Component mounted with filter:', filter);
-  }, []);
+  }, [filter]);
 
   const loadQuestions = useCallback(async () => {
     try {

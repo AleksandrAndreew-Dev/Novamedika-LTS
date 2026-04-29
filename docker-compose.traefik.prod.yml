@@ -86,11 +86,19 @@ services:
       start_period: 60s
     labels:
       - "traefik.enable=true"
+      # API routes - основной хост api.spravka.novamedika.com
       - "traefik.http.routers.backend.rule=Host(`api.${DOMAIN}`)"
       - "traefik.http.routers.backend.entrypoints=websecure"
       - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
       - "traefik.http.services.backend.loadbalancer.server.port=8000"
       - "traefik.http.routers.backend.middlewares=security-headers"
+      # Cities API - маршрут на основном хосте spravka.novamedika.com с высоким приоритетом
+      - "traefik.http.routers.backend-cities.rule=Host(`spravka.novamedika.com`) && PathPrefix(`/cities/`)"
+      - "traefik.http.routers.backend-cities.entrypoints=websecure"
+      - "traefik.http.routers.backend-cities.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.backend-cities.service=backend"
+      - "traefik.http.routers.backend-cities.priority=100"
+      - "traefik.http.routers.backend-cities.middlewares=security-headers"
     volumes:
       - ./uploaded_csv:/app/uploaded_csv:rw
     networks:
