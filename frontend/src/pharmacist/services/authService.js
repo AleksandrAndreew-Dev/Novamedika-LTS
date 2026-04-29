@@ -3,76 +3,57 @@ import { api } from '../../api/client';
 
 export const authService = {
   /**
-   * Set access token directly (for URL-based authentication)
-   * @param {string} accessToken - JWT access token
+   * Set session token directly 
+   * @param {string} sessionToken - Session token
    */
-  setAccessToken(accessToken) {
-    localStorage.setItem('pharmacist_access_token', accessToken);
+  setSessionToken(sessionToken) {
+    localStorage.setItem('pharmacist_session_token', sessionToken);
     // NOTE: Don't set api.defaults.headers here - the interceptor in client.js
     // will automatically add the Authorization header from localStorage for each request.
     // This avoids conflicts and ensures consistency.
   },
 
   /**
-   * Login pharmacist
-   * @param {Object} credentials - Login credentials
-   * @param {number} credentials.telegram_id - Telegram ID
-   * @returns {Promise<{access_token: string, refresh_token: string}>}
+   * Login pharmacist via Telegram WebApp
+   * @returns {Promise<{session_token: string}>}
    */
-  async login(credentials) {
-    const response = await api.post('/api/pharmacist/login/', credentials);
+  async loginWithTelegram() {
+    // Check if we're in Telegram environment
+    if (!window.Telegram?.WebApp) {
+      throw new Error('Not in Telegram WebApp environment. Please open from Telegram bot.');
+    }
     
-    if (response.data.access_token) {
-      this.setAccessToken(response.data.access_token);
-      localStorage.setItem('pharmacist_refresh_token', response.data.refresh_token);
+    // Get initData from Telegram SDK
+    const initData = window.Telegram.WebApp.initData;
+    
+    if (!initData) {
+      throw new Error('Telegram initData not available. Please reload the WebApp.');
+    }
+    
+    const response = await api.post('/api/pharmacist/login/telegram/', {
+      initData: initData
+    });
+    
+    if (response.data.session_token) {
+      this.setSessionToken(response.data.session_token);
     }
     
     return response.data;
   },
 
   /**
-   * Refresh access token
-   * @param {string} refreshToken - Current refresh token
-   * @returns {Promise<{access_token: string}>}
-   */
-  async refresh(refreshToken) {
-    try {
-      const response = await api.post('/api/pharmacist/refresh/', {
-        refresh_token: refreshToken,
-      });
-      
-      if (response.data.access_token) {
-        this.setAccessToken(response.data.access_token);
-      }
-      
-      return response.data;
-    } catch (error) {
-      // If refresh fails, clear tokens and redirect to login
-      this.logout();
-      throw error;
-    }
-  },
-
-  /**
    * Logout pharmacist
-   * @param {string} refreshToken - Refresh token to revoke
    * @returns {Promise<void>}
    */
-  async logout(refreshToken) {
+  async logout() {
     try {
-      if (refreshToken) {
-        await api.post('/api/pharmacist/logout/', {
-          refresh_token: refreshToken,
-        });
-      }
+      // Call backend logout endpoint
+      await api.post('/api/pharmacist/logout/');
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
       // Clear local storage regardless of API call success
-      localStorage.removeItem('pharmacist_access_token');
-      localStorage.removeItem('pharmacist_refresh_token');
-      // NOTE: Don't delete api.defaults.headers here - the interceptor will
-      // automatically stop adding Authorization header when localStorage is empty.
+      localStorage.removeItem('pharmacist_session_token');
     }
   },
 
@@ -110,22 +91,14 @@ export const authService = {
    * @returns {boolean}
    */
   isAuthenticated() {
-    return !!localStorage.getItem('pharmacist_access_token');
+    return !!localStorage.getItem('pharmacist_session_token');
   },
 
   /**
-   * Get current access token
+   * Get current session token
    * @returns {string|null}
    */
-  getAccessToken() {
-    return localStorage.getItem('pharmacist_access_token');
-  },
-
-  /**
-   * Get current refresh token
-   * @returns {string|null}
-   */
-  getRefreshToken() {
-    return localStorage.getItem('pharmacist_refresh_token');
+  getSessionToken() {
+    return localStorage.getItem('pharmacist_session_token');
   },
 };

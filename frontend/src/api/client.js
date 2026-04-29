@@ -20,8 +20,8 @@ api.interceptors.request.use(
       config.headers["X-API-KEY"] = apiKey;
     }
     
-    // Добавляем токен авторизации для фармацевта если есть в localStorage
-    const pharmacistToken = localStorage.getItem('pharmacist_access_token');
+    // Добавляем session token для фармацевта если есть в localStorage
+    const pharmacistToken = localStorage.getItem('pharmacist_session_token');
     if (pharmacistToken && !config.headers['Authorization']) {
       config.headers['Authorization'] = `Bearer ${pharmacistToken}`;
     }

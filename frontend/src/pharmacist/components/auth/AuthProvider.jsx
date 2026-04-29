@@ -21,14 +21,14 @@ function AuthProvider({ children }) {
   const checkAuth = async () => {
     try {
       if (authService.isAuthenticated()) {
-        console.log('[AuthProvider] Found token in localStorage, verifying...');
-        // Try to get profile to verify token is valid
+        console.log('[AuthProvider] Found session token in localStorage, verifying...');
+        // Try to get profile to verify session is valid
         const profile = await authService.getProfile();
         setPharmacist(profile);
         setIsAuthenticated(true);
-        console.log('[AuthProvider] Token is valid, user authenticated:', profile.user?.first_name);
+        console.log('[AuthProvider] Session is valid, user authenticated:', profile.user?.first_name);
       } else {
-        console.log('[AuthProvider] No token found in localStorage');
+        console.log('[AuthProvider] No session token found in localStorage');
         setIsAuthenticated(false);
         setPharmacist(null);
       }
@@ -36,40 +36,22 @@ function AuthProvider({ children }) {
       console.error('[AuthProvider] Auth check failed:', err);
       console.error('[AuthProvider] Error details:', err.response?.data || err.message);
       
-      // Token might be expired, try to refresh
-      const refreshToken = authService.getRefreshToken();
-      if (refreshToken) {
-        console.log('[AuthProvider] Attempting to refresh token...');
-        try {
-          await authService.refresh(refreshToken);
-          const profile = await authService.getProfile();
-          setPharmacist(profile);
-          setIsAuthenticated(true);
-          console.log('[AuthProvider] Token refresh successful');
-        } catch (refreshErr) {
-          console.error('[AuthProvider] Token refresh failed:', refreshErr);
-          console.error('[AuthProvider] Refresh error details:', refreshErr.response?.data || refreshErr.message);
-          setIsAuthenticated(false);
-          setPharmacist(null);
-          
-          // Set specific error message for user
-          if (refreshErr.response?.status === 401) {
-            setError('Сессия истекла. Пожалуйста, войдите снова через Telegram.');
-          } else {
-            setError(refreshErr.userMessage || 'Ошибка обновления сессии. Попробуйте войти снова.');
-          }
-        }
+      console.log('[AuthProvider] Session invalid or expired, user not authenticated');
+      setIsAuthenticated(false);
+      setPharmacist(null);
+      
+      // Set specific error message for user
+      if (err.response?.status === 401) {
+        setError('Сессия истекла. Пожалуйста, войдите снова через Telegram.');
       } else {
-        console.log('[AuthProvider] No refresh token available, user not authenticated');
-        setIsAuthenticated(false);
-        setPharmacist(null);
+        setError(err.userMessage || 'Ошибка сессии. Попробуйте войти снова.');
       }
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Login with Telegram WebApp initData (NEW - proper method)
+  // Login with Telegram WebApp initData (NEW - simplified method)
   const loginWithTelegram = async () => {
     // Prevent concurrent login attempts
     if (loginInProgressRef.current) {
@@ -84,55 +66,11 @@ function AuthProvider({ children }) {
       
       console.log('[AuthProvider] 🔄 Starting Telegram WebApp login...');
       
-      // Check if we're in Telegram environment
-      if (!window.Telegram?.WebApp) {
-        throw new Error('Not in Telegram WebApp environment. Please open from Telegram bot.');
-      }
+      // Use the new loginWithTelegram method from authService
+      const data = await authService.loginWithTelegram();
       
-      // Get initData from Telegram SDK
-      const initData = window.Telegram.WebApp.initData;
+      console.log('[AuthProvider] ✅ Backend validated initData and returned session token');
       
-      if (!initData) {
-        throw new Error('Telegram initData not available. Please reload the WebApp.');
-      }
-      
-      console.log('[AuthProvider] ✅ Got initData from Telegram SDK (length:', initData.length + ')');
-      
-      // Send initData to backend for validation
-      console.log('[AuthProvider] Sending initData to /api/pharmacist/login/telegram...');
-      const response = await fetch('/api/pharmacist/login/telegram/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ initData }),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('[AuthProvider] Backend validation failed:', response.status, errorData);
-        
-        if (response.status === 401) {
-          throw new Error('Неверная подпись Telegram initData. Пожалуйста, перезагрузите WebApp.');
-        } else if (response.status === 404) {
-          throw new Error(errorData.detail || 'Фармацевт не найден в системе. Обратитесь к администратору.');
-        } else {
-          throw new Error(errorData.detail || `Ошибка сервера (${response.status})`);
-        }
-      }
-      
-      const data = await response.json();
-      console.log('[AuthProvider] ✅ Backend validated initData and returned tokens');
-      
-      // Save tokens to localStorage
-      authService.setAccessToken(data.access_token);
-      if (data.refresh_token) {
-        localStorage.setItem('pharmacist_refresh_token', data.refresh_token);
-      }
-      
-      console.log('[AuthProvider] Tokens saved to localStorage');
-      
-      // Get profile after setting token
       console.log('[AuthProvider] Fetching pharmacist profile...');
       const profile = await authService.getProfile();
       
@@ -147,8 +85,7 @@ function AuthProvider({ children }) {
       console.error('[AuthProvider] ❌ Telegram login failed:', err);
       
       // Clear any partial data
-      localStorage.removeItem('pharmacist_access_token');
-      localStorage.removeItem('pharmacist_refresh_token');
+      localStorage.removeItem('pharmacist_session_token');
       
       let errorMessage = 'Ошибка входа через Telegram. ';
       
@@ -168,129 +105,10 @@ function AuthProvider({ children }) {
     }
   };
 
-  // Login with JWT token directly (from URL or other source) - DEPRECATED but kept for backwards compatibility
-  const loginWithToken = async (token) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      console.log('[AuthProvider] 🔄 Starting login with token (legacy method)...');
-      console.log('[AuthProvider] Token length:', token?.length);
-      
-      // Validate token structure before proceeding
-      if (!token || typeof token !== 'string') {
-        throw new Error('Invalid token format');
-      }
-      
-      // Save the token to localStorage - interceptor will pick it up
-      console.log('[AuthProvider] Setting access token in localStorage...');
-      authService.setAccessToken(token);
-      
-      // Verify token was saved
-      const savedToken = localStorage.getItem('pharmacist_access_token');
-      console.log('[AuthProvider] Token saved to localStorage:', !!savedToken);
-      
-      if (!savedToken) {
-        throw new Error('Failed to save token to localStorage');
-      }
-      
-      console.log('[AuthProvider] Fetching pharmacist profile from /api/pharmacist/me...');
-      // Get profile after setting token - interceptor will add Authorization header
-      const profile = await authService.getProfile();
-      
-      console.log('[AuthProvider] ✅ Profile fetched successfully:', profile.user?.first_name, profile.user?.telegram_id);
-      setPharmacist(profile);
-      setIsAuthenticated(true);
-      
-      console.log('[AuthProvider] ✅ Login with token successful');
-      return profile;
-    } catch (err) {
-      console.error('[AuthProvider] ❌ Login with token failed:', err);
-      console.error('[AuthProvider] Error status:', err.response?.status);
-      console.error('[AuthProvider] Error data:', err.response?.data);
-      console.error('[AuthProvider] Error message:', err.message);
-      
-      // Clear invalid token from localStorage
-      localStorage.removeItem('pharmacist_access_token');
-      localStorage.removeItem('pharmacist_refresh_token');
-      
-      let errorMessage = 'Ошибка аутентификации. ';
-      
-      // Check if it's an authentication error
-      if (err.response?.status === 401) {
-        console.error('[AuthProvider] ⚠️ Token is invalid, expired, or pharmacist not found');
-        // Decode token to get more info (for debugging)
-        try {
-          const payload = JSON.parse(atob(token.split('.')[1]));
-          console.log('[AuthProvider] Token payload:', payload);
-          if (payload.sub) {
-            console.log(`[AuthProvider] Looking for pharmacist with UUID: ${payload.sub}`);
-          }
-        } catch (decodeErr) {
-          console.error('[AuthProvider] Failed to decode token:', decodeErr);
-        }
-        
-        // Use specific error message from backend if available
-        const backendDetail = err.response?.data?.detail;
-        if (backendDetail) {
-          if (backendDetail.includes('expired')) {
-            errorMessage += 'Срок действия токена истёк. Пожалуйста, откройте панель заново из Telegram.';
-          } else if (backendDetail.includes('not found') || backendDetail.includes('Фармацевт не найден')) {
-            errorMessage += 'Фармацевт не найден в системе. Обратитесь к администратору.';
-          } else if (backendDetail.includes('deactivated') || backendDetail.includes('деактивирован')) {
-            errorMessage += 'Ваш аккаунт деактивирован. Обратитесь к администратору.';
-          } else {
-            errorMessage += backendDetail;
-          }
-        } else {
-          errorMessage += 'Токен недействителен или фармацевт не найден. Пожалуйста, откройте панель заново из Telegram.';
-        }
-      } else if (err.response?.status === 403) {
-        console.error('[AuthProvider] ⚠️ Access forbidden - no token sent');
-        errorMessage += 'Ошибка доступа. Токен не был отправлен.';
-      } else if (err.response?.status === 0) {
-        console.error('[AuthProvider] ⚠️ Network error - check API connectivity');
-        errorMessage += 'Ошибка сети. Проверьте подключение к интернету и попробуйте снова.';
-      } else {
-        errorMessage += (err.userMessage || err.response?.data?.detail || 'Попробуйте позже.');
-      }
-      
-      setError(errorMessage);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Login function
-  const login = async (credentials) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      const data = await authService.login(credentials);
-      
-      // Get profile after successful login
-      const profile = await authService.getProfile();
-      setPharmacist(profile);
-      setIsAuthenticated(true);
-      
-      logger.info('Login successful');
-      return data;
-    } catch (err) {
-      logger.error('Login failed:', err);
-      setError(err.userMessage || err.response?.data?.detail || 'Ошибка входа. Проверьте данные.');
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   // Logout function
   const logout = async () => {
     try {
-      const refreshToken = authService.getRefreshToken();
-      await authService.logout(refreshToken);
+      await authService.logout();
       
       setPharmacist(null);
       setIsAuthenticated(false);
@@ -339,9 +157,7 @@ function AuthProvider({ children }) {
     pharmacist,
     user: pharmacist, // Alias for compatibility
     error,
-    login,
-    loginWithToken, // Legacy function for token-based login (query params)
-    loginWithTelegram, // NEW: Telegram WebApp login using initData
+    loginWithTelegram, // NEW: Telegram WebApp login using session tokens
     logout,
     setOnlineStatus,
     refreshProfile,

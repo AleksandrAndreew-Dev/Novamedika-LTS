@@ -11,7 +11,7 @@ import logging
 
 from db.database import get_db
 from db.qa_models import Question, User, Pharmacist, DialogMessage
-from auth.auth import get_current_pharmacist
+from auth.session_auth import get_current_pharmacist_session as get_current_pharmacist
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
