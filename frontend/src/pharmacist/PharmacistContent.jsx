@@ -54,66 +54,79 @@ class ErrorBoundary extends React.Component {
 }
 
 export default function PharmacistContent() {
-  const { isAuthenticated, user, loading, loginWithToken, error } = useAuth();
+  const { isAuthenticated, user, loading, loginWithToken, loginWithTelegram, error } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [tokenProcessed, setTokenProcessed] = useState(false);
   const [tokenProcessingError, setTokenProcessingError] = useState(null);
 
-  // Проверяем наличие токена в URL при загрузке
+  // Проверяем наличие токена в URL при загрузке (DEPRECATED) или используем Telegram SDK
   useEffect(() => {
-    const processUrlToken = async () => {
+    const processAuth = async () => {
       if (tokenProcessed || isAuthenticated) {
-        console.log('[PharmacistContent] Skipping token processing - already processed or authenticated');
+        console.log('[PharmacistContent] Skipping auth processing - already processed or authenticated');
         return;
       }
 
-      // Получаем токен из URL параметров
-      const urlParams = new URLSearchParams(window.location.search);
-      const token = urlParams.get('token');
-
-      console.log('[PharmacistContent] Checking for token in URL...');
-      console.log('[PharmacistContent] Token found:', !!token);
+      console.log('[PharmacistContent] Starting authentication process...');
       console.log('[PharmacistContent] isAuthenticated:', isAuthenticated);
       console.log('[PharmacistContent] tokenProcessed:', tokenProcessed);
 
-      if (token) {
-        try {
-          console.log('[PharmacistContent] Found JWT token in URL, attempting to login...');
-          console.log('[PharmacistContent] Token length:', token.length);
-
-          await loginWithToken(token);
-
-          // Удаляем токен из URL для безопасности
-          window.history.replaceState({}, document.title, window.location.pathname);
+      try {
+        // Check if we're in Telegram WebApp environment
+        if (window.Telegram?.WebApp?.initData) {
+          console.log('[PharmacistContent] ✅ Detected Telegram WebApp environment with initData');
+          
+          // Use Telegram SDK for authentication (NEW METHOD)
+          await loginWithTelegram();
+          
           setTokenProcessed(true);
           setTokenProcessingError(null);
-          console.log('[PharmacistContent] ✅ Token login successful, URL cleaned');
-        } catch (error) {
-          console.error('[PharmacistContent] ❌ Failed to login with token from URL:', error);
-          console.error('[PharmacistContent] Error response:', error.response?.status, error.response?.data);
-          console.error('[PharmacistContent] Error message:', error.message);
+          console.log('[PharmacistContent] ✅ Telegram login successful');
           
-          // Set specific error for token processing failure
-          const errorMessage = error.userMessage || error.response?.data?.detail || 'Ошибка аутентификации. Токен недействителен или фармацевт не найден.';
-          setTokenProcessingError(errorMessage);
-          setTokenProcessed(true);
-        }
-      } else {
-        console.log('[PharmacistContent] No token in URL, checking localStorage...');
-        const storedToken = localStorage.getItem('pharmacist_access_token');
-        if (storedToken) {
-          console.log('[PharmacistContent] ✅ Found token in localStorage (length:', storedToken.length + ')');
-          console.log('[PharmacistContent] useAuth hook will handle auto-login');
         } else {
-          console.log('[PharmacistContent] ⚠️ No token found in localStorage either');
+          // Fallback: Try to get token from URL query params (LEGACY METHOD)
+          const urlParams = new URLSearchParams(window.location.search);
+          const token = urlParams.get('token');
+
+          if (token) {
+            console.log('[PharmacistContent] ⚠️ Found JWT token in URL (legacy method), attempting login...');
+            console.log('[PharmacistContent] Token length:', token.length);
+
+            await loginWithToken(token);
+
+            // Удаляем токен из URL для безопасности
+            window.history.replaceState({}, document.title, window.location.pathname);
+            setTokenProcessed(true);
+            setTokenProcessingError(null);
+            console.log('[PharmacistContent] ✅ Legacy token login successful, URL cleaned');
+          } else {
+            console.log('[PharmacistContent] No token in URL and not in Telegram, checking localStorage...');
+            const storedToken = localStorage.getItem('pharmacist_access_token');
+            if (storedToken) {
+              console.log('[PharmacistContent] ✅ Found token in localStorage (length:', storedToken.length + ')');
+              console.log('[PharmacistContent] useAuth hook will handle auto-login via checkAuth()');
+            } else {
+              console.log('[PharmacistContent] ⚠️ No authentication method available');
+              console.log('[PharmacistContent] - Not in Telegram WebApp');
+              console.log('[PharmacistContent] - No token in URL');
+              console.log('[PharmacistContent] - No token in localStorage');
+            }
+            setTokenProcessed(true);
+            setTokenProcessingError(null);
+          }
         }
+      } catch (error) {
+        console.error('[PharmacistContent] ❌ Authentication failed:', error);
+        
+        // Set specific error for authentication failure
+        const errorMessage = error.userMessage || error.response?.data?.detail || error.message || 'Ошибка аутентификации.';
+        setTokenProcessingError(errorMessage);
         setTokenProcessed(true);
-        setTokenProcessingError(null);
       }
     };
 
-    processUrlToken();
-  }, [isAuthenticated, loginWithToken, tokenProcessed]);
+    processAuth();
+  }, [isAuthenticated, loginWithToken, loginWithTelegram, tokenProcessed]);
 
   // Determine the actual error to display
   const displayError = tokenProcessingError || error;

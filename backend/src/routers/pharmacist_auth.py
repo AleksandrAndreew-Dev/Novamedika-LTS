@@ -4,6 +4,7 @@ from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 import uuid
 import logging
+import os
 
 from db.database import get_db
 from db.qa_models import User, Pharmacist
@@ -40,6 +41,11 @@ class PharmacistLoginRequest(BaseModel):
     first_name: Optional[str] = Field(None, description="Имя из Telegram")
     last_name: Optional[str] = Field(None, description="Фамилия из Telegram")
     telegram_username: Optional[str] = Field(None, description="Username из Telegram")
+
+
+class TelegramLoginRequest(BaseModel):
+    """Модель запроса для валидации Telegram initData"""
+    initData: str = Field(..., description="Raw initData string from Telegram WebApp")
 
 
 # Новая функция для получения фармацевта по Telegram ID
@@ -207,6 +213,131 @@ async def pharmacist_login(
         logger.exception("Pharmacist login failed")
         raise HTTPException(
             status_code=500, detail="Login failed. Please try again later."
+        )
+
+
+@router.post("/login/telegram/")
+async def telegram_webapp_login(
+    request: TelegramLoginRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Валидация Telegram WebApp initData и выдача JWT токена
+    
+    Этот эндпоинт принимает rawData от Telegram SDK, проверяет подпись
+    и выдает JWT токен для аутентификации фармацевта.
+    """
+    try:
+        # Импортируем утилиту aiogram для валидации
+        from aiogram.utils.web_app import safe_parse_webapp_init_data
+        
+        # Получаем токен бота из окружения
+        bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+        if not bot_token:
+            logger.error("TELEGRAM_BOT_TOKEN not configured")
+            raise HTTPException(
+                status_code=500,
+                detail="Server configuration error"
+            )
+        
+        # Валидируем initData подпись
+        try:
+            validated_data = safe_parse_webapp_init_data(
+                token=bot_token,
+                init_data=request.initData
+            )
+        except ValueError as e:
+            logger.warning(f"Invalid initData signature: {e}")
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid Telegram initData signature"
+            )
+        
+        # Извлекаем информацию о пользователе
+        telegram_id = validated_data.user.id
+        first_name = validated_data.user.first_name
+        last_name = validated_data.user.last_name or ""
+        username = validated_data.user.username or ""
+        
+        logger.info(f"Telegram login attempt: telegram_id={telegram_id}, user={first_name} {last_name}")
+        
+        # Находим фармацевта по telegram_id
+        result = await db.execute(
+            select(Pharmacist)
+            .join(User, Pharmacist.user_id == User.uuid)
+            .options(selectinload(Pharmacist.user))
+            .where(User.telegram_id == telegram_id)
+            .where(Pharmacist.is_active == True)
+        )
+        pharmacist = result.scalar_one_or_none()
+        
+        if not pharmacist:
+            logger.warning(f"Pharmacist not found for telegram_id={telegram_id}")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Фармацевт не найден для Telegram ID {telegram_id}. Обратитесь к администратору."
+            )
+        
+        # Обновляем данные пользователя из Telegram
+        user = pharmacist.user
+        updated_fields = []
+        
+        if first_name and user.first_name != first_name:
+            user.first_name = first_name
+            updated_fields.append("first_name")
+            
+        if last_name and user.last_name != last_name:
+            user.last_name = last_name
+            updated_fields.append("last_name")
+            
+        if username and user.telegram_username != username:
+            user.telegram_username = username
+            updated_fields.append("telegram_username")
+        
+        # Сохраняем изменения, если были обновления
+        if updated_fields:
+            logger.info(f"Updated user fields for telegram_id {telegram_id}: {updated_fields}")
+            await db.commit()
+            await db.refresh(user)
+        
+        # Обновляем статус онлайн и время последней активности
+        pharmacist.is_online = True
+        pharmacist.last_seen = get_utc_now_naive()
+        await db.commit()
+        
+        # Создаём JWT токены
+        token_data = {
+            "sub": str(pharmacist.uuid),
+            "telegram_id": telegram_id,
+            "role": "pharmacist",
+            "type": "access",
+        }
+        access_token = create_access_token(data=token_data)
+        refresh_token = create_refresh_token(data={
+            "sub": str(pharmacist.uuid),
+            "telegram_id": telegram_id,
+            "role": "pharmacist",
+        })
+        
+        # Сохраняем refresh token в БД
+        await store_refresh_token(refresh_token, str(pharmacist.uuid), db)
+        
+        logger.info(f"✅ Telegram login successful for pharmacist UUID={pharmacist.uuid}")
+        
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+            "expires_in": 86400,  # 24 часа
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Telegram WebApp login failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Login failed. Please try again later."
         )
 
 

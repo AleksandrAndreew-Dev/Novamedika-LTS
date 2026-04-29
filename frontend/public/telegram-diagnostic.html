@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram WebApp Diagnostic</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+        h2 {
+            color: #666;
+            font-size: 18px;
+            margin-top: 0;
+            margin-bottom: 16px;
+        }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .info-label {
+            font-weight: 600;
+            color: #555;
+        }
+        .info-value {
+            color: #333;
+            text-align: right;
+            max-width: 60%;
+            word-break: break-all;
+        }
+        .success {
+            color: #10b981;
+            font-weight: 600;
+        }
+        .error {
+            color: #ef4444;
+            font-weight: 600;
+        }
+        .warning {
+            color: #f59e0b;
+            font-weight: 600;
+        }
+        pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 12px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 16px;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .status-ok {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        .status-fail {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🔍 Telegram WebApp Diagnostic Tool</h1>
+        <p>This tool helps diagnose authentication issues with Telegram WebApp integration.</p>
+    </div>
+
+    <div class="card">
+        <h2>1. Environment Detection</h2>
+        <div id="env-info"></div>
+    </div>
+
+    <div class="card">
+        <h2>2. URL Analysis</h2>
+        <div id="url-info"></div>
+    </div>
+
+    <div class="card">
+        <h2>3. Telegram SDK Status</h2>
+        <div id="sdk-info"></div>
+    </div>
+
+    <div class="card">
+        <h2>4. Authentication Data</h2>
+        <div id="auth-info"></div>
+    </div>
+
+    <div class="card">
+        <h2>5. Raw Data</h2>
+        <pre id="raw-data">Loading...</pre>
+    </div>
+
+    <button onclick="window.location.reload()">🔄 Refresh Diagnostics</button>
+
+    <script>
+        function displayInfo(elementId, data) {
+            const container = document.getElementById(elementId);
+            container.innerHTML = data.map(item => `
+                <div class="info-row">
+                    <span class="info-label">${item.label}:</span>
+                    <span class="info-value ${item.class || ''}">${item.value}</span>
+                </div>
+            `).join('');
+        }
+
+        // 1. Environment Detection
+        const isTelegram = !!window.Telegram?.WebApp;
+        const isInIframe = window.self !== window.top;
+        const protocol = window.location.protocol;
+        
+        displayInfo('env-info', [
+            { label: 'In Telegram', value: isTelegram ? '✅ Yes' : '❌ No', class: isTelegram ? 'success' : 'error' },
+            { label: 'In Iframe', value: isInIframe ? '✅ Yes' : '❌ No', class: isInIframe ? 'success' : 'warning' },
+            { label: 'Protocol', value: protocol, class: protocol === 'https:' ? 'success' : 'warning' },
+            { label: 'Hostname', value: window.location.hostname },
+            { label: 'Platform', value: window.Telegram?.WebApp?.platform || 'N/A' },
+            { label: 'Version', value: window.Telegram?.WebApp?.version || 'N/A' },
+        ]);
+
+        // 2. URL Analysis
+        const hasQueryParams = window.location.search.length > 0;
+        const hasHash = window.location.hash.length > 0;
+        const queryParamNames = new URLSearchParams(window.location.search);
+        
+        displayInfo('url-info', [
+            { 
+                label: 'Full URL', 
+                value: window.location.href.substring(0, 100) + (window.location.href.length > 100 ? '...' : '')
+            },
+            { 
+                label: 'Query Params', 
+                value: hasQueryParams ? `✅ Found (${queryParamNames.size} params)` : '❌ Empty',
+                class: hasQueryParams ? 'success' : 'error'
+            },
+            { 
+                label: 'Hash Fragment', 
+                value: hasHash ? `✅ Found (${window.location.hash.length} chars)` : '❌ Empty',
+                class: hasHash ? 'success' : 'error'
+            },
+            { 
+                label: 'Token in Query', 
+                value: queryParamNames.has('token') ? '✅ Present' : '❌ Missing',
+                class: queryParamNames.has('token') ? 'success' : 'error'
+            },
+            { 
+                label: 'tgWebAppData in Hash', 
+                value: window.location.hash.includes('tgWebAppData') ? '✅ Present' : '❌ Missing',
+                class: window.location.hash.includes('tgWebAppData') ? 'success' : 'error'
+            },
+        ]);
+
+        // 3. Telegram SDK Status
+        const sdkReady = window.Telegram?.WebApp?.isReady || false;
+        const sdkExpanded = window.Telegram?.WebApp?.isExpanded || false;
+        
+        displayInfo('sdk-info', [
+            { 
+                label: 'SDK Loaded', 
+                value: !!window.Telegram?.WebApp ? '✅ Yes' : '❌ No',
+                class: !!window.Telegram?.WebApp ? 'success' : 'error'
+            },
+            { 
+                label: 'SDK Ready', 
+                value: sdkReady ? '✅ Yes' : '⏳ Not called',
+                class: sdkReady ? 'success' : 'warning'
+            },
+            { 
+                label: 'Expanded', 
+                value: sdkExpanded ? '✅ Yes' : '⏳ Not expanded',
+                class: sdkExpanded ? 'success' : 'warning'
+            },
+            { 
+                label: 'Color Scheme', 
+                value: window.Telegram?.WebApp?.colorScheme || 'N/A'
+            },
+            { 
+                label: 'Theme Params', 
+                value: JSON.stringify(window.Telegram?.WebApp?.themeParams || {})
+            },
+        ]);
+
+        // 4. Authentication Data
+        const initData = window.Telegram?.WebApp?.initData;
+        const initDataUnsafe = window.Telegram?.WebApp?.initDataUnsafe;
+        const user = initDataUnsafe?.user;
+        
+        displayInfo('auth-info', [
+            { 
+                label: 'initData Available', 
+                value: !!initData ? '✅ Yes' : '❌ No',
+                class: !!initData ? 'success' : 'error'
+            },
+            { 
+                label: 'initData Length', 
+                value: initData ? `${initData.length} chars` : 'N/A'
+            },
+            { 
+                label: 'User Data', 
+                value: user ? '✅ Present' : '❌ Missing',
+                class: user ? 'success' : 'error'
+            },
+            { 
+                label: 'User ID', 
+                value: user?.id || 'N/A'
+            },
+            { 
+                label: 'First Name', 
+                value: user?.first_name || 'N/A'
+            },
+            { 
+                label: 'Username', 
+                value: user?.username || 'N/A'
+            },
+            { 
+                label: 'Start Param', 
+                value: initDataUnsafe?.start_param || 'N/A'
+            },
+            { 
+                label: 'Auth Date', 
+                value: initDataUnsafe?.auth_date ? new Date(initDataUnsafe.auth_date * 1000).toISOString() : 'N/A'
+            },
+        ]);
+
+        // 5. Raw Data
+        const rawData = {
+            location: {
+                href: window.location.href,
+                search: window.location.search,
+                hash: window.location.hash,
+            },
+            telegram: {
+                available: !!window.Telegram?.WebApp,
+                platform: window.Telegram?.WebApp?.platform,
+                version: window.Telegram?.WebApp?.version,
+                initData: initData ? initData.substring(0, 200) + '...' : null,
+                initDataUnsafe: initDataUnsafe,
+            },
+            timestamp: new Date().toISOString(),
+        };
+
+        document.getElementById('raw-data').textContent = JSON.stringify(rawData, null, 2);
+
+        // Auto-expand if in Telegram
+        if (window.Telegram?.WebApp) {
+            window.Telegram.WebApp.ready();
+            window.Telegram.WebApp.expand();
+        }
+
+        console.log('=== TELEGRAM WEBAPP DIAGNOSTIC COMPLETE ===');
+        console.log('Check the page for detailed information');
+        console.log('Raw data:', rawData);
+    </script>
+</body>
+</html>

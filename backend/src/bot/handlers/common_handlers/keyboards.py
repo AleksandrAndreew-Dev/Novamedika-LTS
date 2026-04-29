@@ -1,8 +1,6 @@
 """Фабрики клавиатур для бота."""
 
 import os
-from datetime import timedelta
-from urllib.parse import urlencode
 
 from aiogram.types import (
     ReplyKeyboardMarkup,
@@ -12,63 +10,38 @@ from aiogram.types import (
     WebAppInfo,
 )
 
-from auth.auth import create_access_token
 
-
-def generate_pharmacist_webapp_url(telegram_id: int, pharmacist_uuid: str | None = None) -> str:
-    """Генерирует URL для WebApp с JWT токеном
+def get_pharmacist_webapp_url() -> str:
+    """Генерирует URL для WebApp панели фармацевта
     
-    Args:
-        telegram_id: Telegram ID фармацевта
-        pharmacist_uuid: UUID фармацевта (обязательно для корректной работы)
+    Telegram WebApp передаст initData автоматически через SDK.
+    Backend валидирует initData и выдаст JWT токен.
     
     Returns:
-        URL с JWT токеном в query параметрах
-        
-    Raises:
-        ValueError: Если pharmacist_uuid не предоставлен
+        URL без query параметров (Telegram добавит initData в hash)
     """
-    if not pharmacist_uuid:
-        raise ValueError("pharmacist_uuid is required for WebApp authentication")
-    
-    # Создаем JWT токен с данными фармацевта
-    # IMPORTANT: Backend expects 'sub' field containing pharmacist UUID for get_current_pharmacist dependency
-    token_data = {
-        "sub": pharmacist_uuid,  # Must be pharmacist UUID, not telegram_id
-        "telegram_id": telegram_id,
-        "role": "pharmacist",
-        "type": "access",  # Mark as access token type
-    }
-    
-    access_token = create_access_token(data=token_data)
-    
     # Базовый URL - используем path-based routing вместо subdomain
     base_url = os.getenv(
         "PHARMACIST_DASHBOARD_URL", 
-        "https://spravka.novamedika.com/pharmacist"  # Changed from subdomain to path-based
+        "https://spravka.novamedika.com/pharmacist"
     )
     
-    # Добавляем токен как query параметр
-    params = {"token": access_token}
-    query_string = urlencode(params)
-    
-    return f"{base_url}?{query_string}"
+    # НЕ добавляем query параметры - Telegram их удалит!
+    # Вместо этого фронтенд использует window.Telegram.WebApp.initData
+    return base_url
 
 
 def get_pharmacist_inline_keyboard_with_token(telegram_id: int, pharmacist_uuid: str | None = None):
-    """Inline-клавиатура фармацевта с JWT токеном в WebApp URL
+    """Inline-клавиатура фармацевта с WebApp URL (без токена в URL)
     
     Args:
-        telegram_id: Telegram ID фармацевта
-        pharmacist_uuid: UUID фармацевта (обязательно)
+        telegram_id: Telegram ID фармацевта (не используется, оставлен для совместимости)
+        pharmacist_uuid: UUID фармацевта (не используется, оставлен для совместимости)
     """
-    if not pharmacist_uuid:
-        # Fallback to non-token keyboard if pharmacist_uuid is missing (should not happen in normal flow)
-        return get_pharmacist_inline_keyboard()
-        
+    # Получаем чистый URL без токена
+    pharmacist_dashboard_url = get_pharmacist_webapp_url()
+    
     webapp_url = os.getenv("FRONTEND_URL", "https://spravka.novamedika.com")
-    # Генерируем URL с токеном
-    pharmacist_dashboard_url = generate_pharmacist_webapp_url(telegram_id, pharmacist_uuid)
     
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -100,63 +73,13 @@ def get_pharmacist_inline_keyboard_with_token(telegram_id: int, pharmacist_uuid:
                     web_app=WebAppInfo(url=webapp_url),
                 )
             ],
-            [
-                InlineKeyboardButton(
-                    text="🔒 Политика конфиденциальности",
-                    callback_data="show_privacy_policy"
-                )
-            ],
-        ],
+        ]
     )
 
 
 def get_pharmacist_inline_keyboard():
-    """Inline-клавиатура фармацевта (без токена - для обратной совместимости)"""
-    webapp_url = os.getenv("FRONTEND_URL", "https://spravka.novamedika.com")
-    # URL для Pharmacist Dashboard (консультации) - path-based routing
-    pharmacist_dashboard_url = os.getenv(
-        "PHARMACIST_DASHBOARD_URL", 
-        "https://spravka.novamedika.com/pharmacist"  # Changed from subdomain to path-based
-    )
-    
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="🟢 Онлайн", callback_data="go_online"),
-                InlineKeyboardButton(text="⚫ Офлайн", callback_data="go_offline"),
-            ],
-            [
-                InlineKeyboardButton(text="📋 Вопросы", callback_data="view_questions"),
-                InlineKeyboardButton(
-                    text="📊 Статистика", callback_data="questions_stats"
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    text="📜 История", callback_data="my_questions_from_completed"
-                ),
-                InlineKeyboardButton(text="❓ Помощь", callback_data="pharmacist_help"),
-            ],
-            [
-                InlineKeyboardButton(
-                    text="💼 Панель фармацевта",
-                    web_app=WebAppInfo(url=pharmacist_dashboard_url),
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🔍 Поиск лекарств",
-                    web_app=WebAppInfo(url=webapp_url),
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🔒 Политика конфиденциальности",
-                    callback_data="show_privacy_policy"
-                )
-            ],
-        ],
-    )
+    """Inline-клавиатура фармацевта (без токена)"""
+    return get_pharmacist_inline_keyboard_with_token(0, None)
 
 
 def get_user_inline_keyboard():

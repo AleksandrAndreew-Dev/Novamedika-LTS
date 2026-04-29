@@ -68,13 +68,104 @@ function AuthProvider({ children }) {
     }
   };
 
-  // Login with JWT token directly (from URL or other source)
+  // Login with Telegram WebApp initData (NEW - proper method)
+  const loginWithTelegram = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      console.log('[AuthProvider] 🔄 Starting Telegram WebApp login...');
+      
+      // Check if we're in Telegram environment
+      if (!window.Telegram?.WebApp) {
+        throw new Error('Not in Telegram WebApp environment. Please open from Telegram bot.');
+      }
+      
+      // Get initData from Telegram SDK
+      const initData = window.Telegram.WebApp.initData;
+      
+      if (!initData) {
+        throw new Error('Telegram initData not available. Please reload the WebApp.');
+      }
+      
+      console.log('[AuthProvider] ✅ Got initData from Telegram SDK (length:', initData.length + ')');
+      
+      // Send initData to backend for validation
+      console.log('[AuthProvider] Sending initData to /api/pharmacist/login/telegram...');
+      const response = await fetch('/api/pharmacist/login/telegram', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ initData }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('[AuthProvider] Backend validation failed:', response.status, errorData);
+        
+        if (response.status === 401) {
+          throw new Error('Неверная подпись Telegram initData. Пожалуйста, перезагрузите WebApp.');
+        } else if (response.status === 404) {
+          throw new Error(errorData.detail || 'Фармацевт не найден в системе. Обратитесь к администратору.');
+        } else {
+          throw new Error(errorData.detail || `Ошибка сервера (${response.status})`);
+        }
+      }
+      
+      const data = await response.json();
+      console.log('[AuthProvider] ✅ Backend validated initData and returned tokens');
+      
+      // Save tokens to localStorage
+      authService.setAccessToken(data.access_token);
+      if (data.refresh_token) {
+        localStorage.setItem('pharmacist_refresh_token', data.refresh_token);
+      }
+      
+      console.log('[AuthProvider] Tokens saved to localStorage');
+      
+      // Get profile after setting token
+      console.log('[AuthProvider] Fetching pharmacist profile...');
+      const profile = await authService.getProfile();
+      
+      console.log('[AuthProvider] ✅ Profile fetched successfully:', profile.user?.first_name, profile.user?.telegram_id);
+      setPharmacist(profile);
+      setIsAuthenticated(true);
+      
+      console.log('[AuthProvider] ✅ Telegram login successful');
+      return profile;
+      
+    } catch (err) {
+      console.error('[AuthProvider] ❌ Telegram login failed:', err);
+      
+      // Clear any partial data
+      localStorage.removeItem('pharmacist_access_token');
+      localStorage.removeItem('pharmacist_refresh_token');
+      
+      let errorMessage = 'Ошибка входа через Telegram. ';
+      
+      if (err.message.includes('Not in Telegram')) {
+        errorMessage = 'Эта страница должна быть открыта из Telegram бота. Пожалуйста, нажмите кнопку "Панель фармацевта" в боте.';
+      } else if (err.message.includes('initData not available')) {
+        errorMessage = 'Данные Telegram не загружены. Попробуйте закрыть и открыть WebApp снова.';
+      } else {
+        errorMessage += err.message || 'Попробуйте позже.';
+      }
+      
+      setError(errorMessage);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Login with JWT token directly (from URL or other source) - DEPRECATED but kept for backwards compatibility
   const loginWithToken = async (token) => {
     try {
       setIsLoading(true);
       setError(null);
       
-      console.log('[AuthProvider] 🔄 Starting login with token...');
+      console.log('[AuthProvider] 🔄 Starting login with token (legacy method)...');
       console.log('[AuthProvider] Token length:', token?.length);
       
       // Validate token structure before proceeding
@@ -240,7 +331,8 @@ function AuthProvider({ children }) {
     user: pharmacist, // Alias for compatibility
     error,
     login,
-    loginWithToken, // New function for token-based login
+    loginWithToken, // Legacy function for token-based login (query params)
+    loginWithTelegram, // NEW: Telegram WebApp login using initData
     logout,
     setOnlineStatus,
     refreshProfile,
