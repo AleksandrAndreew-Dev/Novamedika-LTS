@@ -16,11 +16,30 @@ function App() {
   const [showCookieBanner, setShowCookieBanner] = useState(false);
 
   // Проверяем, это pharmacist dashboard или обычный поиск
-  // Определяем по поддомену ИЛИ по пути
+  // Определяем по поддомену ИЛИ по пути ИЛИ по наличию токена в URL (для WebApp)
   const hostname = window.location.hostname;
   const isPharmacistSubdomain = hostname.startsWith('pharmacist.') || hostname === 'pharmacist.spravka.novamedika.com';
   const isPharmacistPath = window.location.pathname.startsWith('/pharmacist');
-  const isPharmacistMode = isPharmacistSubdomain || isPharmacistPath;
+  
+  // Проверяем наличие JWT токена в URL (WebApp authentication)
+  const urlParams = new URLSearchParams(window.location.search);
+  const hasAuthToken = urlParams.has('token');
+  
+  // Проверяем сохраненный режим в localStorage (для случаев когда WebApp открывается внутри Telegram)
+  const savedMode = localStorage.getItem('app_mode');
+  const isPharmacistFromStorage = savedMode === 'pharmacist';
+  
+  const isPharmacistMode = isPharmacistSubdomain || isPharmacistPath || hasAuthToken || isPharmacistFromStorage;
+
+  // Сохраняем режим в localStorage при первом определении
+  useEffect(() => {
+    if (isPharmacistMode && !savedMode) {
+      localStorage.setItem('app_mode', 'pharmacist');
+    } else if (!isPharmacistMode && savedMode === 'pharmacist') {
+      // Если пользователь перешел на основной сайт, очищаем режим
+      localStorage.removeItem('app_mode');
+    }
+  }, [isPharmacistMode, savedMode]);
 
   // Инициализация хука таймаута (30 минут)
   const { showWarning, secondsLeft, extendSession } = useSessionTimeout(30);
