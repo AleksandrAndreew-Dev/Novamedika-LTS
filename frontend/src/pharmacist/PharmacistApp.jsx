@@ -6,7 +6,6 @@ import Dashboard from './pharmacist/pages/Dashboard';
 import Login from './pharmacist/components/auth/Login';
 import ProtectedRoute from './pharmacist/components/auth/ProtectedRoute';
 import { logger } from './utils/logger';
-import { telegramWebApp } from '../utils/telegramWebApp';
 
 // Component to handle URL token authentication (Legacy)
 function TokenAuthHandler() {
@@ -16,6 +15,12 @@ function TokenAuthHandler() {
   const loginInProgressRef = useRef(false);
 
   useEffect(() => {
+    // Initialize Telegram WebApp
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.ready();
+      window.Telegram.WebApp.expand();
+    }
+
     const token = searchParams.get('token');
     
     if (token && !isAuthenticated && !loginInProgressRef.current) {

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from './hooks/useAuth';
 import DashboardStats from './components/dashboard/DashboardStats';
 import QuestionsList from './components/consultations/QuestionsList';
@@ -6,12 +6,12 @@ import Sidebar from './components/layout/Sidebar';
 import MainLayout from './components/layout/MainLayout';
 
 export default function PharmacistContent() {
-  const { isAuthenticated, user, loading, error } = useAuth();
-  const [activeTab, setActiveTab] = React.useState('dashboard');
+  const { user, loading } = useAuth();
+  const [activeTab, setActiveTab] = useState('dashboard');
 
   // If not authenticated and not loading, this shouldn't be reached due to ProtectedRoute
   // but we add a fallback just in case
-  if (!loading && !isAuthenticated) {
+  if (!loading && !useAuth().isAuthenticated) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
