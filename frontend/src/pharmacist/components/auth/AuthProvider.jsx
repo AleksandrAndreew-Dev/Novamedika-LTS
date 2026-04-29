@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext } from 'react';
+import { useState, useEffect, createContext, useRef } from 'react';
 import { authService } from '../../services/authService';
 import { logger } from '../../../utils/logger';
 
@@ -11,6 +11,7 @@ function AuthProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true);
   const [pharmacist, setPharmacist] = useState(null);
   const [error, setError] = useState(null);
+  const loginInProgressRef = useRef(false); // Prevent concurrent login attempts
 
   // Check authentication status on mount
   useEffect(() => {
@@ -35,6 +36,21 @@ function AuthProvider({ children }) {
       console.error('[AuthProvider] Auth check failed:', err);
       console.error('[AuthProvider] Error details:', err.response?.data || err.message);
       
+      // Clear invalid token
+      localStorage.removeItem('pharmacist_session_token');
+      
+      // Auto-login via Telegram WebApp if available
+      const initData = window.Telegram?.WebApp?.initData;
+      if (initData && err.response?.status === 401) {
+        console.log('[AuthProvider] ⚠️ Session expired. Attempting auto-login via Telegram WebApp...');
+        try {
+          await loginWithTelegram();
+          return; // Exit early as loginWithTelegram handles state updates
+        } catch (loginErr) {
+          console.error('[AuthProvider] ❌ Auto-login failed:', loginErr);
+        }
+      }
+      
       console.log('[AuthProvider] Session invalid or expired, user not authenticated');
       setIsAuthenticated(false);
       setPharmacist(null);
@@ -52,11 +68,24 @@ function AuthProvider({ children }) {
 
   // Login with Telegram WebApp initData (NEW - simplified method)
   const loginWithTelegram = async () => {
+    // Prevent concurrent login attempts
+    if (loginInProgressRef.current) {
+      console.log('[AuthProvider] ⚠️ Login already in progress, skipping...');
+      return pharmacist;
+    }
+
     try {
+      loginInProgressRef.current = true;
       setIsLoading(true);
       setError(null);
       
       console.log('[AuthProvider] 🔄 Starting Telegram WebApp login...');
+      
+      // Initialize Telegram WebApp if available
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.ready();
+        window.Telegram.WebApp.expand();
+      }
       
       // Use the new loginWithTelegram method from authService
       await authService.loginWithTelegram();
@@ -92,6 +121,7 @@ function AuthProvider({ children }) {
       setError(errorMessage);
       throw err;
     } finally {
+      loginInProgressRef.current = false;
       setIsLoading(false);
     }
   };
