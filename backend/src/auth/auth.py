@@ -86,22 +86,23 @@ async def store_refresh_token(token: str, user_id: str, db: AsyncSession):
     """Сохранить refresh token в БД (удаляет старые активные токены пользователя)"""
     from sqlalchemy.exc import IntegrityError
     
-    # Удаляем все активные токены пользователя перед созданием нового
-    await db.execute(
-        delete(RefreshToken).where(
-            RefreshToken.user_id == user_id,
-            RefreshToken.revoked == False
-        )
-    )
-    
-    # Добавляем уникальный идентификатор к токену для предотвращения дублирования
-    # Это особенно важно при параллельных запросах
-    jti = str(uuid.uuid4())
-    unique_token = f"{token}_{jti}"
-    
     max_attempts = 3
     for attempt in range(max_attempts):
         try:
+            # Удаляем все активные токены пользователя перед созданием нового
+            # Делаем это внутри каждой попытки, чтобы избежать race conditions
+            await db.execute(
+                delete(RefreshToken).where(
+                    RefreshToken.user_id == user_id,
+                    RefreshToken.revoked == False
+                )
+            )
+            
+            # Добавляем уникальный идентификатор к токену для предотвращения дублирования
+            # Это особенно важно при параллельных запросах
+            jti = str(uuid.uuid4())
+            unique_token = f"{token}_{jti}"
+            
             # Создаем новый токен
             expires_at = get_utc_now_naive() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
             refresh_token = RefreshToken(
@@ -129,10 +130,23 @@ async def store_refresh_token(token: str, user_id: str, db: AsyncSession):
 
 async def revoke_refresh_token(token: str, db: AsyncSession):
     """Отозвать refresh token по токену"""
+    # Сначала пытаемся найти точное совпадение
     result = await db.execute(
         select(RefreshToken).where(RefreshToken.token == token)
     )
     rt = result.scalar_one_or_none()
+    
+    # Если не найдено, ищем токены, начинающиеся с этого токена + "_"
+    if not rt and "_" in token:
+        # Это может быть оригинальный токен, ищем соответствующий суффиксный
+        result = await db.execute(
+            select(RefreshToken).where(
+                RefreshToken.token.like(f"{token}_%"),
+                RefreshToken.revoked == False
+            )
+        )
+        rt = result.scalar_one_or_none()
+    
     if rt:
         rt.revoked = True
         await db.commit()
@@ -140,8 +154,20 @@ async def revoke_refresh_token(token: str, db: AsyncSession):
 
 async def validate_refresh_token(token: str, db: AsyncSession):
     """Проверить валидность refresh token"""
+    original_token = token
+    
+    # Определяем оригинальный JWT токен (до последнего "_", если есть)
+    if "_" in token:
+        # Предполагаем, что это суффиксный токен, извлекаем оригинальную часть
+        parts = token.rsplit("_", 1)
+        if len(parts) == 2:
+            # Проверяем, что вторая часть выглядит как UUID
+            import re
+            if re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', parts[1]):
+                original_token = parts[0]
+    
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(original_token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")
         if user_id is None:
             return None
@@ -151,12 +177,27 @@ async def validate_refresh_token(token: str, db: AsyncSession):
     # Проверяем наличие в БД и статус отзыва
     result = await db.execute(
         select(RefreshToken).where(
-            RefreshToken.token == token,
+            RefreshToken.token == token,  # Ищем точное совпадение с переданным токеном
             RefreshToken.revoked == False
         )
     )
     rt = result.scalar_one_or_none()
     if not rt:
-        return None
+        # Если не найдено точное совпадение, и у нас был оригинальный токен,
+        # попробуем найти соответствующий суффиксный токен
+        if original_token != token:
+            # Это не должно происходить, так как мы уже используем полный токен
+            return None
+        else:
+            # Ищем любой активный токен для этого пользователя с этим оригинальным токеном
+            result = await db.execute(
+                select(RefreshToken).where(
+                    RefreshToken.token.like(f"{original_token}_%"),
+                    RefreshToken.revoked == False
+                )
+            )
+            rt = result.scalar_one_or_none()
+            if not rt:
+                return None
 
     return user_id
