@@ -16,15 +16,7 @@ from db.qa_schemas import (
     PharmacyInfoSimple,
 )
 from auth.session_manager import create_session_token, delete_session
-# Assuming get_current_pharmacist is in a local auth module or service
-# If it's missing, we might need to define it or import from elsewhere. 
-# For now, I will comment out the endpoint using it if I can't find it, 
-# but typically it should be imported. 
-# Let's assume it needs to be implemented or imported. 
-# Since I cannot create new files easily without path confirmation for auth modules,
-# I will check if I can just fix the imports present.
-# The prompt implies fixing attribute access, but the code has missing imports for functions used.
-# I will remove the usage of undefined JWT functions and stick to session tokens as per the "session token creation" context.
+from auth.session_auth import get_current_pharmacist_session
 
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -347,4 +339,25 @@ async def telegram_webapp_login(
         raise HTTPException(
             status_code=500,
             detail="Login failed. Please try again later."
+        )
+
+
+@router.get("/me", response_model=PharmacistResponse)
+async def get_current_pharmacist_profile(
+    pharmacist: Pharmacist = Depends(get_current_pharmacist_session),
+):
+    """
+    Get current authenticated pharmacist profile
+    
+    This endpoint returns the profile of the currently authenticated pharmacist.
+    It requires a valid session token in the Authorization header.
+    """
+    try:
+        # Use model_validate to properly convert SQLAlchemy model to Pydantic model
+        return PharmacistResponse.model_validate(pharmacist)
+    except Exception as e:
+        logger.exception("Failed to get pharmacist profile")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to retrieve pharmacist profile"
         )
