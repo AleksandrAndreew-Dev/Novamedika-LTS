@@ -4,7 +4,7 @@ Remove unique constraint from refresh_tokens.token column to prevent
 IntegrityError when multiple concurrent requests try to create tokens.
 
 Revision ID: fix_duplicate_refresh_token
-Revises: a1b2c3d4e5f6
+Revises: 3b81fefeff37
 Create Date: 2026-04-29
 
 """
@@ -16,7 +16,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'fix_duplicate_refresh_token'
-down_revision: Union[str, None] = 'a1b2c3d4e5f6'
+down_revision: Union[str, None] = '3b81fefeff37'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
