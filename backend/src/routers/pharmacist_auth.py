@@ -321,3 +321,34 @@ async def telegram_webapp_login(
         
         # Сохраняем refresh token в БД
         await store_refresh_token(refresh_token, str(pharmacist.user_id), db)
+        
+        logger.info(f"✅ Telegram login successful for pharmacist user_id={pharmacist.user_id}, pharmacist_uuid={pharmacist.uuid}")
+        
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+            "expires_in": 86400,  # 24 часа
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Telegram WebApp login failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Login failed. Please try again later."
+        )
+
+
+@router.get("/me", response_model=PharmacistResponse)
+async def get_current_pharmacist_info(
+    pharmacist: Pharmacist = Depends(get_current_pharmacist),
+):
+    """Получение информации о текущем фармацевте"""
+    return PharmacistResponse(
+        uuid=pharmacist.uuid,
+        user=UserResponse.model_validate(pharmacist.user),
+        pharmacy_info=pharmacist.pharmacy_info,
+        is_active=pharmacist.is_active,
+    )
