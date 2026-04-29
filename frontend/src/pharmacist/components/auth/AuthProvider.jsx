@@ -105,6 +105,56 @@ function AuthProvider({ children }) {
     }
   };
 
+  // Login with token from URL (legacy method - if needed)
+  const loginWithToken = async (token) => {
+    // Prevent concurrent login attempts
+    if (loginInProgressRef.current) {
+      console.log('[AuthProvider] ⚠️ Login already in progress, skipping...');
+      return pharmacist;
+    }
+
+    try {
+      loginInProgressRef.current = true;
+      setIsLoading(true);
+      setError(null);
+      
+      console.log('[AuthProvider] 🔄 Starting login with token...');
+      
+      // Store the token
+      authService.setSessionToken(token);
+      
+      console.log('[AuthProvider] Fetching pharmacist profile...');
+      const profile = await authService.getProfile();
+      
+      console.log('[AuthProvider] ✅ Profile fetched successfully:', profile.user?.first_name);
+      setPharmacist(profile);
+      setIsAuthenticated(true);
+      
+      console.log('[AuthProvider] ✅ Token login successful');
+      return profile;
+      
+    } catch (err) {
+      console.error('[AuthProvider] ❌ Token login failed:', err);
+      
+      // Clear any partial data
+      localStorage.removeItem('pharmacist_session_token');
+      
+      let errorMessage = 'Ошибка входа. ';
+      
+      if (err.response?.status === 401) {
+        errorMessage += 'Неверный или истекший токен.';
+      } else {
+        errorMessage += err.message || 'Попробуйте позже.';
+      }
+      
+      setError(errorMessage);
+      throw err;
+    } finally {
+      loginInProgressRef.current = false;
+      setIsLoading(false);
+    }
+  };
+
   // Logout function
   const logout = async () => {
     try {
@@ -158,6 +208,7 @@ function AuthProvider({ children }) {
     user: pharmacist, // Alias for compatibility
     error,
     loginWithTelegram, // NEW: Telegram WebApp login using session tokens
+    loginWithToken, // Legacy: Login with token from URL
     logout,
     setOnlineStatus,
     refreshProfile,

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { AuthProvider } from './components/auth/AuthProvider';
 import { useAuth } from './hooks/useAuth';
@@ -13,6 +13,7 @@ function TokenAuthHandler() {
   const [searchParams] = useSearchParams();
   const { loginWithToken, isAuthenticated } = useAuth();
   const [authError, setAuthError] = useState(null);
+  const loginInProgressRef = useRef(false); // Prevent concurrent login attempts
 
   // Initialize Telegram WebApp on component mount
   useEffect(() => {
@@ -38,6 +39,14 @@ function TokenAuthHandler() {
     if (token && !isAuthenticated) {
       logger.info('Found token in URL, attempting auto-login');
       
+      // Prevent concurrent login attempts
+      if (loginInProgressRef.current) {
+        console.log('[TokenAuthHandler] ⚠️ Login already in progress, skipping...');
+        return;
+      }
+
+      loginInProgressRef.current = true;
+
       // Attempt to login with the token from URL
       loginWithToken(token)
         .then(() => {
@@ -75,6 +84,9 @@ function TokenAuthHandler() {
           
           // Don't redirect immediately - let the user see the error and decide
           // They can click "На главную" or refresh to get a new token from Telegram
+        })
+        .finally(() => {
+          loginInProgressRef.current = false;
         });
     } else if (!token && !isAuthenticated) {
       console.log('[TokenAuthHandler] No token in URL and not authenticated - waiting for manual login or token');
@@ -135,15 +147,17 @@ function TokenAuthHandler() {
 export default function PharmacistApp() {
   return (
     <AuthProvider>
-      <TokenAuthHandler />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route
           path="/"
           element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
+            <>
+              <TokenAuthHandler />
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            </>
           }
         />
         <Route path="*" element={<Navigate to="/" replace />} />

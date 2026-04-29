@@ -109,9 +109,9 @@ export default function PharmacistContent() {
             console.log('[PharmacistContent] ✅ Legacy token login successful, URL cleaned');
           } else {
             console.log('[PharmacistContent] No token in URL and not in Telegram, checking localStorage...');
-            const storedToken = localStorage.getItem('pharmacist_access_token');
+            const storedToken = localStorage.getItem('pharmacist_session_token');
             if (storedToken) {
-              console.log('[PharmacistContent] ✅ Found token in localStorage (length:', storedToken.length + ')');
+              console.log('[PharmacistContent] ✅ Found session token in localStorage (length:', storedToken.length + ')');
               console.log('[PharmacistContent] useAuth hook will handle auto-login via checkAuth()');
             } else {
               console.log('[PharmacistContent] ⚠️ No authentication method available');

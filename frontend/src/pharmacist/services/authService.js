@@ -60,6 +60,17 @@ export const authService = {
   },
 
   /**
+   * Login with token from URL (legacy method)
+   * @param {string} token - Session token
+   * @returns {Promise<void>}
+   */
+  async loginWithToken(token) {
+    this.setSessionToken(token);
+    // Verify the token by fetching profile
+    await this.getProfile();
+  },
+
+  /**
    * Logout pharmacist
    * @returns {Promise<void>}
    */

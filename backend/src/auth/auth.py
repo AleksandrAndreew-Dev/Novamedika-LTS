@@ -36,7 +36,7 @@ def create_access_token(data: dict):
     to_encode = data.copy()
     expire = get_utc_now_naive() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, SECRET_KEY or "", algorithm=ALGORITHM)
 
 
 def create_refresh_token(data: dict):
@@ -44,7 +44,7 @@ def create_refresh_token(data: dict):
     to_encode = data.copy()
     expire = get_utc_now_naive() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode.update({"exp": expire, "type": "refresh"})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, SECRET_KEY or "", algorithm=ALGORITHM)
 
 
 async def get_current_pharmacist(
@@ -53,12 +53,12 @@ async def get_current_pharmacist(
 ):
     try:
         payload = jwt.decode(
-            credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM]
+            credentials.credentials, SECRET_KEY or "", algorithms=[ALGORITHM]
         )
         # Проверяем что это access token (не refresh)
         if payload.get("type") == "refresh":
             raise HTTPException(status_code=401, detail="Invalid token type")
-        pharmacist_id: str = payload.get("sub")
+        pharmacist_id = payload.get("sub")
         if pharmacist_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
     except ExpiredSignatureError:
@@ -90,25 +90,19 @@ async def store_refresh_token(token: str, user_id: str, db: AsyncSession):
     for attempt in range(max_attempts):
         try:
             # Удаляем все активные токены пользователя перед созданием нового
-            # Делаем это внутри каждой попытки, чтобы избежать race conditions
             await db.execute(
                 delete(RefreshToken).where(
                     RefreshToken.user_id == user_id,
-                    RefreshToken.revoked == False
+                    getattr(RefreshToken, 'revoked') == False
                 )
             )
-            
-            # Добавляем уникальный идентификатор к токену для предотвращения дублирования
-            # Это особенно важно при параллельных запросах
-            jti = str(uuid.uuid4())
-            unique_token = f"{token}_{jti}"
             
             # Создаем новый токен
             expires_at = get_utc_now_naive() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
             refresh_token = RefreshToken(
                 id=str(uuid.uuid4()),
                 user_id=user_id,
-                token=unique_token,  # Используем уникальный токен
+                token=token,
                 expires_at=expires_at,
                 revoked=False,
             )
@@ -121,54 +115,30 @@ async def store_refresh_token(token: str, user_id: str, db: AsyncSession):
             await db.rollback()
             logger.warning(f"IntegrityError on attempt {attempt + 1} for user {user_id}: {e}")
             if attempt == max_attempts - 1:
-                logger.error(f"Failed to create unique refresh token after {max_attempts} attempts for user {user_id}")
+                # If we still fail after retries, it means there's a persistent issue.
+                # We can try to find an existing token and return it, or just raise.
+                # For now, let's log and raise a more specific error.
+                logger.error(f"Failed to create refresh token after {max_attempts} attempts for user {user_id}")
                 raise HTTPException(status_code=500, detail="Unable to generate unique refresh token")
-            # Генерируем новый уникальный токен для следующей попытки
-            jti = str(uuid.uuid4())
-            unique_token = f"{token}_{jti}"
 
 
 async def revoke_refresh_token(token: str, db: AsyncSession):
     """Отозвать refresh token по токену"""
-    # Сначала пытаемся найти точное совпадение
     result = await db.execute(
         select(RefreshToken).where(RefreshToken.token == token)
     )
     rt = result.scalar_one_or_none()
     
-    # Если не найдено, ищем токены, начинающиеся с этого токена + "_"
-    if not rt and "_" in token:
-        # Это может быть оригинальный токен, ищем соответствующий суффиксный
-        result = await db.execute(
-            select(RefreshToken).where(
-                RefreshToken.token.like(f"{token}_%"),
-                RefreshToken.revoked == False
-            )
-        )
-        rt = result.scalar_one_or_none()
-    
     if rt:
-        rt.revoked = True
+        setattr(rt, 'revoked', True)
         await db.commit()
 
 
 async def validate_refresh_token(token: str, db: AsyncSession):
     """Проверить валидность refresh token"""
-    original_token = token
-    
-    # Определяем оригинальный JWT токен (до последнего "_", если есть)
-    if "_" in token:
-        # Предполагаем, что это суффиксный токен, извлекаем оригинальную часть
-        parts = token.rsplit("_", 1)
-        if len(parts) == 2:
-            # Проверяем, что вторая часть выглядит как UUID
-            import re
-            if re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', parts[1]):
-                original_token = parts[0]
-    
     try:
-        payload = jwt.decode(original_token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
+        payload = jwt.decode(token, SECRET_KEY or "", algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
         if user_id is None:
             return None
     except (ExpiredSignatureError, InvalidTokenError):
@@ -177,27 +147,12 @@ async def validate_refresh_token(token: str, db: AsyncSession):
     # Проверяем наличие в БД и статус отзыва
     result = await db.execute(
         select(RefreshToken).where(
-            RefreshToken.token == token,  # Ищем точное совпадение с переданным токеном
-            RefreshToken.revoked == False
+            RefreshToken.token == token,
+            getattr(RefreshToken, 'revoked') == False
         )
     )
     rt = result.scalar_one_or_none()
     if not rt:
-        # Если не найдено точное совпадение, и у нас был оригинальный токен,
-        # попробуем найти соответствующий суффиксный токен
-        if original_token != token:
-            # Это не должно происходить, так как мы уже используем полный токен
-            return None
-        else:
-            # Ищем любой активный токен для этого пользователя с этим оригинальным токеном
-            result = await db.execute(
-                select(RefreshToken).where(
-                    RefreshToken.token.like(f"{original_token}_%"),
-                    RefreshToken.revoked == False
-                )
-            )
-            rt = result.scalar_one_or_none()
-            if not rt:
-                return None
+        return None
 
     return user_id
