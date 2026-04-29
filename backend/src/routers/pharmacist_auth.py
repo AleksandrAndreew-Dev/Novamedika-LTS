@@ -50,8 +50,8 @@ class PharmacistLoginRequest(BaseModel):
 
 
 class TelegramLoginRequest(BaseModel):
-    """Модель запроса для валидации Telegram initData"""
-    initData: str = Field(..., description="Raw initData string from Telegram WebApp")
+    """Модель запроса для валидации Telegram initData (пустая, так как данные передаются в заголовке)"""
+    pass
 
 
 # Новая функция для получения фармацевта по Telegram ID
@@ -222,19 +222,29 @@ async def pharmacist_login(
 
 @router.post("/login/telegram/")
 async def telegram_webapp_login(
-    request: TelegramLoginRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """
     Валидация Telegram WebApp initData и выдача session token
     
-    Этот эндпоинт принимает rawData от Telegram SDK, проверяет подпись
-    и выдает простой session token для аутентификации фармацевта.
+    Этот эндпоинт принимает rawData из заголовка Authorization: tma <initData>, 
+    проверяет подпись и выдает простой session token для аутентификации фармацевта.
     """
     try:
         # Импортируем утилиту aiogram для валидации
         from aiogram.utils.web_app import safe_parse_webapp_init_data
         from sqlalchemy.exc import IntegrityError
+        
+        # Получаем initData из заголовка Authorization
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("tma "):
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid authorization header format. Use 'tma <initData>'"
+            )
+        
+        init_data_raw = auth_header[4:]  # убираем префикс "tma "
         
         # Получаем токен бота из окружения
         bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -249,7 +259,7 @@ async def telegram_webapp_login(
         try:
             validated_data = safe_parse_webapp_init_data(
                 token=bot_token,
-                init_data=request.initData
+                init_data=init_data_raw
             )
         except ValueError as e:
             logger.warning(f"Invalid initData signature: {e}")

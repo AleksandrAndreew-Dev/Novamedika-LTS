@@ -17,7 +17,7 @@ export const authService = {
   },
 
   /**
-   * Login pharmacist via Telegram WebApp
+   * Login pharmacist via Telegram WebApp using Authorization header (TMA standard)
    * @returns {Promise<{session_token: string}>}
    */
   async loginWithTelegram() {
@@ -40,16 +40,27 @@ export const authService = {
     }
     
     // Create and store the login promise
-    loginPromise = api.post('/api/pharmacist/login/telegram/', {
-      initData: initData
-    }).then(response => {
-      if (response.data.session_token) {
-        this.setSessionToken(response.data.session_token);
+    loginPromise = fetch('/api/pharmacist/login/telegram/', {
+      method: 'POST',
+      headers: {
+        'Authorization': `tma ${initData}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({}) // Empty body as data is in header
+    }).then(async response => {
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Login failed');
+      }
+      
+      const data = await response.json();
+      if (data.session_token) {
+        this.setSessionToken(data.session_token);
       }
       
       // Clear the login promise after successful completion
       loginPromise = null;
-      return response.data;
+      return data;
     }).catch(error => {
       // Clear the login promise on error
       loginPromise = null;

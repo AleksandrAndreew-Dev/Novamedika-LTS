@@ -29,6 +29,17 @@ function AuthProvider({ children }) {
         console.log('[AuthProvider] Session is valid, user authenticated:', profile.user?.first_name);
       } else {
         console.log('[AuthProvider] No session token found in localStorage');
+        // If no token but we are in Telegram, try to login immediately
+        const initData = window.Telegram?.WebApp?.initData;
+        if (initData) {
+          console.log('[AuthProvider] 🔄 No token but initData found. Attempting auto-login...');
+          try {
+            await loginWithTelegram();
+            return; // Exit early as loginWithTelegram handles state updates
+          } catch (loginErr) {
+            console.error('[AuthProvider] ❌ Initial auto-login failed:', loginErr);
+          }
+        }
         setIsAuthenticated(false);
         setPharmacist(null);
       }
