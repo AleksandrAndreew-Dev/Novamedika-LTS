@@ -1,307 +1,37 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { useAuth } from './hooks/useAuth.js';
+import React, { useEffect } from 'react';
+import { useAuth } from './hooks/useAuth';
 import DashboardStats from './components/dashboard/DashboardStats';
 import QuestionsList from './components/consultations/QuestionsList';
 import Sidebar from './components/layout/Sidebar';
 import MainLayout from './components/layout/MainLayout';
 
-// Simple Error Boundary component
-class ErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error: error };
-  }
-
-  componentDidCatch(error, errorInfo) {
-    console.error('[PharmacistContent] ErrorBoundary caught error:', error);
-    console.error('[PharmacistContent] Error info:', errorInfo);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="text-center">
-            <div className="mx-auto h-16 w-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
-              <svg className="h-8 w-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Ошибка загрузки панели</h3>
-            <p className="text-gray-600 mb-4">
-              Не удалось загрузить статистику. Панель фармацевта доступна, но некоторые данные временно недоступны.
-            </p>
-            <button
-              onClick={() => window.location.reload()}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none"
-            >
-              <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              Перезагрузить панель
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    return this.props.children;
-  }
-}
-
 export default function PharmacistContent() {
-  const { isAuthenticated, user, loading, loginWithToken, loginWithTelegram, error } = useAuth();
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [tokenProcessed, setTokenProcessed] = useState(false);
-  const [tokenProcessingError, setTokenProcessingError] = useState(null);
-  const authInProgressRef = useRef(false); // Prevent concurrent auth attempts
-  const [isLoggingIn, setIsLoggingIn] = useState(false); // New state to track login process
+  const { isAuthenticated, user, loading, error } = useAuth();
+  const [activeTab, setActiveTab] = React.useState('dashboard');
 
-  // Проверяем наличие токена в URL при загрузке (DEPRECATED) или используем Telegram SDK
-  useEffect(() => {
-    const processAuth = async () => {
-      // Prevent concurrent authentication attempts
-      if (tokenProcessed || isAuthenticated || authInProgressRef.current || isLoggingIn) {
-        console.log('[PharmacistContent] Skipping auth processing - already processed, authenticated, or in progress');
-        console.log('[PharmacistContent] tokenProcessed:', tokenProcessed, 'isAuthenticated:', isAuthenticated, 'authInProgress:', authInProgressRef.current, 'isLoggingIn:', isLoggingIn);
-        return;
-      }
-
-      // Mark authentication as in progress
-      authInProgressRef.current = true;
-      setIsLoggingIn(true);
-
-      console.log('[PharmacistContent] Starting authentication process...');
-      console.log('[PharmacistContent] isAuthenticated:', isAuthenticated);
-      console.log('[PharmacistContent] tokenProcessed:', tokenProcessed);
-
-      try {
-        // Check if we're in Telegram WebApp environment
-        if (window.Telegram?.WebApp?.initData) {
-          console.log('[PharmacistContent] ✅ Detected Telegram WebApp environment with initData');
-          
-          // Use Telegram SDK for authentication (NEW METHOD)
-          await loginWithTelegram();
-          
-          setTokenProcessed(true);
-          setTokenProcessingError(null);
-          console.log('[PharmacistContent] ✅ Telegram login successful');
-          
-        } else {
-          // Fallback: Try to get token from URL query params (LEGACY METHOD)
-          const urlParams = new URLSearchParams(window.location.search);
-          const token = urlParams.get('token');
-
-          if (token) {
-            console.log('[PharmacistContent] ⚠️ Found JWT token in URL (legacy method), attempting login...');
-            console.log('[PharmacistContent] Token length:', token.length);
-
-            await loginWithToken(token);
-
-            // Удаляем токен из URL для безопасности
-            window.history.replaceState({}, document.title, window.location.pathname);
-            setTokenProcessed(true);
-            setTokenProcessingError(null);
-            console.log('[PharmacistContent] ✅ Legacy token login successful, URL cleaned');
-          } else {
-            console.log('[PharmacistContent] No token in URL and not in Telegram, checking localStorage...');
-            const storedToken = localStorage.getItem('pharmacist_session_token');
-            if (storedToken) {
-              console.log('[PharmacistContent] ✅ Found session token in localStorage (length:', storedToken.length + ')');
-              console.log('[PharmacistContent] useAuth hook will handle auto-login via checkAuth()');
-            } else {
-              console.log('[PharmacistContent] ⚠️ No authentication method available');
-              console.log('[PharmacistContent] - Not in Telegram WebApp');
-              console.log('[PharmacistContent] - No token in URL');
-              console.log('[PharmacistContent] - No token in localStorage');
-            }
-            setTokenProcessed(true);
-            setTokenProcessingError(null);
-          }
-        }
-      } catch (error) {
-        console.error('[PharmacistContent] ❌ Authentication failed:', error);
-        
-        // Set specific error for authentication failure
-        const errorMessage = error.userMessage || error.response?.data?.detail || error.message || 'Ошибка аутентификации.';
-        setTokenProcessingError(errorMessage);
-        setTokenProcessed(true);
-      } finally {
-        // Reset the flags after authentication completes (success or failure)
-        authInProgressRef.current = false;
-        setIsLoggingIn(false);
-      }
-    };
-
-    // Only process auth if we're not already logging in
-    if (!isLoggingIn) {
-      processAuth();
-    }
-  }, [isAuthenticated, loginWithToken, loginWithTelegram, tokenProcessed, isLoggingIn]);
-
-  // Determine the actual error to display
-  const displayError = tokenProcessingError || error;
-
-  // Если есть ошибка аутентификации - показываем сообщение об ошибке
-  if (!loading && displayError && !isAuthenticated) {
+  // If not authenticated and not loading, this shouldn't be reached due to ProtectedRoute
+  // but we add a fallback just in case
+  if (!loading && !isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full border-l-4 border-red-500">
-          <div className="text-center mb-6">
-            <div className="mx-auto h-16 w-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
-              <svg
-                className="h-8 w-8 text-red-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                />
-              </svg>
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">
-              Ошибка аутентификации
-            </h2>
-            <p className="text-gray-600 text-sm mb-4">
-              {displayError}
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            <button
-              onClick={() => {
-                // Try to reload and reprocess token
-                window.location.reload();
-              }}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center"
-            >
-              <svg
-                className="w-5 h-5 mr-2"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-              Повторить попытку
-            </button>
-            
-            <button
-              onClick={() => {
-                // Close WebApp and go back to Telegram
-                if (window.Telegram?.WebApp) {
-                  window.Telegram.WebApp.close();
-                } else {
-                  window.location.href = '/';
-                }
-              }}
-              className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center"
-            >
-              <svg
-                className="w-5 h-5 mr-2"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
-                />
-              </svg>
-              Вернуться в Telegram
-            </button>
-          </div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600">Требуется авторизация. Перенаправление...</p>
         </div>
       </div>
     );
   }
 
-  // Если не авторизован и токен обработан - показываем страницу входа
-  if (!loading && !isAuthenticated && tokenProcessed) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white p-8 rounded-lg shadow-md max-w-md w-full">
-          <div className="text-center mb-6">
-            <div className="mx-auto h-16 w-16 bg-blue-600 rounded-full flex items-center justify-center mb-4">
-              <svg
-                className="h-8 w-8 text-white"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                />
-              </svg>
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900">Вход для фармацевтов</h2>
-          </div>
-
-          <div className="space-y-4">
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <p className="text-sm text-green-800 mb-3">
-                <strong>✅ Автоматический вход через Telegram</strong>
-              </p>
-              <ol className="text-sm text-green-700 space-y-2 list-decimal list-inside">
-                <li>Откройте бота NovaMedika в Telegram</li>
-                <li>Нажмите кнопку "💼 Панель фармацевта"</li>
-                <li>WebApp откроется автоматически с вашим токеном</li>
-              </ol>
-            </div>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-800 mb-2">
-                <strong>Если автоматический вход не сработал:</strong>
-              </p>
-              <p className="text-xs text-blue-700">
-                Попробуйте перезагрузить страницу или нажмите кнопку ниже, чтобы закрыть WebApp и попробовать снова.
-              </p>
-            </div>
-
-            <button
-              onClick={() => window.Telegram?.WebApp?.close()}
-              className="w-full bg-gray-200 text-gray-700 py-3 rounded-lg hover:bg-gray-300 transition mt-4"
-            >
-              Закрыть
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Show loading state during authentication
-  if (loading || isLoggingIn) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Аутентификация...</p>
+          <p className="text-gray-600">Загрузка панели...</p>
         </div>
       </div>
     );
   }
 
-  // If authenticated, show the dashboard even if verification is pending
-  // The DashboardStats component now handles its own errors gracefully
   return (
     <MainLayout>
       <div className="flex h-screen bg-gray-50">
@@ -311,11 +41,7 @@ export default function PharmacistContent() {
         {/* Main Content */}
         <div className="flex-1 overflow-auto">
           <div className="p-6">
-            {activeTab === 'dashboard' && (
-              <ErrorBoundary>
-                <DashboardStats />
-              </ErrorBoundary>
-            )}
+            {activeTab === 'dashboard' && <DashboardStats />}
             {activeTab === 'questions' && <QuestionsList />}
             {activeTab === 'profile' && (
               <div className="bg-white rounded-lg shadow p-6">

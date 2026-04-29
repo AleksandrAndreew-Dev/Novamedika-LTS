@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useRef } from 'react';
+import { useState, useEffect, createContext } from 'react';
 import { authService } from '../../services/authService';
 import { logger } from '../../../utils/logger';
 
@@ -11,7 +11,6 @@ function AuthProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true);
   const [pharmacist, setPharmacist] = useState(null);
   const [error, setError] = useState(null);
-  const loginInProgressRef = useRef(false); // Prevent concurrent login attempts
 
   // Check authentication status on mount
   useEffect(() => {
@@ -53,14 +52,7 @@ function AuthProvider({ children }) {
 
   // Login with Telegram WebApp initData (NEW - simplified method)
   const loginWithTelegram = async () => {
-    // Prevent concurrent login attempts
-    if (loginInProgressRef.current) {
-      console.log('[AuthProvider] ⚠️ Login already in progress, skipping...');
-      return pharmacist; // Return current pharmacist if login is in progress
-    }
-
     try {
-      loginInProgressRef.current = true;
       setIsLoading(true);
       setError(null);
       
@@ -100,21 +92,13 @@ function AuthProvider({ children }) {
       setError(errorMessage);
       throw err;
     } finally {
-      loginInProgressRef.current = false;
       setIsLoading(false);
     }
   };
 
   // Login with token from URL (legacy method - if needed)
   const loginWithToken = async (token) => {
-    // Prevent concurrent login attempts
-    if (loginInProgressRef.current) {
-      console.log('[AuthProvider] ⚠️ Login already in progress, skipping...');
-      return pharmacist;
-    }
-
     try {
-      loginInProgressRef.current = true;
       setIsLoading(true);
       setError(null);
       
@@ -150,7 +134,6 @@ function AuthProvider({ children }) {
       setError(errorMessage);
       throw err;
     } finally {
-      loginInProgressRef.current = false;
       setIsLoading(false);
     }
   };
