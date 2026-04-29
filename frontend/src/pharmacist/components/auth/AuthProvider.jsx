@@ -49,20 +49,34 @@ function AuthProvider({ children }) {
             setPharmacist(profile);
             setIsAuthenticated(true);
             console.log('[AuthProvider] Session is valid, active pharmacist:', profile.user?.first_name);
+            return; // Успешно авторизованы, выходим
           } else {
-            // Пользователь найден, но не активен — не выбрасываем ошибку, просто выходим
-            console.warn('[AuthProvider] Pharmacist exists but is not active');
+            // Фармацевт неактивен – не пытаемся перелогиниться
+            console.warn('[AuthProvider] Pharmacist is not active');
             setError('Доступ запрещен. Ваш аккаунт фармацевта ещё не активирован администратором.');
+            localStorage.removeItem('pharmacist_session_token');
             setIsAuthenticated(false);
             setPharmacist(null);
-            localStorage.removeItem('pharmacist_session_token');
             return; // Важно: выходим, не пытаемся авто-логиниться
           }
-        } catch (profileErr) {
-          // Если /me вернул 401/403, значит токен истёк или невалиден
-          console.log('[AuthProvider] Profile fetch failed, clearing token');
-          localStorage.removeItem('pharmacist_session_token');
-          throw profileErr; // Пробрасываем дальше для обработки в общем catch
+        } catch (err) {
+          // Если сессия истекла или доступ запрещен
+          if (err.message === 'Session expired') {
+            console.log('[AuthProvider] Token expired, trying auto-login with initData');
+            localStorage.removeItem('pharmacist_session_token');
+            // Продолжаем выполнение, чтобы попробовать initData ниже
+          } else if (err.message?.includes('not an active registered pharmacist')) {
+            // 403 – показываем ошибку и выходим
+            console.warn('[AuthProvider] Access denied: not an active registered pharmacist');
+            setError('Доступ запрещен. Вы не зарегистрированы как активный фармацевт.');
+            localStorage.removeItem('pharmacist_session_token');
+            setIsAuthenticated(false);
+            setPharmacist(null);
+            return;
+          } else {
+            // Любая другая ошибка – пробрасываем дальше для обработки в общем catch
+            throw err;
+          }
         }
       } else {
         console.log('[AuthProvider] No session token found in localStorage');
@@ -90,11 +104,9 @@ function AuthProvider({ children }) {
       // Auto-login via Telegram WebApp ONLY if:
       // 1. We're in Telegram environment
       // 2. The error was 401 (expired token), NOT 403 (forbidden/inactive)
-      // 3. We haven't already tried auto-login in this cycle
       const initData = window.Telegram?.WebApp?.initData;
       const shouldRetryLogin = initData && 
-                               err.response?.status === 401 && 
-                               !err.message?.includes('not an active registered pharmacist');
+                               err.response?.status === 401;
       
       if (shouldRetryLogin) {
         console.log('[AuthProvider] ⚠️ Session expired (401). Attempting auto-login via Telegram WebApp...');
@@ -103,7 +115,7 @@ function AuthProvider({ children }) {
           return; // Exit early as loginWithTelegram handles state updates
         } catch (loginErr) {
           console.error('[AuthProvider] ❌ Auto-login failed:', loginErr);
-          // Don't retry again, just show error
+          // Don't retry again, just show error below
         }
       }
       
@@ -111,15 +123,19 @@ function AuthProvider({ children }) {
       setIsAuthenticated(false);
       setPharmacist(null);
       
-      // Set specific error message for user
+      // Set specific error message for user based on error type
       if (err.response?.status === 403 || err.message?.includes('not an active registered pharmacist')) {
         setError('Доступ запрещен. Вы не зарегистрированы как активный фармацевт, либо ваш аккаунт деактивирован.');
       } else if (err.response?.status === 401) {
         setError('Сессия истекла. Пожалуйста, закройте и откройте Панель фармацевта заново.');
       } else if (err.message?.includes('Telegram session expired') || err.message?.includes('QUERY_ID_INVALID')) {
         setError('Сессия Telegram истекла. Пожалуйста, перезапустите Мини-Приложение.');
+      } else if (err.message?.includes('Not in Telegram')) {
+        setError('Эта страница должна быть открыта из Telegram бота. Пожалуйста, нажмите кнопку "Панель фармацевта" в боте.');
+      } else if (err.message?.includes('initData not available')) {
+        setError('Данные Telegram не загружены. Попробуйте закрыть и открыть WebApp снова.');
       } else {
-        setError(err.userMessage || 'Ошибка авторизации. Попробуйте закрыть и открыть приложение снова.');
+        setError(err.userMessage || err.message || 'Ошибка авторизации. Попробуйте закрыть и открыть приложение снова.');
       }
     } finally {
       loginInProgressRef.current = false;
@@ -146,6 +162,8 @@ function AuthProvider({ children }) {
       if (window.Telegram?.WebApp) {
         window.Telegram.WebApp.ready();
         window.Telegram.WebApp.expand();
+      } else {
+        throw new Error('Not in Telegram WebApp environment');
       }
       
       // Use the new loginWithTelegram method from authService
@@ -157,11 +175,22 @@ function AuthProvider({ children }) {
       const profile = await authService.getProfile();
       
       console.log('[AuthProvider] ✅ Profile fetched successfully:', profile.user?.first_name, profile.user?.telegram_id);
-      setPharmacist(profile);
-      setIsAuthenticated(true);
       
-      console.log('[AuthProvider] ✅ Telegram login successful');
-      return profile;
+      // Проверяем активность фармацевта
+      if (profile && profile.is_active) {
+        setPharmacist(profile);
+        setIsAuthenticated(true);
+        console.log('[AuthProvider] ✅ Telegram login successful');
+        return profile;
+      } else {
+        // Фармацевт не активен
+        console.warn('[AuthProvider] Pharmacist exists but is not active');
+        setError('Доступ запрещен. Ваш аккаунт фармацевта ещё не активирован администратором.');
+        localStorage.removeItem('pharmacist_session_token');
+        setIsAuthenticated(false);
+        setPharmacist(null);
+        throw new Error('Access denied: not an active registered pharmacist');
+      }
       
     } catch (err) {
       console.error('[AuthProvider] ❌ Telegram login failed:', err);
@@ -175,6 +204,10 @@ function AuthProvider({ children }) {
         errorMessage = 'Эта страница должна быть открыта из Telegram бота. Пожалуйста, нажмите кнопку "Панель фармацевта" в боте.';
       } else if (err.message.includes('initData not available')) {
         errorMessage = 'Данные Telegram не загружены. Попробуйте закрыть и открыть WebApp снова.';
+      } else if (err.message.includes('Telegram session expired') || err.message.includes('QUERY_ID_INVALID')) {
+        errorMessage = 'Сессия Telegram истекла. Пожалуйста, перезапустите Мини-Приложение.';
+      } else if (err.message.includes('not an active registered pharmacist') || err.message.includes('Access denied')) {
+        errorMessage = 'Доступ запрещен. Вы не зарегистрированы как активный фармацевт.';
       } else {
         errorMessage += err.message || 'Попробуйте позже.';
       }

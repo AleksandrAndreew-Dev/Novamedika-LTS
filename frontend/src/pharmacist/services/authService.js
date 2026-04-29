@@ -115,8 +115,30 @@ export const authService = {
    * @returns {Promise<Object>}
    */
   async getProfile() {
-    const response = await api.get('/api/pharmacist/me');
-    return response.data;
+    const token = localStorage.getItem('pharmacist_session_token');
+    if (!token) {
+      throw new Error('No session token');
+    }
+
+    try {
+      const response = await api.get('/api/pharmacist/me');
+      return response.data;
+    } catch (error) {
+      // Axios throws for non-2xx status codes, so we check error.response.status
+      if (error.response?.status === 401) {
+        // Token expired or invalid - clear it
+        localStorage.removeItem('pharmacist_session_token');
+        throw new Error('Session expired');
+      }
+      
+      if (error.response?.status === 403) {
+        // Access denied - pharmacist not active
+        throw new Error('Access denied: not an active registered pharmacist');
+      }
+      
+      // Re-throw other errors
+      throw error;
+    }
   },
 
   /**
