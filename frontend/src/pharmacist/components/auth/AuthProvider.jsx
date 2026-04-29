@@ -92,7 +92,7 @@ function AuthProvider({ children }) {
       
       // Send initData to backend for validation
       console.log('[AuthProvider] Sending initData to /api/pharmacist/login/telegram...');
-      const response = await fetch('/api/pharmacist/login/telegram', {
+      const response = await fetch('/api/pharmacist/login/telegram/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
