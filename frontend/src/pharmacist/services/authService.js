@@ -147,8 +147,7 @@ export const authService = {
    * @returns {Promise<Object>}
    */
   async setOnlineStatus(isOnline) {
-    const endpoint = isOnline ? '/api/pharmacist/online' : '/api/pharmacist/offline';
-    const response = await api.put(endpoint);
+    const response = await api.put('/api/pharmacist/online', { online: isOnline });
     return response.data;
   },
 
