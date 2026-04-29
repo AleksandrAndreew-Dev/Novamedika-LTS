@@ -67,7 +67,7 @@ function AuthProvider({ children }) {
       console.log('[AuthProvider] 🔄 Starting Telegram WebApp login...');
       
       // Use the new loginWithTelegram method from authService
-      const data = await authService.loginWithTelegram();
+      await authService.loginWithTelegram();
       
       console.log('[AuthProvider] ✅ Backend validated initData and returned session token');
       
