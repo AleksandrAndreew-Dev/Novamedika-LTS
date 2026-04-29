@@ -6,12 +6,27 @@ import Dashboard from './pharmacist/pages/Dashboard';
 import Login from './pharmacist/components/auth/Login';
 import ProtectedRoute from './pharmacist/components/auth/ProtectedRoute';
 import { logger } from './utils/logger';
+import { telegramWebApp } from '../utils/telegramWebApp';
 
 // Component to handle URL token authentication
 function TokenAuthHandler() {
   const [searchParams] = useSearchParams();
   const { loginWithToken, isAuthenticated } = useAuth();
   const [authError, setAuthError] = useState(null);
+
+  // Initialize Telegram WebApp on component mount
+  useEffect(() => {
+    console.log('[TokenAuthHandler] Initializing Telegram WebApp...');
+    telegramWebApp.initialize();
+    
+    // Apply theme colors if in Telegram
+    if (telegramWebApp.isInTelegram()) {
+      console.log('[TokenAuthHandler] Running inside Telegram - applying theme');
+      telegramWebApp.applyTheme();
+    } else {
+      console.log('[TokenAuthHandler] Running outside Telegram - using default theme');
+    }
+  }, []);
 
   useEffect(() => {
     const token = searchParams.get('token');
