@@ -187,12 +187,12 @@ async def pharmacist_login(
             )
 
         # Создаём JWT токены
-        token_data = {"sub": str(pharmacist.uuid), "type": "access"}
+        token_data = {"sub": str(pharmacist.user_id), "type": "access"}
         access_token = create_access_token(data=token_data)
-        refresh_token = create_refresh_token(data={"sub": str(pharmacist.uuid)})
+        refresh_token = create_refresh_token(data={"sub": str(pharmacist.user_id)})
 
         # Сохраняем refresh token в БД
-        await store_refresh_token(refresh_token, str(pharmacist.uuid), db)
+        await store_refresh_token(refresh_token, str(pharmacist.user_id), db)
 
         return {
             "access_token": access_token,
@@ -307,158 +307,17 @@ async def telegram_webapp_login(
         
         # Создаём JWT токены
         token_data = {
-            "sub": str(pharmacist.uuid),
+            "sub": str(pharmacist.user_id),
             "telegram_id": telegram_id,
             "role": "pharmacist",
             "type": "access",
         }
         access_token = create_access_token(data=token_data)
         refresh_token = create_refresh_token(data={
-            "sub": str(pharmacist.uuid),
+            "sub": str(pharmacist.user_id),
             "telegram_id": telegram_id,
             "role": "pharmacist",
         })
         
         # Сохраняем refresh token в БД
-        await store_refresh_token(refresh_token, str(pharmacist.uuid), db)
-        
-        logger.info(f"✅ Telegram login successful for pharmacist UUID={pharmacist.uuid}")
-        
-        return {
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "token_type": "bearer",
-            "expires_in": 86400,  # 24 часа
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Telegram WebApp login failed")
-        raise HTTPException(
-            status_code=500,
-            detail="Login failed. Please try again later."
-        )
-
-
-@router.get("/me", response_model=PharmacistResponse)
-async def get_current_pharmacist_info(
-    pharmacist: Pharmacist = Depends(get_current_pharmacist),
-):
-    """Получение информации о текущем фармацевте"""
-    return PharmacistResponse(
-        uuid=pharmacist.uuid,
-        user=UserResponse.model_validate(pharmacist.user),
-        pharmacy_info=pharmacist.pharmacy_info,  # ✅ Используем JSON данные
-        is_active=pharmacist.is_active,
-    )
-
-
-# Alias for backwards compatibility with frontend
-@router.get("/profile", response_model=PharmacistResponse)
-async def get_current_pharmacist_profile(
-    pharmacist: Pharmacist = Depends(get_current_pharmacist),
-):
-    """Получение профиля текущего фармацевта (alias для /me)"""
-    return PharmacistResponse(
-        uuid=pharmacist.uuid,
-        user=UserResponse.model_validate(pharmacist.user),
-        pharmacy_info=pharmacist.pharmacy_info,
-        is_active=pharmacist.is_active,
-    )
-
-
-# Новые эндпоинты для управления онлайн статусом
-@router.post("/online")
-async def set_online(
-    pharmacist: Pharmacist = Depends(get_current_pharmacist),
-    db: AsyncSession = Depends(get_db),
-):
-    """Перевести фармацевта в онлайн"""
-    pharmacist.is_online = True
-    pharmacist.last_seen = get_utc_now_naive()
-    await db.commit()
-
-    return {"status": "success", "message": "Вы теперь онлайн"}
-
-
-@router.post("/offline")
-async def set_offline(
-    pharmacist: Pharmacist = Depends(get_current_pharmacist),
-    db: AsyncSession = Depends(get_db),
-):
-    """Перевести фармацевта в офлайн"""
-    pharmacist.is_online = False
-    pharmacist.last_seen = get_utc_now_naive()
-    await db.commit()
-
-    return {"status": "success", "message": "Вы теперь офлайн"}
-
-
-@router.get("/status")
-async def get_status(pharmacist: Pharmacist = Depends(get_current_pharmacist)):
-    """Получить текущий статус фармацевта"""
-    return {
-        "is_online": pharmacist.is_online,
-        "last_seen": pharmacist.last_seen,
-        "is_active": pharmacist.is_active,
-        "pharmacy_info": pharmacist.pharmacy_info,
-    }
-
-
-class RefreshTokenRequest(BaseModel):
-    refresh_token: str
-
-
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    expires_in: int
-
-
-@router.post("/refresh/", response_model=TokenResponse)
-async def refresh_access_token(
-    request: RefreshTokenRequest,
-    db: AsyncSession = Depends(get_db),
-):
-    """Получить новый access token по refresh token"""
-    # Валидируем refresh token
-    token_data = await validate_refresh_token(request.refresh_token, db)
-
-    # Создаём новый access token
-    new_access_token = create_access_token(
-        data={"sub": token_data["user_id"], "type": "access"}
-    )
-
-    return {
-        "access_token": new_access_token,
-        "token_type": "bearer",
-        "expires_in": 1800,
-    }
-
-
-@router.post("/logout/")
-async def logout(
-    request: RefreshTokenRequest,
-    db: AsyncSession = Depends(get_db),
-    pharmacist: Pharmacist = Depends(get_current_pharmacist),
-):
-    """Выход — отзыв refresh token"""
-    await revoke_refresh_token(request.refresh_token, db)
-
-    # Переводим фармацевта в офлайн
-    pharmacist.is_online = False
-    pharmacist.last_seen = get_utc_now_naive()
-    await db.commit()
-
-    return {"status": "success", "message": "Logged out successfully"}
-
-
-# В конце pharmacist_auth.py добавить:
-__all__ = [
-    "router",
-    "get_pharmacist_by_telegram_id",
-    "get_or_create_user",
-    "register_pharmacist",
-    "pharmacist_login",
-]
+        await store_refresh_token(refresh_token, str(pharmacist.user_id), db)
