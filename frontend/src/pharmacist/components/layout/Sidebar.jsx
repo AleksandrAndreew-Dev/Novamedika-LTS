@@ -3,29 +3,9 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function Sidebar() {
-  // Safety check for router context - handle case when Router is not yet initialized
-  let location, navigate;
-  try {
-    location = useLocation();
-    navigate = useNavigate();
-  } catch (error) {
-    console.warn('[Sidebar] Router context not available yet:', error.message);
-    // Return minimal sidebar without navigation functionality
-    return (
-      <div className="hidden lg:flex lg:flex-shrink-0">
-        <div className="flex flex-col w-64">
-          <div className="flex flex-col h-0 flex-1 bg-gray-800">
-            <div className="flex-1 flex flex-col pt-5 pb-4 overflow-y-auto">
-              <div className="flex items-center flex-shrink-0 px-4">
-                <span className="text-white text-lg font-bold">NovaMedika</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  // Always call hooks at the top level - React Hooks Rules
+  const location = useLocation();
+  const navigate = useNavigate();
   const { pharmacist, logout, setOnlineStatus } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 

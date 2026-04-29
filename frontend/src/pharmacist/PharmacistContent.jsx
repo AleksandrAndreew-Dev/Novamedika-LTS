@@ -1,13 +1,11 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useAuth } from './hooks/useAuth';
 import DashboardStats from './components/dashboard/DashboardStats';
 import QuestionsList from './components/consultations/QuestionsList';
-import Sidebar from './components/layout/Sidebar';
 import MainLayout from './components/layout/MainLayout';
 
 export default function PharmacistContent() {
   const { isAuthenticated, user, loading } = useAuth();
-  const [activeTab, setActiveTab] = useState('dashboard');
 
   // Enhanced debugging - log auth state changes
   React.useEffect(() => {
@@ -73,41 +71,34 @@ export default function PharmacistContent() {
 
   return (
     <MainLayout>
-      <div className="flex h-screen bg-gray-50">
-        {/* Sidebar */}
-        <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
-
-        {/* Main Content */}
-        <div className="flex-1 overflow-auto">
-          <div className="p-6">
-            {activeTab === 'dashboard' && <DashboardStats />}
-            {activeTab === 'questions' && <QuestionsList />}
-            {activeTab === 'profile' && (
-              <div className="bg-white rounded-lg shadow p-6">
-                <h2 className="text-2xl font-bold mb-4">Профиль фармацевта</h2>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Имя</label>
-                    <p className="mt-1 text-lg">{user?.user?.first_name || user?.name || 'Не указано'}</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Telegram ID</label>
-                    <p className="mt-1 text-lg">{user?.user?.telegram_id || user?.telegram_id || 'Не указано'}</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Статус</label>
-                    <p className="mt-1 text-lg">
-                      {user?.is_active ? 'Активен' : 'Не активен'}
-                      {user?.is_online && ' • Онлайн'}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Аптека</label>
-                    <p className="mt-1 text-lg">{user?.pharmacy_info?.name || 'Не указана'}</p>
-                  </div>
-                </div>
+      {/* Main Content - без дублирования Sidebar */}
+      <div className="flex-1 overflow-auto">
+        <div className="p-6">
+          <DashboardStats />
+          <QuestionsList />
+          <div className="bg-white rounded-lg shadow p-6 mt-6">
+            <h2 className="text-2xl font-bold mb-4">Профиль фармацевта</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Имя</label>
+                <p className="mt-1 text-lg">{user?.user?.first_name || user?.name || 'Не указано'}</p>
               </div>
-            )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Telegram ID</label>
+                <p className="mt-1 text-lg">{user?.user?.telegram_id || user?.telegram_id || 'Не указано'}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Статус</label>
+                <p className="mt-1 text-lg">
+                  {user?.is_active ? 'Активен' : 'Не активен'}
+                  {user?.is_online && ' • Онлайн'}
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Аптека</label>
+                <p className="mt-1 text-lg">{user?.pharmacy_info?.name || 'Не указана'}</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
