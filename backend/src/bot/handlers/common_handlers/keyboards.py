@@ -42,10 +42,10 @@ def generate_pharmacist_webapp_url(telegram_id: int, pharmacist_uuid: str | None
     
     access_token = create_access_token(data=token_data)
     
-    # Базовый URL
+    # Базовый URL - используем path-based routing вместо subdomain
     base_url = os.getenv(
         "PHARMACIST_DASHBOARD_URL", 
-        "https://pharmacist.spravka.novamedika.com"
+        "https://spravka.novamedika.com/pharmacist"  # Changed from subdomain to path-based
     )
     
     # Добавляем токен как query параметр
@@ -113,10 +113,10 @@ def get_pharmacist_inline_keyboard_with_token(telegram_id: int, pharmacist_uuid:
 def get_pharmacist_inline_keyboard():
     """Inline-клавиатура фармацевта (без токена - для обратной совместимости)"""
     webapp_url = os.getenv("FRONTEND_URL", "https://spravka.novamedika.com")
-    # URL для Pharmacist Dashboard (консультации)
+    # URL для Pharmacist Dashboard (консультации) - path-based routing
     pharmacist_dashboard_url = os.getenv(
         "PHARMACIST_DASHBOARD_URL", 
-        "https://pharmacist.spravka.novamedika.com"
+        "https://spravka.novamedika.com/pharmacist"  # Changed from subdomain to path-based
     )
     
     return InlineKeyboardMarkup(
