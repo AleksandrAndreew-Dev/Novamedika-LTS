@@ -41,15 +41,28 @@ function AuthProvider({ children }) {
       if (authService.isAuthenticated()) {
         console.log('[AuthProvider] Found session token in localStorage, verifying...');
         // Try to get profile to verify session is valid
-        const profile = await authService.getProfile();
-        
-        // Проверяем, что это зарегистрированный фармацевт
-        if (profile && profile.is_active) {
-          setPharmacist(profile);
-          setIsAuthenticated(true);
-          console.log('[AuthProvider] Session is valid, active pharmacist:', profile.user?.first_name);
-        } else {
-          throw new Error('User is not an active registered pharmacist');
+        try {
+          const profile = await authService.getProfile();
+          
+          // Проверяем, что это зарегистрированный И АКТИВНЫЙ фармацевт
+          if (profile && profile.is_active) {
+            setPharmacist(profile);
+            setIsAuthenticated(true);
+            console.log('[AuthProvider] Session is valid, active pharmacist:', profile.user?.first_name);
+          } else {
+            // Пользователь найден, но не активен — не выбрасываем ошибку, просто выходим
+            console.warn('[AuthProvider] Pharmacist exists but is not active');
+            setError('Доступ запрещен. Ваш аккаунт фармацевта ещё не активирован администратором.');
+            setIsAuthenticated(false);
+            setPharmacist(null);
+            localStorage.removeItem('pharmacist_session_token');
+            return; // Важно: выходим, не пытаемся авто-логиниться
+          }
+        } catch (profileErr) {
+          // Если /me вернул 401/403, значит токен истёк или невалиден
+          console.log('[AuthProvider] Profile fetch failed, clearing token');
+          localStorage.removeItem('pharmacist_session_token');
+          throw profileErr; // Пробрасываем дальше для обработки в общем catch
         }
       } else {
         console.log('[AuthProvider] No session token found in localStorage');
@@ -74,15 +87,23 @@ function AuthProvider({ children }) {
       // Clear invalid token
       localStorage.removeItem('pharmacist_session_token');
       
-      // Auto-login via Telegram WebApp if available
+      // Auto-login via Telegram WebApp ONLY if:
+      // 1. We're in Telegram environment
+      // 2. The error was 401 (expired token), NOT 403 (forbidden/inactive)
+      // 3. We haven't already tried auto-login in this cycle
       const initData = window.Telegram?.WebApp?.initData;
-      if (initData && err.response?.status === 401) {
-        console.log('[AuthProvider] ⚠️ Session expired. Attempting auto-login via Telegram WebApp...');
+      const shouldRetryLogin = initData && 
+                               err.response?.status === 401 && 
+                               !err.message?.includes('not an active registered pharmacist');
+      
+      if (shouldRetryLogin) {
+        console.log('[AuthProvider] ⚠️ Session expired (401). Attempting auto-login via Telegram WebApp...');
         try {
           await loginWithTelegram();
           return; // Exit early as loginWithTelegram handles state updates
         } catch (loginErr) {
           console.error('[AuthProvider] ❌ Auto-login failed:', loginErr);
+          // Don't retry again, just show error
         }
       }
       
@@ -91,12 +112,14 @@ function AuthProvider({ children }) {
       setPharmacist(null);
       
       // Set specific error message for user
-      if (err.response?.status === 403) {
-        setError('Доступ запрещен. Вы не зарегистрированы как активный фармацевт.');
+      if (err.response?.status === 403 || err.message?.includes('not an active registered pharmacist')) {
+        setError('Доступ запрещен. Вы не зарегистрированы как активный фармацевт, либо ваш аккаунт деактивирован.');
       } else if (err.response?.status === 401) {
-        setError('Сессия истекла. Пожалуйста, войдите снова через Telegram.');
+        setError('Сессия истекла. Пожалуйста, закройте и откройте Панель фармацевта заново.');
+      } else if (err.message?.includes('Telegram session expired') || err.message?.includes('QUERY_ID_INVALID')) {
+        setError('Сессия Telegram истекла. Пожалуйста, перезапустите Мини-Приложение.');
       } else {
-        setError(err.userMessage || 'Ошибка сессии. Попробуйте войти снова.');
+        setError(err.userMessage || 'Ошибка авторизации. Попробуйте закрыть и открыть приложение снова.');
       }
     } finally {
       loginInProgressRef.current = false;

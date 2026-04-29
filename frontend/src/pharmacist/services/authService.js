@@ -56,6 +56,11 @@ export const authService = {
           throw new Error('Telegram session expired. Please restart the Mini App.');
         }
         
+        // Handle inactive pharmacist (403)
+        if (response.status === 403) {
+          throw new Error(errorData.detail || 'Доступ запрещен. Вы не зарегистрированы как активный фармацевт.');
+        }
+        
         throw new Error(errorData.detail || 'Login failed');
       }
       
