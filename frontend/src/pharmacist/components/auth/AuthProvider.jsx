@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useRef } from 'react';
+import { useState, useEffect, createContext, useRef, useCallback } from 'react';
 import { authService } from '../../services/authService';
 import { logger } from '../../../utils/logger';
 
@@ -13,60 +13,58 @@ function AuthProvider({ children }) {
   const [error, setError] = useState(null);
   const loginInProgressRef = useRef(false); // Prevent concurrent login attempts
 
-  // Check authentication status on mount
-  useEffect(() => {
-    checkAuth();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Single unified auto-login function as recommended in faq3.md
+  const performAutoLogin = useCallback(async () => {
+    // Prevent concurrent login attempts
+    if (loginInProgressRef.current) {
+      console.log('[AuthProvider] Login already in progress, skipping');
+      return;
+    }
 
-  const checkAuth = async () => {
-    // Prevent concurrent auth checks
-    if (loginInProgressRef.current) return;
+    loginInProgressRef.current = true;
+    console.log('[AuthProvider] Starting auto-login check...');
 
     try {
-      loginInProgressRef.current = true;
       setIsLoading(true);
       setError(null);
 
-      // Если мы не в Telegram, сразу выходим (это обычный поиск лекарств)
+      // Check if we're in Telegram environment
       if (!window.Telegram?.WebApp) {
         console.log('[AuthProvider] Not in Telegram environment. Skipping pharmacist auth.');
         setIsAuthenticated(false);
         setPharmacist(null);
-        setIsLoading(false);
-        loginInProgressRef.current = false;
         return;
       }
 
-      if (authService.isAuthenticated()) {
-        console.log('[AuthProvider] Found session token in localStorage, verifying...');
-        // Try to get profile to verify session is valid
+      // Step 1: Try existing token if available
+      const token = localStorage.getItem('pharmacist_session_token');
+      if (token) {
         try {
           const profile = await authService.getProfile();
           
-          // Проверяем, что это зарегистрированный И АКТИВНЫЙ фармацевт
           if (profile && profile.is_active) {
+            // ✅ Valid active session
             setPharmacist(profile);
             setIsAuthenticated(true);
             console.log('[AuthProvider] Session is valid, active pharmacist:', profile.user?.first_name);
-            return; // Успешно авторизованы, выходим
+            return;
           } else {
-            // Фармацевт неактивен – не пытаемся перелогиниться
+            // ❌ Pharmacist exists but is not active - NO RETRY
             console.warn('[AuthProvider] Pharmacist is not active');
             setError('Доступ запрещен. Ваш аккаунт фармацевта ещё не активирован администратором.');
             localStorage.removeItem('pharmacist_session_token');
             setIsAuthenticated(false);
             setPharmacist(null);
-            return; // Важно: выходим, не пытаемся авто-логиниться
+            return;
           }
         } catch (err) {
-          // Если сессия истекла или доступ запрещен
+          // Handle specific error types
           if (err.message === 'Session expired') {
+            // Token expired - remove it and continue to initData login
             console.log('[AuthProvider] Token expired, trying auto-login with initData');
             localStorage.removeItem('pharmacist_session_token');
-            // Продолжаем выполнение, чтобы попробовать initData ниже
           } else if (err.message?.includes('not an active registered pharmacist')) {
-            // 403 – показываем ошибку и выходим
+            // 403 - Access denied, NO RETRY
             console.warn('[AuthProvider] Access denied: not an active registered pharmacist');
             setError('Доступ запрещен. Вы не зарегистрированы как активный фармацевт.');
             localStorage.removeItem('pharmacist_session_token');
@@ -74,150 +72,94 @@ function AuthProvider({ children }) {
             setPharmacist(null);
             return;
           } else {
-            // Любая другая ошибка – пробрасываем дальше для обработки в общем catch
+            // Other errors - throw to outer catch
             throw err;
           }
         }
-      } else {
-        console.log('[AuthProvider] No session token found in localStorage');
-        // If no token but we are in Telegram, try to login immediately
-        const initData = window.Telegram.WebApp.initData;
-        if (initData) {
-          console.log('[AuthProvider] 🔄 No token but initData found. Attempting auto-login...');
-          try {
-            await loginWithTelegram();
-            return; // Exit early as loginWithTelegram handles state updates
-          } catch (loginErr) {
-            console.error('[AuthProvider] ❌ Initial auto-login failed:', loginErr);
-          }
+      }
+
+      // Step 2: No token or token expired - try auto-login via initData
+      const initData = window.Telegram.WebApp.initData;
+      if (!initData) {
+        console.log('[AuthProvider] No initData, not in Telegram Mini App');
+        setIsAuthenticated(false);
+        setPharmacist(null);
+        return;
+      }
+
+      console.log('[AuthProvider] 🔄 Attempting auto-login with initData...');
+      
+      // Initialize Telegram WebApp
+      window.Telegram.WebApp.ready();
+      window.Telegram.WebApp.expand();
+
+      try {
+        // Login via backend
+        await authService.loginWithTelegram();
+        
+        console.log('[AuthProvider] ✅ Backend validated initData and returned session token');
+        
+        // Immediately fetch profile to verify
+        const profile = await authService.getProfile();
+        
+        if (profile && profile.is_active) {
+          setPharmacist(profile);
+          setIsAuthenticated(true);
+          console.log('[AuthProvider] ✅ Auto-login successful:', profile.user?.first_name);
+        } else {
+          // Pharmacist not active after login
+          console.warn('[AuthProvider] Pharmacist exists but is not active after login');
+          setError('Доступ запрещен. Ваш аккаунт фармацевта ещё не активирован администратором.');
+          localStorage.removeItem('pharmacist_session_token');
+          setIsAuthenticated(false);
+          setPharmacist(null);
         }
+      } catch (loginErr) {
+        console.error('[AuthProvider] ❌ Auto-login failed:', loginErr.message);
+        
+        // Clear any partial data
+        localStorage.removeItem('pharmacist_session_token');
+        
+        // Set appropriate error message
+        let errorMessage = 'Ошибка авторизации. ';
+        
+        if (loginErr.message.includes('Not in Telegram')) {
+          errorMessage = 'Эта страница должна быть открыта из Telegram бота. Пожалуйста, нажмите кнопку "Панель фармацевта" в боте.';
+        } else if (loginErr.message.includes('initData not available')) {
+          errorMessage = 'Данные Telegram не загружены. Попробуйте закрыть и открыть WebApp снова.';
+        } else if (loginErr.message.includes('Telegram session expired') || loginErr.message.includes('QUERY_ID_INVALID')) {
+          errorMessage = 'Сессия Telegram истекла. Пожалуйста, перезапустите Мини-Приложение.';
+        } else if (loginErr.message.includes('not an active registered pharmacist') || loginErr.message.includes('Access denied')) {
+          errorMessage = 'Доступ запрещен. Вы не зарегистрированы как активный фармацевт.';
+        } else {
+          errorMessage += loginErr.message || 'Попробуйте позже.';
+        }
+        
+        setError(errorMessage);
         setIsAuthenticated(false);
         setPharmacist(null);
       }
-    } catch (err) {
-      console.error('[AuthProvider] Auth check failed:', err);
-      console.error('[AuthProvider] Error details:', err.response?.data || err.message);
-      
-      // Clear invalid token
-      localStorage.removeItem('pharmacist_session_token');
-      
-      // Auto-login via Telegram WebApp ONLY if:
-      // 1. We're in Telegram environment
-      // 2. The error was 401 (expired token), NOT 403 (forbidden/inactive)
-      const initData = window.Telegram?.WebApp?.initData;
-      const shouldRetryLogin = initData && 
-                               err.response?.status === 401;
-      
-      if (shouldRetryLogin) {
-        console.log('[AuthProvider] ⚠️ Session expired (401). Attempting auto-login via Telegram WebApp...');
-        try {
-          await loginWithTelegram();
-          return; // Exit early as loginWithTelegram handles state updates
-        } catch (loginErr) {
-          console.error('[AuthProvider] ❌ Auto-login failed:', loginErr);
-          // Don't retry again, just show error below
-        }
-      }
-      
-      console.log('[AuthProvider] Session invalid or expired, user not authenticated');
+    } catch (unexpectedError) {
+      console.error('[AuthProvider] Unexpected error:', unexpectedError);
+      setError('Произошла непредвиденная ошибка. Пожалуйста, перезапустите Mini App.');
       setIsAuthenticated(false);
       setPharmacist(null);
-      
-      // Set specific error message for user based on error type
-      if (err.response?.status === 403 || err.message?.includes('not an active registered pharmacist')) {
-        setError('Доступ запрещен. Вы не зарегистрированы как активный фармацевт, либо ваш аккаунт деактивирован.');
-      } else if (err.response?.status === 401) {
-        setError('Сессия истекла. Пожалуйста, закройте и откройте Панель фармацевта заново.');
-      } else if (err.message?.includes('Telegram session expired') || err.message?.includes('QUERY_ID_INVALID')) {
-        setError('Сессия Telegram истекла. Пожалуйста, перезапустите Мини-Приложение.');
-      } else if (err.message?.includes('Not in Telegram')) {
-        setError('Эта страница должна быть открыта из Telegram бота. Пожалуйста, нажмите кнопку "Панель фармацевта" в боте.');
-      } else if (err.message?.includes('initData not available')) {
-        setError('Данные Telegram не загружены. Попробуйте закрыть и открыть WebApp снова.');
-      } else {
-        setError(err.userMessage || err.message || 'Ошибка авторизации. Попробуйте закрыть и открыть приложение снова.');
-      }
     } finally {
+      // ALWAYS reset the flag
       loginInProgressRef.current = false;
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  // Login with Telegram WebApp initData (NEW - simplified method)
+  // Run auto-login on mount
+  useEffect(() => {
+    performAutoLogin();
+  }, [performAutoLogin]);
+
+  // Legacy loginWithTelegram method for manual triggers (if needed)
   const loginWithTelegram = async () => {
-    // Prevent concurrent login attempts
-    if (loginInProgressRef.current) {
-      console.log('[AuthProvider] ⚠️ Login already in progress, skipping...');
-      return pharmacist;
-    }
-
-    try {
-      loginInProgressRef.current = true;
-      setIsLoading(true);
-      setError(null);
-      
-      console.log('[AuthProvider] 🔄 Starting Telegram WebApp login...');
-      
-      // Initialize Telegram WebApp if available
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.ready();
-        window.Telegram.WebApp.expand();
-      } else {
-        throw new Error('Not in Telegram WebApp environment');
-      }
-      
-      // Use the new loginWithTelegram method from authService
-      await authService.loginWithTelegram();
-      
-      console.log('[AuthProvider] ✅ Backend validated initData and returned session token');
-      
-      console.log('[AuthProvider] Fetching pharmacist profile...');
-      const profile = await authService.getProfile();
-      
-      console.log('[AuthProvider] ✅ Profile fetched successfully:', profile.user?.first_name, profile.user?.telegram_id);
-      
-      // Проверяем активность фармацевта
-      if (profile && profile.is_active) {
-        setPharmacist(profile);
-        setIsAuthenticated(true);
-        console.log('[AuthProvider] ✅ Telegram login successful');
-        return profile;
-      } else {
-        // Фармацевт не активен
-        console.warn('[AuthProvider] Pharmacist exists but is not active');
-        setError('Доступ запрещен. Ваш аккаунт фармацевта ещё не активирован администратором.');
-        localStorage.removeItem('pharmacist_session_token');
-        setIsAuthenticated(false);
-        setPharmacist(null);
-        throw new Error('Access denied: not an active registered pharmacist');
-      }
-      
-    } catch (err) {
-      console.error('[AuthProvider] ❌ Telegram login failed:', err);
-      
-      // Clear any partial data
-      localStorage.removeItem('pharmacist_session_token');
-      
-      let errorMessage = 'Ошибка входа через Telegram. ';
-      
-      if (err.message.includes('Not in Telegram')) {
-        errorMessage = 'Эта страница должна быть открыта из Telegram бота. Пожалуйста, нажмите кнопку "Панель фармацевта" в боте.';
-      } else if (err.message.includes('initData not available')) {
-        errorMessage = 'Данные Telegram не загружены. Попробуйте закрыть и открыть WebApp снова.';
-      } else if (err.message.includes('Telegram session expired') || err.message.includes('QUERY_ID_INVALID')) {
-        errorMessage = 'Сессия Telegram истекла. Пожалуйста, перезапустите Мини-Приложение.';
-      } else if (err.message.includes('not an active registered pharmacist') || err.message.includes('Access denied')) {
-        errorMessage = 'Доступ запрещен. Вы не зарегистрированы как активный фармацевт.';
-      } else {
-        errorMessage += err.message || 'Попробуйте позже.';
-      }
-      
-      setError(errorMessage);
-      throw err;
-    } finally {
-      loginInProgressRef.current = false;
-      setIsLoading(false);
-    }
+    // Delegate to performAutoLogin
+    return performAutoLogin();
   };
 
   // Login with token from URL (legacy method - if needed)
@@ -314,12 +256,12 @@ function AuthProvider({ children }) {
     pharmacist,
     user: pharmacist, // Alias for compatibility
     error,
-    loginWithTelegram, // NEW: Telegram WebApp login using session tokens
+    loginWithTelegram, // Delegates to performAutoLogin
     loginWithToken, // Legacy: Login with token from URL
     logout,
     setOnlineStatus,
     refreshProfile,
-    checkAuth,
+    checkAuth: performAutoLogin, // Alias for backward compatibility
   };
 
   // Return the provider component
