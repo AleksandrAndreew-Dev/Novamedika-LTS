@@ -230,6 +230,7 @@ async def telegram_webapp_login(
     try:
         # Импортируем утилиту aiogram для валидации
         from aiogram.utils.web_app import safe_parse_webapp_init_data
+        from sqlalchemy.exc import IntegrityError
         
         # Получаем токен бота из окружения
         bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -319,8 +320,21 @@ async def telegram_webapp_login(
             "role": "pharmacist",
         })
         
-        # Сохраняем refresh token в БД (функция теперь удаляет старые токены автоматически)
-        await store_refresh_token(refresh_token, str(pharmacist.user_id), db)
+        # Сохраняем refresh token в БД с обработкой дубликатов
+        try:
+            await store_refresh_token(refresh_token, str(pharmacist.user_id), db)
+        except IntegrityError as e:
+            # Если возникла ошибка уникальности (конкурентный запрос), 
+            # просто игнорируем - токен уже создан другим запросом
+            logger.warning(f"Duplicate refresh token detected (race condition), ignoring: {e}")
+            await db.rollback()
+            # Пробуем сохранить снова после отката
+            try:
+                await store_refresh_token(refresh_token, str(pharmacist.user_id), db)
+            except IntegrityError:
+                # Если снова ошибка, значит токен уже есть, продолжаем
+                logger.info(f"Refresh token already exists for user {pharmacist.user_id}, continuing...")
+                pass
         
         logger.info(f"✅ Telegram login successful for pharmacist user_id={pharmacist.user_id}, pharmacist_uuid={pharmacist.uuid}")
         
@@ -335,12 +349,6 @@ async def telegram_webapp_login(
         raise
     except Exception as e:
         logger.exception("Telegram WebApp login failed")
-        # Проверяем тип ошибки для более точного сообщения
-        if "duplicate key" in str(e).lower() or "unique" in str(e).lower():
-            raise HTTPException(
-                status_code=500,
-                detail="Database error during token creation. Please try again."
-            )
         raise HTTPException(
             status_code=500,
             detail="Login failed. Please try again later."

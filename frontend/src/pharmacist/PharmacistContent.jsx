@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from './hooks/useAuth.js';
 import DashboardStats from './components/dashboard/DashboardStats';
 import QuestionsList from './components/consultations/QuestionsList';
@@ -58,14 +58,20 @@ export default function PharmacistContent() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [tokenProcessed, setTokenProcessed] = useState(false);
   const [tokenProcessingError, setTokenProcessingError] = useState(null);
+  const authInProgressRef = useRef(false); // Prevent concurrent auth attempts
 
   // Проверяем наличие токена в URL при загрузке (DEPRECATED) или используем Telegram SDK
   useEffect(() => {
     const processAuth = async () => {
-      if (tokenProcessed || isAuthenticated) {
-        console.log('[PharmacistContent] Skipping auth processing - already processed or authenticated');
+      // Prevent concurrent authentication attempts
+      if (tokenProcessed || isAuthenticated || authInProgressRef.current) {
+        console.log('[PharmacistContent] Skipping auth processing - already processed, authenticated, or in progress');
+        console.log('[PharmacistContent] tokenProcessed:', tokenProcessed, 'isAuthenticated:', isAuthenticated, 'authInProgress:', authInProgressRef.current);
         return;
       }
+
+      // Mark authentication as in progress
+      authInProgressRef.current = true;
 
       console.log('[PharmacistContent] Starting authentication process...');
       console.log('[PharmacistContent] isAuthenticated:', isAuthenticated);
@@ -122,6 +128,9 @@ export default function PharmacistContent() {
         const errorMessage = error.userMessage || error.response?.data?.detail || error.message || 'Ошибка аутентификации.';
         setTokenProcessingError(errorMessage);
         setTokenProcessed(true);
+      } finally {
+        // Reset the flag after authentication completes (success or failure)
+        authInProgressRef.current = false;
       }
     };
 
