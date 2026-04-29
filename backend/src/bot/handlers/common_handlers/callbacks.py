@@ -240,6 +240,7 @@ async def go_online_callback(
         reply_markup=keyboard,
     )
     await callback.answer()
+    return True  # Explicitly return True to indicate handler processed the update
 
 
 @router.callback_query(F.data == "go_offline")
@@ -276,6 +277,7 @@ async def go_offline_callback(
         reply_markup=keyboard,
     )
     await callback.answer()
+    return True  # Explicitly return True to indicate handler processed the update
 
 
 @router.callback_query(F.data.startswith("continue_user_dialog_"))
