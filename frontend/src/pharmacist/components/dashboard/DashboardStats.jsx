@@ -13,13 +13,27 @@ export default function DashboardStats() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Enhanced debugging - log component mount and user data
   useEffect(() => {
+    console.log('[DashboardStats] Component mounted with user:', {
+      hasUser: !!user,
+      userStructure: user ? {
+        uuid: user.uuid,
+        hasUserField: !!user.user,
+        firstName: user.user?.first_name || user.name,
+        telegramId: user.user?.telegram_id || user.telegram_id,
+        pharmacyInfo: user.pharmacy_info?.name
+      } : null
+    });
+    
     loadStats();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadStats = async () => {
     try {
+      console.log('[DashboardStats] Loading stats...');
       const data = await questionsService.getDashboardStats();
+      console.log('[DashboardStats] Stats loaded successfully:', data);
       setStats(data);
       setError(null);
     } catch (error) {
@@ -75,25 +89,25 @@ export default function DashboardStats() {
   const statCards = [
     {
       title: 'Новых вопросов',
-      value: stats.newQuestions,
+      value: stats.newQuestions ?? 0,
       color: 'bg-blue-500',
       icon: '📩'
     },
     {
       title: 'В работе',
-      value: stats.inProgress,
+      value: stats.inProgress ?? 0,
       color: 'bg-yellow-500',
       icon: '🔄'
     },
     {
       title: 'Завершено сегодня',
-      value: stats.completedToday,
+      value: stats.completedToday ?? 0,
       color: 'bg-green-500',
       icon: '✅'
     },
     {
       title: 'Среднее время ответа',
-      value: `${stats.avgResponseTime} мин`,
+      value: `${stats.avgResponseTime ?? 0} мин`,
       color: 'bg-purple-500',
       icon: '⏱️'
     }

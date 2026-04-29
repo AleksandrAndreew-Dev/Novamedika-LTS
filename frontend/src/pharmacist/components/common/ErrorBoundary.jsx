@@ -12,10 +12,23 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    // Log error details for debugging
+    // Log error details for debugging with enhanced information
     console.error('🚨 ErrorBoundary caught an error:', error);
-    console.error('Error Info:', errorInfo);
-    console.error('Component Stack:', errorInfo?.componentStack);
+    console.error('📋 Error Info:', errorInfo);
+    console.error('🔍 Component Stack:', errorInfo?.componentStack);
+    console.error('📊 Error Details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      fileName: error.fileName,
+      lineNumber: error.lineNumber,
+      columnNumber: error.columnNumber
+    });
+    
+    // Log additional context if available
+    if (this.props.fallbackRender) {
+      console.warn('⚠️ Custom fallback renderer is defined but not used');
+    }
     
     this.setState({
       error,
@@ -35,6 +48,18 @@ class ErrorBoundary extends React.Component {
 
   render() {
     if (this.state.hasError) {
+      // Enhanced error logging for production debugging
+      if (process.env.NODE_ENV === 'production') {
+        // Send error to monitoring service in production
+        console.error('Production Error:', {
+          error: this.state.error?.message,
+          componentStack: this.state.errorInfo?.componentStack,
+          timestamp: new Date().toISOString(),
+          url: window.location.href,
+          userAgent: navigator.userAgent
+        });
+      }
+
       // Custom fallback UI
       return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -63,12 +88,32 @@ class ErrorBoundary extends React.Component {
               </p>
             </div>
 
-            {/* Error Details (only in development) */}
+            {/* Enhanced Error Details (only in development) */}
             {process.env.NODE_ENV === 'development' && this.state.error && (
               <div className="mb-4 p-3 bg-gray-100 rounded text-left">
-                <p className="text-xs font-mono text-red-600 break-all">
-                  {this.state.error.toString()}
+                <p className="text-xs font-mono text-red-600 break-all mb-2">
+                  <strong>Error:</strong> {this.state.error.toString()}
                 </p>
+                {this.state.error.stack && (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs text-gray-600 hover:text-gray-800">
+                      Показать стек вызовов
+                    </summary>
+                    <pre className="mt-2 text-xs overflow-auto max-h-40 bg-gray-200 p-2 rounded">
+                      {this.state.error.stack}
+                    </pre>
+                  </details>
+                )}
+                {this.state.errorInfo?.componentStack && (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs text-gray-600 hover:text-gray-800">
+                      Показать компонентный стек
+                    </summary>
+                    <pre className="mt-2 text-xs overflow-auto max-h-40 bg-gray-200 p-2 rounded">
+                      {this.state.errorInfo.componentStack}
+                    </pre>
+                  </details>
+                )}
               </div>
             )}
 

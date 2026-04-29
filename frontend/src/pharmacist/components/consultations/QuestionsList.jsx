@@ -6,13 +6,33 @@ export default function QuestionsList() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all'); // all, new, in_progress, completed
 
+  // Enhanced debugging - log component mount
+  useEffect(() => {
+    console.log('[QuestionsList] Component mounted with filter:', filter);
+  }, []);
+
   const loadQuestions = useCallback(async () => {
     try {
+      console.log('[QuestionsList] Loading questions with filter:', filter);
       setLoading(true);
       const data = await questionsService.getQuestions(filter);
-      setQuestions(data);
+      console.log('[QuestionsList] Questions loaded:', Array.isArray(data) ? `${data.length} items` : 'invalid data');
+      
+      // Safety check - ensure data is an array
+      if (Array.isArray(data)) {
+        setQuestions(data);
+      } else {
+        console.error('[QuestionsList] Expected array but got:', typeof data, data);
+        setQuestions([]);
+      }
     } catch (error) {
-      console.error('Failed to load questions:', error);
+      console.error('[QuestionsList] Failed to load questions:', error);
+      console.error('[QuestionsList] Error details:', {
+        status: error.response?.status,
+        message: error.message,
+        url: error.config?.url
+      });
+      setQuestions([]); // Ensure we don't crash on error
     } finally {
       setLoading(false);
     }
@@ -81,16 +101,16 @@ export default function QuestionsList() {
           </div>
         ) : (
           questions.map((question) => (
-            <div key={question.id} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+            <div key={question.id || question.uuid} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
               <div className="flex justify-between items-start mb-4">
                 <div className="flex-1">
                   <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                    {question.title || 'Без названия'}
+                    {question.title || question.text || 'Без названия'}
                   </h3>
-                  <p className="text-gray-600 text-sm mb-2">{question.question}</p>
+                  <p className="text-gray-600 text-sm mb-2">{question.question || question.text}</p>
                   <div className="flex items-center space-x-4 text-sm text-gray-500">
-                    <span>📅 {new Date(question.created_at).toLocaleDateString('ru-RU')}</span>
-                    <span>👤 Пользователь #{question.user_id}</span>
+                    <span>📅 {question.created_at ? new Date(question.created_at).toLocaleDateString('ru-RU') : 'N/A'}</span>
+                    <span>👤 Пользователь #{question.user_id || question.user?.telegram_id || 'N/A'}</span>
                   </div>
                 </div>
                 <div className="ml-4">
