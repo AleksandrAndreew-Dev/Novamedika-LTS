@@ -4,6 +4,9 @@ export const logger = {
   log: (...args) => {
     if (isDev) console.log(...args);
   },
+  debug: (...args) => {
+    if (isDev) console.debug(...args);
+  },
   error: (...args) => {
     if (isDev) console.error(...args);
   },
