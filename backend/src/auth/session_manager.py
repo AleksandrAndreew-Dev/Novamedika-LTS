@@ -1,49 +1,69 @@
 import uuid
 import time
+import json
 from typing import Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from db.qa_models import Pharmacist, User
+import redis.asyncio as redis
+import os
 
-# In-memory session storage (for simplicity - in production, use Redis or database)
-_sessions: Dict[str, dict] = {}
+# Redis connection for session storage (production-ready)
+_redis_client = None
 
-def create_session_token(telegram_id: int, pharmacist_uuid: str, user_id: str) -> str:
-    """Create a simple session token"""
+def get_redis_client():
+    """Get or create Redis client"""
+    global _redis_client
+    if _redis_client is None:
+        redis_url = os.getenv("REDIS_URL", "redis://:your_redis_password_here@redis:6379/1")
+        _redis_client = redis.from_url(redis_url, decode_responses=True)
+    return _redis_client
+
+async def create_session_token(telegram_id: int, pharmacist_uuid: str, user_id: str) -> str:
+    """Create a simple session token and store in Redis"""
     token = str(uuid.uuid4())
-    _sessions[token] = {
+    session_data = {
         'telegram_id': telegram_id,
         'pharmacist_uuid': pharmacist_uuid,
         'user_id': user_id,
         'created_at': time.time(),
         'expires_at': time.time() + 86400  # 24 hours
     }
+    
+    # Store in Redis with expiration
+    redis_client = get_redis_client()
+    await redis_client.setex(
+        f"session:{token}",
+        86400,  # TTL 24 hours
+        json.dumps(session_data)
+    )
+    
     return token
 
-def get_session(token: str) -> Optional[dict]:
-    """Get session data by token"""
-    if token not in _sessions:
+async def get_session(token: str) -> Optional[dict]:
+    """Get session data by token from Redis"""
+    redis_client = get_redis_client()
+    session_json = await redis_client.get(f"session:{token}")
+    
+    if not session_json:
         return None
     
-    session = _sessions[token]
-    if time.time() > session['expires_at']:
-        # Session expired, clean it up
-        del _sessions[token]
+    try:
+        session = json.loads(session_json)
+        return session
+    except json.JSONDecodeError:
         return None
-    
-    return session
 
-def delete_session(token: str) -> bool:
-    """Delete a session"""
-    if token in _sessions:
-        del _sessions[token]
-        return True
-    return False
+async def delete_session(token: str) -> bool:
+    """Delete a session from Redis"""
+    redis_client = get_redis_client()
+    result = await redis_client.delete(f"session:{token}")
+    return result > 0
 
 async def get_pharmacist_by_session(token: str, db: AsyncSession):
     """Get pharmacist object from session token"""
-    session = get_session(token)
+    session = await get_session(token)
     if not session:
         return None
     

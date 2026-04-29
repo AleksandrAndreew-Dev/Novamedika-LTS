@@ -192,8 +192,8 @@ async def pharmacist_login(
                 f"User {login_data.telegram_user_id} has {len(pharmacists)} active pharmacist profiles"
             )
 
-        # Создаём простой session token
-        session_token = create_session_token(
+        # Создаём простой session token (теперь async)
+        session_token = await create_session_token(
             telegram_id=login_data.telegram_user_id,
             pharmacist_uuid=str(pharmacist.uuid),
             user_id=str(pharmacist.user_id)
@@ -328,7 +328,7 @@ async def telegram_webapp_login(
         await db.commit()
         
         # Создаём простой session token вместо JWT
-        session_token = create_session_token(
+        session_token = await create_session_token(
             telegram_id=telegram_id,
             pharmacist_uuid=str(pharmacist.uuid),
             user_id=str(pharmacist.user_id)
