@@ -16,10 +16,18 @@ function AuthProvider({ children }) {
   // Check authentication status on mount
   useEffect(() => {
     checkAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const checkAuth = async () => {
+    // Prevent concurrent auth checks
+    if (loginInProgressRef.current) return;
+
     try {
+      loginInProgressRef.current = true;
+      setIsLoading(true);
+      setError(null);
+
       if (authService.isAuthenticated()) {
         console.log('[AuthProvider] Found session token in localStorage, verifying...');
         // Try to get profile to verify session is valid
@@ -73,6 +81,7 @@ function AuthProvider({ children }) {
         setError(err.userMessage || 'Ошибка сессии. Попробуйте войти снова.');
       }
     } finally {
+      loginInProgressRef.current = false;
       setIsLoading(false);
     }
   };
