@@ -25,11 +25,11 @@ function App() {
   const urlParams = new URLSearchParams(window.location.search);
   const hasAuthToken = urlParams.has('token');
   
-  // Проверяем сохраненный режим в localStorage (для случаев когда WebApp открывается внутри Telegram)
-  const savedMode = localStorage.getItem('app_mode');
-  const isPharmacistFromStorage = savedMode === 'pharmacist';
+  // Упрощенная проверка: если мы внутри Telegram WebApp, считаем что это может быть фармацевт
+  // Финальная проверка регистрации произойдет на бэкенде при логине
+  const isInTelegram = !!window.Telegram?.WebApp;
   
-  const isPharmacistMode = isPharmacistSubdomain || isPharmacistPath || hasAuthToken || isPharmacistFromStorage;
+  const isPharmacistMode = isPharmacistSubdomain || isPharmacistPath || (hasAuthToken && isInTelegram);
 
   // Сохраняем режим в localStorage при первом определении
   useEffect(() => {

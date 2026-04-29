@@ -294,10 +294,10 @@ async def telegram_webapp_login(
         pharmacist = result.scalar_one_or_none()
         
         if not pharmacist:
-            logger.warning(f"Pharmacist not found for telegram_id={telegram_id}")
+            logger.warning(f"Pharmacist not found or inactive for telegram_id={telegram_id}")
             raise HTTPException(
-                status_code=404,
-                detail=f"Фармацевт не найден для Telegram ID {telegram_id}. Обратитесь к администратору."
+                status_code=403,
+                detail=f"Доступ запрещен. Пользователь с Telegram ID {telegram_id} не зарегистрирован как активный фармацевт."
             )
         
         # Обновляем данные пользователя из Telegram

@@ -5,12 +5,12 @@ import { useAuth } from './hooks/useAuth';
 import Dashboard from './pharmacist/pages/Dashboard';
 import Login from './pharmacist/components/auth/Login';
 import ProtectedRoute from './pharmacist/components/auth/ProtectedRoute';
-import { logger } from './utils/logger';
+import { logger } from '../utils/logger';
 
-// Component to handle URL token authentication (Legacy)
+// Component to handle URL token authentication (Legacy) and Telegram validation
 function TokenAuthHandler() {
   const [searchParams] = useSearchParams();
-  const { loginWithToken, isAuthenticated } = useAuth();
+  const { loginWithTelegram, loginWithToken, isAuthenticated, pharmacist } = useAuth();
   const [authError, setAuthError] = useState(null);
   const loginInProgressRef = useRef(false);
 
@@ -23,6 +23,7 @@ function TokenAuthHandler() {
 
     const token = searchParams.get('token');
     
+    // Priority 1: Legacy token login
     if (token && !isAuthenticated && !loginInProgressRef.current) {
       loginInProgressRef.current = true;
       
@@ -49,8 +50,22 @@ function TokenAuthHandler() {
         .finally(() => {
           loginInProgressRef.current = false;
         });
+    } 
+    // Priority 2: Telegram WebApp auto-login (if not already authenticated by AuthProvider)
+    else if (!isAuthenticated && !loginInProgressRef.current && window.Telegram?.WebApp?.initData) {
+       // This is now mostly handled by AuthProvider, but we keep this for explicit error handling
+       // if the user tries to force a reload or something similar.
     }
   }, [searchParams, loginWithToken, isAuthenticated]);
+
+  // Check for registration status after authentication
+  useEffect(() => {
+    if (isAuthenticated && pharmacist) {
+      if (!pharmacist.is_active) {
+        setAuthError('Ваша учетная запись фармацевта не активирована. Обратитесь к администратору.');
+      }
+    }
+  }, [isAuthenticated, pharmacist]);
 
   if (authError) {
     return (
@@ -61,7 +76,7 @@ function TokenAuthHandler() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Ошибка входа</h2>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Доступ запрещен</h2>
           <p className="text-gray-600 text-sm mb-6">{authError}</p>
           <button
             onClick={() => window.location.href = '/'}

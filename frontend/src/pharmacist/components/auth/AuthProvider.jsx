@@ -28,17 +28,33 @@ function AuthProvider({ children }) {
       setIsLoading(true);
       setError(null);
 
+      // Если мы не в Telegram, сразу выходим (это обычный поиск лекарств)
+      if (!window.Telegram?.WebApp) {
+        console.log('[AuthProvider] Not in Telegram environment. Skipping pharmacist auth.');
+        setIsAuthenticated(false);
+        setPharmacist(null);
+        setIsLoading(false);
+        loginInProgressRef.current = false;
+        return;
+      }
+
       if (authService.isAuthenticated()) {
         console.log('[AuthProvider] Found session token in localStorage, verifying...');
         // Try to get profile to verify session is valid
         const profile = await authService.getProfile();
-        setPharmacist(profile);
-        setIsAuthenticated(true);
-        console.log('[AuthProvider] Session is valid, user authenticated:', profile.user?.first_name);
+        
+        // Проверяем, что это зарегистрированный фармацевт
+        if (profile && profile.is_active) {
+          setPharmacist(profile);
+          setIsAuthenticated(true);
+          console.log('[AuthProvider] Session is valid, active pharmacist:', profile.user?.first_name);
+        } else {
+          throw new Error('User is not an active registered pharmacist');
+        }
       } else {
         console.log('[AuthProvider] No session token found in localStorage');
         // If no token but we are in Telegram, try to login immediately
-        const initData = window.Telegram?.WebApp?.initData;
+        const initData = window.Telegram.WebApp.initData;
         if (initData) {
           console.log('[AuthProvider] 🔄 No token but initData found. Attempting auto-login...');
           try {
@@ -75,7 +91,9 @@ function AuthProvider({ children }) {
       setPharmacist(null);
       
       // Set specific error message for user
-      if (err.response?.status === 401) {
+      if (err.response?.status === 403) {
+        setError('Доступ запрещен. Вы не зарегистрированы как активный фармацевт.');
+      } else if (err.response?.status === 401) {
         setError('Сессия истекла. Пожалуйста, войдите снова через Telegram.');
       } else {
         setError(err.userMessage || 'Ошибка сессии. Попробуйте войти снова.');

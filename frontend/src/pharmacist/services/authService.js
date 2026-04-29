@@ -50,6 +50,12 @@ export const authService = {
     }).then(async response => {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        
+        // Handle specific Telegram session errors
+        if (errorData.detail && errorData.detail.includes('QUERY_ID_INVALID')) {
+          throw new Error('Telegram session expired. Please restart the Mini App.');
+        }
+        
         throw new Error(errorData.detail || 'Login failed');
       }
       
