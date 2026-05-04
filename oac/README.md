@@ -11,11 +11,14 @@
 
 Кратко:
 - **origin-docs/** - оригинальные тексты законов и приказов
-- **oac/docs/** - документы compliance проекта (01-13)
+- **oac/docs/** - документы compliance проекта (01-14)
 - **oac/audits/** - отчеты об аудитах и проверках
 - **oac/guides/** - руководства и инструкции для персонала
 - **oac/planning/** - планы и дорожные карты
 - **oac/requirements/** - детализированные требования
+- **oac/dop/** - дополнительная документация
+
+**Последнее обновление структуры:** 4 мая 2026 г. - реорганизация документации, удаление устаревших файлов
 
 ---
 
@@ -32,20 +35,31 @@ oac/
 │   └── oac-sprint.md                 # План спринтов по внедрению
 │
 ├── audits/                            # Аудиты и анализы
-│   ├── oac-audit.md                  # Полный детальный аудит системы
-│   ├── oac-audit-summary.md          # Краткая сводка аудита
-│   ├── PRIVACY-POLICY-AUDIT.md       # Аудит политики обработки ПД
-│   └── OAC-ENCRYPTION-ANALYSIS.md    # Анализ требований к шифрованию
+│   ├── OAC-COMPLIANCE-AUDIT-2026-05-04.md  # Последний полный аудит
+│   ├── OAC-COMPLIANCE-PROGRESS-TRACKER.md  # Трекер прогресса
+│   └── OAC-COMPLIANCE-ACTION-CHECKLIST.md  # Чек-лист действий
 │
 ├── guides/                            # Руководства и инструкции
+│   ├── CONSENT-CHECKBOXES-IMPLEMENTATION.md    ← НОВОЕ: Реализация чекбоксов согласия
+│   ├── CONSENT-MODAL-TROUBLESHOOTING.md        ← НОВОЕ: Диагностика модального окна
+│   ├── TELEGRAM-WEB-CONSENT-GUIDE.md           ← НОВОЕ: Согласия в Telegram и Web
 │   ├── QUICK-START-SECURITY.md       # Быстрый старт: настройка безопасности
-│   ├── OAC-FREE-SOLUTIONS.md         # Бесплатные решения для compliance
-│   └── OAC-FREE-SOLUTIONS-CHEATSHEET.md  # Шпаргалка по бесплатным инструментам
+│   ├── ENCRYPTION-*.md               # Все гайды по шифрованию
+│   ├── OAC-FREE-SOLUTIONS*.md        # Бесплатные решения для compliance
+│   └── FRONTEND-IMPROVEMENTS-ROADMAP.md  # Дорожная карта улучшений фронтенда
 │
 ├── planning/                          # Планирование и отслеживание
 │   ├── oac-compliance-checklist.md   # Интерактивный чек-лист (115 задач)
 │   ├── OAC-VISUAL-PROGRESS.md        # Визуальный dashboard прогресса
 │   └── OAC-AUDIT-SUMMARY-FOR-TEAM.md # Документ для команды
+│
+├── dop/                               # Дополнительная документация
+│   ├── NORMATIVNYE-DOKUMENTY-REGISTER.md  # Реестр нормативных документов
+│   ├── REQUIRED-DOCUMENTS-FOR-COMPLIANCE.md # Требуемые документы
+│   └── PRIKAZ-195-ANALYSIS-TEMPLATE.md      # Шаблон анализа приказа 195
+│
+├── checklist/                         # Чек-листы
+│   └── checklist.md
 │
 └── docs/                              # Шаблоны документов для ОАЦ
     ├── 01-act-class-3in.md           # Акт отнесения к классу 3-ин
@@ -60,7 +74,8 @@ oac/
     ├── 10-encryption-policy.md       # Политика шифрования
     ├── 11-antivirus-reglament.md     # Регламент антивирусной защиты
     ├── 12-ids-ips-reglament.md       # Регламент IDS/IPS
-    └── 13-vuln-scan-reglament.md     # Регламент сканирования уязвимостей
+    ├── 13-vuln-scan-reglament.md     # Регламент сканирования уязвимостей
+    └── 14-personal-data-processing-architecture.md  ← НОВОЕ: Архитектура обработки ПД
 ```
 
 ---
@@ -69,21 +84,21 @@ oac/
 
 ### Для руководителей и менеджеров:
 
-1. **[audits/oac-audit-summary.md](audits/oac-audit-summary.md)** - Краткая сводка аудита с планом действий и бюджетом
-2. **[planning/OAC-AUDIT-SUMMARY-FOR-TEAM.md](planning/OAC-AUDIT-SUMMARY-FOR-TEAM.md)** - Документ для briefing команды
+1. **[audits/OAC-COMPLIANCE-AUDIT-2026-05-04.md](audits/OAC-COMPLIANCE-AUDIT-2026-05-04.md)** - Последний полный аудит системы
+2. **[audits/OAC-COMPLIANCE-ACTION-CHECKLIST.md](audits/OAC-COMPLIANCE-ACTION-CHECKLIST.md)** - Чек-лист необходимых действий
 3. **[planning/OAC-VISUAL-PROGRESS.md](planning/OAC-VISUAL-PROGRESS.md)** - Визуальный dashboard готовности
 
 ### Для технических специалистов:
 
 1. **[guides/QUICK-START-SECURITY.md](guides/QUICK-START-SECURITY.md)** - Пошаговая инструкция по настройке безопасности (15-20 мин)
-2. **[guides/OAC-FREE-SOLUTIONS-CHEATSHEET.md](guides/OAC-FREE-SOLUTIONS-CHEATSHEET.md)** - Шпаргалка по бесплатным инструментам
-3. **[audits/OAC-ENCRYPTION-ANALYSIS.md](audits/OAC-ENCRYPTION-ANALYSIS.md)** - Анализ требований к шифрованию данных
+2. **[guides/ENCRYPTION-QUICK-START.md](guides/ENCRYPTION-QUICK-START.md)** - Быстрая настройка шифрования
+3. **[docs/14-personal-data-processing-architecture.md](docs/14-personal-data-processing-architecture.md)** - Архитектура обработки персональных данных
 
-### Для разработчиков:
+### Для разработчиков (согласия на обработку ПД):
 
-1. **[planning/oac-compliance-checklist.md](planning/oac-compliance-checklist.md)** - Чек-лист из 115 задач для отслеживания
-2. **[audits/oac-audit.md](audits/oac-audit.md)** - Полный детальный аудит системы
-3. **[audits/PRIVACY-POLICY-AUDIT.md](audits/PRIVACY-POLICY-AUDIT.md)** - Аудит политики обработки ПД
+1. **[guides/TELEGRAM-WEB-CONSENT-GUIDE.md](guides/TELEGRAM-WEB-CONSENT-GUIDE.md)** - Реализация согласий в Telegram боте и Web интерфейсе
+2. **[guides/CONSENT-CHECKBOXES-IMPLEMENTATION.md](guides/CONSENT-CHECKBOXES-IMPLEMENTATION.md)** - Технические детали реализации чекбоксов
+3. **[guides/CONSENT-MODAL-TROUBLESHOOTING.md](guides/CONSENT-MODAL-TROUBLESHOOTING.md)** - Диагностика проблем с модальным окном
 
 ### Для работы с документами ОАЦ:
 

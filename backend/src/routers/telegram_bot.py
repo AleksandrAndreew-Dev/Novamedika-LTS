@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Depends
 from aiogram.types import Update
 import logging
 import os
@@ -14,9 +14,26 @@ from sqlalchemy import text, select, func
 
 from db.database import get_db
 from db.qa_models import User, Question, Pharmacist, Answer
+from services.user_service import get_or_create_user
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+class ConsentCheckRequest(BaseModel):
+    """Запрос на проверку согласия пользователя из Telegram WebApp"""
+    telegram_id: int
+    first_name: str | None = None
+    last_name: str | None = None
+    username: str | None = None
+
+
+class ConsentCheckResponse(BaseModel):
+    """Ответ с статусом согласия пользователя"""
+    has_consent: bool
+    consent_privacy_policy: bool | None = None
+    needs_webapp_consent: bool
 
 
 @router.post("/webhook/")
@@ -405,15 +422,76 @@ async def get_pending_questions(
                 }
             )
 
-        return {
-            "status": "success",
-            "count": len(questions_data),
-            "questions": questions_data,
-        }
+        return {"status": "success", "questions": questions_data, "total": len(questions_data)}
 
     except Exception as e:
         logger.error(f"Error getting pending questions: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error getting pending questions: {str(e)}",
+        )
+
+
+@router.post("/webapp/check-consent", response_model=ConsentCheckResponse)
+async def check_webapp_consent(
+    request: ConsentCheckRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Проверка статуса согласия пользователя при открытии WebApp из Telegram бота.
+    
+    Этот endpoint вызывается фронтендом при инициализации Telegram WebApp
+    для определения, нужно ли показывать модальное окно с запросом согласия
+    на обработку данных в контексте WebApp (поиск лекарств, бронирование).
+    
+    Логика:
+    1. Если пользователь дал согласие в боте (consent_privacy_policy = True) - 
+       считаем что согласие есть для базовых функций
+    2. Но для WebApp с дополнительными функциями (бронирование с передачей телефона аптеке)
+       может потребоваться отдельное подтверждение
+    
+    Args:
+        telegram_id: Telegram ID пользователя из initData
+        first_name, last_name, username: Дополнительные данные пользователя
+        
+    Returns:
+        has_consent: Есть ли базовое согласие
+        consent_privacy_policy: Статус согласия из БД
+        needs_webapp_consent: Нужно ли дополнительное согласие для WebApp
+    """
+    try:
+        # Получаем или создаем пользователя
+        user = await get_or_create_user(
+            db=db,
+            telegram_id=request.telegram_id,
+            first_name=request.first_name,
+            last_name=request.last_name,
+            telegram_username=request.username,
+        )
+        
+        # Проверяем статус согласия
+        has_basic_consent = user.consent_privacy_policy if hasattr(user, 'consent_privacy_policy') else False
+        
+        # Для WebApp с функцией бронирования требуется явное согласие
+        # даже если есть базовое согласие из бота
+        # Это связано с тем, что в WebApp обрабатываются дополнительные данные
+        # (телефон для передачи аптеке)
+        needs_additional_consent = not has_basic_consent
+        
+        logger.info(
+            f"WebApp consent check for telegram_id={request.telegram_id}: "
+            f"has_consent={has_basic_consent}, needs_additional={needs_additional_consent}"
+        )
+        
+        return ConsentCheckResponse(
+            has_consent=has_basic_consent,
+            consent_privacy_policy=user.consent_privacy_policy if hasattr(user, 'consent_privacy_policy') else None,
+            needs_webapp_consent=needs_additional_consent,
+        )
+        
+    except Exception as e:
+        logger.error(f"Error checking WebApp consent: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to check consent status"
         )

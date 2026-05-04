@@ -95,21 +95,71 @@ function App() {
       isPharmacistMode
     });
     
-    // Показываем модальное окно если:
-    // 1. Не в Telegram WebApp (нет initData)
-    // 2. Нет записи о согласии в localStorage
-    // 3. Не в режиме фармацевта (там своя аутентификация)
-    if (!isInTelegram && !cookiesAccepted && !isPharmacistMode) {
+    // Если мы в Telegram WebApp - проверяем согласие через API
+    if (isInTelegram && !isPharmacistMode) {
+      checkTelegramConsent();
+    } else if (!isInTelegram && !cookiesAccepted && !isPharmacistMode) {
+      // Для обычного браузера показываем модальное окно если нет согласия
       console.log('[Consent Modal] ✅ Showing modal');
       setShowCookieBanner(true);
     } else {
       console.log('[Consent Modal] ❌ NOT showing', {
-        reason: isInTelegram ? 'in Telegram (has initData)' : 
+        reason: isInTelegram ? 'in Telegram (checking via API)' : 
                 cookiesAccepted ? 'already accepted' : 
                 'pharmacist mode'
       });
     }
   }, [isPharmacistMode]);
+
+  // Функция проверки согласия через API для Telegram WebApp
+  const checkTelegramConsent = async () => {
+    try {
+      const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+      
+      if (!tgUser) {
+        console.log('[Telegram Consent] No user data in initData');
+        return;
+      }
+      
+      console.log('[Telegram Consent] Checking consent for user:', tgUser.id);
+      
+      // Вызываем новый endpoint
+      const response = await fetch('/api/telegram-bot/webapp/check-consent', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          telegram_id: tgUser.id,
+          first_name: tgUser.first_name,
+          last_name: tgUser.last_name,
+          username: tgUser.username,
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Telegram Consent] Response:', data);
+      
+      // Если нужно дополнительное согласие для WebApp - показываем модальное окно
+      if (data.needs_webapp_consent) {
+        console.log('[Telegram Consent] ✅ Additional consent needed - showing modal');
+        setShowCookieBanner(true);
+      } else {
+        console.log('[Telegram Consent] ❌ Consent already given - no modal needed');
+        // Сохраняем флаг что согласие уже есть
+        localStorage.setItem("cookiesAccepted", "true");
+      }
+      
+    } catch (error) {
+      console.error('[Telegram Consent] Error checking consent:', error);
+      // В случае ошибки показываем модальное окно для безопасности
+      setShowCookieBanner(true);
+    }
+  };
 
   const handleConsentChange = (field) => {
     setConsents(prev => ({

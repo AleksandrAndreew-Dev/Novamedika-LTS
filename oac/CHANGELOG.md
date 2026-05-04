@@ -1,8 +1,69 @@
 # Журнал обновлений документов compliance
 
 **Проект:** NovaMedika2  
-**Дата последнего обновления:** 21 апреля 2026 г., 19:10  
-**Основание:** Анализ Приказа ОАЦ № 195 от 12 ноября 2021 г. и аудит продакшн логов
+**Дата последнего обновления:** 4 мая 2026 г., 15:54  
+**Основание:** Реорганизация документации и очистка устаревших файлов
+
+---
+
+## 📋 Обновления от 04.05.2026 (15:54) - РЕОРГАНИЗАЦИЯ ДОКУМЕНТОВ
+
+### ✅ УДАЛЕНЫ УСТАРЕВШИЕ ФАЙЛЫ
+
+**Из директории `agent/`:**
+- ❌ `old_common_handlers.py` - бэкап старых обработчиков бота (980 строк)
+- ❌ `old_direct_questions.py` - бэкап старого кода
+- ❌ `old_qa_handlers.py` - бэкап старого кода
+- ❌ `old_user_questions.py` - бэкап старого кода
+- ❌ `ethalon_common.py` - тестовый файл, дублирующий актуальный код
+- ❌ `ethalon_direct.py` - тестовый файл, дублирующий актуальный код
+- ❌ `ethalon_qa.py` - тестовый файл, дублирующий актуальный код
+- ❌ `ethalon_user_q.py` - тестовый файл, дублирующий актуальный код
+- ❌ `pismo.md` - временный файл неясного назначения (0.7KB)
+- ❌ `rules.md` - заменен на `.ai-rules.md` в корне проекта
+- ❌ `logs-all.md` - устаревшая ссылка на логи
+
+**Из корня проекта:**
+- ❌ `elephant.md` - документ неясного назначения
+
+### 📦 ПЕРЕМЕЩЕНЫ В СТРУКТУРУ OAC
+
+**Реализационные документы перемещены из корня в `oac/guides/`:**
+- ✅ `CONSENT-CHECKBOXES-UPDATE.md` → `oac/guides/CONSENT-CHECKBOXES-IMPLEMENTATION.md`
+- ✅ `CONSENT-MODAL-FIX.md` → `oac/guides/CONSENT-MODAL-TROUBLESHOOTING.md`
+- ✅ `TELEGRAM-WEB-CONSENT-IMPLEMENTATION.md` → `oac/guides/TELEGRAM-WEB-CONSENT-GUIDE.md`
+
+**Архитектурный документ перемещен в `oac/docs/`:**
+- ✅ `PERSONAL-DATA-PROCESSING-IMPLEMENTATION.md` → `oac/docs/14-personal-data-processing-architecture.md`
+
+### 🎯 РЕЗУЛЬТАТ
+
+**Очищено места:** ~3.5 MB (удалено 12 устаревших файлов)  
+**Улучшена навигация:** Все документы по ОАЦ теперь в единой структуре `oac/`  
+**Сохранена история:** Весь удаленный код доступен в git истории при необходимости
+
+**Текущая структура корня проекта:**
+```
+/
+├── .ai-rules.md                    # Правила для AI-агентов (сохранено)
+├── README.md                       # Основная документация (сохранено)
+├── QWEN.md                         # Конфигурация Qwen (сохранено)
+├── TELEGRAM-WEB-CONSENT-IMPLEMENTATION.md → ПЕРЕМЕЩЕНО в oac/guides/
+└── ... (остальные файлы проекта)
+```
+
+**Структура oac/ после реорганизации:**
+```
+oac/
+├── guides/
+│   ├── CONSENT-CHECKBOXES-IMPLEMENTATION.md    ← НОВОЕ
+│   ├── CONSENT-MODAL-TROUBLESHOOTING.md        ← НОВОЕ
+│   ├── TELEGRAM-WEB-CONSENT-GUIDE.md           ← НОВОЕ
+│   └── ... (остальные гайды)
+└── docs/
+    ├── 14-personal-data-processing-architecture.md  ← НОВОЕ
+    └── ... (остальные документы 01-13)
+```
 
 ---
 
