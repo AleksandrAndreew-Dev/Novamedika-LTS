@@ -101,12 +101,18 @@ crontab -e
 */15 * * * * /opt/actions-runner/check-health.sh >> /var/log/runner-health.log 2>&1
 ```
 
-#### 3. Оптимизация Docker BuildKit
+#### 3. Оптимизация Docker BuildKit и Registry Mirrors
 
-Создать конфигурацию `/etc/docker/daemon.json`:
+**ВАЖНО:** Это наиболее эффективная оптимизация для ускорения загрузки образов!
+
+Создать или обновить конфигурацию `/etc/docker/daemon.json`:
 
 ```json
 {
+  "registry-mirrors": [
+    "https://mirror.gcr.io",
+    "https://docker.mirrors.ustc.edu.cn"
+  ],
   "builder": {
     "gc": {
       "enabled": true,
@@ -127,8 +133,16 @@ crontab -e
 
 Перезапустить Docker:
 ```bash
+sudo systemctl daemon-reload
 sudo systemctl restart docker
 ```
+
+**Проверить что зеркала работают:**
+```bash
+docker info | grep -A 5 "Registry Mirrors"
+```
+
+**Ожидаемый эффект:** Ускорение загрузки в 3-5 раз (с 0.5 MB/s до 2-5 MB/s)
 
 #### 4. Проверка скорости сети
 
