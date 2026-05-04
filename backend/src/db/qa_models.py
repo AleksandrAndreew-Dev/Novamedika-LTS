@@ -37,6 +37,10 @@ class User(Base):
     
     user_type = Column(String(20), default="customer")  # customer, pharmacist
     created_at = Column(DateTime, default=get_utc_now_naive)
+    
+    # Поля для согласия на обработку персональных данных
+    consent_privacy_policy = Column(Boolean, default=False, nullable=False)
+    consent_privacy_policy_date = Column(DateTime, nullable=True)
 
     questions = relationship("Question", back_populates="user")
     refresh_tokens = relationship("RefreshToken", back_populates="user")

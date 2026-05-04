@@ -30,6 +30,57 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
+@router.callback_query(F.data == "consent_privacy_policy")
+async def consent_privacy_policy_callback(
+    callback: CallbackQuery, 
+    db: AsyncSession | None = None, 
+    user: User | None = None
+):
+    """Обработка согласия на обработку персональных данных"""
+    if not db or not user:
+        logger.error("Missing required dependencies in consent_privacy_policy_callback")
+        await callback.answer("❌ Ошибка сервера", show_alert=True)
+        return
+    
+    try:
+        # Обновляем согласие пользователя в базе данных
+        user.consent_privacy_policy = True
+        user.consent_privacy_policy_date = get_utc_now_naive()
+        await db.commit()
+        
+        logger.info(f"User {user.telegram_id} gave consent for privacy policy")
+        
+        await callback.answer("✅ Спасибо за согласие!")
+        
+        # Показываем главное меню после согласия
+        await callback.message.answer(
+            "✅ <b>Согласие получено!</b>\n\n"
+            "Теперь вы можете использовать все функции бота.\n\n"
+            "💊 Напишите ваш вопрос фармацевту или используйте кнопки ниже:",
+            parse_mode="HTML",
+            reply_markup=get_user_inline_keyboard(),
+        )
+    except Exception as e:
+        logger.error(f"Error saving consent for user {user.telegram_id}: {e}")
+        await callback.answer("❌ Ошибка при сохранении согласия", show_alert=True)
+
+
+@router.callback_query(F.data == "decline_privacy_policy")
+async def decline_privacy_policy_callback(callback: CallbackQuery):
+    """Обработка отказа от согласия на обработку персональных данных"""
+    await callback.answer()
+    
+    await callback.message.answer(
+        "❌ <b>Согласие не получено</b>\n\n"
+        "К сожалению, без согласия на обработку персональных данных "
+        "мы не можем предоставить вам услуги сервиса.\n\n"
+        "Если у вас есть вопросы, свяжитесь с нами:\n"
+        "📧 Email: support@novamedika.com\n"
+        "📱 Телефон: +375 (XX) XXX-XX-XX\n\n"
+        "Вы можете повторно нажать /start, если передумаете."
+    )
+
+
 @router.callback_query(F.data == "back_to_main")
 async def back_to_main_callback(
     callback: CallbackQuery, 

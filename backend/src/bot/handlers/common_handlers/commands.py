@@ -40,13 +40,59 @@ async def cmd_start(
     is_pharmacist: bool | None = None,
     pharmacist: Pharmacist | None = None,
 ):
-    """Главная команда /start - показывает главное меню"""
+    """Главная команда /start - показывает главное меню или запрашивает согласие для новых пользователей"""
     if not db or not user or is_pharmacist is None:
         logger.error(f"Missing required dependencies for /start command")
         await message.answer("❌ Ошибка сервера. Попробуйте позже.")
         return
         
     logger.info(f"Command /start from user {message.from_user.id}, is_pharmacist: {is_pharmacist}")
+    
+    # Проверяем, дал ли пользователь согласие на обработку ПД
+    consent_given = user.consent_privacy_policy if hasattr(user, 'consent_privacy_policy') else False
+    
+    if not consent_given and not is_pharmacist:
+        # Новый пользователь - запрашиваем согласие
+        privacy_text = (
+            "👋 <b>Добро пожаловать в NovoMedika!</b>\n\n"
+            "💊 Я помогу вам найти лекарства и ответить на вопросы.\n\n"
+            "⚠️ <b>Важно:</b>\n"
+            "Для использования сервиса необходимо дать согласие на обработку персональных данных "
+            "в соответствии с Законом РБ №99-З «О защите персональных данных».\n\n"
+            "📋 <b>Мы обрабатываем следующие данные:</b>\n"
+            "• Telegram ID\n"
+            "• Имя и фамилия (если предоставлены)\n"
+            "• Текст ваших вопросов фармацевту\n"
+            "• История консультаций\n\n"
+            "🔒 <b>Защита данных:</b>\n"
+            "• Все данные шифруются (Fernet + pgcrypto)\n"
+            "• Срок хранения: 1 год после последнего обращения\n"
+            "• Соответствие требованиям ОАЦ РБ (класс ИС 3-ин)\n\n"
+            "📖 Подробная информация: "
+            "<a href='https://spravka.novamedika.com/privacy-policy'>Политика конфиденциальности</a>\n\n"
+            "Нажимая кнопку «✅ Согласен», вы подтверждаете, что ознакомились с Политикой конфиденциальности "
+            "и даете согласие на обработку персональных данных."
+        )
+        
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="✅ Согласен",
+                        callback_data="consent_privacy_policy"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="❌ Не согласен",
+                        callback_data="decline_privacy_policy"
+                    )
+                ]
+            ]
+        )
+        
+        await message.answer(privacy_text, parse_mode="HTML", reply_markup=keyboard)
+        return
     
     if is_pharmacist and pharmacist:
         # Фармацевт - показываем панель с JWT токеном
@@ -67,7 +113,7 @@ async def cmd_start(
             reply_markup=keyboard,
         )
     else:
-        # Обычный пользователь
+        # Обычный пользователь с данным согласием
         await message.answer(
             "👋 <b>Добро пожаловать в NovoMedika!</b>\n\n"
             "💊 Я помогу вам найти лекарства и ответить на вопросы.\n\n"

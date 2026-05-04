@@ -5,6 +5,11 @@ import { logger } from '../../utils/logger';
 
 export default function LoginForm() {
   const [telegramId, setTelegramId] = useState('');
+  const [consents, setConsents] = useState({
+    privacyPolicy: false,
+    dataProcessing: false,
+    securityProtection: false,
+  });
   const { login, isLoading, error } = useAuth();
   const navigate = useNavigate();
 
@@ -12,6 +17,11 @@ export default function LoginForm() {
     e.preventDefault();
     
     if (!telegramId) {
+      return;
+    }
+
+    // Проверка всех согласий
+    if (!consents.privacyPolicy || !consents.dataProcessing || !consents.securityProtection) {
       return;
     }
 
@@ -27,6 +37,15 @@ export default function LoginForm() {
       logger.error('Login failed:', err);
     }
   };
+
+  const handleConsentChange = (field) => {
+    setConsents(prev => ({
+      ...prev,
+      [field]: !prev[field]
+    }));
+  };
+
+  const allConsentsGiven = consents.privacyPolicy && consents.dataProcessing && consents.securityProtection;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
@@ -87,10 +106,71 @@ export default function LoginForm() {
             </div>
           </div>
 
+          {/* Согласия на обработку персональных данных */}
+          <div className="pt-4 border-t border-gray-200 space-y-3">
+            <p className="text-sm font-semibold text-gray-700 mb-2">
+              Согласие на обработку персональных данных *
+            </p>
+            
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={consents.privacyPolicy}
+                onChange={() => handleConsentChange('privacyPolicy')}
+                required
+                disabled={isLoading}
+                className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+              <span className="text-sm text-gray-700 leading-relaxed">
+                Я согласен на обработку моих персональных данных (Telegram ID, имя, 
+                фамилия, телефон) в соответствии с{" "}
+                <a
+                  href="/privacy-policy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:text-blue-800 underline font-medium"
+                >
+                  Политикой конфиденциальности
+                </a>
+                . Срок хранения: 1 год после прекращения сотрудничества.
+              </span>
+            </label>
+
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={consents.dataProcessing}
+                onChange={() => handleConsentChange('dataProcessing')}
+                required
+                disabled={isLoading}
+                className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+              <span className="text-sm text-gray-700 leading-relaxed">
+                Я согласен на обработку моих данных для проведения онлайн-консультаций 
+                и предоставления фармацевтических услуг пользователям сервиса.
+              </span>
+            </label>
+
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={consents.securityProtection}
+                onChange={() => handleConsentChange('securityProtection')}
+                required
+                disabled={isLoading}
+                className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+              <span className="text-sm text-gray-700 leading-relaxed">
+                Я подтверждаю, что ознакомлен с тем, что мои данные будут зашифрованы 
+                и защищены в соответствии с требованиями ОАЦ РБ (класс ИС 3-ин).
+              </span>
+            </label>
+          </div>
+
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={isLoading || !telegramId}
+            disabled={isLoading || !telegramId || !allConsentsGiven}
             className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
             {isLoading ? (

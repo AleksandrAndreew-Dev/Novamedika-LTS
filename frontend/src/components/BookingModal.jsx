@@ -293,6 +293,61 @@ const BookingModal = React.memo(function BookingModal({
                   </div>
                 </div>
 
+                {/* Согласия на обработку персональных данных */}
+                <div className="pt-4 border-t border-gray-200 space-y-3">
+                  <p className="text-sm font-semibold text-gray-700 mb-2">
+                    Согласие на обработку персональных данных *
+                  </p>
+                  
+                  <label className="flex items-start gap-3 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      required
+                      disabled={bookingState.loading}
+                      className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    />
+                    <span className="text-sm text-gray-700 leading-relaxed">
+                      Я согласен на обработку моих персональных данных (имя, телефон) 
+                      в соответствии с{" "}
+                      <a
+                        href="/privacy-policy"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:text-blue-800 underline font-medium"
+                      >
+                        Политикой конфиденциальности
+                      </a>
+                      . Срок хранения: 3 года с даты оформления заказа.
+                    </span>
+                  </label>
+
+                  <label className="flex items-start gap-3 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      required
+                      disabled={bookingState.loading}
+                      className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    />
+                    <span className="text-sm text-gray-700 leading-relaxed">
+                      Я согласен на передачу моих персональных данных аптеке-партнёру 
+                      для подтверждения и выполнения заказа.
+                    </span>
+                  </label>
+
+                  <label className="flex items-start gap-3 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      required
+                      disabled={bookingState.loading}
+                      className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    />
+                    <span className="text-sm text-gray-700 leading-relaxed">
+                      Я подтверждаю, что ознакомлен с тем, что мои данные будут 
+                      зашифрованы и защищены в соответствии с требованиями ОАЦ РБ.
+                    </span>
+                  </label>
+                </div>
+
                 <div className="flex gap-3 pt-4">
                   <button
                     type="submit"
