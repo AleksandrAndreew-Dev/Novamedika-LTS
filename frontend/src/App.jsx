@@ -77,14 +77,33 @@ function App() {
 
   useEffect(() => {
     const isInTelegram = window.Telegram?.WebApp;
-    if (
-      window.location.protocol === "https:" &&
-      !localStorage.getItem("cookiesAccepted") &&
-      !isInTelegram
-    ) {
+    const cookiesAccepted = localStorage.getItem("cookiesAccepted");
+    
+    // Debug logging для production диагностики
+    console.log('[Consent Modal Check]', {
+      isInTelegram,
+      cookiesAccepted,
+      protocol: window.location.protocol,
+      hostname: window.location.hostname,
+      pathname: window.location.pathname,
+      isPharmacistMode
+    });
+    
+    // Показываем модальное окно если:
+    // 1. Не в Telegram WebApp
+    // 2. Нет записи о согласии в localStorage
+    // 3. Не в режиме фармацевта (там своя аутентификация)
+    if (!isInTelegram && !cookiesAccepted && !isPharmacistMode) {
+      console.log('[Consent Modal] ✅ Showing modal');
       setShowCookieBanner(true);
+    } else {
+      console.log('[Consent Modal] ❌ NOT showing', {
+        reason: isInTelegram ? 'in Telegram' : 
+                cookiesAccepted ? 'already accepted' : 
+                'pharmacist mode'
+      });
     }
-  }, []);
+  }, [isPharmacistMode]);
 
   const handleConsentChange = (field) => {
     setConsents(prev => ({
