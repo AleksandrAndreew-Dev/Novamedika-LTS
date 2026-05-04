@@ -157,6 +157,7 @@ speedtest-cli
 1. **Проверить логи диагностики** в GitHub Actions:
    - Найти шаг "Check runner environment"
    - Посмотреть вывод: диск, память, CPU
+   - **Важно:** Если видите `Error: Process completed with exit code 141` - это SIGPIPE ошибка от `docker images | head`, она не критична и исправлена добавлением `|| true`
 
 2. **Подключиться к серверу и проверить:**
 ```bash

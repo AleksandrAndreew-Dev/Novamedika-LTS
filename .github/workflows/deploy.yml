@@ -104,8 +104,8 @@ jobs:
           echo "Disk space:"
           df -h / | tail -1
           echo ""
-          echo "Docker images:"
-          docker images | head -10
+          echo "Docker images (top 10):"
+          docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" | head -10 || true
           echo ""
           echo "Network speed test (downloading small file):"
           time curl -s -o /dev/null https://github.com || echo "Network check completed"
