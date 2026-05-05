@@ -78,6 +78,8 @@ services:
       # Ключ шифрования для персональных данных (ОАЦ compliance)
       # Генерируйте безопасный ключ: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      # Admin API Keys для критичных операций
+      - ADMIN_API_KEYS=${ADMIN_API_KEYS}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
