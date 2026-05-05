@@ -123,8 +123,8 @@ function App() {
       
       console.log('[Telegram Consent] Checking consent for user:', tgUser.id);
       
-      // Вызываем новый endpoint
-      const response = await fetch('/api/telegram-bot/webapp/check-consent', {
+      // Вызываем endpoint на правильном хосте (api subdomain)
+      const response = await fetch('https://api.spravka.novamedika.com/webapp/check-consent', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
