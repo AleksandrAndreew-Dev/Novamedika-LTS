@@ -248,6 +248,11 @@ app.add_middleware(
     ],
 )
 
+# АУДИТ ДОСТУПА К ПЕРСОНАЛЬНЫМ ДАННЫМ (требование ОАЦ п.2.1)
+from middleware.audit_middleware import AuditLoggingMiddleware
+app.add_middleware(AuditLoggingMiddleware)
+logger.info("Audit logging middleware enabled for personal data access tracking")
+
 # Подключение API роутеров
 from routers import (
     pharmacist_auth,
@@ -257,6 +262,7 @@ from routers import (
     upload,
     pharmacies_info,
     pharmacist_dashboard,
+    admin,
 )
 
 app.include_router(pharmacist_auth.router, prefix="/api/pharmacist", tags=["auth"])
@@ -268,6 +274,7 @@ app.include_router(pharmacies_info.router, tags=["pharmacies"])
 app.include_router(booking_orders.router, tags=["booking"])
 app.include_router(pharmacy_api.router, tags=["pharmacy-api"])
 app.include_router(pharmacist_dashboard.router, prefix="/api/pharmacist", tags=["pharmacist-dashboard"])
+app.include_router(admin.router, tags=["admin"])  # Admin endpoints для audit logs
 
 
 @app.get("/")

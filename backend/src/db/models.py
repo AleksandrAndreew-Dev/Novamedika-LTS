@@ -10,11 +10,52 @@ from sqlalchemy import (
     UniqueConstraint,
     Index,
     Boolean,
+    Text,
+    JSON,
 )
 from sqlalchemy.dialects.postgresql import UUID, TSVECTOR
 from sqlalchemy.orm import relationship
 
 from .base import Base
+
+
+class AuditLog(Base):
+    """Модель для аудита доступа к персональным данным (требование ОАЦ)"""
+    __tablename__ = "audit_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    
+    # Кто выполнил действие
+    user_id = Column(UUID(as_uuid=True), nullable=True)  # ID пользователя (если авторизован)
+    user_type = Column(String(20), nullable=False)  # 'user', 'pharmacist', 'admin', 'system'
+    
+    # Какое действие выполнено
+    action = Column(String(50), nullable=False)  # 'read', 'create', 'update', 'delete', 'export'
+    resource_type = Column(String(50), nullable=False)  # 'user', 'pharmacist', 'question', 'order'
+    resource_id = Column(UUID(as_uuid=True), nullable=True)  # ID затронутого ресурса
+    
+    # Детали действия
+    ip_address = Column(String(45), nullable=True)  # IPv4 или IPv6
+    user_agent = Column(String(500), nullable=True)
+    request_method = Column(String(10), nullable=True)  # GET, POST, PUT, DELETE
+    endpoint = Column(String(255), nullable=True)  # URL endpoint
+    
+    # Результат
+    status_code = Column(String(3), nullable=True)  # HTTP status code
+    success = Column(Boolean, default=True)
+    
+    # Дополнительные данные (JSON для гибкости)
+    details = Column(JSON, nullable=True)  # Дополнительная информация о действии
+    
+    # Временные метки
+    created_at = Column(DateTime, nullable=False, index=True)
+
+    __table_args__ = (
+        Index("idx_audit_user_id", "user_id"),
+        Index("idx_audit_action", "action"),
+        Index("idx_audit_resource", "resource_type", "resource_id"),
+        Index("idx_audit_created_at", "created_at"),
+    )
 
 
 class Pharmacy(Base):
