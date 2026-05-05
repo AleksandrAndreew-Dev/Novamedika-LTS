@@ -241,7 +241,7 @@ def get_admin_api_keys():
     return [k.strip() for k in keys_str.split(",") if k.strip()]
 
 
-async def verify_admin_api_key(x_api_key: str = Header(..., alias="X-Api-Key")):
+async def verify_admin_api_key(x_api_key: str = Header(..., alias="X-API-Key")):
     admin_keys = get_admin_api_keys()
     
     if not admin_keys:
