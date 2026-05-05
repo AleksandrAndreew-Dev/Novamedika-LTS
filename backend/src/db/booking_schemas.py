@@ -14,6 +14,15 @@ class OrderStatusUpdate(BaseModel):
     comment: Optional[str] = None
 
 
+class BulkDeleteOrdersRequest(BaseModel):
+    """Запрос на массовое удаление заказов"""
+    confirm: bool = True  # Подтверждение удаления
+    pharmacy_id: Optional[uuid.UUID] = None  # Фильтр по аптеке
+    status: Optional[str] = None  # Фильтр по статусу (pending, cancelled, completed)
+    before_date: Optional[datetime] = None  # Удалить заказы старше этой даты
+    reason: Optional[str] = None  # Причина удаления
+
+
 class BookingOrderBase(BaseModel):
     product_id: Optional[uuid.UUID] = None
     quantity: int

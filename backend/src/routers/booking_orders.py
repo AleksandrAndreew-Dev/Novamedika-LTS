@@ -2,12 +2,13 @@
 
 import uuid
 import logging
+import os
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Header
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -20,12 +21,32 @@ from db.booking_schemas import (
     BookingOrderResponse,
     OrderCancelRequest,
     OrderStatusUpdate,
+    BulkDeleteOrdersRequest,
 )
 from auth.security import get_api_key
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
+
+# Admin API Keys для критичных операций
+ADMIN_API_KEYS = [k.strip() for k in os.getenv("ADMIN_API_KEYS", "").split(",") if k.strip()]
+
+
+async def verify_admin_api_key(x_api_key: str = Header(..., alias="X-API-Key")):
+    """Проверка admin API key для критичных операций"""
+    if not ADMIN_API_KEYS:
+        logger.critical("ADMIN_API_KEYS not configured — admin endpoints blocked")
+        raise HTTPException(
+            status_code=500,
+            detail="Admin API keys not configured",
+        )
+    if x_api_key not in ADMIN_API_KEYS:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing admin API key",
+        )
+    return True
 
 
 @router.post("/orders", response_model=BookingOrderResponse)
@@ -278,3 +299,110 @@ async def cancel_order(
         await db.rollback()
         logger.exception(f"Error cancelling order {order_id}")
         raise HTTPException(status_code=500, detail="Error cancelling order")
+
+
+@router.delete("/orders/bulk-delete")
+async def bulk_delete_orders(
+    request: BulkDeleteOrdersRequest,
+    db: AsyncSession = Depends(get_db),
+    admin_verified: bool = Depends(verify_admin_api_key),
+):
+    """
+    Массовое удаление заказов с фильтрацией.
+    
+    Требует ADMIN API Key аутентификации (из переменной окружения ADMIN_API_KEYS).
+    
+    Параметры фильтрации:
+    - pharmacy_id: удалить заказы только конкретной аптеки
+    - status: удалить заказы определенного статуса (pending, cancelled, confirmed, failed)
+    - before_date: удалить заказы созданые до указанной даты
+    
+    ВАЖНО: Требуется подтверждение (confirm=true) для предотвращения случайного удаления.
+    """
+    if not request.confirm:
+        raise HTTPException(
+            status_code=400,
+            detail="Confirmation required. Set confirm=true to proceed with deletion."
+        )
+    
+    try:
+        # Строим запрос на удаление с фильтрами
+        query = delete(BookingOrder)
+        
+        # Применяем фильтры
+        if request.pharmacy_id:
+            query = query.where(BookingOrder.pharmacy_id == request.pharmacy_id)
+        
+        if request.status:
+            valid_statuses = ["pending", "submitted", "confirmed", "cancelled", "failed"]
+            if request.status not in valid_statuses:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+                )
+            query = query.where(BookingOrder.status == request.status)
+        
+        if request.before_date:
+            query = query.where(BookingOrder.created_at < request.before_date)
+        
+        # Если нет фильтров — запрещаем удаление ВСЕХ заказов без явного указания
+        if not request.pharmacy_id and not request.status and not request.before_date:
+            raise HTTPException(
+                status_code=400,
+                detail="At least one filter is required (pharmacy_id, status, or before_date). "
+                       "Cannot delete all orders without filters."
+            )
+        
+        # Сначала получаем количество заказов для удаления
+        count_query = select(BookingOrder)
+        if request.pharmacy_id:
+            count_query = count_query.where(BookingOrder.pharmacy_id == request.pharmacy_id)
+        if request.status:
+            count_query = count_query.where(BookingOrder.status == request.status)
+        if request.before_date:
+            count_query = count_query.where(BookingOrder.created_at < request.before_date)
+        
+        count_result = await db.execute(count_query)
+        orders_to_delete = count_result.scalars().all()
+        deleted_count = len(orders_to_delete)
+        
+        if deleted_count == 0:
+            return {
+                "status": "success",
+                "message": "No orders matched the criteria",
+                "deleted_count": 0,
+                "filters": {
+                    "pharmacy_id": str(request.pharmacy_id) if request.pharmacy_id else None,
+                    "status": request.status,
+                    "before_date": request.before_date.isoformat() if request.before_date else None,
+                }
+            }
+        
+        # Выполняем удаление
+        await db.execute(query)
+        await db.commit()
+        
+        logger.info(
+            f"Bulk deleted {deleted_count} orders by admin. "
+            f"Filters: pharmacy_id={request.pharmacy_id}, status={request.status}, "
+            f"before_date={request.before_date}, reason={request.reason}"
+        )
+        
+        return {
+            "status": "success",
+            "message": f"Successfully deleted {deleted_count} orders",
+            "deleted_count": deleted_count,
+            "filters": {
+                "pharmacy_id": str(request.pharmacy_id) if request.pharmacy_id else None,
+                "status": request.status,
+                "before_date": request.before_date.isoformat() if request.before_date else None,
+            },
+            "reason": request.reason,
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.exception("Error during bulk delete orders")
+        raise HTTPException(status_code=500, detail="Error deleting orders")
