@@ -233,18 +233,23 @@ from fastapi import Header
 
 from fastapi import Header, HTTPException, status
 
-ADMIN_API_KEYS = [
-    k.strip() for k in os.getenv("ADMIN_API_KEYS", "").split(",") if k.strip()
-]
+# Admin API Keys для критичных операций
+# Читаются при каждом запросе для поддержки hot-reload без перезапуска
+def get_admin_api_keys():
+    """Получить список ADMIN API Keys из окружения"""
+    keys_str = os.getenv("ADMIN_API_KEYS", "")
+    return [k.strip() for k in keys_str.split(",") if k.strip()]
 
 
 async def verify_admin_api_key(x_api_key: str = Header(..., alias="X-Api-Key")):
-    if not ADMIN_API_KEYS:
+    admin_keys = get_admin_api_keys()
+    
+    if not admin_keys:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Admin API keys not configured",
         )
-    if x_api_key not in ADMIN_API_KEYS:
+    if x_api_key not in admin_keys:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin API key"
         )

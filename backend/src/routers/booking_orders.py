@@ -30,18 +30,24 @@ router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 
 # Admin API Keys для критичных операций
-ADMIN_API_KEYS = [k.strip() for k in os.getenv("ADMIN_API_KEYS", "").split(",") if k.strip()]
+# Читаются при каждом запросе для поддержки hot-reload без перезапуска
+def get_admin_api_keys():
+    """Получить список ADMIN API Keys из окружения"""
+    keys_str = os.getenv("ADMIN_API_KEYS", "")
+    return [k.strip() for k in keys_str.split(",") if k.strip()]
 
 
 async def verify_admin_api_key(x_api_key: str = Header(..., alias="X-API-Key")):
     """Проверка admin API key для критичных операций"""
-    if not ADMIN_API_KEYS:
+    admin_keys = get_admin_api_keys()
+    
+    if not admin_keys:
         logger.critical("ADMIN_API_KEYS not configured — admin endpoints blocked")
         raise HTTPException(
             status_code=500,
             detail="Admin API keys not configured",
         )
-    if x_api_key not in ADMIN_API_KEYS:
+    if x_api_key not in admin_keys:
         raise HTTPException(
             status_code=401,
             detail="Invalid or missing admin API key",
