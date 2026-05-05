@@ -255,6 +255,49 @@ async def update_order_status(
         raise HTTPException(status_code=500, detail="Error updating order status")
 
 
+@router.delete("/orders/bulk-delete")
+async def bulk_delete_orders(
+    db: AsyncSession = Depends(get_db),
+    admin_verified: bool = Depends(verify_admin_api_key),
+):
+    """
+    Полное удаление всех заказов бронирования (аналогично /telegram-bot/qa/drop).
+    
+    Требует ADMIN API Key аутентификации (из переменной окружения ADMIN_API_KEYS).
+    
+    ВАЖНО: Эта операция использует TRUNCATE TABLE CASCADE и удаляет ВСЕ заказы без возможности восстановления!
+    """
+    try:
+        # Отключаем внешние ключи (для PostgreSQL)
+        await db.execute(text("SET session_replication_role = 'replica';"))
+        
+        logger.info("Starting bulk delete of all booking orders")
+        
+        # Очищаем таблицу booking_orders
+        await db.execute(text("TRUNCATE TABLE booking_orders CASCADE;"))
+        logger.info("Cleared table: booking_orders")
+        
+        # Включаем обратно внешние ключи
+        await db.execute(text("SET session_replication_role = 'origin';"))
+        await db.commit()
+        
+        logger.info("Bulk delete completed successfully by admin")
+        
+        return {
+            "status": "success",
+            "message": "All booking orders deleted successfully",
+            "cleared_tables": ["booking_orders"],
+        }
+        
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error during bulk delete orders: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error deleting orders: {str(e)}",
+        )
+
+
 @router.delete("/orders/{order_id}")
 async def cancel_order(
     order_id: uuid.UUID,
@@ -305,46 +348,3 @@ async def cancel_order(
         await db.rollback()
         logger.exception(f"Error cancelling order {order_id}")
         raise HTTPException(status_code=500, detail="Error cancelling order")
-
-
-@router.delete("/orders/bulk-delete")
-async def bulk_delete_orders(
-    db: AsyncSession = Depends(get_db),
-    admin_verified: bool = Depends(verify_admin_api_key),
-):
-    """
-    Полное удаление всех заказов бронирования (аналогично /telegram-bot/qa/drop).
-    
-    Требует ADMIN API Key аутентификации (из переменной окружения ADMIN_API_KEYS).
-    
-    ВАЖНО: Эта операция использует TRUNCATE TABLE CASCADE и удаляет ВСЕ заказы без возможности восстановления!
-    """
-    try:
-        # Отключаем внешние ключи (для PostgreSQL)
-        await db.execute(text("SET session_replication_role = 'replica';"))
-        
-        logger.info("Starting bulk delete of all booking orders")
-        
-        # Очищаем таблицу booking_orders
-        await db.execute(text("TRUNCATE TABLE booking_orders CASCADE;"))
-        logger.info("Cleared table: booking_orders")
-        
-        # Включаем обратно внешние ключи
-        await db.execute(text("SET session_replication_role = 'origin';"))
-        await db.commit()
-        
-        logger.info("Bulk delete completed successfully by admin")
-        
-        return {
-            "status": "success",
-            "message": "All booking orders deleted successfully",
-            "cleared_tables": ["booking_orders"],
-        }
-        
-    except Exception as e:
-        await db.rollback()
-        logger.error(f"Error during bulk delete orders: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error deleting orders: {str(e)}",
-        )
