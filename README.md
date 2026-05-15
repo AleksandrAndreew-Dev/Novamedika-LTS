@@ -92,14 +92,7 @@ npm run prod:restart # Перезапуск всех контейнеров
 py oac/check_normative_docs.py
 ```
 
-### 💰 Экономия с бесплатными решениями
 
-Используя open-source инструменты вместо платных аналогов:
-- **Экономия:** $3,799/год (82%)
-- **Стоимость compliance:** $1,500/год вместо $5,299/год
-- **Инструменты:** ELK Stack, pgcrypto, ClamAV, Fail2Ban, OWASP ZAP, Prometheus+Grafana
-
-👉 **Подробности:** [OAC-FREE-SOLUTIONS-CHEATSHEET.md](OAC-FREE-SOLUTIONS-CHEATSHEET.md)
 
 ### 🗓️ Дорожная карта аттестации (9 недель)
 
