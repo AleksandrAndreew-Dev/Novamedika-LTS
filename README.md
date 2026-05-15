@@ -123,16 +123,9 @@ py oac/check_normative_docs.py
 5. Откройте Pull Request
 
 ---
-
-## 📄 Лицензия
-
-Этот проект является частной собственностью. Все права защищены.
-
----
-
 ## 📞 Контакты
 
-- **Email:** info@novamedika.com
+- **Email:** aleksandrandrph@gmail.com
 - **Telegram Bot:** [@NovaMedikaBot](https://t.me/NovaMedikaBot)
 - **Website:** [spravka.novamedika.com](https://spravka.novamedika.com)
 
