@@ -5,9 +5,35 @@
 ### Запуск деплоя вручную
 
 ```bash
-# Через GitHub UI: Actions → Deploy to Production → Run workflow
+# Через GitHub UI: Actions → Deploy to Production with Security Stack → Run workflow
 # Или через CLI:
-gh workflow run deploy.yml --ref main
+gh workflow run deploy-with-security.yml --ref main
+```
+
+## ⚠️ Важное примечание о workflow файлах
+
+В проекте есть **два** workflow файла для деплоя:
+
+1. ✅ **`deploy-with-security.yml`** - **АКТИВНЫЙ** (используется для всех деплоев)
+   - Включает проверки OAC compliance
+   - Настраивает мониторинг (Loki/Grafana)
+   - Поддерживает сканирование уязвимостей OpenVAS
+   - Настраивает Fail2ban и health checks
+
+2. ❌ **`deploy.yml.disabled`** - **ОТКЛЮЧЕН** (не запускается)
+   - Старая версия без проверок безопасности
+   - Переименован в `.disabled` чтобы избежать дублирования деплоев
+   - Сохранен для справки и возможного будущего использования
+
+**Почему отключили `deploy.yml`:**
+- Оба файла имели одинаковые триггеры (push в main/develop)
+- Это приводило к **двойному запуску деплоя** при каждом коммите
+- Тратились ресурсы runner'а впустую
+- `deploy-with-security.yml` включает все функции из `deploy.yml` + дополнительные проверки безопасности
+
+Если нужно вернуть старый workflow, просто переименуйте файл обратно:
+```bash
+git mv .github/workflows/deploy.yml.disabled .github/workflows/deploy.yml
 ```
 
 ## ⚠️ Решение проблем с таймаутом
