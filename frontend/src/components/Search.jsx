@@ -17,6 +17,7 @@ import { logger } from "../utils/logger";
 export default function Search() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [cities, setCities] = useState([]);
 
   const [searchData, setSearchData] = useState({
     name: "",
@@ -65,6 +66,38 @@ export default function Search() {
       tg.BackButton.offClick(onTgBack);
     };
   }, [step, isTelegram, tg, onTgBack]);
+
+  // Fetch cities on component mount
+  useEffect(() => {
+    const fetchCities = async () => {
+      try {
+        const response = await api.get("/cities/");
+        const data = response.data;
+
+        const citiesList = Array.isArray(data)
+          ? data
+          : (data?.results ?? data?.items ?? []);
+        
+        if (!Array.isArray(citiesList)) {
+          setCities([
+            "Минск",
+            "Гомель",
+            "Брест",
+            "Гродно",
+            "Витебск",
+            "Могилев",
+          ]);
+        } else {
+          setCities(citiesList);
+        }
+      } catch (error) {
+        logger.error("Error fetching cities:", error);
+        setCities(["Минск", "Гомель", "Брест", "Гродно", "Витебск", "Могилев"]);
+      }
+    };
+    
+    fetchCities();
+  }, []);
 
   const handleInitialSearch = async (name, city) => {
     if (abortRef.current) abortRef.current.abort();
