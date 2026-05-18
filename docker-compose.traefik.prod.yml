@@ -19,6 +19,12 @@ services:
       - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
       - --log.level=INFO
       - --accesslog=true
+      # Prometheus metrics для мониторинга (требование ОАЦ п.1.5)
+      - --metrics.prometheus=true
+      - --metrics.prometheus.addEntryPointsLabels=true
+      - --metrics.prometheus.addServicesLabels=true
+      - --metrics.prometheus.entryPoint=metrics
+
     ports:
       - "80:80"
       - "443:443"

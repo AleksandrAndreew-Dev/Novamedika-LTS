@@ -1,0 +1,69 @@
+# Promtail конфигурация для сбора логов с Docker контейнеров
+# Отправка в Loki (локальный или Grafana Cloud)
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  # Локальный Loki (для разработки)
+  - url: http://loki:3100/loki/api/v1/push
+    
+  # Grafana Cloud (для production - раскомментируйте и настройте)
+  # - url: https://logs-prod-us-central1.grafana.net/loki/api/v1/push
+  #   basic_auth:
+  #     username: ${GRAFANA_CLOUD_USERNAME}
+  #     password: ${GRAFANA_CLOUD_API_KEY}
+
+scrape_configs:
+  # Сбор логов со всех Docker контейнеров
+  - job_name: docker-containers
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: 'container'
+      - source_labels: ['__meta_docker_container_log_stream']
+        target_label: 'logstream'
+      - source_labels: ['__meta_docker_container_image']
+        target_label: 'image'
+    
+    # Фильтрация только важных контейнеров NovaMedika2
+    pipeline_stages:
+      - match:
+          selector: '{container=~".*(backend|frontend|postgres|redis|traefik).*"}'
+          action: keep
+      
+      # Добавление меток для классификации логов
+      - regex:
+          expression: '.*(?P<level>ERROR|WARN|INFO|DEBUG|CRITICAL).*'
+          target_label: level
+      
+      # Выделение timestamp
+      - timestamp:
+          format: RFC3339Nano
+          source: time
+
+  # Системные логи хоста (опционально)
+  - job_name: system-logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: varlogs
+          __path__: /var/log/*log
+    
+    pipeline_stages:
+      - match:
+          selector: '{job="varlogs"}'
+          stages:
+            - regex:
+                expression: '^(?P<timestamp>\w+ \d+ \d+:\d+:\d+) (?P<hostname>\S+) (?P<service>\S+): (?P<message>.*)$'
+            - labels:
+                hostname:
+                service:

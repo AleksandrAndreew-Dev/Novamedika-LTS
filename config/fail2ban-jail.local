@@ -1,0 +1,129 @@
+# Улучшенная конфигурация Fail2ban для NovaMedika2
+# Соответствие требованиям ОАЦ (Приказ №66 в ред. №259)
+
+[DEFAULT]
+# Базовые настройки
+bantime = 3600          # Бан на 1 час по умолчанию
+findtime = 600          # Период анализа: 10 минут
+maxretry = 5            # Максимум попыток
+backend = auto
+usedns = warn
+logencoding = utf-8
+enabled = true
+
+# Действия при бане
+action = %(action_mwl)s
+         sendmail-whois[name=Fail2Ban, dest=admin@novamedika.com, sender=fail2ban@novamedika.com]
+
+# Игнорировать доверенные IP
+ignoreip = 127.0.0.1/8 ::1
+
+# ============================================================
+# ЗАЩИТА SSH (критично для сервера)
+# ============================================================
+[sshd]
+enabled = true
+port = ssh
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = 3            # Строже для SSH
+bantime = 7200          # Бан на 2 часа
+findtime = 600
+
+# ============================================================
+# ЗАЩИТА HTTP АУТЕНТИФИКАЦИИ (Basic Auth для админки)
+# ============================================================
+[nginx-http-auth]
+enabled = true
+port = http,https
+filter = nginx-http-auth
+logpath = /var/log/nginx/error.log
+maxretry = 5
+bantime = 3600
+findtime = 600
+
+# ============================================================
+# ЗАЩИТА ОТ ВРЕДОНОСНЫХ БОТОВ
+# ============================================================
+[nginx-badbots]
+enabled = true
+port = http,https
+filter = nginx-badbots
+logpath = /var/log/nginx/access.log
+maxretry = 2
+bantime = 86400         # Бан на 24 часа
+findtime = 600
+
+# ============================================================
+# ЗАЩИТА ОТ СКАНИРОВАНИЯ (404 ошибки)
+# ============================================================
+[nginx-404]
+enabled = true
+port = http,https
+filter = nginx-noscript
+logpath = /var/log/nginx/access.log
+maxretry = 20
+bantime = 3600
+findtime = 600
+
+# ============================================================
+# RATE LIMITING (превышение лимитов запросов)
+# ============================================================
+[nginx-limit-req]
+enabled = true
+port = http,https
+filter = nginx-limit-req
+logpath = /var/log/nginx/error.log
+maxretry = 10
+bantime = 3600
+findtime = 600
+
+# ============================================================
+# КРИТИЧЕСКИ ВАЖНО: ОБНАРУЖЕНИЕ ОЧИСТКИ ЛОГОВ
+# Требование ОАЦ: регистрация попыток затирания следов
+# ============================================================
+[log-cleared]
+enabled = true
+filter = log-cleared
+action = iptables-multiport[name=log-cleared, port="http,https"]
+         sendmail-whois[name=Log Cleared Alert, dest=admin@novamedika.com, sender=fail2ban@novamedika.com]
+logpath = /var/log/syslog
+maxretry = 1            # Любая попытка очистки логов = бан
+bantime = 86400         # Бан на 24 часа
+findtime = 3600
+
+# ============================================================
+# ЗАЩИТА DOCKER КОНТЕЙНЕРОВ (Backend API)
+# ============================================================
+[docker-backend-auth]
+enabled = true
+port = 8000
+filter = docker-backend-auth
+logpath = /var/lib/docker/containers/*/*-json.log
+maxretry = 10
+bantime = 3600
+findtime = 600
+
+# ============================================================
+# ЗАЩИТА POSTGRESQL
+# ============================================================
+[postgresql]
+enabled = true
+port = 5432
+filter = postgresql
+logpath = /var/log/postgresql/postgresql-*.log
+maxretry = 5
+bantime = 7200
+findtime = 600
+
+# ============================================================
+# ЗАЩИТА REDIS
+# ============================================================
+[redis]
+enabled = true
+port = 6379
+filter = redis
+logpath = /var/log/redis/redis-server.log
+maxretry = 5
+bantime = 3600
+findtime = 600

@@ -106,25 +106,32 @@ export default function SearchResults({
         const pharmacyId = item.pharmacy_id || item.pharmacy_number;
         const key = `${pharmacyId}-${item.name}-${item.form}-${item.manufacturer}`;
 
+        const q = parseFloat(item.quantity) || 0;
+        const price = parseFloat(item.price) || 0;
+        // Use Date.parse instead of new Date for better performance
+        const ts = Date.parse(item.updated_at || "") || 0;
+
         if (!grouped[key]) {
           grouped[key] = {
             ...item,
             product_uuid: productUuid,
             pharmacy_id: pharmacyId,
-            quantities: [parseFloat(item.quantity) || 0],
-            prices: [parseFloat(item.price) || 0],
+            quantitySum: q,
+            minPrice: price,
+            priceSeen: new Set([price]),
             working_hours:
               item.working_hours || item.opening_hours || "9:00-21:00",
+            updatedTimestamp: ts,
           };
         } else {
-          grouped[key].quantities.push(parseFloat(item.quantity) || 0);
-          if (!grouped[key].prices.includes(parseFloat(item.price) || 0)) {
-            grouped[key].prices.push(parseFloat(item.price) || 0);
-          }
-          const currentDate = new Date(grouped[key].updated_at);
-          const newDate = new Date(item.updated_at);
-          if (newDate > currentDate) {
+          grouped[key].quantitySum += q;
+          grouped[key].minPrice = Math.min(grouped[key].minPrice, price);
+          grouped[key].priceSeen.add(price);
+          
+          // Compare timestamps instead of Date objects
+          if (ts > grouped[key].updatedTimestamp) {
             grouped[key].updated_at = item.updated_at;
+            grouped[key].updatedTimestamp = ts;
             if (item.working_hours || item.opening_hours) {
               grouped[key].working_hours =
                 item.working_hours || item.opening_hours;
@@ -135,10 +142,10 @@ export default function SearchResults({
 
     return Object.values(grouped).map((item) => ({
       ...item,
-      quantity: item.quantities.reduce((sum, q) => sum + q, 0),
-      price: Math.min(...item.prices),
-      hasMultiplePrices: item.prices.length > 1,
-      originalPrices: item.prices,
+      quantity: item.quantitySum,
+      price: item.minPrice,
+      hasMultiplePrices: item.priceSeen.size > 1,
+      originalPrices: Array.from(item.priceSeen),
     }));
   }, [results]);
 
@@ -244,15 +251,19 @@ export default function SearchResults({
                   role="list"
                   aria-label="Результаты поиска лекарств"
                 >
-                  {groupedResults.map((item, index) => (
-                    <ResultItemTelegram
-                      key={index}
-                      item={item}
-                      formatQuantity={formatQuantity}
-                      formatDate={formatDate}
-                      onBook={openBookingModal}
-                    />
-                  ))}
+                  {groupedResults.map((item) => {
+                    // Use stable key instead of index
+                    const key = `${item.pharmacy_id}|${item.product_uuid}|${item.name}|${item.form}|${item.manufacturer ?? ""}`;
+                    return (
+                      <ResultItemTelegram
+                        key={key}
+                        item={item}
+                        formatQuantity={formatQuantity}
+                        formatDate={formatDate}
+                        onBook={openBookingModal}
+                      />
+                    );
+                  })}
                 </div>
               ) : (
                 <div
@@ -260,15 +271,19 @@ export default function SearchResults({
                   role="list"
                   aria-label="Результаты поиска лекарств"
                 >
-                  {groupedResults.map((item, index) => (
-                    <ResultItemWeb
-                      key={index}
-                      item={item}
-                      formatQuantity={formatQuantity}
-                      formatDate={formatDate}
-                      onBook={openBookingModal}
-                    />
-                  ))}
+                  {groupedResults.map((item) => {
+                    // Use stable key instead of index
+                    const key = `${item.pharmacy_id}|${item.product_uuid}|${item.name}|${item.form}|${item.manufacturer ?? ""}`;
+                    return (
+                      <ResultItemWeb
+                        key={key}
+                        item={item}
+                        formatQuantity={formatQuantity}
+                        formatDate={formatDate}
+                        onBook={openBookingModal}
+                      />
+                    );
+                  })}
                 </div>
               )}
 
@@ -282,13 +297,7 @@ export default function SearchResults({
         </div>
       </div>
 
-      {/* Pagination */}
-      {pagination && pagination.total_pages > 1 && !loading && (
-        <SearchResultsPagination
-          pagination={pagination}
-          onPageChange={onPageChange}
-        />
-      )}
+      {/* Pagination removed - duplicate block eliminated */}
     </div>
   );
 }

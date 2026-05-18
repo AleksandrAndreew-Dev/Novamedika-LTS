@@ -1,0 +1,59 @@
+# Loki конфигурация для NovaMedika2
+# Оптимизировано для сервера 4 CPU / 8 GB RAM
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+
+common:
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: boltdb-shipper
+      object_store: filesystem
+      schema: v11
+      index:
+        prefix: index_
+        period: 24h
+
+# Retention policy - хранение логов 395 дней (требование ОАЦ)
+limits_config:
+  retention_period: 395d
+  max_entries_limit_per_query: 5000
+  max_cache_freshness_per_query: 10m
+
+# Оптимизация для ограниченных ресурсов
+ingester:
+  chunk_idle_period: 3m
+  chunk_retain_period: 30s
+  max_transfer_retries: 0
+
+storage_config:
+  boltdb_shipper:
+    active_index_directory: /loki/boltdb-shipper-active
+    cache_location: /loki/boltdb-shipper-cache
+    cache_ttl: 24h
+    shared_store: filesystem
+
+compactor:
+  working_directory: /loki/compactor
+  shared_store: filesystem
+  compaction_interval: 10m
+  retention_enabled: true
+  retention_delete_delay: 2h
+  retention_delete_worker_count: 150
+
+table_manager:
+  retention_deletes_enabled: true
+  retention_period: 395d

@@ -46,36 +46,9 @@ export default function Search() {
     [step],
   );
 
-  useEffect(() => {
-    const fetchCities = async () => {
-      try {
-        const response = await api.get("/cities/");
-        const data = response.data;
-
-        const cities = Array.isArray(data)
-          ? data
-          : (data?.results ?? data?.items ?? []);
-        if (!Array.isArray(cities)) {
-          setCities([
-            "Минск",
-            "Гомель",
-            "Брест",
-            "Гродно",
-            "Витебск",
-            "Могилев",
-          ]);
-        } else {
-          setCities(cities);
-        }
-      } catch (error) {
-        logger.error("Error fetching cities:", error);
-        setCities(["Минск", "Гомель", "Брест", "Гродно", "Витебск", "Могилев"]);
-      }
-    };
-    fetchCities();
-    return () => {
-      if (abortRef.current) abortRef.current.abort();
-    };
+  // Stable BackButton handler to prevent accumulation
+  const onTgBack = useCallback(() => {
+    setStep((s) => Math.max(1, s - 1));
   }, []);
 
   useEffect(() => {
@@ -85,15 +58,13 @@ export default function Search() {
       tg.BackButton.hide();
     } else {
       tg.BackButton.show();
-      tg.BackButton.onClick(() => {
-        handleStepNavigation(step - 1);
-      });
+      tg.BackButton.onClick(onTgBack);
     }
 
     return () => {
-      tg.BackButton.offClick();
+      tg.BackButton.offClick(onTgBack);
     };
-  }, [step, isTelegram, tg, handleStepNavigation]);
+  }, [step, isTelegram, tg, onTgBack]);
 
   const handleInitialSearch = async (name, city) => {
     if (abortRef.current) abortRef.current.abort();
@@ -122,7 +93,14 @@ export default function Search() {
       });
       setStep(2);
     } catch (error) {
-      if (error.name === "CanceledError") return;
+      // Improved cancel detection for axios + AbortController
+      const isCanceled =
+        error?.name === "CanceledError" ||
+        error?.name === "AbortError" ||
+        error?.code === "ERR_CANCELED";
+      
+      if (isCanceled) return;
+      
       logger.error("Search error:", error);
       setError("Ошибка при поиске. Попробуйте еще раз.");
     } finally {
@@ -168,7 +146,14 @@ export default function Search() {
       }));
       setStep(3);
     } catch (error) {
-      if (error.name === "CanceledError") return;
+      // Improved cancel detection for axios + AbortController
+      const isCanceled =
+        error?.name === "CanceledError" ||
+        error?.name === "AbortError" ||
+        error?.code === "ERR_CANCELED";
+      
+      if (isCanceled) return;
+      
       logger.error("Form selection error:", error);
       setError("Ошибка при загрузке результатов.");
     } finally {
@@ -205,7 +190,14 @@ export default function Search() {
         totalPages: response.data.total_pages,
       }));
     } catch (error) {
-      if (error.name === "CanceledError") return;
+      // Improved cancel detection for axios + AbortController
+      const isCanceled =
+        error?.name === "CanceledError" ||
+        error?.name === "AbortError" ||
+        error?.code === "ERR_CANCELED";
+      
+      if (isCanceled) return;
+      
       logger.error("Pagination error:", error);
       setError("Ошибка при загрузке страницы.");
     } finally {

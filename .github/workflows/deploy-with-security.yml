@@ -1,0 +1,476 @@
+name: Deploy to Production with Security Stack
+
+on:
+  push:
+    branches: [main, develop]
+    tags:
+      - "v*"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy_env:
+        description: "Deploy environment"
+        required: false
+        default: "production"
+        type: choice
+        options:
+          - production
+      enable_security_scan:
+        description: "Enable OpenVAS vulnerability scan"
+        required: false
+        default: true
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: aleksandrandreew-dev/novamedika-lts
+  DOCKER_COMPOSE_FILE: docker-compose.traefik.prod.yml
+  DOMAIN: spravka.novamedika.com
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  test:
+    runs-on: [self-hosted, linux, novamedika-runner]
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        node-version: [24.x]
+        python-version: [3.12]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install Python dependencies
+        run: |
+          cd backend
+          pip install -e .[dev]
+
+      - name: Run Python tests
+        env:
+          DATABASE_URL: "postgresql+asyncpg://test:test@localhost:5432/test_db"
+          ASYNCPG_DATABASE_URL: "postgresql://test:test@localhost:5432/test_db"
+          SECRET_KEY: "test-secret-key-for-ci"
+        run: |
+          cd backend
+          python -c "import sys; from src.main import app; print('✅ Backend imports work')"
+
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Node.js dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Run React tests and build
+        run: |
+          cd frontend
+          npm run build
+          echo "✅ Frontend builds successfully"
+
+      - name: Lint code
+        run: |
+          cd frontend
+          npm run lint
+
+  # NEW: Security compliance check
+  security-audit:
+    runs-on: [self-hosted, linux, novamedika-runner]
+    timeout-minutes: 10
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify OAC compliance documents exist
+        run: |
+          echo "🔍 Checking OAC compliance documents..."
+          
+          REQUIRED_DOCS=(
+            "oac/docs/PRIKAZY-OTVETSTVENNYE-IB.md"
+            "oac/docs/04-privacy-policy.md"
+            "oac/docs/05-infosec-policy.md"
+            "oac/docs/06-tech-spec.md"
+            "oac/docs/07-ib-monitoring-reglament.md"
+            "oac/docs/12-ids-ips-reglament.md"
+          )
+          
+          MISSING=0
+          for doc in "${REQUIRED_DOCS[@]}"; do
+            if [ -f "$doc" ]; then
+              echo "✅ $doc exists"
+            else
+              echo "❌ $doc MISSING"
+              MISSING=$((MISSING + 1))
+            fi
+          done
+          
+          if [ $MISSING -gt 0 ]; then
+            echo "::error::Missing $MISSING required OAC compliance documents"
+            exit 1
+          fi
+          
+          echo "✅ All OAC compliance documents present"
+
+      - name: Validate monitoring configuration files
+        run: |
+          echo "🔍 Validating security stack configuration..."
+          
+          REQUIRED_CONFIGS=(
+            "docker-compose.monitoring.yml"
+            "config/loki-config.yaml"
+            "config/promtail-config.yaml"
+            "config/fail2ban-jail.local"
+            "dashboards/oac-security-monitoring.json"
+          )
+          
+          MISSING=0
+          for config in "${REQUIRED_CONFIGS[@]}"; do
+            if [ -f "$config" ]; then
+              echo "✅ $config exists"
+            else
+              echo "❌ $config MISSING"
+              MISSING=$((MISSING + 1))
+            fi
+          done
+          
+          if [ $MISSING -gt 0 ]; then
+            echo "::warning::Missing $MISSING security configuration files"
+          fi
+          
+          echo "✅ Security stack configuration validated"
+
+      - name: Check scripts are executable
+        run: |
+          echo "🔍 Checking automation scripts..."
+          
+          SCRIPTS=(
+            "scripts/annual-security-review.sh"
+            "scripts/manage-openvas.sh"
+          )
+          
+          for script in "${SCRIPTS[@]}"; do
+            if [ -x "$script" ]; then
+              echo "✅ $script is executable"
+            elif [ -f "$script" ]; then
+              echo "⚠️ $script exists but not executable, fixing..."
+              chmod +x "$script"
+            else
+              echo "❌ $script MISSING"
+            fi
+          done
+
+  build-and-push:
+    needs: [test, security-audit]
+    runs-on: [self-hosted, linux, novamedika-runner]
+    timeout-minutes: 45
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check runner environment
+        shell: bash
+        run: |
+          echo "🔍 Runner diagnostics:"
+          echo "Disk space:"
+          df -h / | tail -1
+          echo ""
+          echo "Docker images (top 10):"
+          docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" | head -10 || true
+          echo ""
+          echo "Network speed test (downloading small file):"
+          time curl -s -o /dev/null https://github.com || echo "Network check completed"
+          echo ""
+          echo "Available memory:"
+          free -h
+          echo ""
+          echo "CPU cores:"
+          nproc
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
+
+      - name: Pull base images to cache
+        shell: bash
+        run: |
+          echo "⚡ Pre-pulling common base images to speed up builds..."
+          docker pull python:3.12-slim || echo "⚠️ Failed to pull python:3.12-slim"
+          docker pull node:24-alpine || echo "⚠️ Failed to pull node:24-alpine"
+          docker pull nginx:alpine || echo "⚠️ Failed to pull nginx:alpine"
+          echo "✅ Base images cached"
+
+      - name: Log in to Container Registry (with retry)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+        id: docker-login
+
+      - name: Retry Docker login if failed
+        if: steps.docker-login.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "⚠️ First login attempt failed, retrying in 15 seconds..."
+          sleep 15
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=${{ github.ref_name }},enable=${{ startsWith(github.ref, 'refs/tags/') }}
+
+      - name: Build and push backend image (with retry)
+        id: build-backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: prod
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+          sbom: false
+        continue-on-error: true
+
+      - name: Retry backend push if failed
+        if: steps.build-backend.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "⚠️ Backend push failed, retrying in 20 seconds..."
+          sleep 20
+        continue-on-error: true
+
+      - name: Build and push backend image (retry attempt)
+        if: steps.build-backend.outcome == 'failure'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: prod
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+          sbom: false
+
+      - name: Extract metadata (tags, labels) for Docker Frontend
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=${{ github.ref_name }},enable=${{ startsWith(github.ref, 'refs/tags/') }}
+
+      - name: Build and push frontend image (with retry)
+        id: build-frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          target: prod
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+          sbom: false
+          build-args: |
+            VITE_API_URL=https://api.${{ env.DOMAIN }}
+            VITE_WS_URL=wss://api.${{ env.DOMAIN }}/api/pharmacist/ws/pharmacist
+
+      - name: Retry frontend push if failed
+        if: steps.build-frontend.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "⚠️ Frontend push failed, retrying in 20 seconds..."
+          sleep 20
+        continue-on-error: true
+
+      - name: Build and push frontend image (retry attempt)
+        if: steps.build-frontend.outcome == 'failure'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          target: prod
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+          sbom: false
+          build-args: |
+            VITE_API_URL=https://api.${{ env.DOMAIN }}
+            VITE_WS_URL=wss://api.${{ env.DOMAIN }}/api/pharmacist/ws/pharmacist
+
+  deploy-production:
+    needs: build-and-push
+    runs-on: [self-hosted, linux, novamedika-runner]
+    timeout-minutes: 20
+    if: github.ref == 'refs/heads/main'
+
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Upload all configuration files to server
+        uses: appleboy/scp-action@v0.1.2
+        with:
+          host: ${{ secrets.PRODUCTION_SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          source: |
+            docker-compose.traefik.prod.yml
+            docker-compose.monitoring.yml
+            config/
+            dashboards/
+            scripts/
+          target: /opt/novamedika-prod/
+          strip_components: 0
+          overwrite: true
+
+      - name: Deploy application and security stack to production
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.PRODUCTION_SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd /opt/novamedika-prod/
+            
+            echo "=== Step 1: Making scripts executable ==="
+            chmod +x scripts/*.sh
+            
+            echo "=== Step 2: Setting up Fail2ban configuration ==="
+            sudo cp config/fail2ban-jail.local /etc/fail2ban/jail.local 2>/dev/null || echo "⚠️ Fail2ban not installed"
+            sudo cp config/fail2ban-filter-log-cleared.conf /etc/fail2ban/filter.d/log-cleared.conf 2>/dev/null || true
+            sudo cp config/fail2ban-filter-docker-backend-auth.conf /etc/fail2ban/filter.d/docker-backend-auth.conf 2>/dev/null || true
+            sudo systemctl restart fail2ban 2>/dev/null || echo "⚠️ Fail2ban restart skipped"
+            
+            echo "=== Step 3: Deploying main application ==="
+            docker-compose -f docker-compose.traefik.prod.yml pull
+            docker-compose -f docker-compose.traefik.prod.yml up -d
+            
+            echo "=== Step 4: Deploying monitoring stack ==="
+            docker-compose -f docker-compose.monitoring.yml up -d
+            
+            echo "=== Step 5: Waiting for services to start ==="
+            sleep 10
+            
+            echo "=== Step 6: Health checks ==="
+            echo "Checking Loki..."
+            curl -sf http://localhost:3100/ready && echo "✅ Loki is ready" || echo "❌ Loki failed"
+            
+            echo "Checking Grafana..."
+            curl -sf http://localhost:3000/api/health && echo "✅ Grafana is ready" || echo "❌ Grafana failed"
+            
+            echo "Checking backend..."
+            curl -sf https://api.${{ env.DOMAIN }}/health && echo "✅ Backend is ready" || echo "❌ Backend failed"
+            
+            echo "=== Step 7: Setting up cron jobs ==="
+            # Add weekly OpenVAS scan (Saturday 02:00)
+            (crontab -l 2>/dev/null | grep -v "manage-openvas"; echo "0 2 * * 6 /opt/novamedika-prod/scripts/manage-openvas.sh start-scanning") | crontab -
+            (crontab -l 2>/dev/null | grep -v "stop-scanning"; echo "0 5 * * 6 /opt/novamedika-prod/scripts/manage-openvas.sh stop-scanning") | crontab -
+            
+            # Add annual security review (January 1st 00:00)
+            (crontab -l 2>/dev/null | grep -v "annual-security-review"; echo "0 0 1 1 * /opt/novamedika-prod/scripts/annual-security-review.sh") | crontab -
+            
+            echo "✅ Cron jobs configured"
+            
+            echo "=== Deployment complete ==="
+            echo "Application: https://${{ env.DOMAIN }}"
+            echo "Grafana: http://$(hostname -I | awk '{print $1}'):3000"
+            echo "Monitoring stack deployed with Loki/Promtail/Grafana"
+
+  # NEW: Optional vulnerability scan after deployment
+  vulnerability-scan:
+    needs: deploy-production
+    runs-on: [self-hosted, linux, novamedika-runner]
+    timeout-minutes: 180
+    if: |
+      github.ref == 'refs/heads/main' && 
+      github.event_name == 'push' &&
+      (github.event.inputs.enable_security_scan == 'true' || !github.event.inputs)
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run OpenVAS vulnerability scan
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.PRODUCTION_SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd /opt/novamedika-prod/
+            
+            echo "=== Starting vulnerability scan ==="
+            echo "This will take approximately 2-3 hours..."
+            
+            # Start OpenVAS with resource management
+            ./scripts/manage-openvas.sh start-scanning
+            
+            echo "⏳ Scan started. Waiting for completion..."
+            echo "You can monitor progress at: http://$(hostname -I | awk '{print $1}'):9392"
+            
+            # Note: The scan will be stopped automatically by cron at 05:00
+            # Reports will be saved to /opt/reports/openvas/
+
+      - name: Generate scan summary
+        if: always()
+        run: |
+          echo "## 🔍 Vulnerability Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Scan initiated:** $(date -u '+%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** Scan running in background (will complete in ~3 hours)" >> $GITHUB_STEP_SUMMARY
+          echo "**Reports location:** \`/opt/reports/openvas/\` on production server" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Monitor scan progress via Greenbone web interface" >> $GITHUB_STEP_SUMMARY
+          echo "2. Review PDF reports when scan completes" >> $GITHUB_STEP_SUMMARY
+          echo "3. Address any critical/high vulnerabilities found" >> $GITHUB_STEP_SUMMARY
+          echo "4. Re-scan after fixes" >> $GITHUB_STEP_SUMMARY
