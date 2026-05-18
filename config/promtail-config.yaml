@@ -35,10 +35,6 @@ scrape_configs:
     
     # Фильтрация только важных контейнеров NovaMedika2
     pipeline_stages:
-      - match:
-          selector: '{container=~".*(backend|frontend|postgres|redis|traefik).*"}'
-          action: keep
-      
       # Добавление меток для классификации логов
       - regex:
           expression: '.*(?P<level>ERROR|WARN|INFO|DEBUG|CRITICAL).*'
@@ -59,11 +55,8 @@ scrape_configs:
           __path__: /var/log/*log
     
     pipeline_stages:
-      - match:
-          selector: '{job="varlogs"}'
-          stages:
-            - regex:
-                expression: '^(?P<timestamp>\w+ \d+ \d+:\d+:\d+) (?P<hostname>\S+) (?P<service>\S+): (?P<message>.*)$'
-            - labels:
-                hostname:
-                service:
+      - regex:
+          expression: '^(?P<timestamp>\w+ \d+ \d+:\d+:\d+) (?P<hostname>\S+) (?P<service>\S+): (?P<message>.*)$'
+      - labels:
+          hostname:
+          service:

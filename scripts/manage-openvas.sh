@@ -9,6 +9,14 @@ set -euo pipefail
 OPENVAS_CONTAINER="openvas-temp"
 MONITORING_SERVICES=("grafana-local" "loki" "promtail")
 
+# Загрузка переменных окружения из .env файла (если существует)
+if [ -f /opt/novamedika-prod/.env ]; then
+    source /opt/novamedika-prod/.env
+fi
+
+# Использование пароля из .env или значение по умолчанию (только для backward compatibility)
+OPENVAS_PASSWORD="${OPENVAS_PASSWORD:-OpenVASTempPass123!}"
+
 usage() {
     echo "Использование: $0 {start-scanning|stop-scanning}"
     echo ""
@@ -48,7 +56,7 @@ start_scanning() {
     docker run -d \
         --name "${OPENVAS_CONTAINER}" \
         --network novamedika2_backend-network \
-        -e PASSWORD="OpenVASTempPass123!" \
+        -e PASSWORD="${OPENVAS_PASSWORD}" \
         -v openvas-data:/data \
         --memory=3g \
         --cpus=2.0 \
@@ -58,6 +66,8 @@ start_scanning() {
         }
     
     log "✅ OpenVAS запущен"
+    log "🔐 Пароль GSA: ${OPENVAS_PASSWORD}"
+    log "🌐 Доступ: http://<server-ip>:9392 (username: admin)"
     log "Ожидание инициализации (5 минут)..."
     sleep 300
     
