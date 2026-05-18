@@ -362,12 +362,7 @@ jobs:
           host: ${{ secrets.PRODUCTION_SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: |
-            docker-compose.traefik.prod.yml
-            docker-compose.monitoring.yml
-            config/
-            dashboards/
-            scripts/
+          source: "docker-compose.traefik.prod.yml,docker-compose.monitoring.yml,config/,dashboards/,scripts/"
           target: /opt/novamedika-prod/
           strip_components: 0
           overwrite: true
