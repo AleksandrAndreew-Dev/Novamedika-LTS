@@ -9,11 +9,6 @@ datasources:
     isDefault: false
     jsonData:
       maxLines: 1000
-      derivedFields:
-        - datasourceUid: prometheus
-          matcherRegex: "traceID=(\\w+)"
-          name: TraceID
-          url: '$${__value.raw}'
     
   # Prometheus datasource (метрики)
   - name: Prometheus
@@ -24,7 +19,4 @@ datasources:
     jsonData:
       timeInterval: 15s
       httpMethod: POST
-      exemplarTraceIdDestinations:
-        - name: traceID
-          datasourceUid: tempo
   
