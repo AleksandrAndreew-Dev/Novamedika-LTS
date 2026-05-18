@@ -17,7 +17,7 @@ import { logger } from "../utils/logger";
 export default function Search() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [cities, setCities] = useState([]);
+
   const [searchData, setSearchData] = useState({
     name: "",
     city: "",
@@ -98,9 +98,9 @@ export default function Search() {
         error?.name === "CanceledError" ||
         error?.name === "AbortError" ||
         error?.code === "ERR_CANCELED";
-      
+
       if (isCanceled) return;
-      
+
       logger.error("Search error:", error);
       setError("Ошибка при поиске. Попробуйте еще раз.");
     } finally {
@@ -151,9 +151,9 @@ export default function Search() {
         error?.name === "CanceledError" ||
         error?.name === "AbortError" ||
         error?.code === "ERR_CANCELED";
-      
+
       if (isCanceled) return;
-      
+
       logger.error("Form selection error:", error);
       setError("Ошибка при загрузке результатов.");
     } finally {
@@ -195,9 +195,9 @@ export default function Search() {
         error?.name === "CanceledError" ||
         error?.name === "AbortError" ||
         error?.code === "ERR_CANCELED";
-      
+
       if (isCanceled) return;
-      
+
       logger.error("Pagination error:", error);
       setError("Ошибка при загрузке страницы.");
     } finally {
