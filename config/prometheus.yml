@@ -34,7 +34,20 @@ scrape_configs:
     # Временно отключено до добавления instrumentator
     # enabled: false
     
-  # Node exporter для системных метрик хоста (опционально)
-  # - job_name: 'node'
-  #   static_configs:
-  #     - targets: ['node-exporter:9100']
+  # PostgreSQL exporter metrics (OAC compliance - database monitoring)
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres_exporter:9187']
+    scrape_interval: 15s
+    
+  # Redis exporter metrics (OAC compliance - cache monitoring)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis_exporter:9121']
+    scrape_interval: 15s
+    
+  # Node exporter for system metrics (OAC compliance - infrastructure monitoring)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node_exporter:9100']
+    scrape_interval: 15s
