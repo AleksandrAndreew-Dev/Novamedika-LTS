@@ -1,5 +1,3 @@
-version: '3.8'
-
 # Легковесный стек мониторинга для NovaMedika2
 # Потребление ресурсов: ~1.5 GB RAM, 1.6 CPU (с Prometheus)
 # Интеграция с Grafana Cloud Free Tier (50 GB логов/мес бесплатно)
@@ -60,7 +58,7 @@ services:
 
   # Promtail - сборщик логов с Docker контейнеров
   promtail:
-    image: grafana/promtail:2.9.0
+    image: grafana/promtail:3.0.0
     container_name: promtail
     volumes:
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
