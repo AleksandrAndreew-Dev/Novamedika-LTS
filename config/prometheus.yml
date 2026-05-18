@@ -21,14 +21,14 @@ scrape_configs:
   # Traefik metrics
   - job_name: 'traefik'
     static_configs:
-      - targets: ['traefik-prod:8080']
+      - targets: ['traefik:8080']
     metrics_path: '/metrics'
     scrape_interval: 15s
     
   # Backend FastAPI metrics (если добавим prometheus-fastapi-instrumentator)
   - job_name: 'backend'
     static_configs:
-      - targets: ['backend-prod:8000']
+      - targets: ['backend:8000']
     metrics_path: '/metrics'
     scrape_interval: 15s
     # Временно отключено до добавления instrumentator
