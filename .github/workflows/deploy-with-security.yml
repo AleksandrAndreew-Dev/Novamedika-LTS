@@ -362,10 +362,43 @@ jobs:
           host: ${{ secrets.PRODUCTION_SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "docker-compose.traefik.prod.yml,docker-compose.monitoring.yml,config/,dashboards/,scripts/"
+          source: "docker-compose.traefik.prod.yml,docker-compose.monitoring.yml,config/,dashboards/"
           target: /opt/novamedika-prod/
           strip_components: 0
           overwrite: true
+
+      - name: Upload scripts separately with proper permissions
+        uses: appleboy/scp-action@v0.1.2
+        with:
+          host: ${{ secrets.PRODUCTION_SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          source: "scripts/"
+          target: /tmp/novamedika-scripts/
+          strip_components: 0
+          overwrite: true
+          rm: true
+
+      - name: Move scripts and set permissions
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.PRODUCTION_SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            # Remove old scripts directory
+            rm -rf /opt/novamedika-prod/scripts/
+            
+            # Move new scripts from temp location
+            mv /tmp/novamedika-scripts/scripts /opt/novamedika-prod/scripts/
+            
+            # Set proper permissions
+            chmod -R 755 /opt/novamedika-prod/scripts/
+            
+            # Clean up temp directory
+            rm -rf /tmp/novamedika-scripts/
+            
+            echo "✅ Scripts deployed with correct permissions"
 
       - name: Deploy application and security stack to production
         uses: appleboy/ssh-action@v0.1.10
