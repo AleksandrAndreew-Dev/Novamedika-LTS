@@ -33,6 +33,7 @@ services:
       - ./letsencrypt:/letsencrypt
     networks:
       - traefik-public
+      - monitoring-network  # Added for Prometheus monitoring
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.${DOMAIN}`)"
@@ -111,6 +112,7 @@ services:
       - ./uploaded_csv:/app/uploaded_csv:rw
     networks:
       - traefik-public
+      - monitoring-network  # Added for Prometheus monitoring
     depends_on:
       postgres:
         condition: service_healthy
@@ -330,6 +332,9 @@ networks:
   traefik-public:
     driver: bridge
     name: novamedika-prod_traefik-public
+  monitoring-network:  # Added for Prometheus integration
+    external: true
+    name: novamedika-prod_monitoring-network
 
 # Volume definition
 volumes:

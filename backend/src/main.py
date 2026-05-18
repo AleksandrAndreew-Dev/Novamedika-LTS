@@ -6,7 +6,7 @@ from datetime import datetime
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand
 from aiogram.utils.callback_answer import CallbackAnswerMiddleware
@@ -32,6 +32,10 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
+# Prometheus metrics (OAC compliance - monitoring requirement)
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST, Counter, Histogram, Gauge
+import time
+
 # Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
@@ -41,6 +45,24 @@ logger = logging.getLogger(__name__)
 
 # Инициализация rate limiter
 limiter = Limiter(key_func=get_remote_address)
+
+# Prometheus metrics definitions
+REQUEST_COUNT = Counter(
+    'http_requests_total',
+    'Total HTTP requests',
+    ['method', 'endpoint', 'status']
+)
+
+REQUEST_LATENCY = Histogram(
+    'http_request_duration_seconds',
+    'HTTP request latency',
+    ['method', 'endpoint']
+)
+
+ACTIVE_REQUESTS = Gauge(
+    'http_active_requests',
+    'Number of active HTTP requests'
+)
 
 
 async def set_bot_commands(bot: Bot):
@@ -253,6 +275,33 @@ from middleware.audit_middleware import AuditLoggingMiddleware
 app.add_middleware(AuditLoggingMiddleware)
 logger.info("Audit logging middleware enabled for personal data access tracking")
 
+# Prometheus metrics middleware (OAC compliance - monitoring requirement)
+@app.middleware("http")
+async def prometheus_metrics_middleware(request: Request, call_next):
+    """Middleware to collect Prometheus metrics for all HTTP requests"""
+    start_time = time.time()
+    ACTIVE_REQUESTS.inc()
+    
+    try:
+        response = await call_next(request)
+        duration = time.time() - start_time
+        
+        # Record metrics
+        REQUEST_COUNT.labels(
+            method=request.method,
+            endpoint=request.url.path,
+            status=response.status_code
+        ).inc()
+        
+        REQUEST_LATENCY.labels(
+            method=request.method,
+            endpoint=request.url.path
+        ).observe(duration)
+        
+        return response
+    finally:
+        ACTIVE_REQUESTS.dec()
+
 # Подключение API роутеров
 from routers import (
     pharmacist_auth,
@@ -294,6 +343,15 @@ async def health_check_head():
     """HEAD request for health check (lightweight)."""
     from fastapi.responses import Response
     return Response(status_code=200)
+
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint (OAC compliance - monitoring requirement p.1.5)"""
+    return PlainTextResponse(
+        content=generate_latest(),
+        media_type=CONTENT_TYPE_LATEST
+    )
 
 
 if __name__ == "__main__":
