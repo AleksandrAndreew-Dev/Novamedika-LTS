@@ -120,3 +120,4 @@ networks:
     external: false
   traefik-public:
     external: true
+    name: novamedika-prod_traefik-public
