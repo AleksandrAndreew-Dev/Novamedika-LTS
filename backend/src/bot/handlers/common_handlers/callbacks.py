@@ -81,6 +81,60 @@ async def decline_privacy_policy_callback(callback: CallbackQuery):
     )
 
 
+@router.callback_query(F.data == "consent_transboundary_transfer")
+async def consent_transboundary_transfer_callback(
+    callback: CallbackQuery, 
+    db: AsyncSession | None = None, 
+    user: User | None = None
+):
+    """Обработка согласия на трансграничную передачу ПД через Telegram"""
+    if not db or not user:
+        logger.error("Missing required dependencies in consent_transboundary_transfer_callback")
+        await callback.answer("❌ Ошибка сервера", show_alert=True)
+        return
+    
+    try:
+        # Обновляем согласие на трансграничную передачу
+        user.consent_transboundary_transfer = True
+        user.transboundary_risks_acknowledged = True
+        user.consent_transboundary_transfer_date = get_utc_now_naive()
+        await db.commit()
+        
+        logger.info(f"User {user.telegram_id} gave consent for transboundary transfer")
+        
+        await callback.answer("✅ Спасибо за подтверждение!")
+        
+        # Показываем главное меню после согласия
+        await callback.message.answer(
+            "✅ <b>Согласие получено!</b>\n\n"
+            "Теперь вы можете использовать все функции бота.\n\n"
+            "💊 Напишите ваш вопрос фармацевту или используйте кнопки ниже:",
+            parse_mode="HTML",
+            reply_markup=get_user_inline_keyboard(),
+        )
+    except Exception as e:
+        logger.error(f"Error saving transboundary consent for user {user.telegram_id}: {e}")
+        await callback.answer("❌ Ошибка при сохранении согласия", show_alert=True)
+
+
+@router.callback_query(F.data == "decline_transboundary_transfer")
+async def decline_transboundary_transfer_callback(callback: CallbackQuery):
+    """Обработка отказа от трансграничной передачи ПД"""
+    await callback.answer()
+    
+    await callback.message.answer(
+        "❌ <b>Согласие на трансграничную передачу не получено</b>\n\n"
+        "Без согласия на трансграничную передачу данных использование Telegram-бота невозможно.\n\n"
+        "🔄 <b>Альтернативные каналы связи:</b>\n"
+        "Вы можете использовать следующие каналы, обработка данных через которые "
+        "осуществляется исключительно на территории Республики Беларусь:\n\n"
+        "🌐 Web-сайт: https://spravka.novamedika.com\n"
+        "📧 Email: support@novamedika.com\n"
+        "📱 Телефон: +375 (XX) XXX-XX-XX\n\n"
+        "Если вы передумаете, нажмите /start повторно и дайте согласие."
+    )
+
+
 @router.callback_query(F.data == "back_to_main")
 async def back_to_main_callback(
     callback: CallbackQuery, 

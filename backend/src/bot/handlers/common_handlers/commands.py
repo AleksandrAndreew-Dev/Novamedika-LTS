@@ -50,28 +50,49 @@ async def cmd_start(
     
     # Проверяем, дал ли пользователь согласие на обработку ПД
     consent_given = user.consent_privacy_policy if hasattr(user, 'consent_privacy_policy') else False
+    consent_transboundary = user.consent_transboundary_transfer if hasattr(user, 'consent_transboundary_transfer') else False
     
     if not consent_given and not is_pharmacist:
-        # Новый пользователь - запрашиваем согласие
+        # Новый пользователь - запрашиваем согласие с информацией о трансграничной передаче
         privacy_text = (
             "👋 <b>Добро пожаловать в NovoMedika!</b>\n\n"
             "💊 Я помогу вам найти лекарства и ответить на вопросы.\n\n"
-            "⚠️ <b>Важно:</b>\n"
+            "⚠️ <b>Важная информация о защите данных:</b>\n\n"
+            "🔒 <b>Обработка персональных данных:</b>\n"
             "Для использования сервиса необходимо дать согласие на обработку персональных данных "
             "в соответствии с Законом РБ №99-З «О защите персональных данных».\n\n"
             "📋 <b>Мы обрабатываем следующие данные:</b>\n"
-            "• Telegram ID\n"
-            "• Имя и фамилия (если предоставлены)\n"
+            "• Telegram ID (шифруется в базе данных)\n"
+            "• Имя и фамилия (из профиля Telegram)\n"
             "• Текст ваших вопросов фармацевту\n"
             "• История консультаций\n\n"
-            "🔒 <b>Защита данных:</b>\n"
-            "• Все данные шифруются (Fernet + pgcrypto)\n"
+            "🌍 <b>Трансграничная передача данных:</b>\n"
+            "Этот бот работает на платформе Telegram. Серверы Telegram расположены "
+            "за пределами Республики Беларусь (Великобритания, ОАЭ).\n\n"
+            "При использовании бота ваши данные передаются через инфраструктуру Telegram:\n"
+            "• Telegram ID\n"
+            "• Ваше имя и фамилия\n"
+            "• Тексты сообщений\n"
+            "• Номер телефона (если вы его предоставите)\n\n"
+            "⚠️ <b>Риски:</b>\n"
+            "• Данные могут быть доступны иностранным государственным органам\n"
+            "• Отсутствие механизмов защиты по законодательству РБ за пределами страны\n\n"
+            "✅ <b>Меры защиты:</b>\n"
+            "• Ваши Telegram ID и телефон шифруются в нашей базе данных (AES-256)\n"
+            "• Мы минимизируем объем передаваемых данных\n"
             "• Срок хранения: 1 год после последнего обращения\n"
             "• Соответствие требованиям ОАЦ РБ (класс ИС 3-ин)\n\n"
-            "📖 Подробная информация: "
-            "<a href='https://spravka.novamedika.com/privacy-policy'>Политика конфиденциальности</a>\n\n"
-            "Нажимая кнопку «✅ Согласен», вы подтверждаете, что ознакомились с Политикой конфиденциальности "
-            "и даете согласие на обработку персональных данных."
+            "🔄 <b>Альтернативные каналы связи:</b>\n"
+            "Если вы не согласны с трансграничной передачей, используйте:\n"
+            "• Web-сайт: https://spravka.novamedika.com (только РБ)\n"
+            "• Email: support@novamedika.com\n\n"
+            "📖 Подробная информация:\n"
+            "<a href='https://spravka.novamedika.com/privacy-policy'>Политика конфиденциальности</a>\n"
+            "<a href='https://spravka.novamedika.com/cookie-policy'>Политика cookie</a>\n\n"
+            "Нажимая кнопку «✅ Согласен», вы подтверждаете, что:\n"
+            "1. Ознакомились с Политикой конфиденциальности\n"
+            "2. Даете согласие на обработку персональных данных\n"
+            "3. Понимаете риски трансграничной передачи через Telegram"
         )
         
         keyboard = InlineKeyboardMarkup(
@@ -87,11 +108,62 @@ async def cmd_start(
                         text="❌ Не согласен",
                         callback_data="decline_privacy_policy"
                     )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="🌐 Использовать web-сайт вместо бота",
+                        url="https://spravka.novamedika.com"
+                    )
                 ]
             ]
         )
         
         await message.answer(privacy_text, parse_mode="HTML", reply_markup=keyboard)
+        return
+    
+    # Если согласие на обработку ПД дано, но нет согласия на трансграничную передачу
+    if consent_given and not consent_transboundary and not is_pharmacist:
+        # Дополнительное согласие именно на трансграничную передачу
+        transboundary_text = (
+            "⚠️ <b>Подтверждение трансграничной передачи данных</b>\n\n"
+            "Вы уже дали согласие на обработку персональных данных.\n\n"
+            "Для продолжения использования Telegram-бота необходимо подтвердить "
+            "согласие на трансграничную передачу данных через серверы Telegram "
+            "(Великобритания, ОАЭ).\n\n"
+            "📋 <b>Вы подтверждаете, что:</b>\n"
+            "1. Ознакомлены с рисками передачи данных через Telegram\n"
+            "2. Добровольно соглашаетесь на такую передачу\n"
+            "3. Понимаете, что можете использовать web-сайт вместо бота\n\n"
+            "🔄 <b>Альтернатива:</b>\n"
+            "Используйте web-сайт spravka.novamedika.com для обработки данных "
+            "исключительно на территории РБ.\n\n"
+            "Нажмите «✅ Подтверждаю» для продолжения использования бота."
+        )
+        
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="✅ Подтверждаю",
+                        callback_data="consent_transboundary_transfer"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="❌ Отказаться",
+                        callback_data="decline_transboundary_transfer"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="🌐 Перейти на web-сайт",
+                        url="https://spravka.novamedika.com"
+                    )
+                ]
+            ]
+        )
+        
+        await message.answer(transboundary_text, parse_mode="HTML", reply_markup=keyboard)
         return
     
     if is_pharmacist and pharmacist:

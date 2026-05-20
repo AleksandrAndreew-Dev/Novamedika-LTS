@@ -41,6 +41,14 @@ class User(Base):
     # Поля для согласия на обработку персональных данных
     consent_privacy_policy = Column(Boolean, default=False, nullable=False)
     consent_privacy_policy_date = Column(DateTime, nullable=True)
+    
+    # Поля для согласия на трансграничную передачу ПД через Telegram (UK/UAE)
+    consent_transboundary_transfer = Column(Boolean, default=False, nullable=False, 
+                                            comment='Согласие на трансграничную передачу ПД через Telegram')
+    consent_transboundary_transfer_date = Column(DateTime, nullable=True,
+                                                 comment='Дата предоставления согласия на трансграничную передачу')
+    transboundary_risks_acknowledged = Column(Boolean, default=False, nullable=False,
+                                              comment='Подтверждение ознакомления с рисками трансграничной передачи')
 
     questions = relationship("Question", back_populates="user")
     refresh_tokens = relationship("RefreshToken", back_populates="user")
