@@ -20,6 +20,7 @@ export default function Chat() {
   // Load consultation data
   useEffect(() => {
     loadConsultationData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   // Auto-scroll to bottom when new messages arrive

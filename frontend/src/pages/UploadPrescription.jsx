@@ -70,7 +70,7 @@ const UploadPrescription = () => {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await axios.post(
+      await axios.post(
         '/api/prescriptions/upload',
         formData,
         {

@@ -16,6 +16,7 @@ export default function UserDashboard() {
   // Load dashboard data
   useEffect(() => {
     loadDashboardData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadDashboardData = async () => {
@@ -64,7 +65,7 @@ export default function UserDashboard() {
       setTimeout(() => {
         navigate('/');
       }, 1000);
-    } catch (err) {
+    } catch (_) {
       setToast({ message: 'Ошибка выхода', type: 'error' });
     }
   };

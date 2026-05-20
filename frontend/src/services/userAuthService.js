@@ -99,7 +99,7 @@ class UserAuthService {
           // Retry getting profile with new token
           const response = await api.get('/api/auth/me/');
           return response.data;
-        } catch (refreshError) {
+        } catch (_refreshError) {
           // Refresh failed - clear tokens
           localStorage.removeItem('user_access_token');
           localStorage.removeItem('user_refresh_token');
