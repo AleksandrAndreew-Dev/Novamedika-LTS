@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from db.database import get_db
-from auth.security import get_current_user
+from auth.auth import get_current_user_jwt
 from db.qa_models import User
 from utils.time_utils import get_utc_now_naive
 
@@ -50,7 +50,7 @@ class PrescriptionStatusResponse(BaseModel):
 @router.post("/upload", response_model=PrescriptionUploadResponse)
 async def upload_prescription(
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_jwt),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -126,7 +126,7 @@ async def upload_prescription(
         prescription.uploaded_at = get_utc_now_naive()
         await db.commit()
         
-        logger.info(f"Prescription uploaded by user {current_user.telegram_id}: {prescription_uuid}")
+        logger.info(f"Prescription uploaded by user {current_user.uuid}: {prescription_uuid}")
         
         return PrescriptionUploadResponse(
             success=True,
@@ -149,7 +149,7 @@ async def upload_prescription(
 
 @router.get("/my", response_model=list[dict])
 async def get_my_prescriptions(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_jwt),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -182,7 +182,7 @@ async def get_my_prescriptions(
 @router.get("/{prescription_id}", response_model=dict)
 async def get_prescription_details(
     prescription_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_jwt),
     db: AsyncSession = Depends(get_db),
 ):
     """

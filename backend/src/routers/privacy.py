@@ -20,7 +20,7 @@ from sqlalchemy.orm import selectinload
 from pydantic import BaseModel, Field
 
 from db.database import get_db
-from auth.security import get_current_user
+from auth.auth import get_current_user_jwt
 from db.qa_models import User, Pharmacist, Question, Answer, DialogMessage
 from db.booking_models import BookingOrder
 from utils.time_utils import get_utc_now_naive
@@ -123,7 +123,7 @@ def _anonymize_user(user: User):
 
 @router.get("/my-data", response_model=MyDataResponse)
 async def get_my_data(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_jwt),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -183,7 +183,7 @@ async def get_my_data(
 @router.put("/profile", response_model=dict)
 async def update_profile(
     profile: ProfileUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_jwt),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -226,7 +226,7 @@ async def update_profile(
 @router.delete("/delete-account", response_model=DeleteAccountResponse)
 async def delete_account(
     request: DeleteAccountRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_jwt),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -287,7 +287,7 @@ async def delete_account(
 
 @router.get("/export-data", response_model=ExportDataResponse)
 async def export_data(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_jwt),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -376,7 +376,7 @@ async def export_data(
 
 @router.get("/cookie-data", response_model=CookieDataResponse)
 async def get_cookie_data(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_jwt),
 ):
     """
     Получение данных cookie и локального хранилища пользователя.
@@ -412,7 +412,7 @@ async def get_cookie_data(
 @router.put("/update-consents", response_model=ConsentStatusResponse)
 async def update_consents(
     request: ConsentUpdateRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_jwt),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -464,7 +464,7 @@ async def update_consents(
 
 @router.post("/revoke-all-consents", response_model=dict)
 async def revoke_all_consents(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_jwt),
     db: AsyncSession = Depends(get_db),
 ):
     """
