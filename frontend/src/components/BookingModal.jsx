@@ -237,7 +237,7 @@ const BookingModal = React.memo(function BookingModal({
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M20 12H4" />
                       </svg>
                     </button>
-                    
+
                     {/* Поле ввода количества - стандартное поведение без автовыделения */}
                     <input
                       type="number"
@@ -265,7 +265,7 @@ const BookingModal = React.memo(function BookingModal({
                       inputMode="numeric"
                       pattern="[0-9]*"
                     />
-                    
+
                     {/* Кнопка увеличения */}
                     <button
                       type="button"
@@ -282,7 +282,7 @@ const BookingModal = React.memo(function BookingModal({
                       </svg>
                     </button>
                   </div>
-                  
+
                   <div className="flex items-center justify-between mt-2">
                     <p className="text-xs text-gray-500">
                       Используйте +/- или введите число
@@ -298,7 +298,7 @@ const BookingModal = React.memo(function BookingModal({
                   <p className="text-sm font-semibold text-gray-700 mb-2">
                     Согласие на обработку персональных данных *
                   </p>
-                  
+
                   <label className="flex items-start gap-3 cursor-pointer group">
                     <input
                       type="checkbox"
@@ -307,7 +307,7 @@ const BookingModal = React.memo(function BookingModal({
                       className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                     <span className="text-sm text-gray-700 leading-relaxed">
-                      Я согласен на обработку моих персональных данных (имя, телефон) 
+                      Я согласен на обработку моих персональных данных (имя, телефон)
                       в соответствии с{" "}
                       <a
                         href="/privacy-policy"
@@ -329,7 +329,7 @@ const BookingModal = React.memo(function BookingModal({
                       className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                     <span className="text-sm text-gray-700 leading-relaxed">
-                      Я согласен на передачу моих персональных данных аптеке-партнёру 
+                      Я согласен на передачу моих персональных данных в аптеку
                       для подтверждения и выполнения заказа.
                     </span>
                   </label>
@@ -342,7 +342,7 @@ const BookingModal = React.memo(function BookingModal({
                       className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                     <span className="text-sm text-gray-700 leading-relaxed">
-                      Я подтверждаю, что ознакомлен с тем, что мои данные будут 
+                      Я подтверждаю, что ознакомлен с тем, что мои данные будут
                       зашифрованы и защищены в соответствии с требованиями ОАЦ РБ.
                     </span>
                   </label>
