@@ -49,9 +49,16 @@ class User(Base):
                                                  comment='Дата предоставления согласия на трансграничную передачу')
     transboundary_risks_acknowledged = Column(Boolean, default=False, nullable=False,
                                               comment='Подтверждение ознакомления с рисками трансграничной передачи')
+    
+    # Поля для согласия на обработку специальных ПД (сведений о здоровье - рецепты)
+    consent_special_data = Column(Boolean, default=False, nullable=False,
+                                  comment='Согласие на обработку специальных ПД (сведений о здоровье)')
+    consent_special_data_date = Column(DateTime, nullable=True,
+                                       comment='Дата предоставления согласия на обработку специальных ПД')
 
     questions = relationship("Question", back_populates="user")
     refresh_tokens = relationship("RefreshToken", back_populates="user")
+    prescriptions = relationship("Prescription", back_populates="user", cascade="all, delete-orphan")
     
     # Методы для работы с зашифрованными данными
     def set_telegram_id(self, telegram_id: int):
@@ -105,6 +112,7 @@ class Pharmacist(Base):
         back_populates="assigned_pharmacist",
     )
     answers = relationship("Answer", back_populates="pharmacist")
+    prescriptions_reviewed = relationship("Prescription", back_populates="pharmacist")
 
 
 class Question(Base):

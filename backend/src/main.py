@@ -312,6 +312,7 @@ from routers import (
     pharmacies_info,
     pharmacist_dashboard,
     admin,
+    prescriptions,
 )
 
 app.include_router(pharmacist_auth.router, prefix="/api/pharmacist", tags=["auth"])
@@ -324,6 +325,7 @@ app.include_router(booking_orders.router, tags=["booking"])
 app.include_router(pharmacy_api.router, tags=["pharmacy-api"])
 app.include_router(pharmacist_dashboard.router, prefix="/api/pharmacist", tags=["pharmacist-dashboard"])
 app.include_router(admin.router, tags=["admin"])  # Admin endpoints для audit logs
+app.include_router(prescriptions.router, tags=["prescriptions"])  # Prescription photo upload via Telegram Web App
 
 
 @app.get("/")

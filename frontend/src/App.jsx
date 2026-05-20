@@ -9,6 +9,7 @@ import { TelegramProvider } from "./telegram/TelegramContext";
 import TelegramWrapper from "./telegram/TelegramWrapper";
 import { api } from "./api/client";
 import PharmacistDashboard from "./pharmacist/PharmacistDashboard";
+import UploadPrescription from "./pages/UploadPrescription";
 
 function App() {
   const [page, setPage] = useState(window.location.pathname);
@@ -194,6 +195,11 @@ function App() {
   // Простой роутинг по pathname
   if (page === "/privacy-policy") {
     return <PrivacyPolicy />;
+  }
+
+  // Роут для загрузки рецептов через Telegram Web App
+  if (page.startsWith("/upload-prescription/")) {
+    return <UploadPrescription />;
   }
 
   return (
