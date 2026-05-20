@@ -13,7 +13,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from .base import Base
-from utils.time_utils import get_utc_now_naive
+from ..utils.time_utils import get_utc_now_naive
 
 # Импортируем RefreshToken для relationship (определён в token_models.py)
 from .token_models import RefreshToken
@@ -27,6 +27,8 @@ class User(Base):
     # Зашифрованные поля (новые)
     telegram_id_encrypted = Column(String(255), unique=True, nullable=True, index=True)
     phone_encrypted = Column(String(255), nullable=True)
+    email_encrypted = Column(String(255), unique=True, nullable=True, index=True)
+    password_hash = Column(String(255), nullable=True)  # Hashed password for email/phone auth
     
     # Старые поля (оставляем для обратной совместимости во время миграции)
     telegram_id = Column(BigInteger, unique=True, nullable=True)
@@ -34,31 +36,22 @@ class User(Base):
     first_name = Column(String(100), nullable=True)
     last_name = Column(String(100), nullable=True)
     phone = Column(String(20), nullable=True)
+    email = Column(String(255), nullable=True)  # Unencrypted for backward compatibility
     
     user_type = Column(String(20), default="customer")  # customer, pharmacist
     created_at = Column(DateTime, default=get_utc_now_naive)
     
-    # Поля для согласия на обработку персональных данных
+    # Согласия на обработку персональных данных (Privacy Policy)
     consent_privacy_policy = Column(Boolean, default=False, nullable=False)
     consent_privacy_policy_date = Column(DateTime, nullable=True)
     
-    # Поля для согласия на трансграничную передачу ПД через Telegram (UK/UAE)
-    consent_transboundary_transfer = Column(Boolean, default=False, nullable=False, 
-                                            comment='Согласие на трансграничную передачу ПД через Telegram')
-    consent_transboundary_transfer_date = Column(DateTime, nullable=True,
-                                                 comment='Дата предоставления согласия на трансграничную передачу')
-    transboundary_risks_acknowledged = Column(Boolean, default=False, nullable=False,
-                                              comment='Подтверждение ознакомления с рисками трансграничной передачи')
-    
-    # Поля для согласия на обработку специальных ПД (сведений о здоровье - рецепты)
-    consent_special_data = Column(Boolean, default=False, nullable=False,
-                                  comment='Согласие на обработку специальных ПД (сведений о здоровье)')
-    consent_special_data_date = Column(DateTime, nullable=True,
-                                       comment='Дата предоставления согласия на обработку специальных ПД')
+    # Согласие на трансграничную передачу ПД через Telegram
+    consent_transboundary_transfer = Column(Boolean, default=False, nullable=False)
+    consent_transboundary_transfer_date = Column(DateTime, nullable=True)
+    transboundary_risks_acknowledged = Column(Boolean, default=False, nullable=False)
 
     questions = relationship("Question", back_populates="user")
     refresh_tokens = relationship("RefreshToken", back_populates="user")
-    prescriptions = relationship("Prescription", back_populates="user", cascade="all, delete-orphan")
     
     # Методы для работы с зашифрованными данными
     def set_telegram_id(self, telegram_id: int):
@@ -88,6 +81,20 @@ class User(Base):
         if self.phone_encrypted:
             return decrypt_value(self.phone_encrypted)
         return self.phone  # Fallback на незашифрованное поле
+    
+    def set_email(self, email: str):
+        """Установить зашифрованный email"""
+        from utils.encryption import encrypt_value
+        if email is not None:
+            self.email_encrypted = encrypt_value(email)
+            self.email = email  # Оставляем для обратной совместимости
+    
+    def get_email(self) -> str:
+        """Получить расшифрованный email"""
+        from utils.encryption import decrypt_value
+        if self.email_encrypted:
+            return decrypt_value(self.email_encrypted)
+        return self.email  # Fallback на незашифрованное поле
 
 
 class Pharmacist(Base):
@@ -112,7 +119,6 @@ class Pharmacist(Base):
         back_populates="assigned_pharmacist",
     )
     answers = relationship("Answer", back_populates="pharmacist")
-    prescriptions_reviewed = relationship("Prescription", back_populates="pharmacist")
 
 
 class Question(Base):

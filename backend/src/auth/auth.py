@@ -156,3 +156,43 @@ async def validate_refresh_token(token: str, db: AsyncSession):
         return None
 
     return user_id
+
+
+async def get_current_user_jwt(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """
+    Получить текущего пользователя из JWT токена
+    
+    Используется для аутентификации обычных пользователей (не фармацевтов)
+    через веб-приложение.
+    """
+    try:
+        payload = jwt.decode(
+            credentials.credentials, SECRET_KEY or "", algorithms=[ALGORITHM]
+        )
+        
+        # Проверяем что это access token (не refresh)
+        if payload.get("type") == "refresh":
+            raise HTTPException(status_code=401, detail="Invalid token type")
+        
+        user_id = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+            
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    # Получаем пользователя из базы данных
+    result = await db.execute(
+        select(User).where(User.uuid == uuid.UUID(user_id))
+    )
+    user = result.scalar_one_or_none()
+    
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    return user

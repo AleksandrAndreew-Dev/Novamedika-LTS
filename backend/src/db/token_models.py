@@ -4,8 +4,8 @@ import uuid
 from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship
-from db.base import Base
-from utils.time_utils import get_utc_now_naive
+from .base import Base
+from ..utils.time_utils import get_utc_now_naive
 
 
 class RefreshToken(Base):

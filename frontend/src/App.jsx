@@ -10,6 +10,10 @@ import TelegramWrapper from "./telegram/TelegramWrapper";
 import { api } from "./api/client";
 import PharmacistDashboard from "./pharmacist/PharmacistDashboard";
 import UploadPrescription from "./pages/UploadPrescription";
+import Login from "./pages/Login";
+import UserDashboard from "./pages/UserDashboard";
+import Chat from "./pages/Chat";
+import NewConsultation from "./pages/NewConsultation";
 
 function App() {
   const [page, setPage] = useState(window.location.pathname);
@@ -197,10 +201,38 @@ function App() {
     return <PrivacyPolicy />;
   }
 
-  // Роут для загрузки рецептов через Telegram Web App
-  if (page.startsWith("/upload-prescription/")) {
+  // User authentication routes
+  if (page === "/login") {
+    return <Login />;
+  }
+
+  if (page === "/register") {
+    // TODO: Create Register page component
+    return <div className="min-h-screen flex items-center justify-center">Registration page coming soon</div>;
+  }
+
+  // User dashboard and consultations
+  if (page === "/dashboard") {
+    return <UserDashboard />;
+  }
+
+  if (page === "/chat/new") {
+    return <NewConsultation />;
+  }
+
+  if (page.startsWith("/chat/")) {
+    return <Chat />;
+  }
+
+  // Роуты для загрузки рецептов (Web App с JWT auth)
+  if (page.startsWith("/prescriptions/upload")) {
     return <UploadPrescription />;
   }
+
+  // TODO: Добавить страницу истории рецептов
+  // if (page.startsWith("/prescriptions/history")) {
+  //   return <PrescriptionHistory />;
+  // }
 
   return (
     <TelegramProvider>

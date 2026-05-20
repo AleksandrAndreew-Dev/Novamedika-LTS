@@ -3,8 +3,8 @@
 from sqlalchemy import event
 import logging
 
-from db.qa_models import User
-from db.booking_models import BookingOrder
+from .qa_models import User
+from .booking_models import BookingOrder
 
 logger = logging.getLogger(__name__)
 

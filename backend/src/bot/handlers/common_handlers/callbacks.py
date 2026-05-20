@@ -125,10 +125,16 @@ async def decline_transboundary_transfer_callback(callback: CallbackQuery):
     await callback.message.answer(
         "❌ <b>Согласие на трансграничную передачу не получено</b>\n\n"
         "Без согласия на трансграничную передачу данных использование Telegram-бота невозможно.\n\n"
-        "🔄 <b>Альтернативные каналы связи:</b>\n"
-        "Вы можете использовать следующие каналы, обработка данных через которые "
-        "осуществляется исключительно на территории Республики Беларусь:\n\n"
-        "🌐 Web-сайт: https://spravka.novamedika.com\n"
+        "🔄 <b>Альтернативные каналы связи:</b>\n\n"
+        "Для текстовых консультаций и загрузки рецептов используйте наш web-сайт:\n"
+        "🌐 https://spravka.novamedika.com\n\n"
+        "На сайте вы можете:\n"
+        "• Задавать вопросы фармацевтам\n"
+        "• Загружать фото рецептов безопасно\n"
+        "• Просматривать историю консультаций\n"
+        "• Получать ответы в личном кабинете\n\n"
+        "Все данные обрабатываются исключительно на серверах Республики Беларусь.\n\n"
+        "Также доступны:\n"
         "📧 Email: support@novamedika.com\n"
         "📱 Телефон: +375 (XX) XXX-XX-XX\n\n"
         "Если вы передумаете, нажмите /start повторно и дайте согласие."
@@ -684,187 +690,3 @@ async def unmatched_callback(callback: CallbackQuery):
     )
 
 
-@router.callback_query(F.data == "upload_prescription")
-async def upload_prescription_callback(
-    callback: CallbackQuery,
-    db: AsyncSession | None = None,
-    user: User | None = None,
-):
-    """
-    Обработка запроса на загрузку рецепта через Telegram Web App.
-    Генерирует одноразовую ссылку и открывает Web App.
-    """
-    if not db or not user:
-        logger.error("Missing required dependencies in upload_prescription_callback")
-        await callback.answer("❌ Ошибка сервера", show_alert=True)
-        return
-    
-    try:
-        # Проверяем согласие на обработку специальных ПД
-        consent_special_data = getattr(user, 'consent_special_data', False)
-        
-        if not consent_special_data:
-            # Запрашиваем отдельное согласие на специальные ПД
-            special_consent_text = (
-                "⚠️ <b>Согласие на обработку специальных персональных данных</b>\n\n"
-                "Фото рецепта содержит сведения о вашем здоровье (специальные персональные данные).\n\n"
-                "Для загрузки рецепта необходимо дать отдельное согласие на обработку таких данных "
-                "в соответствии со статьей 8 Закона №99-З.\n\n"
-                "🔒 <b>Как мы защищаем ваши данные:</b>\n"
-                "• Фото загружается напрямую на серверы в Республике Беларусь через Web App\n"
-                "• Данные НЕ передаются через Telegram\n"
-                "• Шифрование AES-256 при хранении\n"
-                "• Автоудаление через 48 часов после консультации\n"
-                "• Доступ только у авторизованных фармацевтов\n"
-                "• Просмотр только в режиме «глазок» (без скачивания)\n\n"
-                "Нажимая «✅ Согласен», вы подтверждаете, что ознакомлены с условиями."
-            )
-            
-            keyboard = InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text="✅ Согласен",
-                            callback_data="consent_special_data"
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            text="❌ Отказаться",
-                            callback_data="decline_special_data"
-                        )
-                    ]
-                ]
-            )
-            
-            await callback.message.answer(special_consent_text, parse_mode="HTML", reply_markup=keyboard)
-            await callback.answer()
-            return
-        
-        # Если согласие есть - генерируем ссылку через API
-        import httpx
-        from auth.security import create_access_token
-        
-        # Создаем JWT токен для аутентификации в API
-        access_token = create_access_token(data={"sub": str(user.uuid)})
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "http://localhost:8000/api/prescriptions/create-upload-link",
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                }
-            )
-            
-            if response.status_code != 200:
-                raise Exception(f"API error: {response.text}")
-            
-            data = response.json()
-            upload_url = data["upload_url"]
-            expires_at = data["expires_at"]
-        
-        # Отправляем ссылку пользователю с инструкцией открыть в Web App
-        upload_message = (
-            "📸 <b>Загрузка рецепта</b>\n\n"
-            "Нажмите кнопку ниже, чтобы открыть безопасную форму загрузки.\n\n"
-            "⏰ <b>Важно:</b> Ссылка действительна 15 минут.\n\n"
-            "🔒 Ваши данные будут защищены:\n"
-            "• Загрузка напрямую на серверы РБ (не через Telegram)\n"
-            "• Шифрование AES-256\n"
-            "• Автоудаление через 48 часов"
-        )
-        
-        keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="📤 Открыть форму загрузки",
-                        url=upload_url
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        text="ℹ️ Как это работает?",
-                        callback_data="how_prescription_upload_works"
-                    )
-                ]
-            ]
-        )
-        
-        await callback.message.answer(upload_message, parse_mode="HTML", reply_markup=keyboard)
-        await callback.answer()
-        
-    except Exception as e:
-        logger.error(f"Error creating upload link for user {user.telegram_id}: {e}")
-        await callback.answer("❌ Ошибка при создании ссылки. Попробуйте позже.", show_alert=True)
-
-
-@router.callback_query(F.data == "consent_special_data")
-async def consent_special_data_callback(
-    callback: CallbackQuery,
-    db: AsyncSession | None = None,
-    user: User | None = None,
-):
-    """Обработка согласия на обработку специальных ПД"""
-    if not db or not user:
-        await callback.answer("❌ Ошибка сервера", show_alert=True)
-        return
-    
-    try:
-        # Обновляем согласие в БД
-        user.consent_special_data = True
-        user.consent_special_data_date = get_utc_now_naive()
-        await db.commit()
-        
-        logger.info(f"User {user.telegram_id} gave consent for special data processing")
-        
-        await callback.answer("✅ Спасибо за согласие!")
-        
-        # Повторно вызываем загрузку рецепта
-        await upload_prescription_callback(callback, db, user)
-        
-    except Exception as e:
-        logger.error(f"Error saving special data consent: {e}")
-        await callback.answer("❌ Ошибка при сохранении согласия", show_alert=True)
-
-
-@router.callback_query(F.data == "decline_special_data")
-async def decline_special_data_callback(callback: CallbackQuery):
-    """Обработка отказа от обработки специальных ПД"""
-    await callback.answer()
-    
-    await callback.message.answer(
-        "❌ <b>Согласие не получено</b>\n\n"
-        "Без согласия на обработку специальных персональных данных "
-        "(сведений о здоровье) мы не можем принимать фото рецептов.\n\n"
-        "Вы можете задать текстовый вопрос фармацевту без загрузки фото."
-    )
-
-
-@router.callback_query(F.data == "how_prescription_upload_works")
-async def how_prescription_upload_works_callback(callback: CallbackQuery):
-    """Объяснение как работает безопасная загрузка рецептов"""
-    await callback.answer()
-    
-    explanation_text = (
-        "ℹ️ <b>Как работает безопасная загрузка рецептов</b>\n\n"
-        "1️⃣ <b>Telegram Web App</b>\n"
-        "Это встроенный браузер внутри Telegram. Когда вы нажимаете кнопку,\n"
-        "открывается страница с нашего белорусского сервера.\n\n"
-        "2️⃣ <b>Прямая загрузка</b>\n"
-        "Фото рецепта отправляется напрямую на серверы NovaMedika в Беларуси.\n"
-        "Telegram НЕ видит и НЕ хранит ваше фото.\n\n"
-        "3️⃣ <b>Защита данных</b>\n"
-        "• Серверы физически находятся в РБ (beCloud/hoster.by)\n"
-        "• Данные шифруются алгоритмом AES-256\n"
-        "• Только авторизованные фармацевты могут просмотреть рецепт\n"
-        "• Фармацевт не может скачать или сохранить фото\n"
-        "• Через 48 часов фото автоматически удаляется\n\n"
-        "4️⃣ <b>Почему это безопасно?</b>\n"
-        "Telegram выступает только как «браузер» для открытия нашей страницы.\n"
-        "Все данные обрабатываются исключительно на территории Республики Беларусь,\n"
-        "что полностью соответствует Закону №99-З и требованиям НЦЗПД.\n\n"
-        "🔗 Подробнее: https://spravka.novamedika.com/privacy"
-    )
-    
-    await callback.message.answer(explanation_text, parse_mode="HTML")

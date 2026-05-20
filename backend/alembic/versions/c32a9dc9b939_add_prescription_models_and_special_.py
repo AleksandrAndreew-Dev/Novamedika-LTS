@@ -48,21 +48,9 @@ def upgrade() -> None:
     op.create_index('idx_prescription_user_id', 'prescriptions', ['user_id'])
     op.create_index('idx_prescription_status', 'prescriptions', ['status'])
     op.create_index('idx_prescription_auto_delete_at', 'prescriptions', ['auto_delete_at'])
-    
-    # Add special data consent fields to qa_users table
-    op.add_column('qa_users', 
-        sa.Column('consent_special_data', sa.Boolean(), nullable=False, server_default='false',
-                  comment='Согласие на обработку специальных ПД (сведений о здоровье)'))
-    op.add_column('qa_users',
-        sa.Column('consent_special_data_date', sa.DateTime(), nullable=True,
-                  comment='Дата предоставления согласия на обработку специальных ПД'))
 
 
 def downgrade() -> None:
-    # Remove special data consent fields from qa_users table
-    op.drop_column('qa_users', 'consent_special_data_date')
-    op.drop_column('qa_users', 'consent_special_data')
-    
     # Drop indexes for prescriptions table
     op.drop_index('idx_prescription_auto_delete_at', table_name='prescriptions')
     op.drop_index('idx_prescription_status', table_name='prescriptions')

@@ -304,6 +304,7 @@ async def prometheus_metrics_middleware(request: Request, call_next):
 
 # Подключение API роутеров
 from routers import (
+    auth,  # User authentication endpoints
     pharmacist_auth,
     qa,
     telegram_bot,
@@ -315,7 +316,8 @@ from routers import (
     prescriptions,
 )
 
-app.include_router(pharmacist_auth.router, prefix="/api/pharmacist", tags=["auth"])
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])  # User auth
+app.include_router(pharmacist_auth.router, prefix="/api/pharmacist", tags=["pharmacist-auth"])
 app.include_router(qa.router, tags=["qa"])
 app.include_router(telegram_bot.router, tags=["bot"])
 app.include_router(search.router, tags=["search"])

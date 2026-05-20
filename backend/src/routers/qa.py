@@ -1,15 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
+from datetime import datetime
 import uuid
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from pydantic import BaseModel
 
 from db.database import get_db
-from db.qa_models import User, Question, Answer, Pharmacist
+from db.qa_models import User, Question, Answer, Pharmacist, DialogMessage
 from db.qa_schemas import QuestionCreate, QuestionResponse, AnswerBase, AnswerResponse
-from auth.auth import get_current_pharmacist
+from auth.auth import get_current_pharmacist, get_current_user_jwt
 from auth.security import get_api_key
 from services.user_service import get_or_create_user
 import logging
@@ -327,6 +329,339 @@ async def get_questions_stats(
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Ошибка при получении статистики: {str(e)}"
+        )
+
+
+# ============================================================================
+# NEW CONSULTATION ENDPOINTS FOR WEB APP USERS (JWT AUTH)
+# ============================================================================
+
+
+class ConsultationCreate(BaseModel):
+    """Модель для создания консультации"""
+    text: str
+    category: str = "general"
+    context_data: Optional[Dict[str, Any]] = None
+
+
+class MessageCreate(BaseModel):
+    """Модель для отправки сообщения"""
+    text: str
+
+
+class MessageResponse(BaseModel):
+    """Модель ответа сообщения"""
+    uuid: uuid.UUID
+    question_id: uuid.UUID
+    message_type: str
+    sender_type: str
+    sender_id: uuid.UUID
+    text: Optional[str] = None
+    file_id: Optional[str] = None
+    caption: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ConsultationStats(BaseModel):
+    """Модель статистики консультаций"""
+    total_count: int
+    pending_count: int
+    answered_count: int
+    completed_count: int
+
+
+@router.post("/consultations/", response_model=QuestionResponse)
+async def create_consultation(
+    consultation: ConsultationCreate,
+    current_user: User = Depends(get_current_user_jwt),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Создать новую консультацию (требует JWT авторизации)
+    
+    Пользователь может создать вопрос/консультацию через веб-приложение.
+    """
+    try:
+        new_question = Question(
+            uuid=uuid.uuid4(),
+            user_id=current_user.uuid,
+            text=consultation.text,
+            category=consultation.category,
+            context_data=consultation.context_data,
+            status="pending",
+        )
+
+        db.add(new_question)
+        await db.commit()
+        await db.refresh(new_question)
+
+        logger.info(f"New consultation created by user {current_user.uuid}: {new_question.uuid}")
+
+        return QuestionResponse.model_validate(new_question)
+
+    except Exception as e:
+        await db.rollback()
+        logger.exception("Failed to create consultation")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при создании консультации: {str(e)}",
+        )
+
+
+@router.get("/consultations/", response_model=List[QuestionResponse])
+async def get_user_consultations(
+    current_user: User = Depends(get_current_user_jwt),
+    db: AsyncSession = Depends(get_db),
+    status_filter: Optional[str] = None,
+    page: int = 1,
+    limit: int = 20,
+):
+    """
+    Получить список консультаций пользователя (требует JWT авторизации)
+    
+    Поддерживает пагинацию и фильтрацию по статусу.
+    """
+    try:
+        query = select(Question).options(
+            selectinload(Question.user),
+            selectinload(Question.assigned_pharmacist).selectinload(Pharmacist.user),
+            selectinload(Question.answers)
+            .selectinload(Answer.pharmacist)
+            .selectinload(Pharmacist.user),
+        ).where(Question.user_id == current_user.uuid)
+
+        # Apply status filter if provided
+        if status_filter:
+            query = query.where(Question.status == status_filter)
+
+        # Order by creation date (newest first)
+        query = query.order_by(Question.created_at.desc())
+
+        # Apply pagination
+        offset = (page - 1) * limit
+        query = query.offset(offset).limit(limit)
+
+        result = await db.execute(query)
+        questions = result.scalars().all()
+
+        return [QuestionResponse.model_validate(q) for q in questions]
+
+    except Exception as e:
+        logger.exception("Failed to get user consultations")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при получении консультаций: {str(e)}",
+        )
+
+
+@router.get("/consultations/{consultation_id}", response_model=QuestionResponse)
+async def get_consultation_details(
+    consultation_id: str,
+    current_user: User = Depends(get_current_user_jwt),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Получить детали консультации по ID (требует JWT авторизации)
+    
+    Проверяет, что консультация принадлежит текущему пользователю.
+    """
+    try:
+        result = await db.execute(
+            select(Question)
+            .options(
+                selectinload(Question.user),
+                selectinload(Question.assigned_pharmacist).selectinload(Pharmacist.user),
+                selectinload(Question.answers)
+                .selectinload(Answer.pharmacist)
+                .selectinload(Pharmacist.user),
+                selectinload(Question.dialog_messages),
+            )
+            .where(Question.uuid == uuid.UUID(consultation_id))
+            .where(Question.user_id == current_user.uuid)  # Security: only own consultations
+        )
+        question = result.scalar_one_or_none()
+
+        if not question:
+            raise HTTPException(status_code=404, detail="Консультация не найдена")
+
+        return QuestionResponse.model_validate(question)
+
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Неверный формат ID")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get consultation details")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при получении консультации: {str(e)}",
+        )
+
+
+@router.get("/consultations/stats", response_model=ConsultationStats)
+async def get_consultation_stats(
+    current_user: User = Depends(get_current_user_jwt),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Получить статистику консультаций пользователя (требует JWT авторизации)
+    """
+    try:
+        # Total count
+        total_result = await db.execute(
+            select(Question).where(Question.user_id == current_user.uuid)
+        )
+        total = total_result.scalars().all()
+
+        # Pending count
+        pending_result = await db.execute(
+            select(Question).where(
+                Question.user_id == current_user.uuid,
+                Question.status == "pending"
+            )
+        )
+        pending = pending_result.scalars().all()
+
+        # Answered count
+        answered_result = await db.execute(
+            select(Question).where(
+                Question.user_id == current_user.uuid,
+                Question.status == "answered"
+            )
+        )
+        answered = answered_result.scalars().all()
+
+        # Completed count
+        completed_result = await db.execute(
+            select(Question).where(
+                Question.user_id == current_user.uuid,
+                Question.status == "completed"
+            )
+        )
+        completed = completed_result.scalars().all()
+
+        return ConsultationStats(
+            total_count=len(total),
+            pending_count=len(pending),
+            answered_count=len(answered),
+            completed_count=len(completed),
+        )
+
+    except Exception as e:
+        logger.exception("Failed to get consultation stats")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при получении статистики: {str(e)}",
+        )
+
+
+@router.get("/consultations/{consultation_id}/messages", response_model=List[MessageResponse])
+async def get_consultation_messages(
+    consultation_id: str,
+    current_user: User = Depends(get_current_user_jwt),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Получить сообщения консультации (требует JWT авторизации)
+    
+    Возвращает историю диалога для конкретной консультации.
+    """
+    try:
+        # First verify that consultation belongs to user
+        result = await db.execute(
+            select(Question).where(
+                Question.uuid == uuid.UUID(consultation_id),
+                Question.user_id == current_user.uuid
+            )
+        )
+        question = result.scalar_one_or_none()
+
+        if not question:
+            raise HTTPException(status_code=404, detail="Консультация не найдена")
+
+        # Get dialog messages
+        messages_result = await db.execute(
+            select(DialogMessage)
+            .where(DialogMessage.question_id == uuid.UUID(consultation_id))
+            .where(DialogMessage.is_deleted == False)
+            .order_by(DialogMessage.created_at.asc())
+        )
+        messages = messages_result.scalars().all()
+
+        return [MessageResponse.model_validate(msg) for msg in messages]
+
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Неверный формат ID")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get consultation messages")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при получении сообщений: {str(e)}",
+        )
+
+
+@router.post("/consultations/{consultation_id}/messages", response_model=MessageResponse)
+async def send_consultation_message(
+    consultation_id: str,
+    message: MessageCreate,
+    current_user: User = Depends(get_current_user_jwt),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Отправить сообщение в консультацию (требует JWT авторизации)
+    
+    Пользователь может отправить сообщение фармацевту в рамках консультации.
+    """
+    try:
+        # Verify consultation belongs to user
+        result = await db.execute(
+            select(Question).where(
+                Question.uuid == uuid.UUID(consultation_id),
+                Question.user_id == current_user.uuid
+            )
+        )
+        question = result.scalar_one_or_none()
+
+        if not question:
+            raise HTTPException(status_code=404, detail="Консультация не найдена")
+
+        # Create new dialog message
+        new_message = DialogMessage(
+            uuid=uuid.uuid4(),
+            question_id=question.uuid,
+            message_type="question",
+            sender_type="user",
+            sender_id=current_user.uuid,
+            text=message.text,
+        )
+
+        db.add(new_message)
+        
+        # Update question status if it was answered/completed
+        if question.status in ["answered", "completed"]:
+            question.status = "pending"  # Reopen for new question
+        
+        await db.commit()
+        await db.refresh(new_message)
+
+        logger.info(f"New message sent in consultation {consultation_id} by user {current_user.uuid}")
+
+        return MessageResponse.model_validate(new_message)
+
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Неверный формат ID")
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.exception("Failed to send message")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при отправке сообщения: {str(e)}",
         )
 
 

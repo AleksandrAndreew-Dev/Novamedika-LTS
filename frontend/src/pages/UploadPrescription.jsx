@@ -1,40 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { telegramWebApp } from '../utils/telegramWebApp';
 
 const UploadPrescription = () => {
-  const { prescriptionId } = useParams();
-  const navigate = useNavigate();
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-  const [userInfo, setUserInfo] = useState(null);
+  const [token, setToken] = useState(null);
 
-  // Initialize Telegram WebApp
+  // Получаем JWT токен из localStorage или URL params
   useEffect(() => {
-    console.log('[UploadPrescription] Initializing Telegram WebApp...');
-    telegramWebApp.initialize();
+    // Проверяем URL параметры (если пользователь перешел по ссылке)
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlToken = urlParams.get('token');
     
-    // Get user info from Telegram WebApp initData
-    if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
-      const tgUser = window.Telegram.WebApp.initDataUnsafe.user;
-      setUserInfo({
-        id: tgUser.id,
-        first_name: tgUser.first_name,
-        last_name: tgUser.last_name,
-        username: tgUser.username,
-      });
-      console.log('[UploadPrescription] User info from Telegram:', tgUser);
-    }
-    
-    // Apply theme colors
-    telegramWebApp.applyTheme();
-    
-    // Expand the WebApp to full screen
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.expand();
+    if (urlToken) {
+      setToken(urlToken);
+      localStorage.setItem('jwt_token', urlToken);
+    } else {
+      // Проверяем localStorage
+      const storedToken = localStorage.getItem('jwt_token');
+      if (storedToken) {
+        setToken(storedToken);
+      } else {
+        // Перенаправляем на страницу входа
+        window.location.href = '/login?redirect=/prescriptions/upload';
+      }
     }
   }, []);
 
@@ -67,6 +58,11 @@ const UploadPrescription = () => {
       return;
     }
 
+    if (!token) {
+      setError('Необходима авторизация');
+      return;
+    }
+
     setUploading(true);
     setError('');
 
@@ -75,40 +71,27 @@ const UploadPrescription = () => {
       formData.append('file', file);
 
       const response = await axios.post(
-        `/api/prescriptions/upload/${prescriptionId}`,
+        '/api/prescriptions/upload',
         formData,
         {
           headers: {
             'Content-Type': 'multipart/form-data',
+            'Authorization': `Bearer ${token}`,
           },
         }
       );
 
       setSuccess(true);
       
-      // Show success message in Telegram
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert('✅ Рецепт успешно загружен! Фармацевт ответит вам в ближайшее время.');
-        
-        // Close WebApp after 3 seconds
-        setTimeout(() => {
-          window.Telegram.WebApp.close();
-        }, 3000);
-      } else {
-        // Fallback for browser testing
-        setTimeout(() => {
-          navigate('/upload-success');
-        }, 3000);
-      }
+      // Показываем сообщение об успехе
+      setTimeout(() => {
+        window.location.href = '/prescriptions/history';
+      }, 3000);
 
     } catch (err) {
       console.error('[UploadPrescription] Upload error:', err);
       const errorMessage = err.response?.data?.detail || 'Ошибка при загрузке. Попробуйте позже.';
       setError(errorMessage);
-      
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`❌ ${errorMessage}`);
-      }
     } finally {
       setUploading(false);
     }
@@ -126,7 +109,7 @@ const UploadPrescription = () => {
             Фармацевт получит уведомление и ответит вам в ближайшее время.
           </p>
           <p className="text-sm text-gray-500">
-            Окно закроется автоматически...
+            Перенаправление в историю рецептов...
           </p>
         </div>
       </div>
@@ -145,11 +128,6 @@ const UploadPrescription = () => {
           <p className="text-sm text-gray-600 mt-1">
             Безопасная загрузка на серверы Республики Беларусь
           </p>
-          {userInfo && (
-            <p className="text-xs text-gray-500 mt-2">
-              Пользователь: {userInfo.first_name} {userInfo.last_name || ''}
-            </p>
-          )}
         </div>
 
         {/* Security Info */}
@@ -160,6 +138,7 @@ const UploadPrescription = () => {
             <li>✓ Шифрование AES-256</li>
             <li>✓ Автоудаление через 48 часов</li>
             <li>✓ Доступ только у фармацевтов</li>
+            <li>✓ Просмотр только в режиме «глазок» (без скачивания)</li>
           </ul>
         </div>
 
@@ -215,6 +194,13 @@ const UploadPrescription = () => {
         <p className="mt-3 text-xs text-gray-500 text-center">
           Поддерживаемые форматы: JPEG, PNG. Максимальный размер: 10 MB
         </p>
+
+        {/* Link to history */}
+        <div className="mt-4 text-center">
+          <a href="/prescriptions/history" className="text-sm text-blue-600 hover:text-blue-800">
+            📋 История рецептов →
+          </a>
+        </div>
       </div>
     </div>
   );

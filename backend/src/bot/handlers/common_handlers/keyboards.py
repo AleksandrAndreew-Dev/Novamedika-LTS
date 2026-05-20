@@ -96,15 +96,12 @@ def get_user_inline_keyboard():
                 ),
             ],
             [
-                InlineKeyboardButton(
-                    text="📸 Загрузить рецепт", callback_data="upload_prescription"
-                ),
                 InlineKeyboardButton(text="❓ Помощь", callback_data="user_help"),
-            ],
-            [
                 InlineKeyboardButton(
                     text="📜 История", callback_data="my_questions_from_completed"
                 ),
+            ],
+            [
                 InlineKeyboardButton(
                     text="👨‍⚕️ Я фармацевт / Регистрация",
                     callback_data="i_am_pharmacist",
