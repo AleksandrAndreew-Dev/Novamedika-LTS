@@ -74,41 +74,90 @@ export default function PharmacistContent() {
   return (
     <MainLayout>
       {/* Main Content with Routing */}
-      <div className="flex-1 overflow-auto">
-        <Routes>
-          <Route path="/" element={
-            <div className="p-6">
-              <DashboardStats />
-              <QuestionsList />
-              <div className="bg-white rounded-lg shadow p-6 mt-6">
-                <h2 className="text-2xl font-bold mb-4">Профиль фармацевта</h2>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Имя</label>
-                    <p className="mt-1 text-lg">{user?.user?.first_name || user?.name || 'Не указано'}</p>
+      <Routes>
+        <Route path="/" element={
+          <div className="p-6 space-y-6">
+            {/* Welcome Header */}
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold text-gray-900">Добро пожаловать!</h1>
+              <p className="mt-2 text-gray-600">
+                {user?.user?.first_name || user?.name}, вот сводка по консультациям за сегодня
+              </p>
+            </div>
+
+            {/* Dashboard Stats */}
+            <DashboardStats />
+
+            {/* Quick Actions */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                Быстрые действия
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <a
+                  href="#/consultations"
+                  className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                >
+                  <div className="p-2 bg-purple-100 rounded-lg mr-3">
+                    <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                    </svg>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Telegram ID</label>
-                    <p className="mt-1 text-lg">{user?.user?.telegram_id || user?.telegram_id || 'Не указано'}</p>
+                    <p className="font-medium text-gray-900">Все консультации</p>
+                    <p className="text-sm text-gray-500">Просмотр и ответы на вопросы</p>
+                  </div>
+                </a>
+
+                <a
+                  href="#/consultations?status=pending"
+                  className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                >
+                  <div className="p-2 bg-red-100 rounded-lg mr-3">
+                    <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Статус</label>
-                    <p className="mt-1 text-lg">
-                      {user?.is_active ? 'Активен' : 'Не активен'}
-                      {user?.is_online && ' • Онлайн'}
-                    </p>
+                    <p className="font-medium text-gray-900">Ожидающие вопросы</p>
+                    <p className="text-sm text-gray-500">Требуют вашего ответа</p>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Аптека</label>
-                    <p className="mt-1 text-lg">{user?.pharmacy_info?.name || 'Не указана'}</p>
-                  </div>
+                </a>
+              </div>
+            </div>
+
+            {/* Questions List */}
+            <QuestionsList />
+
+            {/* Profile Section */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-2xl font-bold mb-4">Профиль фармацевта</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Имя</label>
+                  <p className="mt-1 text-lg">{user?.user?.first_name || user?.name || 'Не указано'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Telegram ID</label>
+                  <p className="mt-1 text-lg">{user?.user?.telegram_id || user?.telegram_id || 'Не указано'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Статус</label>
+                  <p className="mt-1 text-lg">
+                    {user?.is_active ? 'Активен' : 'Не активен'}
+                    {user?.is_online && ' • Онлайн'}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Аптека</label>
+                  <p className="mt-1 text-lg">{user?.pharmacy_info?.name || 'Не указана'}</p>
                 </div>
               </div>
             </div>
-          } />
-          <Route path="/questions/:questionId" element={<ConsultationChat />} />
-        </Routes>
-      </div>
+          </div>
+        } />
+        <Route path="/questions/:questionId" element={<ConsultationChat />} />
+      </Routes>
     </MainLayout>
   );
 }

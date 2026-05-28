@@ -20,6 +20,7 @@ from bot.handlers import (
     qa_handlers_router,
     dialog_management_router,
 )
+
 from bot.middleware.role_middleware import RoleMiddleware
 from db.database import async_session_maker, init_models
 from bot.middleware.db import DbMiddleware
@@ -129,12 +130,59 @@ async def lifespan(app: FastAPI):
         dp.poll.middleware(RoleMiddleware())
 
         # Порядок роутеров важен: специфичные handlers ДО общих (unknown_command)
-        dp.include_router(registration_router)
-        dp.include_router(qa_handlers_router)
-        dp.include_router(dialog_management_router)
-        dp.include_router(user_questions_router)
-        dp.include_router(clarify_router)
-        dp.include_router(common_router)
+        # registration_router должен быть ПЕРВЫМ, чтобы state-based handlers работали до unknown_command
+        logger.info(f"Worker PID {worker_pid}: Including routers...")
+        
+        try:
+            dp.include_router(registration_router)
+            logger.info(f"Worker PID {worker_pid}: ✅ registration_router included successfully")
+        except Exception as e:
+            logger.error(f"Worker PID {worker_pid}: ❌ Failed to include registration_router: {e}", exc_info=True)
+            
+        try:
+            dp.include_router(common_router)
+            logger.info(f"Worker PID {worker_pid}: ✅ common_router included successfully")
+        except Exception as e:
+            logger.error(f"Worker PID {worker_pid}: ❌ Failed to include common_router: {e}", exc_info=True)
+            
+        try:
+            dp.include_router(qa_handlers_router)
+            logger.info(f"Worker PID {worker_pid}: ✅ qa_handlers_router included successfully")
+        except Exception as e:
+            logger.error(f"Worker PID {worker_pid}: ❌ Failed to include qa_handlers_router: {e}", exc_info=True)
+            
+        try:
+            dp.include_router(dialog_management_router)
+            logger.info(f"Worker PID {worker_pid}: ✅ dialog_management_router included successfully")
+        except Exception as e:
+            logger.error(f"Worker PID {worker_pid}: ❌ Failed to include dialog_management_router: {e}", exc_info=True)
+            
+        try:
+            dp.include_router(user_questions_router)
+            logger.info(f"Worker PID {worker_pid}: ✅ user_questions_router included successfully")
+        except Exception as e:
+            logger.error(f"Worker PID {worker_pid}: ❌ Failed to include user_questions_router: {e}", exc_info=True)
+            
+        try:
+            dp.include_router(clarify_router)
+            logger.info(f"Worker PID {worker_pid}: ✅ clarify_router included successfully")
+        except Exception as e:
+            logger.error(f"Worker PID {worker_pid}: ❌ Failed to include clarify_router: {e}", exc_info=True)
+        
+        logger.info(f"Worker PID {worker_pid}: All routers included")
+        
+        # DIAGNOSTIC: Verify callback handlers are registered
+        try:
+            from bot.handlers.common_handlers.callbacks import pharmacist_help_callback
+            logger.info(f"Worker PID {worker_pid}: ✅ pharmacist_help_callback function is accessible")
+            
+            # Check if common_router has sub-routers
+            if hasattr(common_router, 'sub_routers'):
+                logger.info(f"Worker PID {worker_pid}: common_router has {len(common_router.sub_routers)} sub-routers")
+                            
+        except Exception as e:
+            logger.error(f"Worker PID {worker_pid}: ❌ Error during router diagnostics: {e}", exc_info=True)
+
 
         # УСТАНОВКА КОМАНД БОТА (только первый worker)
         init_lock_file = "/tmp/bot_commands_lock"

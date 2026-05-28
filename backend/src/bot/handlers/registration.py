@@ -98,6 +98,14 @@ async def cmd_register(
         await message.answer("❌ Вы уже зарегистрированы как фармацевт!")
         return
 
+    # Clear any existing FSM state before starting registration
+    current_state = await state.get_state()
+    if current_state is not None:
+        logger.info(
+            f"Clearing state {current_state} for user {message.from_user.id} on /register command"
+        )
+        await state.clear()
+
     cancel_keyboard = ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]], resize_keyboard=True
     )
@@ -135,9 +143,29 @@ async def cancel_registration(message: Message, state: FSMContext):
     await message.answer("❌ Регистрация отменена.", reply_markup=ReplyKeyboardRemove())
 
 
-@router.message(RegistrationStates.waiting_secret_word)
+def is_not_command(text: str | None) -> bool:
+    """Проверка, что текст не является командой"""
+    if text is None:
+        return False
+    return not text.startswith("/")
+
+
+@router.message(RegistrationStates.waiting_secret_word, F.text)
 async def process_secret_word(message: Message, state: FSMContext):
     """Проверка секретного слова"""
+    logger.info(
+        f"process_secret_word called for user {message.from_user.id}, text='{message.text}'"
+    )
+
+    # Проверяем текущее состояние
+    current_state = await state.get_state()
+    logger.info(f"Current state for user {message.from_user.id}: {current_state}")
+
+    # Игнорируем команды в состоянии ожидания секретного слова
+    if not is_not_command(message.text):
+        logger.info(f"Ignoring command in secret word state: {message.text}")
+        return
+
     secret_word = message.text.strip()
     expected_secret = os.getenv("REGISTRATION_SECRET_WORD")
 
@@ -151,6 +179,9 @@ async def process_secret_word(message: Message, state: FSMContext):
         return
 
     if secret_word != expected_secret:
+        logger.warning(
+            f"User {message.from_user.id} entered wrong secret word: '{secret_word}'"
+        )
         await message.answer("❌ Неверное секретное слово. Попробуйте еще раз:")
         return
 
@@ -170,9 +201,13 @@ async def process_secret_word(message: Message, state: FSMContext):
     await state.set_state(RegistrationStates.waiting_pharmacy_chain)
 
 
-@router.message(RegistrationStates.waiting_pharmacy_chain)
+@router.message(RegistrationStates.waiting_pharmacy_chain, F.text)
 async def process_pharmacy_chain(message: Message, state: FSMContext):
     """Обработка выбора сети аптек"""
+    # Игнорируем команды
+    if not is_not_command(message.text):
+        return
+
     chain = message.text.strip()
     if chain not in ["Новамедика", "Эклиния"]:
         await message.answer("Пожалуйста, выберите сеть из предложенных вариантов:")
@@ -190,9 +225,13 @@ async def process_pharmacy_chain(message: Message, state: FSMContext):
     await state.set_state(RegistrationStates.waiting_pharmacy_number)
 
 
-@router.message(RegistrationStates.waiting_pharmacy_number)
+@router.message(RegistrationStates.waiting_pharmacy_number, F.text)
 async def process_pharmacy_number(message: Message, state: FSMContext):
     """Обработка номера аптеки"""
+    # Игнорируем команды
+    if not is_not_command(message.text):
+        return
+
     number = message.text.strip()
     if not number.isdigit():
         await message.answer("Пожалуйста, введите только цифры:")
@@ -214,9 +253,13 @@ async def process_pharmacy_number(message: Message, state: FSMContext):
     await state.set_state(RegistrationStates.waiting_pharmacy_role)
 
 
-@router.message(RegistrationStates.waiting_pharmacy_role)
+@router.message(RegistrationStates.waiting_pharmacy_role, F.text)
 async def process_pharmacy_role(message: Message, state: FSMContext):
     """Обработка выбора роли"""
+    # Игнорируем команды
+    if not is_not_command(message.text):
+        return
+
     role = message.text.strip()
     if role not in ["Фармацевт", "Провизор"]:
         await message.answer("Пожалуйста, выберите роль из предложенных вариантов:")
@@ -234,12 +277,16 @@ async def process_pharmacy_role(message: Message, state: FSMContext):
     await state.set_state(RegistrationStates.waiting_first_name)
 
 
-@router.message(RegistrationStates.waiting_first_name)
+@router.message(RegistrationStates.waiting_first_name, F.text)
 async def process_first_name(message: Message, state: FSMContext):
-    """Обработка ввода имени"""
+    """Обработка имени"""
+    # Игнорируем команды
+    if not is_not_command(message.text):
+        return
+
     first_name = message.text.strip()
-    if not first_name:
-        await message.answer("Пожалуйста, введите ваше имя:")
+    if len(first_name) < 2:
+        await message.answer("Пожалуйста, введите корректное имя (минимум 2 символа):")
         return
 
     await state.update_data(first_name=first_name)
@@ -254,12 +301,18 @@ async def process_first_name(message: Message, state: FSMContext):
     await state.set_state(RegistrationStates.waiting_last_name)
 
 
-@router.message(RegistrationStates.waiting_last_name)
+@router.message(RegistrationStates.waiting_last_name, F.text)
 async def process_last_name(message: Message, state: FSMContext):
-    """Обработка ввода фамилии"""
+    """Обработка фамилии"""
+    # Игнорируем команды
+    if not is_not_command(message.text):
+        return
+
     last_name = message.text.strip()
-    if not last_name:
-        await message.answer("Пожалуйста, введите вашу фамилию:")
+    if len(last_name) < 2:
+        await message.answer(
+            "Пожалуйста, введите корректную фамилию (минимум 2 символа):"
+        )
         return
 
     await state.update_data(last_name=last_name)
@@ -269,72 +322,56 @@ async def process_last_name(message: Message, state: FSMContext):
     )
 
     await message.answer(
-        "👤 Введите ваше отчество (или отправьте '-' чтобы пропустить):",
-        reply_markup=cancel_keyboard,
+        "👤 Введите ваше отчество (необязательно):", reply_markup=cancel_keyboard
     )
     await state.set_state(RegistrationStates.waiting_patronymic)
 
 
-@router.message(RegistrationStates.waiting_patronymic)
+@router.message(RegistrationStates.waiting_patronymic, F.text)
 async def process_patronymic(message: Message, state: FSMContext, db: AsyncSession):
-    """Обработка ввода отчества и завершение регистрации"""
+    if not is_not_command(message.text):
+        return
     patronymic = message.text.strip()
-    if patronymic == "-":
-        patronymic = ""
-
-    try:
-        data = await state.get_data()
-
-        # Формируем данные для регистрации
-        pharmacy_info = {
-            "name": f"{data['pharmacy_chain']} №{data['pharmacy_number']}",
-            "number": data["pharmacy_number"],
-            "chain": data["pharmacy_chain"],
-            "role": data["pharmacy_role"],
-            "first_name": data["first_name"],
-            "last_name": data["last_name"],
-            "patronymic": patronymic,
-        }
-
-        telegram_data = {
-            "telegram_user_id": message.from_user.id,
-            "first_name": data["first_name"],
-            "last_name": data["last_name"],
-            "patronymic": patronymic,
-            "telegram_username": message.from_user.username,
-            "pharmacy_info": pharmacy_info,
-        }
-
-        # Вызываем функцию регистрации
-        pharmacist = await register_pharmacist_from_telegram(telegram_data, db)
-
-        # Формируем приветственное сообщение с ФИО
-        welcome_message = (
-            "✅ Регистрация успешно завершена!\n\n"
-            f"👤 Ваши данные:\n"
-            f"• Имя: {data['first_name']}\n"
-            f"• Фамилия: {data['last_name']}\n"
+    if len(patronymic) < 2 and patronymic != "":
+        await message.answer(
+            "Пожалуйста, введите корректное отчество (минимум 2 символа) или нажмите «❌ Отмена»:"
         )
+        return
 
-        if patronymic:
-            welcome_message += f"• Отчество: {patronymic}\n"
+    data = await state.get_data()
+    pharmacy_chain = data.get("pharmacy_chain")
+    pharmacy_number = data.get("pharmacy_number")
+    pharmacy_role = data.get("pharmacy_role")
+    first_name = data.get("first_name")
+    last_name = data.get("last_name")
 
-        welcome_message += (
-            f"\n🏥 Данные аптеки:\n"
-            f"• Сеть: {data['pharmacy_chain']}\n"
-            f"• Аптека №: {data['pharmacy_number']}\n"
-            f"• Роль: {data['pharmacy_role']}\n\n"
-            "Теперь вы можете:\n"
-            "• Просматривать вопросы (/questions)\n"
-            "• Отвечать пользователям\n"
-            "• Получать уведомления о новых вопросах\n"
-            "• Управлять своим онлайн статусом (/online, /offline)"
-        )
+    # Сохраняем фармацевта
+    telegram_data = {
+        "telegram_user_id": message.from_user.id,
+        "first_name": first_name,
+        "last_name": last_name,
+        "patronymic": patronymic,
+        "telegram_username": message.from_user.username,
+        "pharmacy_info": {
+            "chain": pharmacy_chain,
+            "number": pharmacy_number,
+            "role": pharmacy_role,
+            "first_name": first_name,
+            "last_name": last_name,
+            "patronymic": patronymic,
+            "name": f"{pharmacy_chain} №{pharmacy_number}",
+        },
+    }
 
-        await message.answer(welcome_message, reply_markup=ReplyKeyboardRemove())
-        await state.clear()
+    from .registration import register_pharmacist_from_telegram
 
-    except Exception as e:
-        logger.error(f"Registration error: {e}")
-        await message.answer("❌ Ошибка регистрации. Попробуйте еще раз.")
-        await state.clear()
+    await register_pharmacist_from_telegram(telegram_data, db)
+
+    await state.clear()
+    await message.answer(
+        "✅ <b>Регистрация завершена!</b>\n\n"
+        "Теперь вы можете отвечать на вопросы пользователей.\n"
+        "Используйте /start для входа в панель фармацевта.",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardRemove(),
+    )

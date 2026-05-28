@@ -1,0 +1,191 @@
+# Novamedika2 - AI Assistant Configuration
+
+## Project Overview
+Full-stack medication search service with Telegram bot, OAC Class 3-in compliance (Belarus)
+
+## Tech Stack
+- **Backend:** FastAPI + Python, aiogram 3.x (Telegram), Celery + Redis
+- **Frontend:** React 19 + Vite
+- **Database:** PostgreSQL 17
+- **Proxy:** Traefik v3.6
+- **Monitoring:** Prometheus + Grafana + Loki + Promtail
+
+## Critical Rules (.ai-rules.md)
+
+### NEVER SAY:
+- ❌ "✅ FULLY IMPLEMENTED"
+- ❌ "Works perfectly"
+- ❌ "Problem solved"
+- ❌ "100% working"
+
+### ALWAYS SAY:
+- ✅ "Code changes applied according to specifications"
+- ✅ "Ready for testing - requires your verification"
+- ✅ "Changes made, awaiting confirmation"
+
+### Required Response Structure:
+```markdown
+## Статус выполнения
+
+**Что сделано:**
+- [specific changes]
+
+**Что НЕ проверено:**
+- [what needs testing]
+
+**Следующие шаги:**
+1. [step 1]
+2. [step 2]
+```
+
+## Quick Commands
+
+### Diagnostics (agent/diagnostics.sh)
+```bash
+bash agent/diagnostics.sh all       # Full diagnostics
+bash agent/diagnostics.sh status    # Container status
+bash agent/diagnostics.sh logs      # Logs with error filtering
+bash agent/diagnostics.sh backend   # Backend logs (last 500 lines)
+bash agent/diagnostics.sh frontend  # Frontend + API tests
+bash agent/diagnostics.sh bot       # Telegram bot diagnostics
+bash agent/diagnostics.sh db        # Database + Redis stats
+```
+
+### Production Management
+```bash
+npm run prod:up              # Start all services
+npm run prod:down            # Stop all services
+npm run prod:restart         # Restart all
+npm run prod:restart-backend # Restart backend only
+npm run prod:logs            # View logs
+npm run prod:ps              # Service status
+```
+
+### Security Checks
+```bash
+py oac/check_normative_docs.py    # OAC compliance
+sh scripts/run-zap-scan.sh        # OWASP ZAP scan
+```
+
+## Key Directories
+
+### Backend
+- `backend/src/main.py` - FastAPI entry point
+- `backend/src/auth/` - Authentication & JWT
+- `backend/src/bot/` - Telegram bot (aiogram)
+- `backend/src/routers/` - API endpoints
+- `backend/src/tasks/` - Celery tasks
+- `backend/src/db/` - SQLAlchemy models
+- `backend/alembic/versions/` - Database migrations
+
+### Frontend
+- `frontend/src/App.jsx` - Main component
+- `frontend/src/pages/` - Application pages
+- `frontend/src/components/` - Reusable components
+- `frontend/src/api/` - API clients
+- `frontend/src/telegram/` - Telegram WebApp integration
+
+### Compliance & Documentation
+- `.ai-rules.md` - **AI AGENT RULES** (read first!)
+- `oac/docs/` - 13 OAC Class 3-in documents
+- `oac/guides/` - Implementation guides
+- `oac/audits/` - Audit reports
+
+### Configuration
+- `docker-compose.traefik.prod.yml` - Production config
+- `docker-compose.traefik.dev.yml` - Development config
+- `traefic/traefik.yml` - Traefik settings
+
+## Code Search Patterns
+
+### When to use which tool:
+- **Specific symbols** (classes, functions) → `search_symbol`
+- **Concepts/features** → `search_codebase`
+- **Text patterns** → `grep_code` (regex)
+- **File reading** → Always use `view_dependencies=true` when modifying
+
+### Common search scenarios:
+1. Auth issues → `backend/src/auth/` + `frontend/src/hooks/useAuth*`
+2. Bot problems → `backend/src/bot/` + `agent/diagnostics.sh bot`
+3. API not responding → `backend/src/routers/` + check Traefik routes
+4. Database → `backend/src/db/models*.py` + `backend/alembic/versions/`
+5. Celery tasks → `backend/src/tasks/` + check Redis status
+6. Frontend errors → `frontend/src/` + `agent/diagnostics.sh frontend`
+7. OAC compliance → `oac/docs/` + `oac/checklist/`
+
+## OAC Class 3-in Compliance (CRITICAL)
+
+All changes must consider:
+- Personal data encryption (`oac/docs/10-encryption-policy.md`)
+- Cross-border data transfer (Telegram = cross-border!)
+- Audit logs for all actions
+- User consent for data processing
+- Right to delete/export data
+
+## Token Optimization Strategies
+
+### DO:
+- Use `search_symbol` for specific code elements
+- Run `agent/diagnostics.sh` instead of manual log collection
+- Reference files instead of full quoting
+- Read files in parts (line ranges) when possible
+- Search OAC docs by keywords instead of loading all
+
+### DON'T:
+- Load entire OAC documentation into context
+- Read whole files when only部分内容 needed
+- Manually collect logs - use diagnostics script
+- Quote large file sections - reference them instead
+
+## Project-Specific Notes
+
+### Architecture:
+- Traefik manages ALL traffic - all requests go through it
+- Celery + Redis for background tasks (CSV import, notifications)
+- Alembic for DB migrations - NEVER change models without migration
+- JWT + RBAC - three roles: user, pharmacist, admin
+- Telegram WebApp - separate auth flow
+- Monitoring stack - Prometheus + Grafana + Loki + Promtail
+
+### Common Issues:
+- Bot won't start → Check Gunicorn workers (`FIX-BOT-GUNICORN-WORKERS.md`)
+- Auth race condition → See `AuthProvider.jsx` and commit history
+- Encryption problems → `oac/guides/ENCRYPTION-IMPLEMENTATION-GUIDE.md`
+- Cross-border transfer → `oac/privacy-policy/transboundary-transfer-telegram-analysis-2026-05-20.md`
+
+## AI Agent Workflow
+
+### When receiving a task:
+1. **Check .ai-rules.md** - remember prohibitions on absolute statements
+2. **Determine scope** - backend/frontend/bot/db/compliance
+3. **Use right tool**:
+   - Code → `search_symbol` or `search_codebase`
+   - Configs → `read_file` with dependencies
+   - Problems → `run_in_terminal` with diagnostics.sh
+4. **Make changes** → `edit_file` with minimal edits
+5. **Validate** → `get_problems` for syntax check
+6. **Report** → use required response structure
+
+### When troubleshooting:
+1. First run `bash agent/diagnostics.sh all`
+2. Analyze `${TIMESTAMP}_errors-only.txt`
+3. Search for specific errors in code
+4. Propose solution considering OAC compliance
+5. Specify what needs production verification
+
+## Pre-Response Checklist
+
+Before every response, verify:
+- [ ] Did I avoid absolute statements?
+- [ ] Did I use the required report structure?
+- [ ] Did I specify what is NOT verified?
+- [ ] Did I propose concrete verification steps?
+- [ ] Did I consider OAC compliance requirements?
+- [ ] Did I use optimal search tools?
+- [ ] Did I avoid loading too much context?
+
+---
+
+**Version:** 1.0  
+**Based on:** `.ai-rules.md` + project experience  
+**Last updated:** 2026-05-28

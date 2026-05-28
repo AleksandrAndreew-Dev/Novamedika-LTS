@@ -1,5 +1,5 @@
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,8 +7,8 @@ from sqlalchemy import select
 import logging
 
 from db.qa_models import User, Question, Answer
-from bot.handlers.qa_states import UserQAStates
 from bot.services.dialog_service import DialogService
+from bot.handlers.qa_states import UserQAStates
 from bot.services.notification_service import notify_about_clarification
 
 logger = logging.getLogger(__name__)
@@ -77,11 +77,22 @@ async def clarify_command_handler(
             await update.answer(error_msg)
 
 
-@router.message(UserQAStates.waiting_for_clarification)
+def is_not_command(text: str | None) -> bool:
+    """Проверка, что текст не является командой"""
+    if text is None:
+        return False
+    return not text.startswith('/')
+
+
+@router.message(UserQAStates.waiting_for_clarification & F.text)
 async def process_clarification(
     message: Message, state: FSMContext, db: AsyncSession, user: User
 ):
     """Обработка уточнения пользователя - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+    # Игнорируем команды в состоянии ожидания уточнения
+    if not is_not_command(message.text):
+        return
+    
     try:
         state_data = await state.get_data()
         question_uuid = state_data.get("clarify_question_id")

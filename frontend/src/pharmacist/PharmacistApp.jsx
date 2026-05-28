@@ -2,9 +2,9 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { AuthProvider } from './components/auth/AuthProvider';
 import { useAuth } from './hooks/useAuth';
-import Dashboard from './pharmacist/pages/Dashboard';
-import Login from './pharmacist/components/auth/Login';
-import ProtectedRoute from './pharmacist/components/auth/ProtectedRoute';
+import PharmacistContent from './PharmacistContent';
+import Login from './components/auth/Login';
+import ProtectedRoute from './components/auth/ProtectedRoute';
 import { logger } from '../utils/logger';
 
 // Component to handle URL token authentication (Legacy) and Telegram validation
@@ -102,7 +102,7 @@ export default function PharmacistApp() {
           element={
             <ProtectedRoute>
               <TokenAuthHandler />
-              <Dashboard />
+              <PharmacistContent />
             </ProtectedRoute>
           }
         />

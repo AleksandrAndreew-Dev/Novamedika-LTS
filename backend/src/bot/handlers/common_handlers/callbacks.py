@@ -593,7 +593,11 @@ async def my_questions_from_completed_callback(
 @router.callback_query(F.data == "start_registration")
 async def start_registration_callback(callback: CallbackQuery, state: FSMContext):
     """Начать регистрацию фармацевта"""
+    logger.info(f"start_registration_callback called for user {callback.from_user.id}")
+    
     await state.clear()
+    logger.info(f"State cleared for user {callback.from_user.id}")
+    
     await callback.message.answer(
         "📝 <b>Регистрация фармацевта</b>\n\n"
         "Введите секретное слово для регистрации:\n"
@@ -604,8 +608,13 @@ async def start_registration_callback(callback: CallbackQuery, state: FSMContext
             resize_keyboard=True,
         ),
     )
+    logger.info(f"Message sent to user {callback.from_user.id}")
+    
     await state.set_state(RegistrationStates.waiting_secret_word)
+    logger.info(f"State set to waiting_secret_word for user {callback.from_user.id}")
+    
     await callback.answer()
+    logger.info(f"Callback answered for user {callback.from_user.id}")
 
 
 @router.callback_query(F.data == "registration_info")

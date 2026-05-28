@@ -35,6 +35,7 @@ router = Router()
 @router.message(Command("start"))
 async def cmd_start(
     message: Message, 
+    state: FSMContext,
     db: AsyncSession | None = None, 
     user: User | None = None, 
     is_pharmacist: bool | None = None,
@@ -47,6 +48,12 @@ async def cmd_start(
         return
         
     logger.info(f"Command /start from user {message.from_user.id}, is_pharmacist: {is_pharmacist}")
+    
+    # Clear any existing FSM state (e.g., if user was in registration flow)
+    current_state = await state.get_state()
+    if current_state is not None:
+        logger.info(f"Clearing state {current_state} for user {message.from_user.id} on /start command")
+        await state.clear()
     
     # Проверяем, дал ли пользователь согласие на обработку ПД
     consent_given = user.consent_privacy_policy if hasattr(user, 'consent_privacy_policy') else False
@@ -333,6 +340,12 @@ async def cmd_continue(
         return
 
     try:
+        # Clear any existing FSM state before continuing dialog
+        current_state = await state.get_state()
+        if current_state is not None:
+            logger.info(f"Clearing state {current_state} for user {message.from_user.id} on /continue command")
+            await state.clear()
+
         result = await db.execute(
             select(Question)
             .where(

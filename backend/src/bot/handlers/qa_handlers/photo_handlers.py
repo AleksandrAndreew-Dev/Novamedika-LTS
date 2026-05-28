@@ -216,7 +216,14 @@ async def request_more_photos_callback(
         await callback.answer("❌ Ошибка при обработке запроса", show_alert=True)
 
 
-@router.message(QAStates.waiting_for_photo_request)
+def is_not_command(text: str | None) -> bool:
+    """Проверка, что текст не является командой"""
+    if text is None:
+        return False
+    return not text.startswith('/')
+
+
+@router.message(QAStates.waiting_for_photo_request & F.text)
 async def process_photo_request_message(
     message: Message,
     state: FSMContext,
@@ -225,6 +232,10 @@ async def process_photo_request_message(
     pharmacist: Pharmacist,
 ):
     """Обработка сообщения для запроса фото рецепта"""
+    # Игнорируем команды в состоянии ожидания запроса фото
+    if not is_not_command(message.text):
+        return
+    
     if not is_pharmacist or not pharmacist:
         await message.answer("❌ Эта функция доступна только фармацевтам")
         await state.clear()

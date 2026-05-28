@@ -20,7 +20,14 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
-@router.message(QAStates.in_dialog_with_user, F.text)
+def is_not_command(text: str | None) -> bool:
+    """Проверка, что текст не является командой"""
+    if text is None:
+        return False
+    return not text.startswith('/')
+
+
+@router.message(QAStates.in_dialog_with_user & F.text)
 async def handle_pharmacist_text_in_dialog(
     message: Message,
     state: FSMContext,
@@ -29,6 +36,10 @@ async def handle_pharmacist_text_in_dialog(
     pharmacist: Pharmacist,
 ):
     """Обработка текстовых сообщений фармацевта в диалоге"""
+    # Игнорируем команды в состоянии диалога
+    if not is_not_command(message.text):
+        return
+    
     if not is_pharmacist or not pharmacist:
         await message.answer("❌ Эта функция доступна только фармацевтам")
         await state.clear()
@@ -185,7 +196,7 @@ async def handle_pharmacist_text_in_dialog(
         await state.clear()
 
 
-@router.message(QAStates.waiting_for_answer)
+@router.message(QAStates.waiting_for_answer & F.text)
 async def process_answer_text(
     message: Message,
     state: FSMContext,
@@ -194,6 +205,10 @@ async def process_answer_text(
     pharmacist: Pharmacist,
 ):
     """Обработка сообщения от фармацевта (ответ или уточнение)"""
+    # Игнорируем команды в состоянии ожидания ответа
+    if not is_not_command(message.text):
+        return
+    
     logger.info(f"Processing message from pharmacist {message.from_user.id}")
 
     if not is_pharmacist or not pharmacist:
