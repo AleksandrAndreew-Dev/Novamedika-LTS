@@ -332,11 +332,9 @@ async def process_patronymic(message: Message, state: FSMContext, db: AsyncSessi
     if not is_not_command(message.text):
         return
     patronymic = message.text.strip()
-    if len(patronymic) < 2 and patronymic != "":
-        await message.answer(
-            "Пожалуйста, введите корректное отчество (минимум 2 символа) или нажмите «❌ Отмена»:"
-        )
-        return
+    if patronymic == "":
+        patronymic = None
+        
 
     data = await state.get_data()
     pharmacy_chain = data.get("pharmacy_chain")
