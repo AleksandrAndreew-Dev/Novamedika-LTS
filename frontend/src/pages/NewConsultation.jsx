@@ -63,6 +63,7 @@ export default function NewConsultation() {
     );
   }
 
+  const categories = [
     { value: 'general', label: 'Общий вопрос' },
     { value: 'medication', label: 'Лекарства' },
     { value: 'symptoms', label: 'Симптомы' },
