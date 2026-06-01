@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 async def notify_pharmacists_about_new_question(question, db: AsyncSession):
     """Уведомление фармацевтов о новом вопросе"""
     try:
-        bot, _ = await bot_manager.initialize()
+        bot = bot_manager.get_bot()
         if not bot:
             logger.error("Bot not initialized for notifications")
             return
@@ -88,7 +88,7 @@ async def notify_about_clarification(
 ):
     """Уведомление об уточнении - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
     try:
-        bot, _ = await bot_manager.initialize()
+        bot = bot_manager.get_bot()
         if not bot:
             logger.error("Bot not initialized for notifications")
             return
