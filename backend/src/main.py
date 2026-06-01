@@ -34,7 +34,13 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
 # Prometheus metrics (OAC compliance - monitoring requirement)
-from prometheus_client import generate_latest, CONTENT_TYPE_LATEST, Counter, Histogram, Gauge
+from prometheus_client import (
+    generate_latest,
+    CONTENT_TYPE_LATEST,
+    Counter,
+    Histogram,
+    Gauge,
+)
 import time
 
 # Настройка логирования
@@ -49,21 +55,14 @@ limiter = Limiter(key_func=get_remote_address)
 
 # Prometheus metrics definitions
 REQUEST_COUNT = Counter(
-    'http_requests_total',
-    'Total HTTP requests',
-    ['method', 'endpoint', 'status']
+    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"]
 )
 
 REQUEST_LATENCY = Histogram(
-    'http_request_duration_seconds',
-    'HTTP request latency',
-    ['method', 'endpoint']
+    "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
 )
 
-ACTIVE_REQUESTS = Gauge(
-    'http_active_requests',
-    'Number of active HTTP requests'
-)
+ACTIVE_REQUESTS = Gauge("http_active_requests", "Number of active HTTP requests")
 
 
 async def set_bot_commands(bot: Bot):
@@ -129,60 +128,98 @@ async def lifespan(app: FastAPI):
         dp.poll.middleware(DbMiddleware())
         dp.poll.middleware(RoleMiddleware())
 
-        # Порядок роутеров важен: специфичные handlers ДО общих (unknown_command)
-        # registration_router должен быть ПЕРВЫМ, чтобы state-based handlers работали до unknown_command
+        # Порядок роутеров важен: специфичные handlers ДО общих fallback-обработчиков
+        # registration_router должен быть первым, чтобы state-based handlers работали до unknown_command
+        # common_router содержит общее меню и catch-all handlers, поэтому его нужно подключать последним
         logger.info(f"Worker PID {worker_pid}: Including routers...")
-        
+
         try:
             dp.include_router(registration_router)
-            logger.info(f"Worker PID {worker_pid}: ✅ registration_router included successfully")
+            logger.info(
+                f"Worker PID {worker_pid}: ✅ registration_router included successfully"
+            )
         except Exception as e:
-            logger.error(f"Worker PID {worker_pid}: ❌ Failed to include registration_router: {e}", exc_info=True)
-            
-        try:
-            dp.include_router(common_router)
-            logger.info(f"Worker PID {worker_pid}: ✅ common_router included successfully")
-        except Exception as e:
-            logger.error(f"Worker PID {worker_pid}: ❌ Failed to include common_router: {e}", exc_info=True)
-            
+            logger.error(
+                f"Worker PID {worker_pid}: ❌ Failed to include registration_router: {e}",
+                exc_info=True,
+            )
+
         try:
             dp.include_router(qa_handlers_router)
-            logger.info(f"Worker PID {worker_pid}: ✅ qa_handlers_router included successfully")
+            logger.info(
+                f"Worker PID {worker_pid}: ✅ qa_handlers_router included successfully"
+            )
         except Exception as e:
-            logger.error(f"Worker PID {worker_pid}: ❌ Failed to include qa_handlers_router: {e}", exc_info=True)
-            
+            logger.error(
+                f"Worker PID {worker_pid}: ❌ Failed to include qa_handlers_router: {e}",
+                exc_info=True,
+            )
+
         try:
             dp.include_router(dialog_management_router)
-            logger.info(f"Worker PID {worker_pid}: ✅ dialog_management_router included successfully")
+            logger.info(
+                f"Worker PID {worker_pid}: ✅ dialog_management_router included successfully"
+            )
         except Exception as e:
-            logger.error(f"Worker PID {worker_pid}: ❌ Failed to include dialog_management_router: {e}", exc_info=True)
-            
+            logger.error(
+                f"Worker PID {worker_pid}: ❌ Failed to include dialog_management_router: {e}",
+                exc_info=True,
+            )
+
         try:
             dp.include_router(user_questions_router)
-            logger.info(f"Worker PID {worker_pid}: ✅ user_questions_router included successfully")
+            logger.info(
+                f"Worker PID {worker_pid}: ✅ user_questions_router included successfully"
+            )
         except Exception as e:
-            logger.error(f"Worker PID {worker_pid}: ❌ Failed to include user_questions_router: {e}", exc_info=True)
-            
+            logger.error(
+                f"Worker PID {worker_pid}: ❌ Failed to include user_questions_router: {e}",
+                exc_info=True,
+            )
+
         try:
             dp.include_router(clarify_router)
-            logger.info(f"Worker PID {worker_pid}: ✅ clarify_router included successfully")
+            logger.info(
+                f"Worker PID {worker_pid}: ✅ clarify_router included successfully"
+            )
         except Exception as e:
-            logger.error(f"Worker PID {worker_pid}: ❌ Failed to include clarify_router: {e}", exc_info=True)
-        
+            logger.error(
+                f"Worker PID {worker_pid}: ❌ Failed to include clarify_router: {e}",
+                exc_info=True,
+            )
+
+        try:
+            dp.include_router(common_router)
+            logger.info(
+                f"Worker PID {worker_pid}: ✅ common_router included successfully"
+            )
+        except Exception as e:
+            logger.error(
+                f"Worker PID {worker_pid}: ❌ Failed to include common_router: {e}",
+                exc_info=True,
+            )
+
         logger.info(f"Worker PID {worker_pid}: All routers included")
-        
+
         # DIAGNOSTIC: Verify callback handlers are registered
         try:
             from bot.handlers.common_handlers.callbacks import pharmacist_help_callback
-            logger.info(f"Worker PID {worker_pid}: ✅ pharmacist_help_callback function is accessible")
-            
-            # Check if common_router has sub-routers
-            if hasattr(common_router, 'sub_routers'):
-                logger.info(f"Worker PID {worker_pid}: common_router has {len(common_router.sub_routers)} sub-routers")
-                            
-        except Exception as e:
-            logger.error(f"Worker PID {worker_pid}: ❌ Error during router diagnostics: {e}", exc_info=True)
 
+            logger.info(
+                f"Worker PID {worker_pid}: ✅ pharmacist_help_callback function is accessible"
+            )
+
+            # Check if common_router has sub-routers
+            if hasattr(common_router, "sub_routers"):
+                logger.info(
+                    f"Worker PID {worker_pid}: common_router has {len(common_router.sub_routers)} sub-routers"
+                )
+
+        except Exception as e:
+            logger.error(
+                f"Worker PID {worker_pid}: ❌ Error during router diagnostics: {e}",
+                exc_info=True,
+            )
 
         # УСТАНОВКА КОМАНД БОТА (только первый worker)
         init_lock_file = "/tmp/bot_commands_lock"
@@ -221,9 +258,9 @@ async def lifespan(app: FastAPI):
                                 "max_connections": 40,
                                 # Ограничиваем типы обновлений для уменьшения нагрузки и устранения warning'ов
                                 "allowed_updates": [
-                                    "message",           # Текстовые сообщения
-                                    "callback_query",    # Inline кнопки
-                                    "my_chat_member",    # Изменения статуса чата (блокировка/разблокировка)
+                                    "message",  # Текстовые сообщения
+                                    "callback_query",  # Inline кнопки
+                                    "my_chat_member",  # Изменения статуса чата (блокировка/разблокировка)
                                 ],
                             }
 
@@ -232,7 +269,9 @@ async def lifespan(app: FastAPI):
 
                             await bot.set_webhook(**webhook_config)
                             logger.info(f"Webhook set successfully: {webhook_url}")
-                            logger.info(f"Allowed updates: {webhook_config['allowed_updates']}")
+                            logger.info(
+                                f"Allowed updates: {webhook_config['allowed_updates']}"
+                            )
                         else:
                             logger.info(f"Webhook already set, skipping: {webhook_url}")
                     else:
@@ -244,7 +283,9 @@ async def lifespan(app: FastAPI):
             except FileExistsError:
                 pass  # Другой worker уже установил webhook
         else:
-            logger.info(f"Worker PID {worker_pid}: Webhook already configured by another worker")
+            logger.info(
+                f"Worker PID {worker_pid}: Webhook already configured by another worker"
+            )
 
         logger.info(f"Worker PID {worker_pid}: Bot ready to handle webhooks")
     else:
@@ -320,8 +361,10 @@ app.add_middleware(
 
 # АУДИТ ДОСТУПА К ПЕРСОНАЛЬНЫМ ДАННЫМ (требование ОАЦ п.2.1)
 from middleware.audit_middleware import AuditLoggingMiddleware
+
 app.add_middleware(AuditLoggingMiddleware)
 logger.info("Audit logging middleware enabled for personal data access tracking")
+
 
 # Prometheus metrics middleware (OAC compliance - monitoring requirement)
 @app.middleware("http")
@@ -329,26 +372,26 @@ async def prometheus_metrics_middleware(request: Request, call_next):
     """Middleware to collect Prometheus metrics for all HTTP requests"""
     start_time = time.time()
     ACTIVE_REQUESTS.inc()
-    
+
     try:
         response = await call_next(request)
         duration = time.time() - start_time
-        
+
         # Record metrics
         REQUEST_COUNT.labels(
             method=request.method,
             endpoint=request.url.path,
-            status=response.status_code
+            status=response.status_code,
         ).inc()
-        
+
         REQUEST_LATENCY.labels(
-            method=request.method,
-            endpoint=request.url.path
+            method=request.method, endpoint=request.url.path
         ).observe(duration)
-        
+
         return response
     finally:
         ACTIVE_REQUESTS.dec()
+
 
 # Подключение API роутеров
 from routers import (
@@ -365,7 +408,9 @@ from routers import (
 )
 
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])  # User auth
-app.include_router(pharmacist_auth.router, prefix="/api/pharmacist", tags=["pharmacist-auth"])
+app.include_router(
+    pharmacist_auth.router, prefix="/api/pharmacist", tags=["pharmacist-auth"]
+)
 app.include_router(qa.router, tags=["qa"])
 app.include_router(telegram_bot.router, tags=["bot"])
 app.include_router(search.router, tags=["search"])
@@ -373,9 +418,13 @@ app.include_router(upload.router, tags=["upload"])
 app.include_router(pharmacies_info.router, tags=["pharmacies"])
 app.include_router(booking_orders.router, tags=["booking"])
 app.include_router(pharmacy_api.router, tags=["pharmacy-api"])
-app.include_router(pharmacist_dashboard.router, prefix="/api/pharmacist", tags=["pharmacist-dashboard"])
+app.include_router(
+    pharmacist_dashboard.router, prefix="/api/pharmacist", tags=["pharmacist-dashboard"]
+)
 app.include_router(admin.router, tags=["admin"])  # Admin endpoints для audit logs
-app.include_router(prescriptions.router, tags=["prescriptions"])  # Prescription photo upload via Telegram Web App
+app.include_router(
+    prescriptions.router, tags=["prescriptions"]
+)  # Prescription photo upload via Telegram Web App
 
 
 @app.get("/")
@@ -394,16 +443,14 @@ async def health_check():
 async def health_check_head():
     """HEAD request for health check (lightweight)."""
     from fastapi.responses import Response
+
     return Response(status_code=200)
 
 
 @app.get("/metrics")
 async def metrics():
     """Prometheus metrics endpoint (OAC compliance - monitoring requirement p.1.5)"""
-    return PlainTextResponse(
-        content=generate_latest(),
-        media_type=CONTENT_TYPE_LATEST
-    )
+    return PlainTextResponse(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 if __name__ == "__main__":
