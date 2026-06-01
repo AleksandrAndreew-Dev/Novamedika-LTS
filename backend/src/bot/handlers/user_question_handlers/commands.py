@@ -109,7 +109,7 @@ async def cmd_my_questions(
         else:
             await update.answer("❌ Ошибка сервера")
         return
-        
+
     if isinstance(update, CallbackQuery):
         message = update.message
         is_callback = True
@@ -146,7 +146,16 @@ async def cmd_my_questions(
             message_text = header + formatted
             reply_markup = make_questions_pagination_keyboard(questions, page)
 
-        await message.answer(message_text, parse_mode="HTML", reply_markup=reply_markup)
+        if is_callback and update.message:
+            await update.message.edit_text(
+                message_text,
+                parse_mode="HTML",
+                reply_markup=reply_markup,
+            )
+        else:
+            await message.answer(
+                message_text, parse_mode="HTML", reply_markup=reply_markup
+            )
 
         if is_callback:
             await update.answer()
@@ -169,7 +178,7 @@ async def cmd_done(
         logger.error("Missing required dependencies in cmd_done")
         await message.answer("❌ Ошибка сервера")
         return
-        
+
     logger.info(
         f"Command /done from user {message.from_user.id}, is_pharmacist: {is_pharmacist}"
     )

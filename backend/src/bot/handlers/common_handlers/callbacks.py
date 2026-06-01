@@ -32,26 +32,24 @@ router = Router()
 
 @router.callback_query(F.data == "consent_privacy_policy")
 async def consent_privacy_policy_callback(
-    callback: CallbackQuery, 
-    db: AsyncSession | None = None, 
-    user: User | None = None
+    callback: CallbackQuery, db: AsyncSession | None = None, user: User | None = None
 ):
     """Обработка согласия на обработку персональных данных"""
     if not db or not user:
         logger.error("Missing required dependencies in consent_privacy_policy_callback")
         await callback.answer("❌ Ошибка сервера", show_alert=True)
         return
-    
+
     try:
         # Обновляем согласие пользователя в базе данных
         user.consent_privacy_policy = True
         user.consent_privacy_policy_date = get_utc_now_naive()
         await db.commit()
-        
+
         logger.info(f"User {user.telegram_id} gave consent for privacy policy")
-        
+
         await callback.answer("✅ Спасибо за согласие!")
-        
+
         # Показываем главное меню после согласия
         await callback.message.answer(
             "✅ <b>Согласие получено!</b>\n\n"
@@ -69,7 +67,7 @@ async def consent_privacy_policy_callback(
 async def decline_privacy_policy_callback(callback: CallbackQuery):
     """Обработка отказа от согласия на обработку персональных данных"""
     await callback.answer()
-    
+
     await callback.message.answer(
         "❌ <b>Согласие не получено</b>\n\n"
         "К сожалению, без согласия на обработку персональных данных "
@@ -83,27 +81,27 @@ async def decline_privacy_policy_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data == "consent_transboundary_transfer")
 async def consent_transboundary_transfer_callback(
-    callback: CallbackQuery, 
-    db: AsyncSession | None = None, 
-    user: User | None = None
+    callback: CallbackQuery, db: AsyncSession | None = None, user: User | None = None
 ):
     """Обработка согласия на трансграничную передачу ПД через Telegram"""
     if not db or not user:
-        logger.error("Missing required dependencies in consent_transboundary_transfer_callback")
+        logger.error(
+            "Missing required dependencies in consent_transboundary_transfer_callback"
+        )
         await callback.answer("❌ Ошибка сервера", show_alert=True)
         return
-    
+
     try:
         # Обновляем согласие на трансграничную передачу
         user.consent_transboundary_transfer = True
         user.transboundary_risks_acknowledged = True
         user.consent_transboundary_transfer_date = get_utc_now_naive()
         await db.commit()
-        
+
         logger.info(f"User {user.telegram_id} gave consent for transboundary transfer")
-        
+
         await callback.answer("✅ Спасибо за подтверждение!")
-        
+
         # Показываем главное меню после согласия
         await callback.message.answer(
             "✅ <b>Согласие получено!</b>\n\n"
@@ -113,7 +111,9 @@ async def consent_transboundary_transfer_callback(
             reply_markup=get_user_inline_keyboard(),
         )
     except Exception as e:
-        logger.error(f"Error saving transboundary consent for user {user.telegram_id}: {e}")
+        logger.error(
+            f"Error saving transboundary consent for user {user.telegram_id}: {e}"
+        )
         await callback.answer("❌ Ошибка при сохранении согласия", show_alert=True)
 
 
@@ -121,7 +121,7 @@ async def consent_transboundary_transfer_callback(
 async def decline_transboundary_transfer_callback(callback: CallbackQuery):
     """Обработка отказа от трансграничной передачи ПД"""
     await callback.answer()
-    
+
     await callback.message.answer(
         "❌ <b>Согласие на трансграничную передачу не получено</b>\n\n"
         "Без согласия на трансграничную передачу данных использование Telegram-бота невозможно.\n\n"
@@ -143,11 +143,11 @@ async def decline_transboundary_transfer_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data == "back_to_main")
 async def back_to_main_callback(
-    callback: CallbackQuery, 
-    state: FSMContext, 
-    is_pharmacist: bool | None = None, 
+    callback: CallbackQuery,
+    state: FSMContext,
+    is_pharmacist: bool | None = None,
     user: User | None = None,
-    pharmacist: Pharmacist | None = None
+    pharmacist: Pharmacist | None = None,
 ):
     """Возврат в главное меню"""
     await state.clear()
@@ -158,23 +158,36 @@ async def back_to_main_callback(
         return
 
     if is_pharmacist and pharmacist:
-        # Генерируем клавиатуру с JWT токеном
         keyboard = get_pharmacist_inline_keyboard_with_token(
-            telegram_id=int(user.telegram_id),
-            pharmacist_uuid=str(pharmacist.uuid)
+            telegram_id=int(user.telegram_id), pharmacist_uuid=str(pharmacist.uuid)
         )
-        await callback.message.answer(
-            "👨‍⚕️ <b>Панель фармацевта</b>\n\n" "Выберите действие:",
-            parse_mode="HTML",
-            reply_markup=keyboard,
-        )
+        if callback.message:
+            await callback.message.edit_text(
+                "👨‍⚕️ <b>Панель фармацевта</b>\n\n" "Выберите действие:",
+                parse_mode="HTML",
+                reply_markup=keyboard,
+            )
+        else:
+            await callback.message.answer(
+                "👨‍⚕️ <b>Панель фармацевта</b>\n\n" "Выберите действие:",
+                parse_mode="HTML",
+                reply_markup=keyboard,
+            )
     else:
-        await callback.message.answer(
-            "👋 <b>Главное меню</b>\n\n"
-            " Напишите ваш вопрос фармацевтическомуу специалисту в чат  или Выберите действие:",
-            parse_mode="HTML",
-            reply_markup=get_user_inline_keyboard(),
-        )
+        if callback.message:
+            await callback.message.edit_text(
+                "👋 <b>Главное меню</b>\n\n"
+                " Напишите ваш вопрос фармацевтическомуу специалисту в чат  или Выберите действие:",
+                parse_mode="HTML",
+                reply_markup=get_user_inline_keyboard(),
+            )
+        else:
+            await callback.message.answer(
+                "👋 <b>Главное меню</b>\n\n"
+                " Напишите ваш вопрос фармацевтическомуу специалисту в чат  или Выберите действие:",
+                parse_mode="HTML",
+                reply_markup=get_user_inline_keyboard(),
+            )
 
     await callback.answer()
 
@@ -199,95 +212,165 @@ async def back_to_pharmacist_main_callback(
 
     # Генерируем клавиатуру с JWT токеном
     keyboard = get_pharmacist_inline_keyboard_with_token(
-        telegram_id=int(user.telegram_id),
-        pharmacist_uuid=str(pharmacist.uuid)
+        telegram_id=int(user.telegram_id), pharmacist_uuid=str(pharmacist.uuid)
     )
 
-    await callback.message.answer(
-        f"👨‍⚕️ <b>Панель фармацевта</b>\n\n"
-        f"🏥 {pharmacy_name}\n"
-        f"📊 Статус: {status_text}\n\n"
-        "Выберите действие:",
-        parse_mode="HTML",
-        reply_markup=keyboard,
-    )
+    if callback.message:
+        await callback.message.edit_text(
+            f"👨‍⚕️ <b>Панель фармацевта</b>\n\n"
+            f"🏥 {pharmacy_name}\n"
+            f"📊 Статус: {status_text}\n\n"
+            "Выберите действие:",
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
+    else:
+        await callback.message.answer(
+            f"👨‍⚕️ <b>Панель фармацевта</b>\n\n"
+            f"🏥 {pharmacy_name}\n"
+            f"📊 Статус: {status_text}\n\n"
+            "Выберите действие:",
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
     await callback.answer()
 
 
 @router.callback_query(F.data == "questions_stats")
 async def questions_stats_callback(
-    callback: CallbackQuery, 
-    db: AsyncSession | None = None, 
-    user: User | None = None, 
-    is_pharmacist: bool | None = None
+    callback: CallbackQuery,
+    db: AsyncSession | None = None,
+    user: User | None = None,
+    is_pharmacist: bool | None = None,
 ):
     """Показать статистику по вопросам"""
     if not db or not user or is_pharmacist is None:
         logger.error("Missing required dependencies in questions_stats_callback")
         await callback.answer("❌ Ошибка сервера", show_alert=True)
         return
-        
-    if is_pharmacist:
-        await callback.answer(
-            "❌ Эта функция доступна только пользователям", show_alert=True
-        )
-        return
 
     try:
-        total_result = await db.execute(
-            select(func.count(Question.uuid)).where(Question.user_id == user.uuid)
-        )
-        total = total_result.scalar() or 0
-
-        pending_result = await db.execute(
-            select(func.count(Question.uuid)).where(
-                Question.user_id == user.uuid, Question.status == "pending"
+        if is_pharmacist:
+            result = await db.execute(
+                select(Pharmacist).where(Pharmacist.user_id == user.uuid)
             )
-        )
-        pending = pending_result.scalar() or 0
+            pharmacist = result.scalar_one_or_none()
 
-        answered_result = await db.execute(
-            select(func.count(Question.uuid)).where(
-                Question.user_id == user.uuid, Question.status == "answered"
+            if not pharmacist:
+                await callback.answer("❌ Вы не найдены как фармацевт", show_alert=True)
+                return
+
+            total_result = await db.execute(
+                select(func.count(Question.uuid)).where(
+                    Question.taken_by == pharmacist.uuid
+                )
             )
-        )
-        answered = answered_result.scalar() or 0
+            total = total_result.scalar() or 0
 
-        completed_result = await db.execute(
-            select(func.count(Question.uuid)).where(
-                Question.user_id == user.uuid, Question.status == "completed"
+            pending_result = await db.execute(
+                select(func.count(Question.uuid)).where(
+                    Question.taken_by == pharmacist.uuid,
+                    Question.status == "pending",
+                )
             )
-        )
-        completed = completed_result.scalar() or 0
+            pending = pending_result.scalar() or 0
 
-        in_progress_result = await db.execute(
-            select(func.count(Question.uuid)).where(
-                Question.user_id == user.uuid, Question.status == "in_progress"
+            in_progress_result = await db.execute(
+                select(func.count(Question.uuid)).where(
+                    Question.taken_by == pharmacist.uuid,
+                    Question.status == "in_progress",
+                )
             )
-        )
-        in_progress = in_progress_result.scalar() or 0
+            in_progress = in_progress_result.scalar() or 0
 
+            answered_result = await db.execute(
+                select(func.count(Question.uuid)).where(
+                    Question.taken_by == pharmacist.uuid,
+                    Question.status == "answered",
+                )
+            )
+            answered = answered_result.scalar() or 0
+
+            completed_result = await db.execute(
+                select(func.count(Question.uuid)).where(
+                    Question.taken_by == pharmacist.uuid,
+                    Question.status == "completed",
+                )
+            )
+            completed = completed_result.scalar() or 0
+
+            keyboard = get_pharmacist_inline_keyboard_with_token(
+                telegram_id=int(user.telegram_id),
+                pharmacist_uuid=str(pharmacist.uuid),
+            )
+            header = "📊 <b>Статистика вашей работы</b>\n\n"
+        else:
+            total_result = await db.execute(
+                select(func.count(Question.uuid)).where(Question.user_id == user.uuid)
+            )
+            total = total_result.scalar() or 0
+
+            pending_result = await db.execute(
+                select(func.count(Question.uuid)).where(
+                    Question.user_id == user.uuid,
+                    Question.status == "pending",
+                )
+            )
+            pending = pending_result.scalar() or 0
+
+            in_progress_result = await db.execute(
+                select(func.count(Question.uuid)).where(
+                    Question.user_id == user.uuid,
+                    Question.status == "in_progress",
+                )
+            )
+            in_progress = in_progress_result.scalar() or 0
+
+            answered_result = await db.execute(
+                select(func.count(Question.uuid)).where(
+                    Question.user_id == user.uuid,
+                    Question.status == "answered",
+                )
+            )
+            answered = answered_result.scalar() or 0
+
+            completed_result = await db.execute(
+                select(func.count(Question.uuid)).where(
+                    Question.user_id == user.uuid,
+                    Question.status == "completed",
+                )
+            )
+            completed = completed_result.scalar() or 0
+
+            keyboard = get_user_inline_keyboard()
+            header = "📊 <b>Статистика ваших вопросов</b>\n\n"
+
+        stats_text = header
         if total == 0:
-            await callback.message.answer(
-                "📊 <b>Статистика</b>\n\n"
-                "У вас пока нет вопросов.\n\n"
-                "Задайте первый вопрос в чат!",
+            stats_text += "У вас пока нет вопросов.\n\nЗадайте первый вопрос в чат!"
+        else:
+            stats_text += f"📋 <b>Всего:</b> {total}\n"
+            stats_text += f"⏳ <b>Ожидают ответа:</b> {pending}\n"
+            stats_text += f"🔄 <b>В обработке:</b> {in_progress}\n"
+            stats_text += f"💬 <b>Отвечены:</b> {answered}\n"
+            stats_text += f"✅ <b>Завершены:</b> {completed}\n\n"
+
+            if total > 0:
+                answer_rate = ((answered + completed) / total) * 100
+                stats_text += f"📈 <b>Процент ответов:</b> {answer_rate:.1f}%\n"
+
+        if callback.message:
+            await callback.message.edit_text(
+                stats_text,
                 parse_mode="HTML",
+                reply_markup=keyboard,
             )
-            return
-
-        stats_text = f"📊 <b>Статистика ваших вопросов</b>\n\n"
-        stats_text += f"📋 <b>Всего:</b> {total}\n"
-        stats_text += f"⏳ <b>Ожидают ответа:</b> {pending}\n"
-        stats_text += f"🔄 <b>В обработке:</b> {in_progress}\n"
-        stats_text += f"💬 <b>Отвечены:</b> {answered}\n"
-        stats_text += f"✅ <b>Завершены:</b> {completed}\n\n"
-
-        if total > 0:
-            answer_rate = ((answered + completed) / total) * 100
-            stats_text += f"📈 <b>Процент ответов:</b> {answer_rate:.1f}%\n"
-
-        await callback.message.answer(stats_text, parse_mode="HTML")
+        else:
+            await callback.message.answer(
+                stats_text,
+                parse_mode="HTML",
+                reply_markup=keyboard,
+            )
 
     except Exception as e:
         logger.error(f"Error in questions_stats_callback: {e}")
@@ -327,10 +410,14 @@ async def go_online_callback(
 ):
     """Перейти в онлайн"""
     logger.info(f"go_online_callback called for user {callback.from_user.id}")
-    logger.info(f"Dependencies: db={db is not None}, user={user is not None}, is_pharmacist={is_pharmacist}, pharmacist={pharmacist is not None}")
-    
+    logger.info(
+        f"Dependencies: db={db is not None}, user={user is not None}, is_pharmacist={is_pharmacist}, pharmacist={pharmacist is not None}"
+    )
+
     if not db or not user or not is_pharmacist or not pharmacist:
-        logger.error(f"Missing dependencies: db={bool(db)}, user={bool(user)}, is_pharmacist={is_pharmacist}, pharmacist={bool(pharmacist)}")
+        logger.error(
+            f"Missing dependencies: db={bool(db)}, user={bool(user)}, is_pharmacist={is_pharmacist}, pharmacist={bool(pharmacist)}"
+        )
         await callback.answer("❌ Ошибка сервера. Попробуйте позже.", show_alert=True)
         return True  # Явно возвращаем True чтобы aiogram понял что handler обработал update
 
@@ -340,16 +427,23 @@ async def go_online_callback(
 
     # Генерируем клавиатуру с JWT токеном
     keyboard = get_pharmacist_inline_keyboard_with_token(
-        telegram_id=int(user.telegram_id),
-        pharmacist_uuid=str(pharmacist.uuid)
+        telegram_id=int(user.telegram_id), pharmacist_uuid=str(pharmacist.uuid)
     )
 
-    await callback.message.answer(
-        "🟢 <b>Вы теперь онлайн!</b>\n\n"
-        "Вы будете получать уведомления о новых вопросах.",
-        parse_mode="HTML",
-        reply_markup=keyboard,
-    )
+    if callback.message:
+        await callback.message.edit_text(
+            "🟢 <b>Вы теперь онлайн!</b>\n\n"
+            "Вы будете получать уведомления о новых вопросах.",
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
+    else:
+        await callback.message.answer(
+            "🟢 <b>Вы теперь онлайн!</b>\n\n"
+            "Вы будете получать уведомления о новых вопросах.",
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
     await callback.answer()
     return True  # Explicitly return True to indicate handler processed the update
 
@@ -364,10 +458,14 @@ async def go_offline_callback(
 ):
     """Перейти в офлайн"""
     logger.info(f"go_offline_callback called for user {callback.from_user.id}")
-    logger.info(f"Dependencies: db={db is not None}, user={user is not None}, is_pharmacist={is_pharmacist}, pharmacist={pharmacist is not None}")
-    
+    logger.info(
+        f"Dependencies: db={db is not None}, user={user is not None}, is_pharmacist={is_pharmacist}, pharmacist={pharmacist is not None}"
+    )
+
     if not db or not user or not is_pharmacist or not pharmacist:
-        logger.error(f"Missing dependencies: db={bool(db)}, user={bool(user)}, is_pharmacist={is_pharmacist}, pharmacist={bool(pharmacist)}")
+        logger.error(
+            f"Missing dependencies: db={bool(db)}, user={bool(user)}, is_pharmacist={is_pharmacist}, pharmacist={bool(pharmacist)}"
+        )
         await callback.answer("❌ Ошибка сервера. Попробуйте позже.", show_alert=True)
         return True  # Явно возвращаем True чтобы aiogram понял что handler обработал update
 
@@ -377,16 +475,23 @@ async def go_offline_callback(
 
     # Генерируем клавиатуру с JWT токеном
     keyboard = get_pharmacist_inline_keyboard_with_token(
-        telegram_id=int(user.telegram_id),
-        pharmacist_uuid=str(pharmacist.uuid)
+        telegram_id=int(user.telegram_id), pharmacist_uuid=str(pharmacist.uuid)
     )
 
-    await callback.message.answer(
-        "🔴 <b>Вы теперь офлайн.</b>\n\n"
-        "Вы не будете получать уведомления о новых вопросах.",
-        parse_mode="HTML",
-        reply_markup=keyboard,
-    )
+    if callback.message:
+        await callback.message.edit_text(
+            "🔴 <b>Вы теперь офлайн.</b>\n\n"
+            "Вы не будете получать уведомления о новых вопросах.",
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
+    else:
+        await callback.message.answer(
+            "🔴 <b>Вы теперь офлайн.</b>\n\n"
+            "Вы не будете получать уведомления о новых вопросах.",
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
     await callback.answer()
     return True  # Explicitly return True to indicate handler processed the update
 
@@ -404,7 +509,7 @@ async def continue_user_dialog_callback(
         logger.error("Missing required dependencies in continue_user_dialog_callback")
         await callback.answer("❌ Ошибка сервера", show_alert=True)
         return
-        
+
     if is_pharmacist:
         await callback.answer(
             "❌ Эта функция доступна только пользователям", show_alert=True
@@ -455,7 +560,7 @@ async def view_questions_callback(
         logger.error("Missing required dependencies in view_questions_callback")
         await callback.answer("❌ Ошибка сервера", show_alert=True)
         return
-        
+
     from bot.handlers.user_question_handlers.commands import cmd_my_questions
 
     await cmd_my_questions(callback, db, user, is_pharmacist)
@@ -476,17 +581,17 @@ async def ask_question_callback(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "my_questions")
 async def my_questions_callback(
-    callback: CallbackQuery, 
-    db: AsyncSession | None = None, 
-    user: User | None = None, 
-    is_pharmacist: bool | None = None
+    callback: CallbackQuery,
+    db: AsyncSession | None = None,
+    user: User | None = None,
+    is_pharmacist: bool | None = None,
 ):
     """Мои вопросы"""
     if not db or not user or is_pharmacist is None:
         logger.error("Missing required dependencies in my_questions_callback")
         await callback.answer("❌ Ошибка сервера", show_alert=True)
         return
-        
+
     from bot.handlers.user_question_handlers.commands import cmd_my_questions
 
     await cmd_my_questions(callback, db, user, is_pharmacist)
@@ -513,38 +618,69 @@ async def user_help_callback(callback: CallbackQuery):
 
 
 @router.callback_query(F.data == "pharmacist_help")
-async def pharmacist_help_callback(callback: CallbackQuery):
+async def pharmacist_help_callback(
+    callback: CallbackQuery,
+    pharmacist: Pharmacist | None = None,
+    user: User | None = None,
+):
     """Помощь для фармацевтов через кнопку"""
     await callback.answer()
-    await callback.message.answer(
-        "👨‍⚕️ <b>Помощь для фармацевтов</b>\n\n"
-        "💊 <b>Основной процесс:</b>\n"
-        "1. Перейдите в онлайн (/online)\n"
-        "2. Просматривайте вопросы (/questions)\n"
-        "3. Нажмите «Ответить» под вопросом\n"
-        "4. Ведите диалог с пользователем\n"
-        "5. Завершите диалог когда консультация завершена\n\n"
-        "💬 <b>В диалоге вы можете:</b>\n"
-        "• Отправлять ответы пользователю\n"
-        "• Запрашивать фото рецепта (кнопка «Запросить фото»)\n"
-        "• Завершать диалог (кнопка «Завершить диалог»)\n\n"
-        "Для подробной справки используйте /help",
-        parse_mode="HTML",
+    if not pharmacist or not user:
+        await callback.answer("❌ Ошибка сервера. Попробуйте позже.", show_alert=True)
+        return
+
+    keyboard = get_pharmacist_inline_keyboard_with_token(
+        telegram_id=int(user.telegram_id),
+        pharmacist_uuid=str(pharmacist.uuid),
     )
+    if callback.message:
+        await callback.message.edit_text(
+            "👨‍⚕️ <b>Помощь для фармацевтов</b>\n\n"
+            "💊 <b>Основной процесс:</b>\n"
+            "1. Перейдите в онлайн (/online)\n"
+            "2. Просматривайте вопросы (/questions)\n"
+            "3. Нажмите «Ответить» под вопросом\n"
+            "4. Ведите диалог с пользователем\n"
+            "5. Завершите диалог когда консультация завершена\n\n"
+            "💬 <b>В диалоге вы можете:</b>\n"
+            "• Отправлять ответы пользователю\n"
+            "• Запрашивать фото рецепта (кнопка «Запросить фото»)\n"
+            "• Завершать диалог (кнопка «Завершить диалог»)\n\n"
+            "Для подробной справки используйте /help",
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
+    else:
+        await callback.message.answer(
+            "👨‍⚕️ <b>Помощь для фармацевтов</b>\n\n"
+            "💊 <b>Основной процесс:</b>\n"
+            "1. Перейдите в онлайн (/online)\n"
+            "2. Просматривайте вопросы (/questions)\n"
+            "3. Нажмите «Ответить» под вопросом\n"
+            "4. Ведите диалог с пользователем\n"
+            "5. Завершите диалог когда консультация завершена\n\n"
+            "💬 <b>В диалоге вы можете:</b>\n"
+            "• Отправлять ответы пользователю\n"
+            "• Запрашивать фото рецепта (кнопка «Запросить фото»)\n"
+            "• Завершать диалог (кнопка «Завершить диалог»)\n\n"
+            "Для подробной справки используйте /help",
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
 
 
 @router.callback_query(F.data == "system_status")
 async def system_status_callback(
-    callback: CallbackQuery, 
-    db: AsyncSession | None = None, 
-    is_pharmacist: bool | None = None
+    callback: CallbackQuery,
+    db: AsyncSession | None = None,
+    is_pharmacist: bool | None = None,
 ):
     """Статус системы через кнопку"""
     if not db or is_pharmacist is None:
         logger.error("Missing required dependencies in system_status_callback")
         await callback.answer("❌ Ошибка сервера", show_alert=True)
         return
-        
+
     from bot.handlers.qa_handlers.commands import debug_status
 
     await debug_status(callback, db, is_pharmacist)
@@ -552,17 +688,17 @@ async def system_status_callback(
 
 @router.callback_query(F.data == "clarify_question")
 async def clarify_question_callback(
-    callback: CallbackQuery, 
-    state: FSMContext, 
-    db: AsyncSession | None = None, 
-    user: User | None = None
+    callback: CallbackQuery,
+    state: FSMContext,
+    db: AsyncSession | None = None,
+    user: User | None = None,
 ):
     """Уточнение вопроса через кнопку"""
     if not db or not user:
         logger.error("Missing required dependencies in clarify_question_callback")
         await callback.answer("❌ Ошибка сервера", show_alert=True)
         return
-        
+
     from bot.handlers.clarify_handlers import clarify_command_handler
 
     await clarify_command_handler(callback, state, db, user)
@@ -570,20 +706,26 @@ async def clarify_question_callback(
 
 @router.callback_query(F.data == "my_questions_from_completed")
 async def my_questions_from_completed_callback(
-    callback: CallbackQuery, 
-    db: AsyncSession | None = None, 
-    user: User | None = None, 
-    is_pharmacist: bool | None = None
+    callback: CallbackQuery,
+    db: AsyncSession | None = None,
+    user: User | None = None,
+    is_pharmacist: bool | None = None,
 ):
     """Обработка кнопки 'Мои вопросы' из завершенного диалога"""
-    logger.info(f"my_questions_from_completed_callback called for user {callback.from_user.id}")
-    logger.info(f"Dependencies: db={db is not None}, user={user is not None}, is_pharmacist={is_pharmacist}")
-    
+    logger.info(
+        f"my_questions_from_completed_callback called for user {callback.from_user.id}"
+    )
+    logger.info(
+        f"Dependencies: db={db is not None}, user={user is not None}, is_pharmacist={is_pharmacist}"
+    )
+
     if not db or not user or is_pharmacist is None:
-        logger.error(f"Missing dependencies: db={bool(db)}, user={bool(user)}, is_pharmacist={is_pharmacist}")
+        logger.error(
+            f"Missing dependencies: db={bool(db)}, user={bool(user)}, is_pharmacist={is_pharmacist}"
+        )
         await callback.answer("❌ Ошибка сервера", show_alert=True)
         return True  # Явно возвращаем True чтобы aiogram понял что handler обработал update
-        
+
     from bot.handlers.user_question_handlers.commands import cmd_my_questions
 
     await cmd_my_questions(callback, db, user, is_pharmacist)
@@ -594,10 +736,10 @@ async def my_questions_from_completed_callback(
 async def start_registration_callback(callback: CallbackQuery, state: FSMContext):
     """Начать регистрацию фармацевта"""
     logger.info(f"start_registration_callback called for user {callback.from_user.id}")
-    
+
     await state.clear()
     logger.info(f"State cleared for user {callback.from_user.id}")
-    
+
     await callback.message.answer(
         "📝 <b>Регистрация фармацевта</b>\n\n"
         "Введите секретное слово для регистрации:\n"
@@ -609,10 +751,10 @@ async def start_registration_callback(callback: CallbackQuery, state: FSMContext
         ),
     )
     logger.info(f"Message sent to user {callback.from_user.id}")
-    
+
     await state.set_state(RegistrationStates.waiting_secret_word)
     logger.info(f"State set to waiting_secret_word for user {callback.from_user.id}")
-    
+
     await callback.answer()
     logger.info(f"Callback answered for user {callback.from_user.id}")
 
@@ -636,7 +778,7 @@ async def registration_info_callback(callback: CallbackQuery):
 async def show_privacy_policy_callback(callback: CallbackQuery):
     """Показать политику конфиденциальности через кнопку"""
     await callback.answer()
-    
+
     privacy_text = (
         "🔒 <b>Политика конфиденциальности</b>\n\n"
         "Мы заботимся о защите ваших персональных данных.\n\n"
@@ -681,7 +823,9 @@ async def show_privacy_policy_callback(callback: CallbackQuery):
         ]
     )
 
-    await callback.message.answer(privacy_text, parse_mode="HTML", reply_markup=keyboard)
+    await callback.message.answer(
+        privacy_text, parse_mode="HTML", reply_markup=keyboard
+    )
 
 
 @router.callback_query()
@@ -692,10 +836,8 @@ async def unmatched_callback(callback: CallbackQuery):
         f"data='{callback.data}', "
         f"message_id={callback.message.message_id if callback.message else None}"
     )
-    
+
     await callback.answer(
         "❌ Действие не распознано. Пожалуйста, обновите меню командой /start.",
-        show_alert=True
+        show_alert=True,
     )
-
-
