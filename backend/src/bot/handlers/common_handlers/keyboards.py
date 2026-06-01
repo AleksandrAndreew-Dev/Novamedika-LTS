@@ -13,19 +13,19 @@ from aiogram.types import (
 
 def get_pharmacist_webapp_url() -> str:
     """Генерирует URL для WebApp панели фармацевта
-    
+
     Telegram WebApp передаст initData автоматически через SDK.
     Backend валидирует initData и выдаст JWT токен.
-    
+
     Returns:
         URL без query параметров (Telegram добавит initData в hash)
     """
     # Базовый URL - используем path-based routing вместо subdomain
     base_url = os.getenv(
-        "PHARMACIST_DASHBOARD_URL", 
+        "PHARMACIST_DASHBOARD_URL",
         "https://spravka.novamedika.com/pharmacist"
     )
-    
+
     # НЕ добавляем query параметры - Telegram их удалит!
     # Вместо этого фронтенд использует window.Telegram.WebApp.initData
     return base_url
@@ -33,16 +33,16 @@ def get_pharmacist_webapp_url() -> str:
 
 def get_pharmacist_inline_keyboard_with_token(telegram_id: int, pharmacist_uuid: str | None = None):
     """Inline-клавиатура фармацевта с WebApp URL (без токена в URL)
-    
+
     Args:
         telegram_id: Telegram ID фармацевта (не используется, оставлен для совместимости)
         pharmacist_uuid: UUID фармацевта (не используется, оставлен для совместимости)
     """
     # Получаем чистый URL без токена
     pharmacist_dashboard_url = get_pharmacist_webapp_url()
-    
+
     webapp_url = os.getenv("FRONTEND_URL", "https://spravka.novamedika.com")
-    
+
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -109,7 +109,13 @@ def get_user_inline_keyboard():
             ],
             [
                 InlineKeyboardButton(
-                    text="🔍 Поиск лекарств",
+                    text="� Чат с фармацевтом",
+                    web_app=WebAppInfo(url=f"{webapp_url}/chat/new"),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="�🔍 Поиск лекарств",
                     web_app=WebAppInfo(url=webapp_url),
                 )
             ],
@@ -130,7 +136,13 @@ def get_webapp_only_keyboard():
         keyboard=[
             [
                 KeyboardButton(
-                    text="🔍 Поиск лекарств",
+                    text="� Чат с фармацевтом",
+                    web_app=WebAppInfo(url=f"{webapp_url}/chat/new"),
+                )
+            ],
+            [
+                KeyboardButton(
+                    text="�🔍 Поиск лекарств",
                     web_app=WebAppInfo(url=webapp_url),
                 )
             ]

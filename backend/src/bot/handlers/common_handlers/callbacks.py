@@ -51,13 +51,25 @@ async def consent_privacy_policy_callback(
         await callback.answer("✅ Спасибо за согласие!")
 
         # Показываем главное меню после согласия
-        await callback.message.answer(
-            "✅ <b>Согласие получено!</b>\n\n"
-            "Теперь вы можете использовать все функции бота.\n\n"
-            "💊 Напишите ваш вопрос фармацевту или используйте кнопки ниже:",
-            parse_mode="HTML",
-            reply_markup=get_user_inline_keyboard(),
-        )
+        if callback.message:
+            await callback.message.edit_text(
+                "✅ <b>Согласие получено!</b>\n\n"
+                "Теперь вы можете использовать все функции бота.\n\n"
+                "💊 Напишите ваш вопрос фармацевту или используйте кнопки ниже:",
+                parse_mode="HTML",
+                reply_markup=get_user_inline_keyboard(),
+            )
+        else:
+            await callback.bot.send_message(
+                chat_id=callback.from_user.id,
+                text=(
+                    "✅ <b>Согласие получено!</b>\n\n"
+                    "Теперь вы можете использовать все функции бота.\n\n"
+                    "💊 Напишите ваш вопрос фармацевту или используйте кнопки ниже:"
+                ),
+                parse_mode="HTML",
+                reply_markup=get_user_inline_keyboard(),
+            )
     except Exception as e:
         logger.error(f"Error saving consent for user {user.telegram_id}: {e}")
         await callback.answer("❌ Ошибка при сохранении согласия", show_alert=True)
@@ -68,15 +80,29 @@ async def decline_privacy_policy_callback(callback: CallbackQuery):
     """Обработка отказа от согласия на обработку персональных данных"""
     await callback.answer()
 
-    await callback.message.answer(
-        "❌ <b>Согласие не получено</b>\n\n"
-        "К сожалению, без согласия на обработку персональных данных "
-        "мы не можем предоставить вам услуги сервиса.\n\n"
-        "Если у вас есть вопросы, свяжитесь с нами:\n"
-        "📧 Email: support@novamedika.com\n"
-        "📱 Телефон: +375 (XX) XXX-XX-XX\n\n"
-        "Вы можете повторно нажать /start, если передумаете."
-    )
+    if callback.message:
+        await callback.message.edit_text(
+            "❌ <b>Согласие не получено</b>\n\n"
+            "К сожалению, без согласия на обработку персональных данных "
+            "мы не можем предоставить вам услуги сервиса.\n\n"
+            "Если у вас есть вопросы, свяжитесь с нами:\n"
+            "📧 Email: support@novamedika.com\n"
+            "📱 Телефон: +375 (XX) XXX-XX-XX\n\n"
+            "Вы можете повторно нажать /start, если передумаете."
+        )
+    else:
+        await callback.bot.send_message(
+            chat_id=callback.from_user.id,
+            text=(
+                "❌ <b>Согласие не получено</b>\n\n"
+                "К сожалению, без согласия на обработку персональных данных "
+                "мы не можем предоставить вам услуги сервиса.\n\n"
+                "Если у вас есть вопросы, свяжитесь с нами:\n"
+                "📧 Email: support@novamedika.com\n"
+                "📱 Телефон: +375 (XX) XXX-XX-XX\n\n"
+                "Вы можете повторно нажать /start, если передумаете."
+            ),
+        )
 
 
 @router.callback_query(F.data == "consent_transboundary_transfer")
@@ -103,13 +129,25 @@ async def consent_transboundary_transfer_callback(
         await callback.answer("✅ Спасибо за подтверждение!")
 
         # Показываем главное меню после согласия
-        await callback.message.answer(
-            "✅ <b>Согласие получено!</b>\n\n"
-            "Теперь вы можете использовать все функции бота.\n\n"
-            "💊 Напишите ваш вопрос фармацевту или используйте кнопки ниже:",
-            parse_mode="HTML",
-            reply_markup=get_user_inline_keyboard(),
-        )
+        if callback.message:
+            await callback.message.edit_text(
+                "✅ <b>Согласие получено!</b>\n\n"
+                "Теперь вы можете использовать все функции бота.\n\n"
+                "💊 Напишите ваш вопрос фармацевту или используйте кнопки ниже:",
+                parse_mode="HTML",
+                reply_markup=get_user_inline_keyboard(),
+            )
+        else:
+            await callback.bot.send_message(
+                chat_id=callback.from_user.id,
+                text=(
+                    "✅ <b>Согласие получено!</b>\n\n"
+                    "Теперь вы можете использовать все функции бота.\n\n"
+                    "💊 Напишите ваш вопрос фармацевту или используйте кнопки ниже:"
+                ),
+                parse_mode="HTML",
+                reply_markup=get_user_inline_keyboard(),
+            )
     except Exception as e:
         logger.error(
             f"Error saving transboundary consent for user {user.telegram_id}: {e}"
@@ -122,23 +160,45 @@ async def decline_transboundary_transfer_callback(callback: CallbackQuery):
     """Обработка отказа от трансграничной передачи ПД"""
     await callback.answer()
 
-    await callback.message.answer(
-        "❌ <b>Согласие на трансграничную передачу не получено</b>\n\n"
-        "Без согласия на трансграничную передачу данных использование Telegram-бота невозможно.\n\n"
-        "🔄 <b>Альтернативные каналы связи:</b>\n\n"
-        "Для текстовых консультаций и загрузки рецептов используйте наш web-сайт:\n"
-        "🌐 https://spravka.novamedika.com\n\n"
-        "На сайте вы можете:\n"
-        "• Задавать вопросы фармацевтам\n"
-        "• Загружать фото рецептов безопасно\n"
-        "• Просматривать историю консультаций\n"
-        "• Получать ответы в личном кабинете\n\n"
-        "Все данные обрабатываются исключительно на серверах Республики Беларусь.\n\n"
-        "Также доступны:\n"
-        "📧 Email: support@novamedika.com\n"
-        "📱 Телефон: +375 (XX) XXX-XX-XX\n\n"
-        "Если вы передумаете, нажмите /start повторно и дайте согласие."
-    )
+    if callback.message:
+        await callback.message.edit_text(
+            "❌ <b>Согласие на трансграничную передачу не получено</b>\n\n"
+            "Без согласия на трансграничную передачу данных использование Telegram-бота невозможно.\n\n"
+            "🔄 <b>Альтернативные каналы связи:</b>\n\n"
+            "Для текстовых консультаций и загрузки рецептов используйте наш web-сайт:\n"
+            "🌐 https://spravka.novamedika.com\n\n"
+            "На сайте вы можете:\n"
+            "• Задавать вопросы фармацевтам\n"
+            "• Загружать фото рецептов безопасно\n"
+            "• Просматривать историю консультаций\n"
+            "• Получать ответы в личном кабинете\n\n"
+            "Все данные обрабатываются исключительно на серверах Республики Беларусь.\n\n"
+            "Также доступны:\n"
+            "📧 Email: support@novamedika.com\n"
+            "📱 Телефон: +375 (XX) XXX-XX-XX\n\n"
+            "Если вы передумаете, нажмите /start повторно и дайте согласие."
+        )
+    else:
+        await callback.bot.send_message(
+            chat_id=callback.from_user.id,
+            text=(
+                "❌ <b>Согласие на трансграничную передачу не получено</b>\n\n"
+                "Без согласия на трансграничную передачу данных использование Telegram-бота невозможно.\n\n"
+                "🔄 <b>Альтернативные каналы связи:</b>\n\n"
+                "Для текстовых консультаций и загрузки рецептов используйте наш web-сайт:\n"
+                "🌐 https://spravka.novamedika.com\n\n"
+                "На сайте вы можете:\n"
+                "• Задавать вопросы фармацевтам\n"
+                "• Загружать фото рецептов безопасно\n"
+                "• Просматривать историю консультаций\n"
+                "• Получать ответы в личном кабинете\n\n"
+                "Все данные обрабатываются исключительно на серверах Республики Беларусь.\n\n"
+                "Также доступны:\n"
+                "📧 Email: support@novamedika.com\n"
+                "📱 Телефон: +375 (XX) XXX-XX-XX\n\n"
+                "Если вы передумаете, нажмите /start повторно и дайте согласие."
+            ),
+        )
 
 
 @router.callback_query(F.data == "back_to_main")
@@ -168,8 +228,9 @@ async def back_to_main_callback(
                 reply_markup=keyboard,
             )
         else:
-            await callback.message.answer(
-                "👨‍⚕️ <b>Панель фармацевта</b>\n\n" "Выберите действие:",
+            await callback.bot.send_message(
+                chat_id=callback.from_user.id,
+                text="👨‍⚕️ <b>Панель фармацевта</b>\n\n" "Выберите действие:",
                 parse_mode="HTML",
                 reply_markup=keyboard,
             )
@@ -182,9 +243,12 @@ async def back_to_main_callback(
                 reply_markup=get_user_inline_keyboard(),
             )
         else:
-            await callback.message.answer(
-                "👋 <b>Главное меню</b>\n\n"
-                " Напишите ваш вопрос фармацевтическомуу специалисту в чат  или Выберите действие:",
+            await callback.bot.send_message(
+                chat_id=callback.from_user.id,
+                text=(
+                    "👋 <b>Главное меню</b>\n\n"
+                    " Напишите ваш вопрос фармацевтическомуу специалисту в чат  или Выберите действие:"
+                ),
                 parse_mode="HTML",
                 reply_markup=get_user_inline_keyboard(),
             )
@@ -225,11 +289,14 @@ async def back_to_pharmacist_main_callback(
             reply_markup=keyboard,
         )
     else:
-        await callback.message.answer(
-            f"👨‍⚕️ <b>Панель фармацевта</b>\n\n"
-            f"🏥 {pharmacy_name}\n"
-            f"📊 Статус: {status_text}\n\n"
-            "Выберите действие:",
+        await callback.bot.send_message(
+            chat_id=callback.from_user.id,
+            text=(
+                f"👨‍⚕️ <b>Панель фармацевта</b>\n\n"
+                f"🏥 {pharmacy_name}\n"
+                f"📊 Статус: {status_text}\n\n"
+                "Выберите действие:"
+            ),
             parse_mode="HTML",
             reply_markup=keyboard,
         )
@@ -366,37 +433,68 @@ async def questions_stats_callback(
                 reply_markup=keyboard,
             )
         else:
-            await callback.message.answer(
-                stats_text,
+            await callback.bot.send_message(
+                chat_id=callback.from_user.id,
+                text=stats_text,
                 parse_mode="HTML",
                 reply_markup=keyboard,
             )
 
     except Exception as e:
         logger.error(f"Error in questions_stats_callback: {e}")
-        await callback.message.answer("❌ Ошибка при получении статистики")
+        if callback.message:
+            await callback.bot.send_message(
+                chat_id=callback.from_user.id,
+                text="❌ Ошибка при получении статистики",
+            )
+        else:
+            await callback.bot.send_message(
+                chat_id=callback.from_user.id,
+                text="❌ Ошибка при получении статистики",
+            )
 
 
 @router.callback_query(F.data == "i_am_pharmacist")
 async def i_am_pharmacist_callback(callback: CallbackQuery, state: FSMContext):
     """Начать регистрацию фармацевта"""
     await state.clear()
-    await callback.message.answer(
-        "👨‍⚕️ <b>Регистрация фармацевта</b>\n\n"
-        "Для регистрации обратитесь к администратору.\n\n"
-        "Или нажмите кнопку «Регистрация» ниже.",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="📝 Регистрация",
-                        callback_data="start_registration",
-                    )
+    if callback.message:
+        await callback.message.edit_text(
+            "👨‍⚕️ <b>Регистрация фармацевта</b>\n\n"
+            "Для регистрации обратитесь к администратору.\n\n"
+            "Или нажмите кнопку «Регистрация» ниже.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="📝 Регистрация",
+                            callback_data="start_registration",
+                        )
+                    ]
                 ]
-            ]
-        ),
-    )
+            ),
+        )
+    else:
+        await callback.bot.send_message(
+            chat_id=callback.from_user.id,
+            text=(
+                "👨‍⚕️ <b>Регистрация фармацевта</b>\n\n"
+                "Для регистрации обратитесь к администратору.\n\n"
+                "Или нажмите кнопку «Регистрация» ниже."
+            ),
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="📝 Регистрация",
+                            callback_data="start_registration",
+                        )
+                    ]
+                ]
+            ),
+        )
     await callback.answer()
 
 
@@ -438,9 +536,12 @@ async def go_online_callback(
             reply_markup=keyboard,
         )
     else:
-        await callback.message.answer(
-            "🟢 <b>Вы теперь онлайн!</b>\n\n"
-            "Вы будете получать уведомления о новых вопросах.",
+        await callback.bot.send_message(
+            chat_id=callback.from_user.id,
+            text=(
+                "🟢 <b>Вы теперь онлайн!</b>\n\n"
+                "Вы будете получать уведомления о новых вопросах."
+            ),
             parse_mode="HTML",
             reply_markup=keyboard,
         )
@@ -486,9 +587,12 @@ async def go_offline_callback(
             reply_markup=keyboard,
         )
     else:
-        await callback.message.answer(
-            "🔴 <b>Вы теперь офлайн.</b>\n\n"
-            "Вы не будете получать уведомления о новых вопросах.",
+        await callback.bot.send_message(
+            chat_id=callback.from_user.id,
+            text=(
+                "🔴 <b>Вы теперь офлайн.</b>\n\n"
+                "Вы не будете получать уведомления о новых вопросах."
+            ),
             parse_mode="HTML",
             reply_markup=keyboard,
         )
@@ -535,12 +639,23 @@ async def continue_user_dialog_callback(
         await state.update_data(active_dialog_question_id=question_uuid)
         await state.set_state(UserQAStates.in_dialog)
 
-        await callback.message.answer(
-            "💬 <b>Продолжение диалога</b>\n\n"
-            f"❓ <b>Ваш вопрос:</b>\n{question.text}\n\n"
-            "Напишите ваше сообщение фармацевту:",
-            parse_mode="HTML",
-        )
+        if callback.message:
+            await callback.message.edit_text(
+                "💬 <b>Продолжение диалога</b>\n\n"
+                f"❓ <b>Ваш вопрос:</b>\n{question.text}\n\n"
+                "Напишите ваше сообщение фармацевту:",
+                parse_mode="HTML",
+            )
+        else:
+            await callback.bot.send_message(
+                chat_id=callback.from_user.id,
+                text=(
+                    "💬 <b>Продолжение диалога</b>\n\n"
+                    f"❓ <b>Ваш вопрос:</b>\n{question.text}\n\n"
+                    "Напишите ваше сообщение фармацевту:"
+                ),
+                parse_mode="HTML",
+            )
         await callback.answer()
 
     except Exception as e:
@@ -570,12 +685,23 @@ async def view_questions_callback(
 async def ask_question_callback(callback: CallbackQuery, state: FSMContext):
     """Задать вопрос"""
     await state.set_state(UserQAStates.waiting_for_question)
-    await callback.message.answer(
-        "📝 <b>Напишите ваш вопрос:</b>\n\n"
-        "Опишите вашу проблему подробно.\n\n"
-        "Для отмены: /cancel",
-        parse_mode="HTML",
-    )
+    if callback.message:
+        await callback.message.edit_text(
+            "📝 <b>Напишите ваш вопрос:</b>\n\n"
+            "Опишите вашу проблему подробно.\n\n"
+            "Для отмены: /cancel",
+            parse_mode="HTML",
+        )
+    else:
+        await callback.bot.send_message(
+            chat_id=callback.from_user.id,
+            text=(
+                "📝 <b>Напишите ваш вопрос:</b>\n\n"
+                "Опишите вашу проблему подробно.\n\n"
+                "Для отмены: /cancel"
+            ),
+            parse_mode="HTML",
+        )
     await callback.answer()
 
 
@@ -601,20 +727,39 @@ async def my_questions_callback(
 async def user_help_callback(callback: CallbackQuery):
     """Помощь для пользователей через кнопку"""
     await callback.answer()
-    await callback.message.answer(
-        "👋 <b>Помощь для пользователей</b>\n\n"
-        "💊 <b>Основной процесс:</b>\n"
-        "1. Просто напишите вопрос в чат\n"
-        "2. Фармацевт ответит в ближайшее время\n"
-        "3. После ответа вы увидите кнопки:\n"
-        "   • Уточнить вопрос\n"
-        "   • Завершить диалог\n\n"
-        "💬 <b>Завершение диалога:</b>\n"
-        "Нажмите кнопку «Завершить диалог» в сообщении с ответом,\n"
-        "чтобы завершить консультацию по текущему вопросу.",
-        parse_mode="HTML",
-        reply_markup=get_user_inline_keyboard(),
-    )
+    if callback.message:
+        await callback.message.edit_text(
+            "👋 <b>Помощь для пользователей</b>\n\n"
+            "💊 <b>Основной процесс:</b>\n"
+            "1. Просто напишите вопрос в чат\n"
+            "2. Фармацевт ответит в ближайшее время\n"
+            "3. После ответа вы увидите кнопки:\n"
+            "   • Уточнить вопрос\n"
+            "   • Завершить диалог\n\n"
+            "💬 <b>Завершение диалога:</b>\n"
+            "Нажмите кнопку «Завершить диалог» в сообщении с ответом,\n"
+            "чтобы завершить консультацию по текущему вопросу.",
+            parse_mode="HTML",
+            reply_markup=get_user_inline_keyboard(),
+        )
+    else:
+        await callback.bot.send_message(
+            chat_id=callback.from_user.id,
+            text=(
+                "👋 <b>Помощь для пользователей</b>\n\n"
+                "💊 <b>Основной процесс:</b>\n"
+                "1. Просто напишите вопрос в чат\n"
+                "2. Фармацевт ответит в ближайшее время\n"
+                "3. После ответа вы увидите кнопки:\n"
+                "   • Уточнить вопрос\n"
+                "   • Завершить диалог\n\n"
+                "💬 <b>Завершение диалога:</b>\n"
+                "Нажмите кнопку «Завершить диалог» в сообщении с ответом,\n"
+                "чтобы завершить консультацию по текущему вопросу."
+            ),
+            parse_mode="HTML",
+            reply_markup=get_user_inline_keyboard(),
+        )
 
 
 @router.callback_query(F.data == "pharmacist_help")
@@ -651,19 +796,22 @@ async def pharmacist_help_callback(
             reply_markup=keyboard,
         )
     else:
-        await callback.message.answer(
-            "👨‍⚕️ <b>Помощь для фармацевтов</b>\n\n"
-            "💊 <b>Основной процесс:</b>\n"
-            "1. Перейдите в онлайн (/online)\n"
-            "2. Просматривайте вопросы (/questions)\n"
-            "3. Нажмите «Ответить» под вопросом\n"
-            "4. Ведите диалог с пользователем\n"
-            "5. Завершите диалог когда консультация завершена\n\n"
-            "💬 <b>В диалоге вы можете:</b>\n"
-            "• Отправлять ответы пользователю\n"
-            "• Запрашивать фото рецепта (кнопка «Запросить фото»)\n"
-            "• Завершать диалог (кнопка «Завершить диалог»)\n\n"
-            "Для подробной справки используйте /help",
+        await callback.bot.send_message(
+            chat_id=callback.from_user.id,
+            text=(
+                "👨‍⚕️ <b>Помощь для фармацевтов</b>\n\n"
+                "💊 <b>Основной процесс:</b>\n"
+                "1. Перейдите в онлайн (/online)\n"
+                "2. Просматривайте вопросы (/questions)\n"
+                "3. Нажмите «Ответить» под вопросом\n"
+                "4. Ведите диалог с пользователем\n"
+                "5. Завершите диалог когда консультация завершена\n\n"
+                "💬 <b>В диалоге вы можете:</b>\n"
+                "• Отправлять ответы пользователю\n"
+                "• Запрашивать фото рецепта (кнопка «Запросить фото»)\n"
+                "• Завершать диалог (кнопка «Завершить диалог» )\n\n"
+                "Для подробной справки используйте /help"
+            ),
             parse_mode="HTML",
             reply_markup=keyboard,
         )
@@ -740,16 +888,31 @@ async def start_registration_callback(callback: CallbackQuery, state: FSMContext
     await state.clear()
     logger.info(f"State cleared for user {callback.from_user.id}")
 
-    await callback.message.answer(
-        "📝 <b>Регистрация фармацевта</b>\n\n"
-        "Введите секретное слово для регистрации:\n"
-        "(или нажмите «❌ Отмена регистрации» для отмены)",
-        parse_mode="HTML",
-        reply_markup=ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]],
-            resize_keyboard=True,
-        ),
-    )
+    if callback.message:
+        await callback.message.edit_text(
+            "📝 <b>Регистрация фармацевта</b>\n\n"
+            "Введите секретное слово для регистрации:\n"
+            "(или нажмите «❌ Отмена регистрации» для отмены)",
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]],
+                resize_keyboard=True,
+            ),
+        )
+    else:
+        await callback.bot.send_message(
+            chat_id=callback.from_user.id,
+            text=(
+                "📝 <b>Регистрация фармацевта</b>\n\n"
+                "Введите секретное слово для регистрации:\n"
+                "(или нажмите «❌ Отмена регистрации» для отмены)"
+            ),
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]],
+                resize_keyboard=True,
+            ),
+        )
     logger.info(f"Message sent to user {callback.from_user.id}")
 
     await state.set_state(RegistrationStates.waiting_secret_word)
@@ -763,15 +926,29 @@ async def start_registration_callback(callback: CallbackQuery, state: FSMContext
 async def registration_info_callback(callback: CallbackQuery):
     """Информация о регистрации"""
     await callback.answer()
-    await callback.message.answer(
-        "📝 <b>Регистрация фармацевта</b>\n\n"
-        "Для регистрации необходимо:\n"
-        "1. Быть сотрудником аптеки\n"
-        "2. Знать секретное слово (уточните у руководителя)\n"
-        "3. Нажать кнопку «Регистрация»\n\n"
-        "После регистрации вы сможете отвечать на вопросы пользователей.",
-        parse_mode="HTML",
-    )
+    if callback.message:
+        await callback.message.edit_text(
+            "📝 <b>Регистрация фармацевта</b>\n\n"
+            "Для регистрации необходимо:\n"
+            "1. Быть сотрудником аптеки\n"
+            "2. Знать секретное слово (уточните у руководителя)\n"
+            "3. Нажать кнопку «Регистрация»\n\n"
+            "После регистрации вы сможете отвечать на вопросы пользователей.",
+            parse_mode="HTML",
+        )
+    else:
+        await callback.bot.send_message(
+            chat_id=callback.from_user.id,
+            text=(
+                "📝 <b>Регистрация фармацевта</b>\n\n"
+                "Для регистрации необходимо:\n"
+                "1. Быть сотрудником аптеки\n"
+                "2. Знать секретное слово (уточните у руководителя)\n"
+                "3. Нажать кнопку «Регистрация»\n\n"
+                "После регистрации вы сможете отвечать на вопросы пользователей."
+            ),
+            parse_mode="HTML",
+        )
 
 
 @router.callback_query(F.data == "show_privacy_policy")
@@ -823,9 +1000,17 @@ async def show_privacy_policy_callback(callback: CallbackQuery):
         ]
     )
 
-    await callback.message.answer(
-        privacy_text, parse_mode="HTML", reply_markup=keyboard
-    )
+    if callback.message:
+        await callback.message.edit_text(
+            privacy_text, parse_mode="HTML", reply_markup=keyboard
+        )
+    else:
+        await callback.bot.send_message(
+            chat_id=callback.from_user.id,
+            text=privacy_text,
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
 
 
 @router.callback_query()

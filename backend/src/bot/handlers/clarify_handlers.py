@@ -1,5 +1,10 @@
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (
+    Message,
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,13 +19,11 @@ from bot.services.notification_service import notify_about_clarification
 logger = logging.getLogger(__name__)
 router = Router()
 
+
 @router.message(Command("clarify"))
 @router.callback_query(F.data == "clarify_question")
 async def clarify_command_handler(
-    update: Message | CallbackQuery,
-    state: FSMContext,
-    db: AsyncSession,
-    user: User
+    update: Message | CallbackQuery, state: FSMContext, db: AsyncSession, user: User
 ):
     """Обработчик команды уточнения - показываем вопросы для уточнения"""
     try:
@@ -46,13 +49,17 @@ async def clarify_command_handler(
         # Создаем клавиатуру с вопросами для уточнения
         keyboard_buttons = []
         for question in answered_questions:
-            question_preview = question.text[:50] + "..." if len(question.text) > 50 else question.text
-            keyboard_buttons.append([
-                InlineKeyboardButton(
-                    text=f"❓ {question_preview}",
-                    callback_data=f"clarify_select_{question.uuid}"
-                )
-            ])
+            question_preview = (
+                question.text[:50] + "..." if len(question.text) > 50 else question.text
+            )
+            keyboard_buttons.append(
+                [
+                    InlineKeyboardButton(
+                        text=f"❓ {question_preview}",
+                        callback_data=f"clarify_select_{question.uuid}",
+                    )
+                ]
+            )
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
 
@@ -62,7 +69,9 @@ async def clarify_command_handler(
         )
 
         if isinstance(update, CallbackQuery):
-            await update.message.answer(message_text, parse_mode="HTML", reply_markup=keyboard)
+            await update.message.answer(
+                message_text, parse_mode="HTML", reply_markup=keyboard
+            )
             await update.answer()
         else:
             await update.answer(message_text, parse_mode="HTML", reply_markup=keyboard)
@@ -81,10 +90,10 @@ def is_not_command(text: str | None) -> bool:
     """Проверка, что текст не является командой"""
     if text is None:
         return False
-    return not text.startswith('/')
+    return not text.startswith("/")
 
 
-@router.message(UserQAStates.waiting_for_clarification & F.text)
+@router.message(UserQAStates.waiting_for_clarification, F.text)
 async def process_clarification(
     message: Message, state: FSMContext, db: AsyncSession, user: User
 ):
@@ -92,7 +101,7 @@ async def process_clarification(
     # Игнорируем команды в состоянии ожидания уточнения
     if not is_not_command(message.text):
         return
-    
+
     try:
         state_data = await state.get_data()
         question_uuid = state_data.get("clarify_question_id")
@@ -132,9 +141,7 @@ async def process_clarification(
 
         # ✅ Уведомляем о новом уточнении
         await notify_about_clarification(
-            original_question=original_question,
-            clarification_text=message.text,
-            db=db
+            original_question=original_question, clarification_text=message.text, db=db
         )
 
         # ✅ ОТПРАВЛЯЕМ ПОЛЬЗОВАТЕЛЮ ИСТОРИЮ С УТОЧНЕНИЕМ
@@ -147,7 +154,7 @@ async def process_clarification(
             pre_text="💬 <b>ВАШЕ УТОЧНЕНИЕ ОТПРАВЛЕНО</b>\n\n",
             post_text=None,
             is_pharmacist=False,
-            show_buttons=True
+            show_buttons=True,
         )
 
         await state.clear()
@@ -160,10 +167,7 @@ async def process_clarification(
 
 @router.callback_query(F.data.startswith("clarify_select_"))
 async def clarify_select_question(
-    callback: CallbackQuery,
-    state: FSMContext,
-    db: AsyncSession,
-    user: User
+    callback: CallbackQuery, state: FSMContext, db: AsyncSession, user: User
 ):
     """Выбор конкретного вопроса для уточнения"""
     question_uuid = callback.data.replace("clarify_select_", "")

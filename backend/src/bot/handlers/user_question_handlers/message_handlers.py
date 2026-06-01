@@ -27,10 +27,10 @@ def is_not_command(text: str | None) -> bool:
     """Проверка, что текст не является командой"""
     if text is None:
         return False
-    return not text.startswith('/')
+    return not text.startswith("/")
 
 
-@router.message(UserQAStates.waiting_for_question & F.text)
+@router.message(UserQAStates.waiting_for_question, F.text)
 async def process_user_question(
     message: Message,
     state: FSMContext,
@@ -42,7 +42,7 @@ async def process_user_question(
     # Игнорируем команды в состоянии ожидания вопроса
     if not is_not_command(message.text):
         return
-    
+
     logger.info(f"Processing question from user {message.from_user.id}")
 
     if not message.text or not message.text.strip():
@@ -103,7 +103,7 @@ async def process_user_question(
         await state.clear()
 
 
-@router.message(UserQAStates.in_dialog & F.text)
+@router.message(UserQAStates.in_dialog, F.text)
 async def process_dialog_message(
     message: Message,
     state: FSMContext,
@@ -115,7 +115,7 @@ async def process_dialog_message(
     # Игнорируем команды в состоянии диалога
     if not is_not_command(message.text):
         return
-    
+
     if is_pharmacist:
         await message.answer("👨‍⚕️ Вы фармацевт. Используйте /questions для ответов.")
         return
