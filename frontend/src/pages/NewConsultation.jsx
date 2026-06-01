@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import userAuthService from '../services/userAuthService';
+import telegramAuthService from '../services/telegramAuthService';
 import Toast from '../components/Toast';
 
 export default function NewConsultation() {
@@ -13,8 +14,55 @@ export default function NewConsultation() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [toast, setToast] = useState(null);
+  const [authChecking, setAuthChecking] = useState(true);
 
-  const categories = [
+  // Check authentication on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        // Try Telegram auto-login if in WebApp
+        if (telegramAuthService.canAuthViaWebApp()) {
+          console.log('[NewConsultation] Attempting Telegram auto-login');
+          const success = await telegramAuthService.autoLogin();
+
+          if (success) {
+            console.log('[NewConsultation] ✅ Telegram auto-login successful');
+            setAuthChecking(false);
+            return;
+          }
+        }
+
+        // Check if already authenticated
+        if (userAuthService.isAuthenticated()) {
+          console.log('[NewConsultation] User already authenticated');
+          setAuthChecking(false);
+          return;
+        }
+
+        // Not authenticated and can't do Telegram login
+        console.log('[NewConsultation] Not authenticated, redirecting to login');
+        navigate('/login');
+      } catch (err) {
+        console.error('[NewConsultation] Auth check error:', err);
+        navigate('/login');
+      }
+    };
+
+    checkAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (authChecking) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Загрузка...</p>
+        </div>
+      </div>
+    );
+  }
+
     { value: 'general', label: 'Общий вопрос' },
     { value: 'medication', label: 'Лекарства' },
     { value: 'symptoms', label: 'Симптомы' },
@@ -43,13 +91,7 @@ export default function NewConsultation() {
     try {
       setLoading(true);
 
-      // Check authentication
-      if (!userAuthService.isAuthenticated()) {
-        navigate('/login');
-        return;
-      }
-
-      // Create consultation
+      // Create consultation (authentication already checked in useEffect)
       const response = await api.post('/api/consultations/', {
         text: formData.text.trim(),
         category: formData.category,
@@ -70,6 +112,7 @@ export default function NewConsultation() {
       setLoading(false);
     }
   };
+
 
   return (
     <div className="min-h-screen bg-gray-50">

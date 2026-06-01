@@ -1,6 +1,14 @@
 """Router for Pharmacist WebApp Dashboard - Consultations Management"""
 
-from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, Body
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    status,
+    WebSocket,
+    WebSocketDisconnect,
+    Body,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 from sqlalchemy.orm import selectinload
@@ -30,7 +38,7 @@ class QuestionResponse(BaseModel):
     updated_at: Optional[datetime] = None
     user_name: str
     message_count: int
-    
+
     class Config:
         from_attributes = True
 
@@ -58,13 +66,12 @@ class ConsultationStats(BaseModel):
 async def get_questions_query(status_filter: Optional[str] = None):
     """Build base query for questions with filters"""
     query = select(Question).options(
-        selectinload(Question.user),
-        selectinload(Question.messages)
+        selectinload(Question.user), selectinload(Question.dialog_messages)
     )
-    
+
     if status_filter:
         query = query.where(Question.status == status_filter)
-    
+
     return query.order_by(Question.created_at.desc())
 
 
@@ -78,41 +85,43 @@ async def get_questions(
     pharmacist: Pharmacist = Depends(get_current_pharmacist),
 ):
     """Get list of questions with filtering and pagination"""
-    
+
     # Get total count
     count_query = select(func.count()).select_from(Question)
     if status:
         count_query = count_query.where(Question.status == status)
-    
+
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
-    
+
     # Get paginated questions
     query = await get_questions_query(status)
     query = query.offset((page - 1) * limit).limit(limit)
-    
+
     result = await db.execute(query)
     questions = result.scalars().all()
-    
+
     # Convert to response format
     questions_data = []
     for q in questions:
         user_name = f"{q.user.first_name or ''} {q.user.last_name or ''}".strip()
         if not user_name:
             user_name = f"User {q.user.telegram_id}"
-        
-        questions_data.append(QuestionResponse(
-            uuid=str(q.uuid),
-            text=str(q.text),
-            status=str(q.status),
-            created_at=q.created_at,
-            updated_at=q.updated_at,
-            user_name=user_name,
-            message_count=len(q.dialog_messages),
-        ))
-    
+
+        questions_data.append(
+            QuestionResponse(
+                uuid=str(q.uuid),
+                text=str(q.text),
+                status=str(q.status),
+                created_at=q.created_at,
+                updated_at=q.updated_at,
+                user_name=user_name,
+                message_count=len(q.dialog_messages),
+            )
+        )
+
     pages = (total + limit - 1) // limit if limit > 0 else 0
-    
+
     return QuestionsListResponse(
         questions=questions_data,
         total=total,
@@ -129,41 +138,40 @@ async def get_question_by_id(
     pharmacist: Pharmacist = Depends(get_current_pharmacist),
 ):
     """Get single question with full details and message history"""
-    
+
     try:
         question_uuid = uuid.UUID(question_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid question ID")
-    
+
     result = await db.execute(
         select(Question)
-        .options(
-            selectinload(Question.user),
-            selectinload(Question.messages)
-        )
+        .options(selectinload(Question.user), selectinload(Question.dialog_messages))
         .where(Question.uuid == question_uuid)
     )
-    
+
     question = result.scalar_one_or_none()
-    
+
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
-    
+
     # Format messages
     messages = []
     for msg in question.dialog_messages:
         sender_type = "user" if msg.sender_type == "user" else "pharmacist"
         sender_name = question.user.first_name if sender_type == "user" else "Фармацевт"
-        
-        messages.append({
-            "id": str(msg.uuid),
-            "text": msg.text,
-            "sender_type": sender_type,
-            "sender_name": sender_name,
-            "created_at": msg.created_at,
-            "message_type": msg.message_type,
-        })
-    
+
+        messages.append(
+            {
+                "id": str(msg.uuid),
+                "text": msg.text,
+                "sender_type": sender_type,
+                "sender_name": sender_name,
+                "created_at": msg.created_at,
+                "message_type": msg.message_type,
+            }
+        )
+
     return {
         "uuid": str(question.uuid),
         "text": question.text,
@@ -186,26 +194,23 @@ async def answer_question(
     pharmacist: Pharmacist = Depends(get_current_pharmacist),
 ):
     """Send answer to user's question"""
-    
+
     try:
         question_uuid = uuid.UUID(question_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid question ID")
-    
-    result = await db.execute(
-        select(Question).where(Question.uuid == question_uuid)
-    )
+
+    result = await db.execute(select(Question).where(Question.uuid == question_uuid))
     question = result.scalar_one_or_none()
-    
+
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
-    
+
     if question.status == "completed":
         raise HTTPException(
-            status_code=400, 
-            detail="Cannot answer to completed question"
+            status_code=400, detail="Cannot answer to completed question"
         )
-    
+
     # Create message in dialog history
     new_message = DialogMessage(
         question_id=question.uuid,
@@ -214,20 +219,20 @@ async def answer_question(
         message_type="answer",
         text=answer_data.text,
     )
-    
+
     db.add(new_message)
-    
+
     # Update question status
     question.status = "answered"
     question.updated_at = datetime.utcnow()
-    
+
     await db.commit()
-    
+
     # TODO: Send notification to user via Telegram Bot
     # This will be handled by background task or WebSocket
-    
+
     logger.info(f"Pharmacist {pharmacist.uuid} answered question {question_id}")
-    
+
     return {"message": "Answer sent successfully"}
 
 
@@ -238,27 +243,25 @@ async def complete_question(
     pharmacist: Pharmacist = Depends(get_current_pharmacist),
 ):
     """Complete/close consultation"""
-    
+
     try:
         question_uuid = uuid.UUID(question_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid question ID")
-    
-    result = await db.execute(
-        select(Question).where(Question.uuid == question_uuid)
-    )
+
+    result = await db.execute(select(Question).where(Question.uuid == question_uuid))
     question = result.scalar_one_or_none()
-    
+
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
-    
+
     question.status = "completed"
     question.updated_at = datetime.utcnow()
-    
+
     await db.commit()
-    
+
     logger.info(f"Pharmacist {pharmacist.uuid} completed question {question_id}")
-    
+
     return {"message": "Question completed"}
 
 
@@ -269,28 +272,26 @@ async def assign_question(
     pharmacist: Pharmacist = Depends(get_current_pharmacist),
 ):
     """Assign question to current pharmacist"""
-    
+
     try:
         question_uuid = uuid.UUID(question_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid question ID")
-    
-    result = await db.execute(
-        select(Question).where(Question.uuid == question_uuid)
-    )
+
+    result = await db.execute(select(Question).where(Question.uuid == question_uuid))
     question = result.scalar_one_or_none()
-    
+
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
-    
+
     question.taken_by = pharmacist.uuid
     question.status = "in_progress"
     question.updated_at = datetime.utcnow()
-    
+
     await db.commit()
-    
+
     logger.info(f"Pharmacist {pharmacist.uuid} assigned question {question_id}")
-    
+
     return {"message": "Question assigned successfully"}
 
 
@@ -300,12 +301,10 @@ async def get_unread_count(
     pharmacist: Pharmacist = Depends(get_current_pharmacist),
 ):
     """Get count of unread/new questions"""
-    
-    result = await db.execute(
-        select(func.count()).where(Question.status == "pending")
-    )
+
+    result = await db.execute(select(func.count()).where(Question.status == "pending"))
     count = result.scalar() or 0
-    
+
     return {"count": count}
 
 
@@ -315,44 +314,41 @@ async def get_consultation_stats(
     pharmacist: Pharmacist = Depends(get_current_pharmacist),
 ):
     """Get consultation statistics"""
-    
+
     # Pending count
     pending_result = await db.execute(
         select(func.count()).where(Question.status == "pending")
     )
     pending_count = pending_result.scalar() or 0
-    
+
     # In progress count
     in_progress_result = await db.execute(
         select(func.count()).where(Question.status == "in_progress")
     )
     in_progress_count = in_progress_result.scalar() or 0
-    
+
     # Completed today
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     completed_result = await db.execute(
         select(func.count()).where(
-            and_(
-                Question.status == "completed",
-                Question.created_at >= today_start
-            )
+            and_(Question.status == "completed", Question.created_at >= today_start)
         )
     )
     completed_today = completed_result.scalar() or 0
-    
+
     # Average response time (simplified - last 7 days)
     week_ago = datetime.utcnow() - timedelta(days=7)
     avg_time_result = await db.execute(
         select(func.avg(Question.answered_at - Question.created_at)).where(
             and_(
                 Question.status.in_(["answered", "completed"]),
-                Question.created_at >= week_ago
+                Question.created_at >= week_ago,
             )
         )
     )
     avg_time = avg_time_result.scalar()
     avg_response_time = (avg_time.total_seconds() / 60) if avg_time else 0
-    
+
     return ConsultationStats(
         pending_count=pending_count,
         in_progress_count=in_progress_count,
@@ -366,7 +362,7 @@ async def get_consultation_stats(
 async def update_online_status(
     online: bool = Body(..., embed=True),
     pharmacist: Pharmacist = Depends(get_current_pharmacist),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Update pharmacist online status"""
     pharmacist.is_online = online
@@ -386,16 +382,18 @@ class DialogMessageResponse(BaseModel):
     sender: str  # "pharmacist" or "user"
     text: str
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
 
-@router.get("/questions/{question_id}/dialog", response_model=List[DialogMessageResponse])
+@router.get(
+    "/questions/{question_id}/dialog", response_model=List[DialogMessageResponse]
+)
 async def get_dialog(
     question_id: str,
     pharmacist: Pharmacist = Depends(get_current_pharmacist),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Get dialog messages for a specific question"""
     # Verify pharmacist is assigned to this question
@@ -403,14 +401,14 @@ async def get_dialog(
         select(Question).where(Question.uuid == question_id)
     )
     question = question_result.scalar_one_or_none()
-    
+
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
-    
+
     # Check if pharmacist is assigned or can access this question
     if question.assigned_to != pharmacist.uuid and question.taken_by != pharmacist.uuid:
         raise HTTPException(status_code=403, detail="Not assigned to this question")
-    
+
     # Get dialog messages
     messages_result = await db.execute(
         select(DialogMessage)
@@ -418,7 +416,7 @@ async def get_dialog(
         .order_by(DialogMessage.created_at)
     )
     messages = messages_result.scalars().all()
-    
+
     return messages
 
 
@@ -427,35 +425,35 @@ async def send_message(
     question_id: str,
     data: SendMessageRequest,
     pharmacist: Pharmacist = Depends(get_current_pharmacist),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Send message in consultation dialog (from Web App)"""
     from main import app
-    
+
     # Verify pharmacist is assigned to this question
     question_result = await db.execute(
         select(Question).where(Question.uuid == question_id)
     )
     question = question_result.scalar_one_or_none()
-    
+
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
-    
+
     # Check assignment
     if question.assigned_to != pharmacist.uuid and question.taken_by != pharmacist.uuid:
         raise HTTPException(status_code=403, detail="Not assigned to this question")
-    
+
     # Save message to database
     msg = DialogMessage(
         question_id=question_id,
         sender="pharmacist",
         text=data.text,
-        created_at=datetime.utcnow()
+        created_at=datetime.utcnow(),
     )
     db.add(msg)
     await db.commit()
     await db.refresh(msg)
-    
+
     # Send message to user via Telegram bot
     try:
         bot = app.state.bot
@@ -463,17 +461,17 @@ async def send_message(
             select(User).where(User.uuid == question.user_id)
         )
         user = user_result.scalar_one_or_none()
-        
+
         if user and user.telegram_id:
             await bot.send_message(
                 chat_id=user.telegram_id,
                 text=f"💊 *Ответ фармацевта:*\n{data.text}",
-                parse_mode="Markdown"
+                parse_mode="Markdown",
             )
     except Exception as e:
         logger.error(f"Failed to send message to user via bot: {e}")
         # Don't fail the request if bot message fails
-    
+
     return msg
 
 
@@ -483,15 +481,15 @@ async def websocket_endpoint(
     websocket: WebSocket,
 ):
     """WebSocket connection for real-time consultation updates"""
-    
+
     await websocket.accept()
-    
+
     try:
         # Keep connection alive and handle messages
         while True:
             data = await websocket.receive_text()
             # Handle incoming messages if needed
             # For now, just keep connection alive
-            
+
     except WebSocketDisconnect:
         logger.info("Pharmacist WebSocket disconnected")
