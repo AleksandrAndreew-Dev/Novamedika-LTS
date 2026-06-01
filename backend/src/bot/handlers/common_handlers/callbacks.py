@@ -888,31 +888,19 @@ async def start_registration_callback(callback: CallbackQuery, state: FSMContext
     await state.clear()
     logger.info(f"State cleared for user {callback.from_user.id}")
 
-    if callback.message:
-        await callback.message.edit_text(
+    await callback.bot.send_message(
+        chat_id=callback.from_user.id,
+        text=(
             "📝 <b>Регистрация фармацевта</b>\n\n"
             "Введите секретное слово для регистрации:\n"
-            "(или нажмите «❌ Отмена регистрации» для отмены)",
-            parse_mode="HTML",
-            reply_markup=ReplyKeyboardMarkup(
-                keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]],
-                resize_keyboard=True,
-            ),
-        )
-    else:
-        await callback.bot.send_message(
-            chat_id=callback.from_user.id,
-            text=(
-                "📝 <b>Регистрация фармацевта</b>\n\n"
-                "Введите секретное слово для регистрации:\n"
-                "(или нажмите «❌ Отмена регистрации» для отмены)"
-            ),
-            parse_mode="HTML",
-            reply_markup=ReplyKeyboardMarkup(
-                keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]],
-                resize_keyboard=True,
-            ),
-        )
+            "(или нажмите «❌ Отмена регистрации» для отмены)"
+        ),
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="❌ Отмена регистрации")]],
+            resize_keyboard=True,
+        ),
+    )
     logger.info(f"Message sent to user {callback.from_user.id}")
 
     await state.set_state(RegistrationStates.waiting_secret_word)
