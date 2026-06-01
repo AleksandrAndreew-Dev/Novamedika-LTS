@@ -71,6 +71,36 @@ class BotManager:
     def get_dp(self) -> Dispatcher | None:
         return self.dp
 
+    async def reset(self):
+        """Сброс бота и FSM storage для auto-restart после /qa/drop"""
+        logger.warning("🔄 BotManager reset initiated — cleaning up FSM storage and bot instances")
+
+        # Закрываем FSM storage
+        if self._storage:
+            try:
+                redis_client = self._storage.redis
+                if redis_client:
+                    await redis_client.flushdb()
+                    logger.info("Redis FSM storage flushed (DB 1 cleared)")
+            except Exception as e:
+                logger.warning(f"Redis FSM flush error (non-critical): {e}")
+            try:
+                await self._storage.close()
+            except Exception as e:
+                logger.warning(f"FSM storage close error (non-critical): {e}")
+            self._storage = None
+
+        # Закрываем bot session
+        if self.bot:
+            try:
+                await self.bot.session.close()
+            except Exception as e:
+                logger.warning(f"Bot session close error (non-critical): {e}")
+            self.bot = None
+
+        self.dp = None
+        logger.warning("✅ BotManager reset complete — will reinitialize on next webhook")
+
     async def shutdown(self):
         if self.bot:
             await self.bot.session.close()

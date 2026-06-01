@@ -91,7 +91,7 @@ async def telegram_webhook(request: Request):
             # Поэтому мы не можем полагаться на return value для определения успешности обработки
             # aiogram сам логирует успешную обработку через "Update id=X is handled"
             logger.debug(f"Update {update.update_id} processed, result={result}")
-            
+
         except Exception as e:
             logger.error(
                 f"❌ Error processing update {update.update_id}: {e}", exc_info=True
@@ -226,7 +226,7 @@ def get_admin_api_keys():
 
 async def verify_admin_api_key(x_api_key: str = Header(..., alias="X-API-Key")):
     admin_keys = get_admin_api_keys()
-    
+
     if not admin_keys:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -241,9 +241,14 @@ async def verify_admin_api_key(x_api_key: str = Header(..., alias="X-API-Key")):
 
 @router.post("/qa/drop", summary="Очистка всей базы QA")
 async def drop_qa_database(
-    admin: bool = Depends(verify_admin_api_key), db: AsyncSession = Depends(get_db)
+    request: Request,
+    admin: bool = Depends(verify_admin_api_key),
+    db: AsyncSession = Depends(get_db),
 ):
     """Очистка всей базы QA (только для админов)"""
+    client_ip = request.client.host if request.client else "unknown"
+    logger.warning(f"⚠️ /qa/drop invoked from IP {client_ip}")
+
     try:
         # Отключаем внешние ключи (для PostgreSQL)
         await db.execute(text("SET session_replication_role = 'replica';"))
@@ -261,10 +266,20 @@ async def drop_qa_database(
         await db.execute(text("SET session_replication_role = 'origin';"))
         await db.commit()
 
+        logger.warning(
+            f"⚠️ /qa/drop completed — client: {client_ip}, "
+            f"tables: {cleared_tables}. "
+            f"Bot auto-restart scheduled."
+        )
+
+        # Auto-restart: сброс bot_manager (FSM storage, bot session, dispatcher)
+        await bot_manager.reset()
+
         return {
             "status": "success",
             "message": "QA database cleared successfully",
             "cleared_tables": cleared_tables,
+            "client_ip": client_ip,
         }
 
     except Exception as e:
@@ -427,21 +442,21 @@ async def check_webapp_consent(
 ):
     """
     Проверка статуса согласия пользователя при открытии WebApp из Telegram бота.
-    
+
     Этот endpoint вызывается фронтендом при инициализации Telegram WebApp
     для определения, нужно ли показывать модальное окно с запросом согласия
     на обработку данных в контексте WebApp (поиск лекарств, бронирование).
-    
+
     Логика:
-    1. Если пользователь дал согласие в боте (consent_privacy_policy = True) - 
+    1. Если пользователь дал согласие в боте (consent_privacy_policy = True) -
        считаем что согласие есть для базовых функций
     2. Но для WebApp с дополнительными функциями (бронирование с передачей телефона аптеке)
        может потребоваться отдельное подтверждение
-    
+
     Args:
         telegram_id: Telegram ID пользователя из initData
         first_name, last_name, username: Дополнительные данные пользователя
-        
+
     Returns:
         has_consent: Есть ли базовое согласие
         consent_privacy_policy: Статус согласия из БД
@@ -456,27 +471,27 @@ async def check_webapp_consent(
             last_name=request.last_name,
             telegram_username=request.username,
         )
-        
+
         # Проверяем статус согласия
         has_basic_consent = user.consent_privacy_policy if hasattr(user, 'consent_privacy_policy') else False
-        
+
         # Для WebApp с функцией бронирования требуется явное согласие
         # даже если есть базовое согласие из бота
         # Это связано с тем, что в WebApp обрабатываются дополнительные данные
         # (телефон для передачи аптеке)
         needs_additional_consent = not has_basic_consent
-        
+
         logger.info(
             f"WebApp consent check for telegram_id={request.telegram_id}: "
             f"has_consent={has_basic_consent}, needs_additional={needs_additional_consent}"
         )
-        
+
         return ConsentCheckResponse(
             has_consent=has_basic_consent,
             consent_privacy_policy=user.consent_privacy_policy if hasattr(user, 'consent_privacy_policy') else None,
             needs_webapp_consent=needs_additional_consent,
         )
-        
+
     except Exception as e:
         logger.error(f"Error checking WebApp consent: {e}", exc_info=True)
         raise HTTPException(
