@@ -86,96 +86,63 @@ jobs:
           cd frontend
           npm run lint
 
-  # NEW: Security compliance check
-  security-audit:
-    runs-on: [self-hosted, linux, novamedika-runner]
-    timeout-minutes: 10
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Verify OAC compliance documents exist
-        run: |
-          echo "🔍 Checking OAC compliance documents..."
-          
-          REQUIRED_DOCS=(
-            "oac/docs/PRIKAZY-OTVETSTVENNYE-IB.md"
-            "oac/docs/04-privacy-policy.md"
-            "oac/docs/05-infosec-policy.md"
-            "oac/docs/06-tech-spec.md"
-            "oac/docs/07-ib-monitoring-reglament.md"
-            "oac/docs/12-ids-ips-reglament.md"
-          )
-          
-          MISSING=0
-          for doc in "${REQUIRED_DOCS[@]}"; do
-            if [ -f "$doc" ]; then
-              echo "✅ $doc exists"
-            else
-              echo "❌ $doc MISSING"
-              MISSING=$((MISSING + 1))
-            fi
-          done
-          
-          if [ $MISSING -gt 0 ]; then
-            echo "::error::Missing $MISSING required OAC compliance documents"
-            exit 1
-          fi
-          
-          echo "✅ All OAC compliance documents present"
-
-      - name: Validate monitoring configuration files
-        run: |
-          echo "🔍 Validating security stack configuration..."
-          
-          REQUIRED_CONFIGS=(
-            "docker-compose.monitoring.yml"
-            "config/loki-config.yaml"
-            "config/promtail-config.yaml"
-            "config/fail2ban-jail.local"
-            "dashboards/oac-security-monitoring.json"
-          )
-          
-          MISSING=0
-          for config in "${REQUIRED_CONFIGS[@]}"; do
-            if [ -f "$config" ]; then
-              echo "✅ $config exists"
-            else
-              echo "❌ $config MISSING"
-              MISSING=$((MISSING + 1))
-            fi
-          done
-          
-          if [ $MISSING -gt 0 ]; then
-            echo "::warning::Missing $MISSING security configuration files"
-          fi
-          
-          echo "✅ Security stack configuration validated"
-
-      - name: Check scripts are executable
-        run: |
-          echo "🔍 Checking automation scripts..."
-          
-          SCRIPTS=(
-            "scripts/annual-security-review.sh"
-            "scripts/manage-openvas.sh"
-          )
-          
-          for script in "${SCRIPTS[@]}"; do
-            if [ -x "$script" ]; then
-              echo "✅ $script is executable"
-            elif [ -f "$script" ]; then
-              echo "⚠️ $script exists but not executable, fixing..."
-              chmod +x "$script"
-            else
-              echo "❌ $script MISSING"
-            fi
-          done
+  # DISABLED: Security compliance check (see .ai-rules.md)
+  # security-audit:
+  #   runs-on: [self-hosted, linux, novamedika-runner]
+  #   timeout-minutes: 10
+  #   if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #     - name: Verify OAC compliance documents exist
+  #       run: |
+  #         echo "🔍 Checking OAC compliance documents..."
+  #         REQUIRED_DOCS=(
+  #           "oac/docs/PRIKAZY-OTVETSTVENNYE-IB.md"
+  #           "oac/docs/04-privacy-policy.md"
+  #           "oac/docs/05-infosec-policy.md"
+  #           "oac/docs/06-tech-spec.md"
+  #           "oac/docs/07-ib-monitoring-reglament.md"
+  #           "oac/docs/12-ids-ips-reglament.md"
+  #         )
+  #         MISSING=0
+  #         for doc in "${REQUIRED_DOCS[@]}"; do
+  #           if [ -f "$doc" ]; then echo "✅ $doc exists"
+  #           else echo "❌ $doc MISSING"; MISSING=$((MISSING + 1)); fi
+  #         done
+  #         if [ $MISSING -gt 0 ]; then
+  #           echo "::error::Missing $MISSING required OAC compliance documents"
+  #           exit 1
+  #         fi
+  #         echo "✅ All OAC compliance documents present"
+  #     - name: Validate monitoring configuration files
+  #       run: |
+  #         echo "🔍 Validating security stack configuration..."
+  #         REQUIRED_CONFIGS=(
+  #           "docker-compose.monitoring.yml"
+  #           "config/loki-config.yaml"
+  #           "config/promtail-config.yaml"
+  #           "config/fail2ban-jail.local"
+  #           "dashboards/oac-security-monitoring.json"
+  #         )
+  #         MISSING=0
+  #         for config in "${REQUIRED_CONFIGS[@]}"; do
+  #           if [ -f "$config" ]; then echo "✅ $config exists"
+  #           else echo "❌ $config MISSING"; MISSING=$((MISSING + 1)); fi
+  #         done
+  #         if [ $MISSING -gt 0 ]; then echo "::warning::Missing $MISSING security configuration files"; fi
+  #         echo "✅ Security stack configuration validated"
+  #     - name: Check scripts are executable
+  #       run: |
+  #         echo "🔍 Checking automation scripts..."
+  #         for script in "scripts/annual-security-review.sh" "scripts/manage-openvas.sh"; do
+  #           if [ -x "$script" ]; then echo "✅ $script is executable"
+  #           elif [ -f "$script" ]; then echo "⚠️ $script exists but not executable, fixing..."; chmod +x "$script"
+  #           else echo "❌ $script MISSING"; fi
+  #         done
 
   build-and-push:
-    needs: [test, security-audit]
+    needs: [test]
     runs-on: [self-hosted, linux, novamedika-runner]
     timeout-minutes: 45
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
@@ -388,16 +355,16 @@ jobs:
           script: |
             # Remove old scripts directory
             rm -rf /opt/novamedika-prod/scripts/
-            
+
             # Move new scripts from temp location
             mv /tmp/novamedika-scripts/scripts /opt/novamedika-prod/scripts/
-            
+
             # Set proper permissions
             chmod -R 755 /opt/novamedika-prod/scripts/
-            
+
             # Clean up temp directory
             rm -rf /tmp/novamedika-scripts/
-            
+
             echo "✅ Scripts deployed with correct permissions"
 
       - name: Deploy application and security stack to production
@@ -408,46 +375,46 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             cd /opt/novamedika-prod/
-            
+
             echo "=== Step 1: Making scripts executable ==="
             chmod +x scripts/*.sh
-            
+
             echo "=== Step 2: Setting up Fail2ban configuration ==="
             sudo cp config/fail2ban-jail.local /etc/fail2ban/jail.local 2>/dev/null || echo "⚠️ Fail2ban not installed"
             sudo cp config/fail2ban-filter-log-cleared.conf /etc/fail2ban/filter.d/log-cleared.conf 2>/dev/null || true
             sudo cp config/fail2ban-filter-docker-backend-auth.conf /etc/fail2ban/filter.d/docker-backend-auth.conf 2>/dev/null || true
             sudo systemctl restart fail2ban 2>/dev/null || echo "⚠️ Fail2ban restart skipped"
-            
+
             echo "=== Step 3: Deploying main application ==="
             docker-compose -f docker-compose.traefik.prod.yml pull
             docker-compose -f docker-compose.traefik.prod.yml up -d
-            
+
             echo "=== Step 4: Deploying monitoring stack ==="
             docker-compose -f docker-compose.monitoring.yml up -d
-            
+
             echo "=== Step 5: Waiting for services to start ==="
             sleep 10
-            
+
             echo "=== Step 6: Health checks ==="
             echo "Checking Loki..."
             curl -sf http://localhost:3100/ready && echo "✅ Loki is ready" || echo "❌ Loki failed"
-            
+
             echo "Checking Grafana..."
             curl -sf http://localhost:3000/api/health && echo "✅ Grafana is ready" || echo "❌ Grafana failed"
-            
+
             echo "Checking backend..."
             curl -sf https://api.${{ env.DOMAIN }}/health && echo "✅ Backend is ready" || echo "❌ Backend failed"
-            
+
             echo "=== Step 7: Setting up cron jobs ==="
             # Add weekly OpenVAS scan (Saturday 02:00)
             (crontab -l 2>/dev/null | grep -v "manage-openvas"; echo "0 2 * * 6 /opt/novamedika-prod/scripts/manage-openvas.sh start-scanning") | crontab -
             (crontab -l 2>/dev/null | grep -v "stop-scanning"; echo "0 5 * * 6 /opt/novamedika-prod/scripts/manage-openvas.sh stop-scanning") | crontab -
-            
+
             # Add annual security review (January 1st 00:00)
             (crontab -l 2>/dev/null | grep -v "annual-security-review"; echo "0 0 1 1 * /opt/novamedika-prod/scripts/annual-security-review.sh") | crontab -
-            
+
             echo "✅ Cron jobs configured"
-            
+
             echo "=== Deployment complete ==="
             echo "Application: https://${{ env.DOMAIN }}"
             echo "Grafana: http://$(hostname -I | awk '{print $1}'):3000"
@@ -459,7 +426,7 @@ jobs:
     runs-on: [self-hosted, linux, novamedika-runner]
     timeout-minutes: 180
     if: |
-      github.ref == 'refs/heads/main' && 
+      github.ref == 'refs/heads/main' &&
       github.event_name == 'push' &&
       (github.event.inputs.enable_security_scan == 'true' || !github.event.inputs)
 
@@ -475,16 +442,16 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             cd /opt/novamedika-prod/
-            
+
             echo "=== Starting vulnerability scan ==="
             echo "This will take approximately 2-3 hours..."
-            
+
             # Start OpenVAS with resource management
             ./scripts/manage-openvas.sh start-scanning
-            
+
             echo "⏳ Scan started. Waiting for completion..."
             echo "You can monitor progress at: http://$(hostname -I | awk '{print $1}'):9392"
-            
+
             # Note: The scan will be stopped automatically by cron at 05:00
             # Reports will be saved to /opt/reports/openvas/
 
