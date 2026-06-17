@@ -1,14 +1,10 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import userAuthService from "../services/userAuthService";
 import telegramAuthService from "../services/telegramAuthService";
-import api from "../api/client";
 
 export default function Login() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [mode, setMode] = useState("login");
-  const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // Auto-login via Telegram WebApp if available
@@ -60,12 +56,6 @@ export default function Login() {
           <h1 className="text-2xl font-bold text-gray-900">НоваМедика</h1>
           <p className="text-gray-500 mt-1 text-sm">Справочная служба аптек</p>
         </div>
-
-        {error && (
-          <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
-            {error}
-          </div>
-        )}
 
         <p className="text-center text-gray-500 text-sm mb-6">
           Для входа используйте Telegram. Нажмите кнопку ниже, чтобы открыть бота.

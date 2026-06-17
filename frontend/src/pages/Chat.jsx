@@ -49,11 +49,11 @@ export default function Chat() {
     };
 
     initChat();
-  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [id]);
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [messages]);
 
   const getAuthHeaders = (inTelegram) => {
     const token = userAuthService.getAccessToken();

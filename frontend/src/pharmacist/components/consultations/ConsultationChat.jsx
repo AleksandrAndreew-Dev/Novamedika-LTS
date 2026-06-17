@@ -48,7 +48,7 @@ export default function ConsultationChat({
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [messages]);
 
   const handleSend = useCallback(async () => {
     if (!newMsg.trim() || !questionId) return;
@@ -83,18 +83,6 @@ export default function ConsultationChat({
       hour: "2-digit",
       minute: "2-digit",
     });
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return "";
-    const date = new Date(dateString);
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    if (date.toDateString() === today.toDateString()) return "Сегодня";
-    if (date.toDateString() === yesterday.toDateString()) return "Вчера";
-    return date.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
   };
 
   const scrollToBottom = () => {
