@@ -8,9 +8,9 @@
 **[НАИМЕНОВАНИЕ ОРГАНИЗАЦИИ]**
 (далее — Организация)
 
-**Версия:** 1.1
+**Версия:** 1.2
 **Дата вступления в силу:** «___» ____________ 20___ г.
-**Дата обновления:** 05 мая 2026 г. (в соответствии с требованиями Приказа ОАЦ №66 в редакции Приказа №259)
+**Дата обновления:** 08 июня 2026 г. (приведение в соответствие с фактической реализацией)
 
 ---
 
@@ -91,14 +91,66 @@
 - Docker resource limits — изоляция ресурсов контейнеров
 
 **Средства контроля целостности:**
-- HTTPS/TLS для контроля целостности передаваемых данных
-- Health checks для контроля работоспособности контейнеров
-- Мониторинг событий ИБ
+- HTTPS/TLS 1.3 для контроля целостности передаваемых данных (SSL Labs A+)
+- Health checks (Docker HEALTHCHECK, Traefik health endpoint)
+- Database constraints (UNIQUE, FOREIGN KEY, CHECK) для контроля целостности данных
+- SHA-256 checksums для резервных копий (scripts/backup.sh)
+- Мониторинг событий ИБ (см. [07-ib-monitoring-reglament.md](07-ib-monitoring-reglament.md))
 
 **Средства межсетевого экранирования:**
-- Traefik v3.6 — обратный прокси с маршрутизацией
+- Traefik v3.6 — обратный прокси с маршрутизацией и TLS-терминацией
 - Docker bridge network — сегментация внутренней сети
-- Security headers: CSP, HSTS, X-Frame-Options, XSS-Filter, Referrer-Policy
+- Security headers: CSP (frame-ancestors 'self' https://t.me https://web.telegram.org), HSTS (max-age=31536000, includeSubDomains, preload), X-Frame-Options=SAMEORIGIN, XSS-Filter, Referrer-Policy, Permissions-Policy
+- BasicAuth для Traefik dashboard (защита служебного интерфейса)
+- Slowapi rate limiting на backend (защита от brute-force)
+- CORS policy с whitelist origins
+
+**Средства мониторинга и аудита:**
+- **Audit middleware** (ackend/src/middleware/audit_middleware.py) — логирование обращений к ПД в таблицу udit_logs (требование ОАЦ п.2.1)
+- **Prometheus metrics** (/metrics endpoint) — REQUEST_COUNT, REQUEST_LATENCY, ACTIVE_REQUESTS (требование ОАЦ п.1.5)
+- Traefik Prometheus exporter (метрики инфраструктуры)
+- Health checks для всех контейнеров (Docker HEALTHCHECK, интервал 30s)
+- Логи контейнеров в JSON-формате (json-file driver, ротация max-size=10m, max-file=3)
+
+**Средства защиты от НСД (дополнение):**
+- Двухэтапная аутентификация фармацевтов: (1) Telegram ID + (2) REGISTRATION_SECRET_WORD
+- Маскирование полей ввода паролей (type=password, autocomplete=off)
+- Session timeout 30 мин для веб-приложения (React hook useSessionTimeout)
+- FSM timeout 15 мин для Telegram-бота
+- IP whitelist / rate limiting для админ-эндпоинтов
+
+### 4.3. Соответствие фактической реализации (по состоянию на 08.06.2026)
+
+| Компонент СЗИ | Реализация | Документация |
+|----------------|------------|--------------|
+| HTTPS/TLS | Traefik + Let's Encrypt, TLS 1.3, A+ | [02-structural-schema.md](02-structural-schema.md) |
+| JWT | PyJWT, access 30 мин + refresh 7 дней rotation | [06-tech-spec.md](06-tech-spec.md) п.4.2 |
+| Шифрование ПД | pgcrypto AES-256-CBC для phone, telegram_id | [10-encryption-policy.md](10-encryption-policy.md) |
+| Шифрование токенов | Fernet AES-128-CBC для API-токенов аптек | [10-encryption-policy.md](10-encryption-policy.md) |
+| RBAC | 3 роли: user/pharmacist/admin, RoleMiddleware | [06-tech-spec.md](06-tech-spec.md) п.3.1 |
+| Audit logging | AuditLoggingMiddleware + audit_logs | [07-ib-monitoring-reglament.md](07-ib-monitoring-reglament.md) |
+| Backup PostgreSQL | pg_dump, ежедневно 02:00, **365 дней** | [08-backup-reglament.md](08-backup-reglament.md) |
+| Backup логов | Архивирование 6 часов, **395 дней** | [07-ib-monitoring-reglament.md](07-ib-monitoring-reglament.md) |
+| Security headers | CSP, HSTS preload, X-Frame-Options, XSS, Permissions | docker-compose.traefik.prod.yml |
+| Prometheus метрики | /metrics endpoint | [06-tech-spec.md](06-tech-spec.md) п.2.1 |
+| Container isolation | Non-root (UID 100/999/1000), cgroups v2 | docker-compose.traefik.prod.yml |
+| Network isolation | Docker bridge networks, Traefik exposed | docker-compose.traefik.prod.yml |
+| Rate limiting | Slowapi API + Traefik middleware | backend/src/main.py |
+| 2FA фармацевтов | Telegram ID + REGISTRATION_SECRET_WORD | backend/src/auth/ |
+| Session timeout | 30 мин веб + 15 мин бот | frontend + bot handlers |
+
+
+### 4.4. Распределение ответственности (с учётом работ, передаваемых хостеру)
+
+Часть работ по подготовке инфраструктуры к аттестации передана хостинг-провайдеру. Детальное распределение см. в [planning/HOSTER-DIVISION-OF-WORK.md](../planning/HOSTER-DIVISION-OF-WORK.md).
+
+**Краткое распределение зон ответственности:**
+
+- **ХОСТЕР (10 направлений):** SIEM, система резервного копирования, Active Directory, система логирования (ELK), сетевые устройства/МЭ, NTP, виртуализация, антивирус, интеграция СЗИ, помощь в устранении уязвимостей
+- **Наша команда:** вся прикладная безопасность (шифрование, сессии, RBAC, audit), документация, тестирование (OWASP ZAP, pentest), аттестация, подача в ОАЦ
+- **СОВМЕСТНО:** централизованное логирование, мониторинг ИБ, схемы (структурная/логическая), NTP-синхронизация
+
+**Координация:** kickoff-встречи с хостером (5 точек синхронизации) согласно HOSTER-DIVISION-OF-WORK.md.
 
 ### 4.2. Организационные меры
 
@@ -147,7 +199,14 @@
 | Компрометация криптографических ключей | Прекращение использования, перевыпуск | Администратор | Немедленно |
 | Нарушение политики ИБ | Расследование, устранение нарушений | Ответственный за защиту | В течение 5 рабочих дней |
 
-### 6.2. Порядок управления учётными записями
+### 6.2. Порядок управления учётными записями (детализировано)
+
+- **Создание учётной записи фармацевта:** через Telegram-бот с двухэтапной верификацией (Telegram ID + REGISTRATION_SECRET_WORD)
+- **Создание учётной записи администратора:** по приказу руководителя Организации
+- **Аутентификация:** JWT (access token 30 мин + refresh token 7 дней с rotation и отзыванием в БД), bcrypt для хэширования паролей
+- **Блокировка:** при увольнении, нарушении правил, неактивности > 90 дней, а также автоматически при попытках brute-force (slowapi)
+- **Удаление:** по истечении 1 года после блокировки, либо по запросу субъекта ПД (GDPR-compliant API endpoints)
+- **Контроль паролей:** API-ключи аптек — минимум 16 символов, генерация через secrets.token_urlsafe(32). Пользовательские пароли — минимум 8 символов, принудительная смена каждые 90 дней (запланировано Q2 2026)
 
 - Создание учётной записи — по приказу руководителя или через процедуру регистрации
 - Блокировка — при увольнении, нарушении правил, неактивности более 90 дней
@@ -157,7 +216,8 @@
 ### 6.3. Порядок обновления программного обеспечения
 
 - Обновление Docker-образов — через CI/CD pipeline (GitHub Actions)
-- Обновление зависимостей — еженедельная проверка (Dependabot)
+- Обновление зависимостей Python: ручной контроль (uv.lock) + Dependabot для security-обновлений
+- Обновление зависимостей JS: Dependabot для npm (package-lock.json)
 - Тестирование обновлений перед внедрением в production
 - Контроль своевременности — ответственный администратор
 
@@ -275,19 +335,19 @@
 
 ## 10. ПОРЯДОК ВНЕСЕНИЯ ИЗМЕНЕНИЙ В ПОЛИТИКУ
 
-9.1. Изменения в настоящую Политику вносятся решением руководителя Организации.
+10.1. Изменения в настоящую Политику вносятся решением руководителя Организации.
 
-9.2. При изменении целей защиты информации, обязательств или принципов — новая версия доводится до сведения работников в части, их касающейся.
+10.2. При изменении целей защиты информации, обязательств или принципов — новая версия доводится до сведения работников в части, их касающейся.
 
-9.3. Настоящая Политика пересматривается не реже одного раза в год.
+10.3. Настоящая Политика пересматривается не реже одного раза в год.
 
 ---
 
 ## 11. ЗАКЛЮЧИТЕЛЬНЫЕ ПОЛОЖЕНИЯ
 
-10.1. Настоящая Политика вступает в силу с даты её утверждения руководителем Организации.
+11.1. Настоящая Политика вступает в силу с даты её утверждения руководителем Организации.
 
-10.2. Настоящая Политика действует бессрочно до её замены новой редакцией.
+11.2. Настоящая Политика действует бессрочно до её замены новой редакцией.
 
 10.3. Ответственный за обеспечение защиты информации:
 
@@ -310,6 +370,8 @@ _______________ / [ФИО]
 «___» ____________ 20___ г.
 
 ---
+
+*Связанные документы: [HOSTER-DIVISION-OF-WORK.md](../planning/HOSTER-DIVISION-OF-WORK.md), [oac-compliance-checklist.md](../planning/oac-compliance-checklist.md), [10-encryption-policy.md](10-encryption-policy.md), [08-backup-reglament.md](08-backup-reglament.md), [07-ib-monitoring-reglament.md](07-ib-monitoring-reglament.md), [06-tech-spec.md](06-tech-spec.md).*
 
 *Документ составлен в соответствии с:*
 - *Законом Республики Беларусь №99-З «О защите персональных данных» от 07.05.2021*

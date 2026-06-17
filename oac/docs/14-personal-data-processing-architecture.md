@@ -670,7 +670,6 @@ await bot.set_webhook(
    
    Варианты:
    - OWASP ZAP (бесплатно, автоматизированно)
-   - Внешний аудит ($1000-5000)
    
    Фокус areas:
    - SQL injection

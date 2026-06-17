@@ -13,20 +13,20 @@
   - Validates privacy policy consent
   - Encrypts email and phone before storage
   - Hashes password using bcrypt
-  
+
 - ✅ `POST /api/auth/login/` - User login with credentials
   - Rate limit: 10 requests/minute
   - Supports both email and phone login
   - Returns JWT access token (30 min) and refresh token (7 days)
-  
+
 - ✅ `POST /api/auth/refresh/` - Refresh JWT token
   - Rate limit: 20 requests/minute
   - Invalidates old refresh token
   - Issues new access and refresh tokens
-  
+
 - ✅ `POST /api/auth/logout/` - Logout and invalidate tokens
   - Marks refresh token as inactive in database
-  
+
 - ✅ `GET /api/auth/me/` - Get current user profile
   - Requires valid JWT access token
   - Returns user information (email, phone, name, etc.)
@@ -54,22 +54,22 @@ All endpoints require JWT authentication via `get_current_user_jwt()` dependency
 - ✅ `POST /api/consultations/` - Create new consultation
   - Request body: `{text, category?, context_data?}`
   - Returns created consultation with status "pending"
-  
+
 - ✅ `GET /api/consultations/` - List user's consultations
   - Query params: `status_filter?`, `page=1`, `limit=20`
   - Returns paginated list of consultations with answers
-  
+
 - ✅ `GET /api/consultations/{id}` - Get consultation details
   - Includes full question, answers, and dialog messages
   - Security: Only returns consultations belonging to authenticated user
-  
+
 - ✅ `GET /api/consultations/stats` - Get consultation statistics
   - Returns: `{total_count, pending_count, answered_count, completed_count}`
-  
+
 - ✅ `GET /api/consultations/{id}/messages` - Get messages for consultation
   - Returns chronological message history
   - Excludes deleted messages
-  
+
 - ✅ `POST /api/consultations/{id}/messages` - Send message
   - Creates new dialog message
   - Reopens consultation if status was "answered" or "completed"
@@ -119,15 +119,11 @@ Token storage:
 
 ### 2. Login Page
 
-**File**: `frontend/src/pages/Login.jsx`
+
 
 Features:
-- Email input field
-- Phone input field (alternative to email)
-- Password input field
-- "Login" button with loading state
-- "Login with Telegram" button (placeholder for OAuth)
-- Link to registration page
+ - Auto redirect to `/dashboard` on success -
+ use auto telegram data if needed
 - Error handling with toast notifications
 - Redirect to `/dashboard` on success
 - Beautiful gradient UI with responsive design
@@ -204,30 +200,30 @@ Added routes:
 
 1. **Registration**:
    ```
-   User fills form → POST /api/auth/register/ → 
-   Backend validates & hashes password → Stores encrypted data → 
+   User do not needed to fills form → POST /api/auth/register/ →
+   Backend validates & hashes password → Stores encrypted data →
    Returns user profile
    ```
 
 2. **Login**:
    ```
-   User enters credentials → POST /api/auth/login/ → 
-   Backend verifies password → Generates JWT tokens → 
-   Stores refresh token in DB → Returns tokens → 
+
+   Backend verifies password → Generates JWT tokens →
+   Stores refresh token in DB → Returns tokens →
    Frontend stores in localStorage
    ```
 
 3. **API Requests**:
    ```
-   Frontend adds Authorization: Bearer <token> → 
-   Backend validates JWT → get_current_user_jwt() returns User → 
+   Frontend adds Authorization: Bearer <token> →
+   Backend validates JWT → get_current_user_jwt() returns User →
    Process request → Return response
    ```
 
 4. **Token Refresh**:
    ```
-   API returns 401 → Frontend calls POST /api/auth/refresh/ → 
-   Backend validates refresh token → Issues new tokens → 
+   API returns 401 → Frontend calls POST /api/auth/refresh/ →
+   Backend validates refresh token → Issues new tokens →
    Frontend retries original request
    ```
 

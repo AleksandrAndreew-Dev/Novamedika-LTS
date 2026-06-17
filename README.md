@@ -11,22 +11,34 @@ Full-stack приложение (FastAPI + React) с интеграцией Tele
 
 ## 📂 Структура проекта
 
+> **Обновлено 8 июня 2026 г.** — проведена реорганизация документации в соответствии с `oac/DOCUMENTS-ORGANIZATION-RULES.md`. Подробности в [`oac/CHANGELOG.md`](oac/CHANGELOG.md) и [`oac/dop/DOCUMENTS-ORGANIZATION-PLAN-2026-06-08.md`](oac/dop/DOCUMENTS-ORGANIZATION-PLAN-2026-06-08.md).
+
 - `backend/` — Серверная часть, логика бота и фоновые задачи. Использует `uv`.
 - `frontend/` — Клиентская часть на React.
-- `oac/` — **Документация и политики для аттестации ОАЦ РБ (Класс 3-ин)**
-  - `docs/` — 13 документов compliance (01-act-class-3in.md ... 13-vuln-scan-reglament.md)
-  - `guides/` — Руководства и инструкции для персонала
-  - `audits/` — Отчеты об аудитах и проверках
-  - `planning/` — Планы и дорожные карты
-  - `requirements/` — Детализированные требования
-  - `DOCUMENTS-ORGANIZATION-RULES.md` — Правила организации документов
-  - `QUICK-REFERENCE.md` — Шпаргалка для быстрого доступа
-- `origin-docs/` — **Оригинальные нормативные документы**
-  - `449.md` — Указ Президента № 449
-  - `195.md` — Приказ ОАЦ № 195
-  - `zakon 99-3.pdf` — Закон № 99-З
-  - `NORMATIVNYE-DOKUMENTY-REGISTER.md` — Полный реестр с анализом
-- `traefic/` — Конфигурация динамического роутинга и сертификатов.
+- `oac/` — **Документация и политики для аттестации ОАЦ РБ (Класс 3-ин)** — [карта документов](oac/README.md)
+  - `oac/docs/` — 15 документов compliance (01-act-class-3in.md ... 15-cookie-policy.md)
+  - `oac/audits/` — Отчёты об аудитах и проверках
+  - `oac/architecture/` — Архитектурные решения (ADR)
+  - `oac/guides/` — Пошаговые руководства и инструкции
+  - `oac/planning/` — Планы, чек-листы, дорожные карты
+  - `oac/requirements/` — Детализированные требования
+  - `oac/dop/` — Дополнительные документы (чеклисты, приказы, шаблоны)
+  - `oac/dop/drafts/` — Рабочие черновики
+  - `oac/telegram/` — Специфика Telegram-бота (трансграничная передача)
+  - `oac/DOCUMENTS-ORGANIZATION-RULES.md` — Правила организации документов
+  - `oac/QUICK-REFERENCE.md` — Шпаргалка для быстрого доступа
+  - `oac/CHANGELOG.md` — Журнал изменений
+- `origin-docs/` — **Оригинальные тексты** законов, указов, приказов и разъяснений НЦЗПД
+  - `66.md`, `99-3n.md`, `422.md`, `449.md`, `455-3.md` — основные нормативные акты
+  - `NORMATIVNYE-DOKUMENTY-REGISTER.md` — реестр документов с анализом
+  - `nczpd-*.md` — разъяснения НЦЗПД
+  - `pd-policy-clinic-template.md` — шаблон политики для медучреждений
+- `docs/` — **Общая проектная документация** (НЕ про ОАЦ): AI-гайды, конфигурация, безопасность
+- `skills/` — Скиллы для AI-агентов
+- `scripts/` — Скрипты автоматизации
+- `config/` — Конфигурации мониторинга (Prometheus, Grafana, Loki, Promtail, Fail2ban)
+- `dashboards/` — Дашборды Grafana
+- `traefic/` — Конфигурация Traefik
 - `uploaded_csv/` — Хранилище данных для синхронизации аптек.
 
 ## 🛠 Разработка и Workflow
@@ -69,21 +81,27 @@ npm run prod:restart # Перезапуск всех контейнеров
 
 | Документ | Описание | Ссылка |
 |----------|----------|--------|
-| **Нормативная база** | Законы, указы, приказы ОАЦ | [origin-docs/](origin-docs/) |
-| **Реестр документов** | Полный реестр с анализом | [NORMATIVNYE-DOKUMENTY-REGISTER.md](origin-docs/NORMATIVNYE-DOKUMENTY-REGISTER.md) |
-| **Документы compliance** | 13 документов для аттестации | [oac/docs/](oac/docs/) |
-| **Руководства** | Инструкции для персонала | [oac/guides/](oac/guides/) |
-| **Правила организации** | Как работать с документами ОАЦ | [DOCUMENTS-ORGANIZATION-RULES.md](oac/DOCUMENTS-ORGANIZATION-RULES.md) |
-| **Шпаргалка** | Быстрый справочник | [QUICK-REFERENCE.md](oac/QUICK-REFERENCE.md) |
-| **Журнал изменений** | История обновлений | [CHANGELOG.md](oac/CHANGELOG.md) |
+| **Нормативная база** | Законы, указы, приказы ОАЦ | [`origin-docs/`](origin-docs/) |
+| **Реестр документов** | Полный реестр с анализом | [`origin-docs/NORMATIVNYE-DOKUMENTY-REGISTER.md`](origin-docs/NORMATIVNYE-DOKUMENTY-REGISTER.md) |
+| **Документы compliance** | 15 документов для аттестации | [`oac/docs/`](oac/docs/) |
+| **Руководства** | Инструкции для персонала | [`oac/guides/`](oac/guides/) |
+| **Архитектура** | ADR и тех. решения | [`oac/architecture/`](oac/architecture/) |
+| **Аудиты** | Отчёты о проверках | [`oac/audits/`](oac/audits/) |
+| **Telegram-специфика** | Трансграничная передача | [`oac/telegram/`](oac/telegram/) |
+| **Правила организации** | Как работать с документами ОАЦ | [`oac/DOCUMENTS-ORGANIZATION-RULES.md`](oac/DOCUMENTS-ORGANIZATION-RULES.md) |
+| **Шпаргалка** | Быстрый справочник | [`oac/QUICK-REFERENCE.md`](oac/QUICK-REFERENCE.md) |
+| **Журнал изменений** | История обновлений | [`oac/CHANGELOG.md`](oac/CHANGELOG.md) |
+| **Проектная документация** | AI-гайды, конфигурация | [`docs/`](docs/) |
 
 ### 💡 Ключевые документы
 
 - **Политика конфиденциальности:** [`oac/docs/04-privacy-policy.md`](oac/docs/04-privacy-policy.md)
+- **Cookie политика:** [`oac/docs/15-cookie-policy.md`](oac/docs/15-cookie-policy.md)
 - **Техническое задание на СЗИ:** [`oac/docs/06-tech-spec.md`](oac/docs/06-tech-spec.md)
 - **Политика шифрования:** [`oac/docs/10-encryption-policy.md`](oac/docs/10-encryption-policy.md)
 - **Руководство по шифрованию:** [`oac/guides/ENCRYPTION-IMPLEMENTATION-GUIDE.md`](oac/guides/ENCRYPTION-IMPLEMENTATION-GUIDE.md)
-- **Продакшн шифрование:** [`oac/docs/PRODUCTION-DEPLOYMENT-ENCRYPTION.md`](oac/docs/PRODUCTION-DEPLOYMENT-ENCRYPTION.md)
+- **Аудит ПД (актуальный):** [`oac/audits/audit-personal-data-2026-06-08.md`](oac/audits/audit-personal-data-2026-06-08.md)
+- **Анализ трансграничной передачи Telegram:** [`oac/requirements/transboundary-transfer-telegram-analysis-2026-05-20.md`](oac/requirements/transboundary-transfer-telegram-analysis-2026-05-20.md)
 
 ### 🛠️ Инструменты проверки
 
@@ -91,8 +109,6 @@ npm run prod:restart # Перезапуск всех контейнеров
 # Проверить наличие всех нормативных документов
 py oac/check_normative_docs.py
 ```
-
-
 
 ### 🗓️ Дорожная карта аттестации (9 недель)
 
@@ -108,9 +124,10 @@ py oac/check_normative_docs.py
 
 ## 📚 Дополнительная документация
 
-- [Архитектура системы](docs/architecture.md) *(если существует)*
-- [API Documentation](backend/docs/) *(если существует)*
-- [Contributing Guidelines](CONTRIBUTING.md) *(если существует)*
+- [Проектная документация](docs/README.md) — AI-гайды, конфигурация
+- [Скиллы для AI-агентов](skills/README.md) — специализированные инструкции
+- [Скрипты автоматизации](scripts/README.md) — backup, ZAP, мониторинг
+- [Архитектурные решения](oac/architecture/README.md) — ADR
 
 ---
 
@@ -131,4 +148,4 @@ py oac/check_normative_docs.py
 
 ---
 
-**Последнее обновление:** 21 апреля 2026 г.
+**Последнее обновление:** 8 июня 2026 г. (реорганизация документации)

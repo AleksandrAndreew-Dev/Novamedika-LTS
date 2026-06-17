@@ -264,7 +264,6 @@ Novamedika2/
 | Keyword search in docs | ~3,000 | 5x/day | 450,000 |
 | **Total** | | | **~2,400,000** |
 
-**Estimated monthly savings: 2-3 million tokens** (~$60-90 USD at current rates)
 
 ---
 
@@ -490,7 +489,6 @@ Done
 ### What We Achieved:
 
 ✅ **Faster Navigation** - Quick access to key information  
-✅ **Token Savings** - Estimated 2-3M tokens/month ($60-90 USD)  
 ✅ **Quality Maintained** - No compromise on standards  
 ✅ **Compliance Ensured** - OAC requirements built-in  
 ✅ **Consistency** - Systematic approach to all tasks  

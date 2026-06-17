@@ -324,7 +324,6 @@ grep_code(include_pattern="oac/docs/*.md", regex="encryption.*personal.*data")
 | Keyword search in docs | ~3000 | 5x/day | 450,000 |
 | **Total** | | | **~2,400,000** |
 
-**Estimated monthly token savings: 2-3 million tokens** (~$60-90 USD at current rates)
 
 ---
 

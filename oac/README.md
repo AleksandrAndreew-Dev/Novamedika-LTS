@@ -1,211 +1,233 @@
-# NovaMedika2 - Соответствие требованиям ОАЦ
+# 🛡️ NovaMedika2 — Документация ОАЦ compliance
 
-Эта папка содержит всю документацию, необходимую для соответствия требованиям Оперативно-аналитического центра (ОАЦ) при Президенте Республики Беларусь и Закона №99-З «О защите персональных данных».
-
----
-
-## 📜 Правила организации документов
-
-**Важно:** Перед добавлением новых документов ознакомьтесь с правилами:
-👉 [`DOCUMENTS-ORGANIZATION-RULES.md`](DOCUMENTS-ORGANIZATION-RULES.md)
-
-Кратко:
-- **origin-docs/** - оригинальные тексты законов и приказов
-- **oac/docs/** - документы compliance проекта (01-14)
-- **oac/audits/** - отчеты об аудитах и проверках
-- **oac/guides/** - руководства и инструкции для персонала
-- **oac/planning/** - планы и дорожные карты
-- **oac/requirements/** - детализированные требования
-- **oac/dop/** - дополнительная документация
-
-**Последнее обновление структуры:** 4 мая 2026 г. - реорганизация документации, удаление устаревших файлов
+**Навигатор по документам проекта.**
+Для быстрого старта используй [QUICK-REFERENCE.md](QUICK-REFERENCE.md).
 
 ---
 
-## 📂 Структура документации
+## 🗺️ Карта документов
 
 ```
-oac/
-├── README.md                          # Этот файл - навигация
-├── oac.md                             # Приказ ОАЦ №66 (полный текст)
-├── personal1.md                       # Закон РБ №99-З
+oac/                            ← Корень всей compliance-документации
+├── README.md                   ← Ты здесь (карта документов)
+├── QUICK-REFERENCE.md          ← Шпаргалка "куда что сохранять"
+├── CHANGELOG.md                ← Журнал всех изменений
+├── DOCUMENTS-ORGANIZATION-RULES.md  ← Правила организации документов
 │
-├── requirements/                      # Требования и планы
-│   ├── oac-requirements.md           # Полные требования ОАЦ к системе
-│   └── oac-sprint.md                 # План спринтов по внедрению
+├── docs/                       ← Основные документы compliance (01-15)
+├── architecture/               ← Архитектурные решения (ADR)
+├── audits/                     ← Отчёты об аудитах и проверках
+├── guides/                     ← Инструкции и руководства
+├── planning/                   ← Планы и дорожные карты
+├── requirements/               ← Детализированные требования
+├── telegram/                   ← Специфика Telegram-бота в контексте ОАЦ
+├── dop/                        ← Дополнительные материалы
+│   └── drafts/                 ← Черновики (не финальные)
 │
-├── audits/                            # Аудиты и анализы
-│   ├── OAC-COMPLIANCE-AUDIT-2026-05-04.md  # Последний полный аудит
-│   ├── OAC-COMPLIANCE-PROGRESS-TRACKER.md  # Трекер прогресса
-│   └── OAC-COMPLIANCE-ACTION-CHECKLIST.md  # Чек-лист действий
-│
-├── guides/                            # Руководства и инструкции
-│   ├── CONSENT-CHECKBOXES-IMPLEMENTATION.md    ← НОВОЕ: Реализация чекбоксов согласия
-│   ├── CONSENT-MODAL-TROUBLESHOOTING.md        ← НОВОЕ: Диагностика модального окна
-│   ├── TELEGRAM-WEB-CONSENT-GUIDE.md           ← НОВОЕ: Согласия в Telegram и Web
-│   ├── QUICK-START-SECURITY.md       # Быстрый старт: настройка безопасности
-│   ├── ENCRYPTION-*.md               # Все гайды по шифрованию
-│   ├── OAC-FREE-SOLUTIONS*.md        # Бесплатные решения для compliance
-│   └── FRONTEND-IMPROVEMENTS-ROADMAP.md  # Дорожная карта улучшений фронтенда
-│
-├── planning/                          # Планирование и отслеживание
-│   ├── oac-compliance-checklist.md   # Интерактивный чек-лист (115 задач)
-│   ├── OAC-VISUAL-PROGRESS.md        # Визуальный dashboard прогресса
-│   └── OAC-AUDIT-SUMMARY-FOR-TEAM.md # Документ для команды
-│
-├── dop/                               # Дополнительная документация
-│   ├── NORMATIVNYE-DOKUMENTY-REGISTER.md  # Реестр нормативных документов
-│   ├── REQUIRED-DOCUMENTS-FOR-COMPLIANCE.md # Требуемые документы
-│   └── PRIKAZ-195-ANALYSIS-TEMPLATE.md      # Шаблон анализа приказа 195
-│
-├── checklist/                         # Чек-листы
-│   └── checklist.md
-│
-└── docs/                              # Шаблоны документов для ОАЦ
-    ├── 01-act-class-3in.md           # Акт отнесения к классу 3-ин
-    ├── 02-structural-schema.md       # Структурная схема системы
-    ├── 03-logical-schema.md          # Логическая схема системы
-    ├── 04-privacy-policy.md          # Политика обработки ПД
-    ├── 05-infosec-policy.md          # Политика информационной безопасности
-    ├── 06-tech-spec.md               # Техническое задание на СЗИ
-    ├── 07-ib-monitoring-reglament.md # Регламент мониторинга ИБ
-    ├── 08-backup-reglament.md        # Регламент резервного копирования
-    ├── 09-data-retention-reglament.md# Регламент хранения данных
-    ├── 10-encryption-policy.md       # Политика шифрования
-    ├── 11-antivirus-reglament.md     # Регламент антивирусной защиты
-    ├── 12-ids-ips-reglament.md       # Регламент IDS/IPS
-    ├── 13-vuln-scan-reglament.md     # Регламент сканирования уязвимостей
-    └── 14-personal-data-processing-architecture.md  ← НОВОЕ: Архитектура обработки ПД
+└── oac.md                      ← Полный текст Приказа ОАЦ №66
 ```
 
 ---
 
-## 🎯 Быстрый старт
+## 📂 Что где лежит
 
-### Для руководителей и менеджеров:
+### 1️⃣ `oac/docs/` — Основные документы compliance (01-15)
 
-1. **[audits/OAC-COMPLIANCE-AUDIT-2026-05-04.md](audits/OAC-COMPLIANCE-AUDIT-2026-05-04.md)** - Последний полный аудит системы
-2. **[audits/OAC-COMPLIANCE-ACTION-CHECKLIST.md](audits/OAC-COMPLIANCE-ACTION-CHECKLIST.md)** - Чек-лист необходимых действий
-3. **[planning/OAC-VISUAL-PROGRESS.md](planning/OAC-VISUAL-PROGRESS.md)** - Визуальный dashboard готовности
+**Ядро аттестации.** Нумерованные документы, которые непосредственно проверяет ОАЦ.
 
-### Для технических специалистов:
-
-1. **[guides/QUICK-START-SECURITY.md](guides/QUICK-START-SECURITY.md)** - Пошаговая инструкция по настройке безопасности (15-20 мин)
-2. **[guides/ENCRYPTION-QUICK-START.md](guides/ENCRYPTION-QUICK-START.md)** - Быстрая настройка шифрования
-3. **[docs/14-personal-data-processing-architecture.md](docs/14-personal-data-processing-architecture.md)** - Архитектура обработки персональных данных
-
-### Для разработчиков (согласия на обработку ПД):
-
-1. **[guides/TELEGRAM-WEB-CONSENT-GUIDE.md](guides/TELEGRAM-WEB-CONSENT-GUIDE.md)** - Реализация согласий в Telegram боте и Web интерфейсе
-2. **[guides/CONSENT-CHECKBOXES-IMPLEMENTATION.md](guides/CONSENT-CHECKBOXES-IMPLEMENTATION.md)** - Технические детали реализации чекбоксов
-3. **[guides/CONSENT-MODAL-TROUBLESHOOTING.md](guides/CONSENT-MODAL-TROUBLESHOOTING.md)** - Диагностика проблем с модальным окном
-
-### Для работы с документами ОАЦ:
-
-1. **[requirements/oac-requirements.md](requirements/oac-requirements.md)** - Полные требования ОАЦ к системе
-2. **[docs/](docs/)** - Шаблоны 13 обязательных документов
-3. **[oac.md](oac.md)** - Приказ ОАЦ №66 (полный текст закона)
+| №  | Файл | О чём |
+|----|------|-------|
+| 01 | `01-act-class-3in.md` | Акт отнесения к классу защиты 3-ин |
+| 02 | `02-structural-schema.md` | Структурная схема ИС |
+| 03 | `03-logical-schema.md` | Логическая схема ИС |
+| 04 | `04-privacy-policy.md` | Политика обработки персональных данных |
+| 05 | `05-infosec-policy.md` | Политика информационной безопасности |
+| 06 | `06-tech-spec.md` | Техническое задание на СЗИ |
+| 07 | `07-ib-monitoring-reglament.md` | Регламент мониторинга ИБ |
+| 08 | `08-backup-reglament.md` | Регламент резервного копирования |
+| 09 | `09-data-retention-reglament.md` | Регламент хранения данных |
+| 10 | `10-encryption-policy.md` | Политика шифрования |
+| 11 | `11-antivirus-reglament.md` | Регламент антивирусной защиты |
+| 12 | `12-ids-ips-reglament.md` | Регламент IDS/IPS |
+| 13 | `13-vuln-scan-reglament.md` | Регламент сканирования уязвимостей |
+| 14 | `14-personal-data-processing-architecture.md` | Архитектура обработки ПД |
+| 15 | `15-cookie-policy.md` | Политика использования cookie |
 
 ---
 
-## 📊 Текущий статус готовности
+### 2️⃣ `oac/architecture/` — Архитектурные решения (ADR)
 
-**Общая готовность к аттестации:** **45%** → **95%+** (план после реализации)
+Документы, описывающие архитектурные решения, влияющие на ОАЦ-compliance.
 
-### По категориям:
-
-| Категория | Готовность | Документ |
-|-----------|------------|----------|
-| **Анализ требований** | 100% ✅ | [requirements/oac-requirements.md](requirements/oac-requirements.md) |
-| **Аудит системы** | 100% ✅ | [audits/oac-audit.md](audits/oac-audit.md) |
-| **Политика ПД** | 85% ⚠️ | [audits/PRIVACY-POLICY-AUDIT.md](audits/PRIVACY-POLICY-AUDIT.md) |
-| **Шифрование** | 100% ✅ | [audits/OAC-ENCRYPTION-ANALYSIS.md](audits/OAC-ENCRYPTION-ANALYSIS.md) |
-| **Инфраструктура** | 60% ⚠️ | [guides/QUICK-START-SECURITY.md](guides/QUICK-START-SECURITY.md) |
-| **Документация ОАЦ** | 20% ❌ | [docs/](docs/) |
-| **Тестирование** | 0% ❌ | [guides/OAC-FREE-SOLUTIONS.md](guides/OAC-FREE-SOLUTIONS.md) |
+| Файл | Описание |
+|------|----------|
+| `PRESCRIPTION-PHOTO-ARCHITECTURE-SOLUTION.md` | Архитектурное решение по загрузке фото рецептов |
+| `PRESCRIPTION-PHOTO-SOLUTION-SUMMARY.md` | Сводка решения по фото рецептов |
+| `SIMPLIFIED-PRESCRIPTION-ARCHITECTURE.md` | Упрощённая архитектура для рецептов |
+| `WEB-APP-CHAT-ARCHITECTURE.md` | Архитектура WebApp чата |
 
 ---
 
-## 🗺️ Дорожная карта соответствия
+### 3️⃣ `oac/audits/` — Отчёты об аудитах
 
-### Недели 1-2: Документация и планирование
-- [ ] Заполнить шаблоны документов в `docs/`
-- [ ] Создать комиссию по аттестации
-- [ ] Провести акт классификации системы
+Результаты внутренних и внешних проверок.
 
-### Недели 3-4: Критическая инфраструктура
-- [ ] Настроить централизованное логирование (ELK Stack)
-- [ ] Внедрить шифрование БД (pgcrypto)
-- [ ] Настроить автоматический backup
-
-### Недели 5-6: Дополнительные меры защиты
-- [ ] Установить антивирус (ClamAV)
-- [ ] Настроить защиту от brute-force (Fail2Ban)
-- [ ] Внедрить мониторинг (Prometheus + Grafana)
-
-### Недели 7-8: Тестирование
-- [ ] Запустить OWASP ZAP scan
-- [ ] Провести penetration testing
-- [ ] Исправить найденные уязвимости
-
-### Неделя 9: Аттестация
-- [ ] Подготовить пакет документов
-- [ ] Провести испытания
-- [ ] Подать сведения в ОАЦ
+| Файл | Описание |
+|------|----------|
+| `audit-personal-data-2026-06-08.md` | Аудит обработки ПД (июнь 2026) |
+| `audit-policy-2026-05-20.md` | Аудит политик (май 2026) |
+| `README.md` | Описание папки |
 
 ---
 
-## 💰 Бюджет проекта
+### 4️⃣ `oac/guides/` — Инструкции и руководства
 
-### С использованием бесплатных решений:
+Пошаговые инструкции для команды. Сгруппированы по темам.
 
-| Статья расходов | Стоимость |
-|----------------|-----------|
-| Единовременные затраты | $3,120-5,240 |
-| Ежегодные затраты | $1,120-2,240/год |
-| **Экономия vs платные решения** | **$6,000-7,000/год (72-82%)** |
+**🛡️ Безопасность:**
+- `QUICK-START-SECURITY.md` — Быстрый старт настройки безопасности
+- `OPENSOURCE-SECURITY-SOLUTIONS.md` — Open Source решения для compliance
+- `ATTESTATION-OAC-GUIDE.md` — Руководство по аттестации
+- `MONITORING-STACK-GUIDE.md` — Настройка мониторинга
+- `RECOMMENDATIONS-1.md`, `RECOMMENDATIONS-2.md` — Рекомендации
 
-Подробнее: [guides/OAC-FREE-SOLUTIONS-CHEATSHEET.md](guides/OAC-FREE-SOLUTIONS-CHEATSHEET.md)
+**🔐 Шифрование:**
+- `ENCRYPTION-IMPLEMENTATION-GUIDE.md` — Внедрение шифрования
+- `ENCRYPTION-QUICK-START.md` — Быстрый старт шифрования
+- `ENCRYPTION-VISUAL-GUIDE.md` — Визуальное руководство
+- `AUTO-ENCRYPTION-DEPLOYMENT-GUIDE.md` — Автоматическое развёртывание
+- `PRODUCTION-DEPLOYMENT-ENCRYPTION.md` — Prod развёртывание
+- `PRODUCTION-ENCRYPTION-SETUP.md` — Настройка в production
+- `QUICK-ENCRYPTION-DEPLOYMENT.md` — Быстрое развёртывание
+- `SUMMARY-ENCRYPTION-DEPLOYMENT.md` — Сводка
+- `README-ENCRYPTION-DEPLOYMENT.md` — Описание
 
----
+**✅ Согласия пользователей:**
+- `CONSENT-CHECKBOXES-IMPLEMENTATION.md` — Чекбоксы согласия
+- `CONSENT-MODAL-TROUBLESHOOTING.md` — Диагностика модального окна
+- `TELEGRAM-WEB-CONSENT-GUIDE.md` — Согласия в Telegram и Web
+- `IMPLEMENTATION-GUIDE-PRIVACY-COOKIE-POLICIES.md` — Политики приватности
 
-## 🔗 Полезные ссылки
+**🔄 Трансграничная передача:**
+- `IMPLEMENTATION-GUIDE-TRANSBOUNDARY-FIX.md` — Исправление трансграничной передачи
 
-### Внешние ресурсы:
-- [Национальный центр защиты персональных данных (НЦЗПД)](https://pdpa.by/)
-- [Закон РБ №99-З «О защите персональных данных»](personal1.md)
-- [Приказ ОАЦ №66 от 20.02.2020](oac.md)
-
-### Внутренние документы:
-- [Главный README проекта](../README.md)
-- [Скрипты автоматизации](../scripts/README.md)
-- [Backend документация](../backend/)
-
----
-
-## 📞 Контакты и поддержка
-
-**Ответственный за соответствие ОАЦ:**
-- Должность: [ДОЛЖНОСТЬ]
-- ФИО: [ФИО]
-- Email: privacy@novamedika.com
-- Телефон: [+375 (XX) XXX-XX-XX]
-
-**Техническая поддержка:**
-- Email: tech@novamedika.com
-- Telegram: [@NovaMedikaSupport](https://t.me/NovaMedikaSupport)
+**🐛 Исправления:**
+- `FIX-BOT-GUNICORN-WORKERS.md` — Фикс Gunicorn workers
+- `FIX-BOT-WITHOUT-ENCRYPTION.md` — Фикс без шифрования
+- `FRONTEND-IMPROVEMENTS-ROADMAP.md` — Дорожная карта фронтенда
 
 ---
 
-## 📝 История изменений
+### 5️⃣ `oac/planning/` — Планы работ
 
-| Версия | Дата | Изменения | Автор |
-|--------|------|-----------|-------|
-| 2.0 | 21.04.2026 | Реорганизация структуры документации | AI Assistant |
-| 1.0 | 20.04.2026 | Первоначальная версия | AI Assistant |
+Дорожные карты и чек-листы.
+
+| Файл | Описание |
+|------|----------|
+| `HOSTER-DIVISION-OF-WORK.md` | Распределение работ с хостинг-провайдером |
+| `oac-compliance-checklist.md` | Чек-лист compliance (с маркерами ХОСТЕР/МЫ/СОВМЕСТНО) |
+| `OAC-VISUAL-PROGRESS.md` | Визуальный прогресс выполнения |
+| `README.md` | Описание папки |
 
 ---
 
-**Последнее обновление:** 21 апреля 2026 г.  
-**Статус:** Актуально  
-**Класс ИС:** 3-ин
+### 6️⃣ `oac/requirements/` — Требования
+
+Детальная расшифровка требований нормативных документов.
+
+| Файл | Описание |
+|------|----------|
+| `oac-requirements.md` | Требования к классу 3-ин |
+| `oac-sprint.md` | Sprint-план по выполнению требований |
+| `transboundary-transfer-telegram-analysis-2026-05-20.md` | Анализ трансграничной передачи Telegram |
+| `README.md` | Описание папки |
+
+---
+
+### 7️⃣ `oac/telegram/` — Telegram-специфика
+
+Документы, связанные с Telegram-ботом в контексте ОАЦ (трансграничная передача данных).
+
+| Файл | Описание |
+|------|----------|
+| `common-privacy.md` | Общая политика приватности Telegram |
+| `telegram-cereits.md` | Сертификация Telegram |
+| `telegram-receits2.md` | Чек-лист по рецептам |
+| `explanations/` | Разъяснения (подпапка) |
+
+---
+
+### 8️⃣ `oac/dop/` — Дополнительные материалы
+
+Вспомогательные документы, не вошедшие в основные разделы.
+
+| Файл | Описание |
+|------|----------|
+| `OAC-COMPLIANCE-STATUS-REPORT.md` | Отчёт о статусе соответствия |
+| `REQUIRED-DOCUMENTS-FOR-COMPLIANCE.md` | Список необходимых документов |
+| `PRIKAZY-OTVETSTVENNYE-IB.md` | Приказы о назначении ответственных |
+| `PRIKAZ-195-ANALYSIS-TEMPLATE.md` | Шаблон анализа Приказа №195 |
+| `checklist-audit-pd-2026-06-08.md` | Чек-лист аудита ПД |
+| `check-list-primeryy-proverky.md` | Примеры проверок |
+| `check-list-zaschita.md` | Чек-лист защиты |
+| `PRIVACY-POLICY-UPDATE-SUMMARY-2026-05-20.md` | Сводка обновления политик |
+| `TECHNICAL-IMPLEMENTATION-SUMMARY-2026-05-20.md` | Сводка технической реализации |
+| `DOCUMENTS-ORGANIZATION-PLAN-2026-06-08.md` | План реорганизации документов |
+| `README.md` | Описание папки |
+| **`drafts/`** | **Черновики (не финальные)** |
+| └── `questions-for-lawyer-2026-05-04.md` | Вопросы юристу |
+
+---
+
+## 🧭 Как пользоваться этим навигатором
+
+### Я — новый разработчик, с чего начать?
+
+1. **Прочитать** [QUICK-REFERENCE.md](QUICK-REFERENCE.md) — 5 минут
+2. **Посмотреть** `oac/docs/` — основные документы compliance (01-15)
+3. **Ознакомиться** с `oac/guides/ATTESTATION-OAC-GUIDE.md` — процесс аттестации
+4. **Проверить статус** — `oac/dop/OAC-COMPLIANCE-STATUS-REPORT.md`
+
+### Я хочу найти документ по теме:
+
+| Тема | Куда смотреть |
+|------|---------------|
+| Шифрование данных | `oac/docs/10-encryption-policy.md` + `oac/guides/ENCRYPTION-*` |
+| Telegram-бот | `oac/telegram/` + `oac/requirements/transboundary-transfer-*` |
+| Аттестация в ОАЦ | `oac/guides/ATTESTATION-OAC-GUIDE.md` |
+| Аудиты и проверки | `oac/audits/` |
+| Архитектура | `oac/architecture/` |
+| Планы работ | `oac/planning/` |
+| Требования ОАЦ №66 | `oac/oac.md` |
+| Нормативные документы | `origin-docs/` |
+
+### Я сделал изменения — что обновить?
+
+1. ✅ Сохранить файл в правильную папку (см. `DOCUMENTS-ORGANIZATION-RULES.md`)
+2. ✅ Обновить `oac/CHANGELOG.md`
+3. ✅ Проверить, не нужно ли обновить этот `README.md`
+
+---
+
+## 📋 Быстрая статистика
+
+| Показатель | Значение |
+|------------|----------|
+| Всего документов | ~70 файлов |
+| Основных compliance (docs/) | 15 |
+| Руководств (guides/) | ~25 |
+| Аудитов (audits/) | 2 |
+| Папок всего | 11 |
+| Черновиков (drafts/) | 1 |
+
+---
+
+## 🔗 Связанные ресурсы
+
+- [`origin-docs/`](../origin-docs/) — Оригинальные тексты нормативных актов
+- [`docs/`](../docs/) — Проектная документация (не ОАЦ)
+- [`scripts/`](../scripts/) — Скрипты автоматизации
+
+---
+
+*Последнее обновление: 8 июня 2026 г.*
