@@ -662,4 +662,85 @@ async def send_consultation_message(
         )
 
 
+# ============================================================================
+# PUBLIC ENDPOINTS (для анонимных пользователей без JWT)
+# ============================================================================
+
+
+class PublicQuestionCreate(BaseModel):
+    """Модель для создания вопроса анонимным пользователем"""
+    text: str
+    category: str = "general"
+    anon_user_id: Optional[str] = None  # UUID, генерируется на фронтенде
+
+
+@router.post("/public/questions/")
+async def create_public_question(
+    question: PublicQuestionCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
+    """
+    Создать вопрос от анонимного пользователя (без JWT).
+
+    Используется для веб-пользователей, которые не зарегистрированы
+    и не находятся в Telegram. Создаёт временного пользователя.
+    """
+    try:
+        anon_id = uuid.uuid4() if not question.anon_user_id else uuid.UUID(question.anon_user_id)
+
+        # Создаём или находим анонимного пользователя по anon_user_id
+        result = await db.execute(
+            select(User).where(User.uuid == anon_id)
+        )
+        user = result.scalar_one_or_none()
+
+        if not user:
+            user = User(
+                uuid=anon_id,
+                first_name="Гость",
+                telegram_username=None,
+                telegram_id=None,
+                user_type="customer",
+                consent_privacy_policy=True,
+            )
+            db.add(user)
+            await db.flush()
+            logger.info(f"Created anonymous user {anon_id}")
+
+        # Создаём вопрос
+        new_question = Question(
+            uuid=uuid.uuid4(),
+            user_id=user.uuid,
+            text=question.text,
+            category=question.category,
+            status="pending",
+        )
+
+        db.add(new_question)
+        await db.commit()
+        await db.refresh(new_question)
+
+        logger.info(f"Public question created by anon user {user.uuid}: {new_question.uuid}")
+
+        return {
+            "uuid": str(new_question.uuid),
+            "user_uuid": str(user.uuid),
+            "text": new_question.text,
+            "status": new_question.status,
+            "created_at": new_question.created_at.isoformat(),
+        }
+
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Неверный формат ID")
+    except Exception as e:
+        await db.rollback()
+        logger.exception("Failed to create public question")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при создании вопроса: {str(e)}",
+        )
+
+
 __all__ = ["router"]

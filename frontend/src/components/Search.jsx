@@ -13,10 +13,12 @@ const SearchResults = lazy(() => import("./SearchResults"));
 import { useTelegramWebApp } from "../telegram/TelegramContext";
 import { api } from "../api/client";
 import { logger } from "../utils/logger";
+import AskPharmacist from "./AskPharmacist";
 
 export default function Search() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [showAskForm, setShowAskForm] = useState(false);
   const [cities, setCities] = useState([]);
 
   const [searchData, setSearchData] = useState({
@@ -77,7 +79,7 @@ export default function Search() {
         const citiesList = Array.isArray(data)
           ? data
           : (data?.results ?? data?.items ?? []);
-        
+
         if (!Array.isArray(citiesList)) {
           setCities([
             "Минск",
@@ -95,7 +97,7 @@ export default function Search() {
         setCities(["Минск", "Гомель", "Брест", "Гродно", "Витебск", "Могилев"]);
       }
     };
-    
+
     fetchCities();
   }, []);
 
@@ -527,7 +529,25 @@ export default function Search() {
         </div>
       </div>
 
-      {/* Footer - показываем и в Telegram, и вне его */}
+      {/* Кнопка "Задать вопрос фармацевту" — везде, кроме Telegram WebApp */}
+      {!isTelegram && (
+        <div className="fixed bottom-24 right-4 z-40">
+          <button
+            onClick={() => setShowAskForm(true)}
+            className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-full px-5 py-3 shadow-lg hover:shadow-xl transition-all text-sm font-medium flex items-center gap-2 hover:scale-105 active:scale-95"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+            </svg>
+            Задать вопрос
+          </button>
+        </div>
+      )}
+
+      {/* Модальное окно вопроса фармацевту */}
+      {showAskForm && <AskPharmacist onClose={() => setShowAskForm(false)} />}
+
+      {/* Footer */}
       <div className="bg-white border-t border-telegram-border mt-8">
         <div className="max-w-4xl mx-auto py-6 px-4">
           <div className="space-y-4">

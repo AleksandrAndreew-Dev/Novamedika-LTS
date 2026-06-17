@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>НоваМедика — Чат с фармацевтом</title>
+    <style>
+        /* ===============================
+           Tailwind-like design system
+           (matching NovaMedika2 frontend)
+           =============================== */
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --blue-50: #eff6ff;
+            --blue-100: #dbeafe;
+            --blue-200: #bfdbfe;
+            --blue-300: #93c5fd;
+            --blue-500: #3b82f6;
+            --blue-600: #2563eb;
+            --blue-700: #1d4ed8;
+            --blue-900: #1e3a5f;
+            --green-50: #f0fdf4;
+            --green-100: #dcfce7;
+            --green-200: #bbf7d0;
+            --green-500: #22c55e;
+            --green-600: #16a34a;
+            --green-700: #15803d;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-400: #9ca3af;
+            --gray-500: #6b7280;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+            --white: #ffffff;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+            --radius-sm: 8px;
+            --radius-md: 16px;
+            --radius-lg: 24px;
+            --radius-full: 9999px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background-color: var(--gray-50);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: var(--gray-900);
+            line-height: 1.6;
+        }
+
+        /* ===============================
+           Container
+           =============================== */
+        .chat-container {
+            width: 100%;
+            max-width: 420px;
+            height: 100vh;
+            max-height: 780px;
+            background: var(--gray-100);
+            display: flex;
+            flex-direction: column;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* ===============================
+           Header (bg-white + border-b)
+           =============================== */
+        .chat-header {
+            background: var(--white);
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-bottom: 1px solid var(--gray-200);
+            flex-shrink: 0;
+            z-index: 10;
+        }
+
+        .back-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px;
+            color: var(--gray-600);
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: var(--radius-full);
+            transition: background 0.15s;
+        }
+        .back-btn:hover {
+            background: var(--gray-100);
+        }
+
+        .chat-avatar {
+            width: 42px;
+            height: 42px;
+            border-radius: var(--radius-full);
+            background: linear-gradient(135deg, var(--blue-600), #6366f1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--white);
+            font-weight: 600;
+            font-size: 18px;
+            flex-shrink: 0;
+            position: relative;
+        }
+
+        .online-indicator {
+            position: absolute;
+            bottom: 1px;
+            right: 1px;
+            width: 12px;
+            height: 12px;
+            background: var(--green-500);
+            border: 2px solid var(--white);
+            border-radius: var(--radius-full);
+        }
+
+        .chat-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .chat-name {
+            font-weight: 600;
+            font-size: 16px;
+            line-height: 1.3;
+            letter-spacing: 0.3px;
+            color: var(--gray-900);
+        }
+
+        .chat-status {
+            font-size: 12px;
+            color: var(--green-600);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .chat-status .dot {
+            width: 6px;
+            height: 6px;
+            background: var(--green-500);
+            border-radius: var(--radius-full);
+            display: inline-block;
+        }
+        .chat-status.offline {
+            color: var(--gray-500);
+        }
+        .chat-status.offline .dot {
+            background: var(--gray-400);
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 4px;
+        }
+
+        .header-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 6px;
+            color: var(--gray-500);
+            border-radius: var(--radius-full);
+            transition: background 0.15s;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .header-btn:hover {
+            background: var(--gray-100);
+        }
+
+        /* ===============================
+           Messages Area
+           =============================== */
+        .messages-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            scroll-behavior: smooth;
+        }
+
+        .messages-area::-webkit-scrollbar {
+            width: 6px;
+        }
+        .messages-area::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .messages-area::-webkit-scrollbar-thumb {
+            background: var(--gray-300);
+            border-radius: 3px;
+        }
+        .messages-area::-webkit-scrollbar-thumb:hover {
+            background: var(--gray-400);
+        }
+
+        /* Date separator */
+        .date-separator {
+            text-align: center;
+            margin: 8px 0;
+        }
+        .date-separator span {
+            background: rgba(0, 0, 0, 0.06);
+            padding: 4px 14px;
+            border-radius: var(--radius-full);
+            font-size: 11px;
+            color: var(--gray-500);
+            font-weight: 500;
+            letter-spacing: 0.3px;
+        }
+
+        /* ===============================
+           Message Bubbles
+           =============================== */
+        .message-wrapper {
+            display: flex;
+            margin-bottom: 2px;
+            max-width: 82%;
+            animation: messageIn 0.3s ease-out;
+        }
+        @keyframes messageIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message-wrapper.user {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+        .message-wrapper.pharmacist {
+            align-self: flex-start;
+        }
+
+        .message-avatar {
+            width: 28px;
+            height: 28px;
+            border-radius: var(--radius-full);
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--white);
+            margin-top: 4px;
+        }
+        .message-wrapper.pharmacist .message-avatar {
+            margin-right: 8px;
+            background: linear-gradient(135deg, var(--blue-600), #6366f1);
+        }
+        .message-wrapper.user .message-avatar {
+            margin-left: 8px;
+            background: linear-gradient(135deg, var(--green-600), var(--blue-500));
+        }
+
+        .message-bubble {
+            padding: 10px 16px;
+            border-radius: var(--radius-md);
+            position: relative;
+            word-wrap: break-word;
+            min-width: 60px;
+        }
+        .message-wrapper.user .message-bubble {
+            background: var(--blue-600);
+            color: var(--white);
+            border-bottom-right-radius: 4px;
+        }
+        .message-wrapper.pharmacist .message-bubble {
+            background: var(--white);
+            color: var(--gray-900);
+            border-bottom-left-radius: 4px;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--gray-200);
+        }
+
+        .message-text {
+            font-size: 15px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+
+        .message-meta {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 4px;
+            margin-top: 3px;
+        }
+        .message-wrapper.user .message-meta {
+            justify-content: flex-end;
+        }
+        .message-wrapper.pharmacist .message-meta {
+            justify-content: flex-end;
+        }
+
+        .message-time {
+            font-size: 10px;
+            opacity: 0.7;
+            letter-spacing: 0.2px;
+        }
+        .message-wrapper.user .message-time {
+            color: rgba(255, 255, 255, 0.75);
+        }
+        .message-wrapper.pharmacist .message-time {
+            color: var(--gray-500);
+        }
+
+        .message-status-icon {
+            width: 14px;
+            height: 14px;
+        }
+
+        .status-read {
+            color: var(--blue-500);
+        }
+        .status-delivered {
+            color: rgba(255, 255, 255, 0.5);
+        }
+        .status-sent {
+            color: rgba(255, 255, 255, 0.35);
+        }
+
+        .message-sender-name {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--blue-600);
+            margin-bottom: 2px;
+            letter-spacing: 0.3px;
+        }
+
+        /* ===============================
+           Typing Indicator
+           =============================== */
+        .typing-indicator {
+            align-self: flex-start;
+            display: none;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 0;
+            animation: messageIn 0.3s ease-out;
+        }
+        .typing-indicator.active {
+            display: flex;
+        }
+        .typing-dots {
+            background: var(--white);
+            padding: 10px 16px;
+            border-radius: var(--radius-md);
+            border-bottom-left-radius: 4px;
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            gap: 4px;
+            align-items: center;
+            border: 1px solid var(--gray-200);
+        }
+        .typing-dots span {
+            width: 7px;
+            height: 7px;
+            background: var(--gray-400);
+            border-radius: var(--radius-full);
+            animation: typingBounce 1.4s infinite ease-in-out;
+        }
+        .typing-dots span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        .typing-dots span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        @keyframes typingBounce {
+            0%,
+            60%,
+            100% {
+                transform: translateY(0);
+                opacity: 0.4;
+            }
+            30% {
+                transform: translateY(-6px);
+                opacity: 1;
+            }
+        }
+
+        /* ===============================
+           Input Area
+           =============================== */
+        .input-area {
+            background: var(--white);
+            padding: 10px 12px 12px;
+            border-top: 1px solid var(--gray-200);
+            flex-shrink: 0;
+        }
+
+        .input-row {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+        }
+
+        .attach-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 8px;
+            color: var(--gray-500);
+            border-radius: var(--radius-full);
+            transition: background 0.15s;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .attach-btn:hover {
+            background: var(--gray-100);
+        }
+
+        .input-field-wrapper {
+            flex: 1;
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-lg);
+            padding: 4px 4px 4px 16px;
+            display: flex;
+            align-items: flex-end;
+            gap: 4px;
+            transition: border-color 0.15s;
+        }
+        .input-field-wrapper:focus-within {
+            border-color: var(--blue-500);
+            box-shadow: 0 0 0 2px var(--blue-100);
+        }
+
+        .input-field-wrapper textarea {
+            flex: 1;
+            border: none;
+            background: transparent;
+            outline: none;
+            font-family: inherit;
+            font-size: 15px;
+            resize: none;
+            padding: 8px 0;
+            max-height: 100px;
+            line-height: 1.4;
+            color: var(--gray-900);
+        }
+        .input-field-wrapper textarea::placeholder {
+            color: var(--gray-400);
+        }
+
+        .emoji-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 6px;
+            color: var(--gray-400);
+            border-radius: var(--radius-full);
+            transition: background 0.15s, color 0.15s;
+            width: 34px;
+            height: 34px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .emoji-btn:hover {
+            background: var(--gray-100);
+            color: var(--gray-600);
+        }
+
+        .send-btn {
+            background: var(--blue-600);
+            border: none;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: var(--radius-full);
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: background 0.15s, transform 0.15s;
+        }
+        .send-btn:hover {
+            background: var(--blue-700);
+        }
+        .send-btn:active {
+            transform: scale(0.92);
+        }
+        .send-btn:disabled {
+            background: var(--gray-300);
+            cursor: not-allowed;
+            transform: none;
+        }
+        .send-btn svg {
+            fill: var(--white);
+            width: 20px;
+            height: 20px;
+        }
+
+        /* ===============================
+           Quick Replies (Tailwind-style chips)
+           =============================== */
+        .quick-replies {
+            display: flex;
+            gap: 6px;
+            padding: 0 4px 8px;
+            overflow-x: auto;
+            flex-shrink: 0;
+            scrollbar-width: none;
+        }
+        .quick-replies::-webkit-scrollbar {
+            display: none;
+        }
+
+        .quick-reply-chip {
+            background: var(--white);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-full);
+            padding: 6px 14px;
+            font-size: 13px;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: all 0.15s;
+            color: var(--gray-700);
+            flex-shrink: 0;
+            font-family: inherit;
+        }
+        .quick-reply-chip:hover {
+            background: var(--blue-50);
+            border-color: var(--blue-300);
+            color: var(--blue-700);
+        }
+        .quick-reply-chip:active {
+            transform: scale(0.96);
+        }
+
+        /* ===============================
+           Scroll to bottom button
+           =============================== */
+        .scroll-bottom-btn {
+            position: absolute;
+            bottom: 80px;
+            right: 16px;
+            width: 40px;
+            height: 40px;
+            background: var(--white);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-full);
+            box-shadow: var(--shadow-md);
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 5;
+            transition: opacity 0.3s, box-shadow 0.15s;
+        }
+        .scroll-bottom-btn:hover {
+            box-shadow: var(--shadow-lg);
+        }
+        .scroll-bottom-btn.visible {
+            display: flex;
+        }
+
+        /* ===============================
+           Responsive
+           =============================== */
+        @media (max-width: 440px) {
+            .chat-container {
+                max-width: 100%;
+                max-height: 100vh;
+                border-radius: 0;
+                height: 100vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <!-- HEADER -->
+        <header class="chat-header">
+            <button class="back-btn" onclick="alert('Назад к списку')" aria-label="Назад">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+            <div class="chat-avatar">
+                Ф
+                <span class="online-indicator"></span>
+            </div>
+            <div class="chat-info">
+                <div class="chat-name">Фармацевт Алексей</div>
+                <div class="chat-status" id="pharmacistStatus">
+                    <span class="dot"></span> Онлайн
+                </div>
+            </div>
+            <div class="header-actions">
+                <button class="header-btn" onclick="alert('Информация')" aria-label="Информация">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- MESSAGES -->
+        <div class="messages-area" id="messagesArea"></div>
+
+        <!-- SCROLL TO BOTTOM -->
+        <button class="scroll-bottom-btn" id="scrollBottomBtn" onclick="scrollToBottom()" aria-label="Вниз">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+        </button>
+
+        <!-- TYPING INDICATOR -->
+        <div class="typing-indicator" id="typingIndicator">
+            <div class="message-avatar" style="background: linear-gradient(135deg, var(--blue-600), #6366f1);">Ф</div>
+            <div class="typing-dots"><span></span><span></span><span></span></div>
+        </div>
+
+        <!-- INPUT -->
+        <div class="input-area">
+            <div class="quick-replies" id="quickReplies">
+                <button class="quick-reply-chip" data-text="Здравствуйте! Есть ли в наличии аналог?" onclick="useQuickReply(this)">🔍 Аналог препарата?</button>
+                <button class="quick-reply-chip" data-text="Подскажите, работает ли аптека сейчас?" onclick="useQuickReply(this)">🕐 Режим работы</button>
+                <button class="quick-reply-chip" data-text="Сколько стоит?" onclick="useQuickReply(this)">💰 Цена</button>
+                <button class="quick-reply-chip" data-text="Можно ли заказать доставку?" onclick="useQuickReply(this)">🚚 Доставка</button>
+            </div>
+            <div class="input-row">
+                <button class="attach-btn" onclick="document.getElementById('fileInput').click()" aria-label="Прикрепить">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"></path>
+                    </svg>
+                </button>
+                <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="handleFileUpload(event)">
+                <div class="input-field-wrapper">
+                    <textarea id="messageInput" rows="1" placeholder="Напишите сообщение..." oninput="autoResize(this)" onkeydown="handleKeyDown(event)"></textarea>
+                    <button class="emoji-btn" onclick="toggleEmojiPicker()" aria-label="Эмодзи">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
+                            <line x1="9" y1="9" x2="9.01" y2="9"></line>
+                            <line x1="15" y1="9" x2="15.01" y2="9"></line>
+                        </svg>
+                    </button>
+                    <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled aria-label="Отправить">
+                        <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // DATA
+        // ============================================
+        const messages = [{
+            id: 1,
+            sender: 'pharmacist',
+            text: 'Здравствуйте! Чем могу помочь? 👋',
+            time: '10:30',
+            date: 'Сегодня'
+        }, {
+            id: 2,
+            sender: 'user',
+            text: 'Здравствуйте! Подскажите, есть ли в наличии Цитрамон-Боримед?',
+            time: '10:32',
+            date: 'Сегодня',
+            status: 'read'
+        }, {
+            id: 3,
+            sender: 'pharmacist',
+            text: 'Да, сейчас проверю наличие... ⏳',
+            time: '10:33',
+            date: 'Сегодня'
+        }, {
+            id: 4,
+            sender: 'pharmacist',
+            text: 'Цитрамон-Боримед есть в нескольких аптеках:\n\n1️⃣ Аптека №1 (ул. Ленина, 25) — 250 шт.\n2️⃣ Аптека №5 (пр. Победителей, 10) — 180 шт.\n3️⃣ Аптека №8 (ул. Независимости, 50) — 320 шт.\n\nЦена: от 1.85 руб. 💊',
+            time: '10:34',
+            date: 'Сегодня'
+        }, {
+            id: 5,
+            sender: 'user',
+            text: 'Отлично! А какие есть аналоги подешевле?',
+            time: '10:36',
+            date: 'Сегодня',
+            status: 'read'
+        }, {
+            id: 6,
+            sender: 'pharmacist',
+            text: 'Из аналогов могу предложить:\n\n💊 Парацетамол — от 0.90 руб.\n💊 Аспирин-Кардио — от 1.50 руб.\n💊 Анальгин — от 0.70 руб.\n\nХотите забронировать какой-то препарат? 😊',
+            time: '10:38',
+            date: 'Сегодня'
+        }];
+
+        // ============================================
+        // STATE
+        // ============================================
+        let messageIdCounter = messages.length;
+        let isAtBottom = true;
+        let unreadCount = 0;
+
+        // ============================================
+        // DOM REFS
+        // ============================================
+        const messagesArea = document.getElementById('messagesArea');
+        const sendBtn = document.getElementById('sendBtn');
+        const messageInput = document.getElementById('messageInput');
+        const scrollBottomBtn = document.getElementById('scrollBottomBtn');
+        const typingIndicator = document.getElementById('typingIndicator');
+
+        // ============================================
+        // RENDER
+        // ============================================
+        function renderMessages() {
+            let currentDate = '';
+            messages.forEach(msg => {
+                if (msg.date !== currentDate) {
+                    currentDate = msg.date;
+                    const dateDiv = document.createElement('div');
+                    dateDiv.className = 'date-separator';
+                    dateDiv.innerHTML = `<span>${msg.date}</span>`;
+                    messagesArea.appendChild(dateDiv);
+                }
+                messagesArea.appendChild(createMessageElement(msg));
+            });
+            scrollToBottom();
+        }
+
+        function createMessageElement(msg) {
+            const wrapper = document.createElement('div');
+            wrapper.className = `message-wrapper ${msg.sender === 'user' ? 'user' : 'pharmacist'}`;
+            wrapper.dataset.messageId = msg.id;
+
+            const avatar = document.createElement('div');
+            avatar.className = 'message-avatar';
+            avatar.textContent = msg.sender === 'user' ? 'В' : 'Ф';
+
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble';
+
+            if (msg.sender === 'pharmacist') {
+                const name = document.createElement('div');
+                name.className = 'message-sender-name';
+                name.textContent = 'Фармацевт Алексей';
+                bubble.appendChild(name);
+            }
+
+            const textDiv = document.createElement('div');
+            textDiv.className = 'message-text';
+            textDiv.innerHTML = msg.text.replace(/\n/g, '<br>');
+            bubble.appendChild(textDiv);
+
+            const meta = document.createElement('div');
+            meta.className = 'message-meta';
+
+            const time = document.createElement('span');
+            time.className = 'message-time';
+            time.textContent = msg.time;
+            meta.appendChild(time);
+
+            if (msg.sender === 'user' && msg.status) {
+                meta.appendChild(createStatusIcon(msg.status));
+            }
+            bubble.appendChild(meta);
+
+            wrapper.appendChild(avatar);
+            wrapper.appendChild(bubble);
+            return wrapper;
+        }
+
+        function createStatusIcon(status) {
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('class', 'message-status-icon');
+            svg.setAttribute('viewBox', '0 0 16 11');
+            svg.setAttribute('fill', 'currentColor');
+            const cls = status === 'read' ? 'status-read' : status === 'delivered' ? 'status-delivered' : 'status-sent';
+            svg.setAttribute('class', `message-status-icon ${cls}`);
+            if (status === 'read') {
+                svg.innerHTML =
+                    '<path d="M11.071.653a.457.457 0 00-.304-.102.446.446 0 00-.394.202l-5.79 7.969-2.77-2.536a.457.457 0 00-.658.045.452.452 0 00.045.647l3.18 2.91a.458.458 0 00.324.127.467.467 0 00.345-.18l6.3-8.666a.453.453 0 00-.278-.716zm-2.312 0a.457.457 0 00-.304-.102.446.446 0 00-.394.202l-5.79 7.969-2.77-2.536a.457.457 0 00-.658.045.452.452 0 00.045.647l3.18 2.91a.458.458 0 00.324.127.467.467 0 00.345-.18l6.3-8.666a.453.453 0 00-.278-.716z"/>';
+            } else if (status === 'delivered') {
+                svg.innerHTML =
+                    '<path d="M15.071.653a.457.457 0 00-.304-.102.446.446 0 00-.394.202l-5.79 7.969-2.77-2.536a.457.457 0 00-.658.045.452.452 0 00.045.647l3.18 2.91a.458.458 0 00.324.127.467.467 0 00.345-.18l6.3-8.666a.453.453 0 00-.278-.716z"/>';
+            } else {
+                svg.innerHTML =
+                    '<path d="M11.071.653a.457.457 0 00-.304-.102.446.446 0 00-.394.202l-5.79 7.969-2.77-2.536a.457.457 0 00-.658.045.452.452 0 00.045.647l3.18 2.91a.458.458 0 00.324.127.467.467 0 00.345-.18l6.3-8.666a.453.453 0 00-.278-.716z"/>';
+            }
+            return svg;
+        }
+
+        // ============================================
+        // SEND
+        // ============================================
+        function sendMessage() {
+            const text = messageInput.value.trim();
+            if (!text) return;
+
+            messageIdCounter++;
+            const now = new Date();
+            const time = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+
+            const newMsg = { id: messageIdCounter, sender: 'user', text, time, date: 'Сегодня', status: 'sent' };
+            messages.push(newMsg);
+            messagesArea.appendChild(createMessageElement(newMsg));
+            messageInput.value = '';
+            updateSendBtn();
+            autoResize(messageInput);
+            scrollToBottom();
+
+            setTimeout(() => simulateReply(text), 1500 + Math.random() * 2000);
+        }
+
+        function simulateReply(userText) {
+            typingIndicator.classList.add('active');
+            scrollToBottom();
+            unreadCount++;
+            document.title = `(${unreadCount}) Чат с фармацевтом`;
+
+            setTimeout(() => {
+                typingIndicator.classList.remove('active');
+                document.title = 'НоваМедика — Чат с фармацевтом';
+
+                messageIdCounter++;
+                const now = new Date();
+                const time = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+
+                const replies = [
+                    'Отличный вопрос! Сейчас уточню информацию для вас 😊',
+                    'Да, такая информация есть. Разрешите, я проверю?',
+                    'Понял ваш вопрос! Давайте посмотрим, что можно предложить.',
+                    'Хорошо, обработал запрос. Вот что удалось выяснить:',
+                    'Спасибо за обращение! Вот подробности по вашему вопросу:',
+                ];
+
+                const reply = {
+                    id: messageIdCounter,
+                    sender: 'pharmacist',
+                    text: replies[Math.floor(Math.random() * replies.length)] + '\n\n_' + userText.substring(0, 30) + (userText.length > 30 ? '...' : '') + '_',
+                    time,
+                    date: 'Сегодня'
+                };
+
+                messages.push(reply);
+                messagesArea.appendChild(createMessageElement(reply));
+                scrollToBottom();
+                updateLastUserMessageStatus('read');
+            }, 1500 + Math.random() * 2000);
+        }
+
+        function updateLastUserMessageStatus(status) {
+            const userMessages = document.querySelectorAll('.message-wrapper.user');
+            if (userMessages.length > 0) {
+                const last = userMessages[userMessages.length - 1];
+                const meta = last.querySelector('.message-meta');
+                const icon = meta.querySelector('.message-status-icon');
+                if (icon) {
+                    icon.setAttribute('class', `message-status-icon status-${status}`);
+                } else {
+                    meta.appendChild(createStatusIcon(status));
+                }
+            }
+        }
+
+        // ============================================
+        // HELPERS
+        // ============================================
+        function updateSendBtn() {
+            sendBtn.disabled = !messageInput.value.trim();
+        }
+
+        function autoResize(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 100) + 'px';
+            updateSendBtn();
+        }
+
+        function handleKeyDown(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        }
+
+        function scrollToBottom() {
+            messagesArea.scrollTop = messagesArea.scrollHeight;
+            isAtBottom = true;
+            scrollBottomBtn.classList.remove('visible');
+            unreadCount = 0;
+            document.title = 'НоваМедика — Чат с фармацевтом';
+        }
+
+        messagesArea.addEventListener('scroll', () => {
+            const threshold = 100;
+            const atBottom = messagesArea.scrollHeight - messagesArea.scrollTop - messagesArea.clientHeight < threshold;
+            isAtBottom = atBottom;
+            if (atBottom) {
+                scrollBottomBtn.classList.remove('visible');
+                unreadCount = 0;
+                document.title = 'НоваМедика — Чат с фармацевтом';
+            } else {
+                scrollBottomBtn.classList.add('visible');
+            }
+        });
+
+        function useQuickReply(btn) {
+            messageInput.value = btn.dataset.text;
+            autoResize(messageInput);
+            messageInput.focus();
+        }
+
+        function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            messageIdCounter++;
+            const now = new Date();
+            const time = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+            messages.push({ id: messageIdCounter, sender: 'user', text: `📎 ${file.name}`, time, date: 'Сегодня', status: 'sent' });
+            messagesArea.appendChild(createMessageElement(messages[messages.length - 1]));
+            e.target.value = '';
+            scrollToBottom();
+        }
+
+        // ============================================
+        // EMOJI PICKER
+        // ============================================
+        const emojis = ['😊', '👍', '🙏', '❤️', '😅', '😂', '🤔', '😉', '✨', '🔥', '💊', '🏥', '✅', '❌', '👋', '🫡', '🤝', '💪', '🤞', '👌'];
+
+        function toggleEmojiPicker() {
+            const existing = document.getElementById('emojiPicker');
+            if (existing) { existing.remove(); return; }
+
+            const picker = document.createElement('div');
+            picker.id = 'emojiPicker';
+            picker.style.cssText = `
+                position: absolute; bottom: 100%; left: 50px;
+                background: white; border-radius: 16px;
+                box-shadow: 0 -4px 20px rgba(0,0,0,0.12);
+                padding: 10px; display: grid;
+                grid-template-columns: repeat(5,1fr); gap: 6px;
+                z-index: 20; max-width: 220px;
+                border: 1px solid var(--gray-200);
+            `;
+
+            emojis.forEach(emoji => {
+                const btn = document.createElement('button');
+                btn.textContent = emoji;
+                btn.style.cssText = 'background:none;border:none;font-size:22px;cursor:pointer;padding:4px;border-radius:6px;transition:background 0.15s';
+                btn.onmouseenter = () => { btn.style.background = '#f3f4f6'; };
+                btn.onmouseleave = () => { btn.style.background = 'transparent'; };
+                btn.onclick = () => {
+                    messageInput.value += emoji;
+                    messageInput.focus();
+                    autoResize(messageInput);
+                    picker.remove();
+                };
+                picker.appendChild(btn);
+            });
+
+            const inputRow = document.querySelector('.input-row');
+            inputRow.style.position = 'relative';
+            inputRow.appendChild(picker);
+
+            setTimeout(() => document.addEventListener('click', function closeOnOutside(e) {
+                if (!picker.contains(e.target) && !e.target.closest('.emoji-btn')) {
+                    picker.remove();
+                    document.removeEventListener('click', closeOnOutside);
+                }
+            }), 10);
+        }
+
+        // ============================================
+        // INIT
+        // ============================================
+        renderMessages();
+        updateSendBtn();
+    </script>
+</body>
+</html>
