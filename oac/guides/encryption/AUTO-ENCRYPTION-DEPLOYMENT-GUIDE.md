@@ -4,8 +4,8 @@
 
 Данное руководство описывает процесс настройки **автоматического шифрования** персональных данных при создании новых записей в базе данных NovaMedika2.
 
-**Дата внедрения:** 05 мая 2026 г.  
-**Ответственный:** Администратор backend  
+**Дата внедрения:** 05 мая 2026 г.
+**Ответственный:** Администратор backend
 **Класс ИС:** 3-ин (согласно требованиям ОАЦ)
 
 ---
@@ -111,7 +111,7 @@ INFO:db.encryption_events:Encryption event listeners registered successfully
 #### 4.1 Создание тестового пользователя
 
 ```bash
-# Открыть Telegram и найти бота @NovaMedikaBot
+# Открыть Telegram и найти бота @Novamedika_bot
 # Отправить команду /start
 # Пройти регистрацию (ввести имя, телефон)
 
@@ -133,7 +133,7 @@ curl -X POST https://api.novamedika.com/api/users/register \
 docker exec -it postgres-prod psql -U novamedika -d novamedika_prod
 
 # Проверить последнего созданного пользователя
-SELECT 
+SELECT
     uuid,
     telegram_id,
     telegram_id_encrypted IS NOT NULL as has_encrypted_id,
@@ -142,8 +142,8 @@ SELECT
     phone_encrypted IS NOT NULL as has_encrypted_phone,
     LENGTH(phone_encrypted) as encrypted_phone_length,
     created_at
-FROM qa_users 
-ORDER BY created_at DESC 
+FROM qa_users
+ORDER BY created_at DESC
 LIMIT 1;
 ```
 
@@ -160,19 +160,19 @@ LIMIT 1;
 
 ```sql
 -- Внутри psql проверить корректность расшифровки
-SELECT 
+SELECT
     telegram_id as original_id,
     pgp_sym_decrypt(
         DECODE(telegram_id_encrypted, 'base64'),
         current_setting('app.encryption_key')
     ) as decrypted_id,
-    CASE 
+    CASE
         WHEN telegram_id::text = pgp_sym_decrypt(DECODE(telegram_id_encrypted, 'base64'), current_setting('app.encryption_key'))
         THEN '✅ MATCH'
         ELSE '❌ MISMATCH'
     END as status
-FROM qa_users 
-ORDER BY created_at DESC 
+FROM qa_users
+ORDER BY created_at DESC
 LIMIT 1;
 ```
 
@@ -185,15 +185,15 @@ LIMIT 1;
 # Затем проверить в БД:
 
 docker exec postgres-prod psql -U novamedika -d novamedika_prod -c "
-SELECT 
+SELECT
     uuid,
     customer_phone,
     customer_phone_encrypted IS NOT NULL as has_encrypted_phone,
     telegram_id,
     telegram_id_encrypted IS NOT NULL as has_encrypted_id,
     created_at
-FROM booking_orders 
-ORDER BY created_at DESC 
+FROM booking_orders
+ORDER BY created_at DESC
 LIMIT 1;
 "
 ```
@@ -290,14 +290,14 @@ SELECT LENGTH(current_setting('app.encryption_key')) as key_length;
 
 ```sql
 -- Процент зашифрованных пользователей
-SELECT 
+SELECT
     COUNT(*) as total_users,
     COUNT(telegram_id_encrypted) as encrypted_users,
     ROUND(COUNT(telegram_id_encrypted)::numeric / COUNT(*)::numeric * 100, 2) as encryption_percentage
 FROM qa_users;
 
 -- Процент зашифрованных заказов
-SELECT 
+SELECT
     COUNT(*) as total_orders,
     COUNT(customer_phone_encrypted) as encrypted_orders,
     ROUND(COUNT(customer_phone_encrypted)::numeric / COUNT(*)::numeric * 100, 2) as encryption_percentage
@@ -340,9 +340,9 @@ gunzip -c /backups/pre-encryption-auto_*.sql.gz | \
 
 ---
 
-**Документ подготовил:** AI Assistant  
-**Дата:** 05 мая 2026 г.  
-**Статус:** Готово к внедрению  
+**Документ подготовил:** AI Assistant
+**Дата:** 05 мая 2026 г.
+**Статус:** Готово к внедрению
 **Требуется тестирование:** Да
 
 ## Endpoint массового удаления заказов бронирования

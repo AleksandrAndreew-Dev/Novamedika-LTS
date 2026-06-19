@@ -62,7 +62,7 @@ export default function Login() {
         </p>
 
         <a
-          href="https://t.me/NovaMedikaBot"
+          href="https://t.me/Novamedika_bot"
           target="_blank"
           rel="noopener noreferrer"
           className="block w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-2xl text-center transition-colors"
@@ -71,7 +71,7 @@ export default function Login() {
         </a>
 
         <p className="mt-4 text-center text-xs text-gray-400">
-          Бот @NovaMedikaBot
+          Бот @Novamedika_bot
         </p>
       </div>
     </div>

@@ -1,7 +1,7 @@
 # ИНСТРУКЦИЯ ПО ИСПРАВЛЕНИЮ ТРАНСГРАНИЧНОЙ ПЕРЕДАЧИ ЧЕРЕЗ TELEGRAM
 
-**Версия:** 1.0  
-**Дата:** 20 мая 2026 г.  
+**Версия:** 1.0
+**Дата:** 20 мая 2026 г.
 **Приоритет:** 🔴 КРИТИЧЕСКИЙ
 
 ---
@@ -35,7 +35,7 @@ code 04-privacy-policy.md
 ```markdown
 ## 4. О ТРАНСГРАНИЧНОЙ ПЕРЕДАЧЕ ПЕРСОНАЛЬНЫХ ДАННЫХ
 
-4.1. Оператор осуществляет трансграничную передачу персональных данных при использовании Telegram-бота [@NovaMedikaBot](https://t.me/NovaMedikaBot).
+4.1. Оператор осуществляет трансграничную передачу персональных данных при использовании Telegram-бота [@Novamedika_bot](https://t.me/Novamedika_bot).
 
 4.2. Параметры трансграничной передачи:
 
@@ -175,14 +175,14 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Добавление полей для согласия на трансграничную передачу"""
-    op.add_column('qa_users', 
-        sa.Column('consent_transboundary_transfer', sa.Boolean(), 
+    op.add_column('qa_users',
+        sa.Column('consent_transboundary_transfer', sa.Boolean(),
                   nullable=False, server_default='false'))
-    op.add_column('qa_users', 
-        sa.Column('consent_transboundary_transfer_date', sa.DateTime(), 
+    op.add_column('qa_users',
+        sa.Column('consent_transboundary_transfer_date', sa.DateTime(),
                   nullable=True))
-    op.add_column('qa_users', 
-        sa.Column('transboundary_risks_acknowledged', sa.Boolean(), 
+    op.add_column('qa_users',
+        sa.Column('transboundary_risks_acknowledged', sa.Boolean(),
                   nullable=False, server_default='false'))
 
 
@@ -246,10 +246,10 @@ if not consent_given and not is_pharmacist:
 
 <b>⚠️ Важная информация о трансграничной передаче:</b>
 
-Этот бот работает на платформе Telegram, серверы которой расположены 
+Этот бот работает на платформе Telegram, серверы которой расположены
 за пределами Республики Беларусь (Великобритания, ОАЭ).
 
-При использовании бота ваши данные (Telegram ID, имя, сообщения) 
+При использовании бота ваши данные (Telegram ID, имя, сообщения)
 передаются через инфраструктуру Telegram.
 
 <b>Передаваемые данные:</b>
@@ -316,7 +316,7 @@ async def consent_transboundary_callback(callback: CallbackQuery, db: AsyncSessi
     user.transboundary_risks_acknowledged = True
     user.consent_transboundary_transfer_date = get_utc_now_naive()
     await db.commit()
-    
+
     logger.info(f"User {user.telegram_id} gave consent for transboundary transfer")
     await callback.answer("✅ Спасибо за подтверждение!")
     await callback.message.answer(
@@ -349,7 +349,7 @@ async def show_main_menu(message: Message, user: User):
     """Показать главное меню пользователя"""
     # Импортировать клавиатуру
     from bot.keyboards.user_keyboards import get_user_inline_keyboard
-    
+
     keyboard = get_user_inline_keyboard()
     await message.answer(
         f"👋 Добро пожаловать, {user.first_name}!\n\n"
@@ -409,7 +409,7 @@ uv run python -m bot.core
 \d qa_users
 
 -- Проверить данные пользователя
-SELECT telegram_id, consent_privacy_policy, consent_transboundary_transfer, 
+SELECT telegram_id, consent_privacy_policy, consent_transboundary_transfer,
        transboundary_risks_acknowledged, consent_transboundary_transfer_date
 FROM qa_users
 WHERE telegram_id = [TEST_USER_ID];
@@ -470,6 +470,6 @@ docker-compose restart backend
 
 ---
 
-**Статус инструкции:** ✅ Готова к использованию  
-**Автор:** AI-ассистент  
+**Статус инструкции:** ✅ Готова к использованию
+**Автор:** AI-ассистент
 **Дата создания:** 20 мая 2026 г.

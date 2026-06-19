@@ -144,7 +144,7 @@ py oac/check_normative_docs.py
 ## 📞 Контакты
 
 - **Email:** aleksandrandrph@gmail.com
-- **Telegram Bot:** [@NovaMedikaBot](https://t.me/NovaMedikaBot)
+- **Telegram Bot:** [@Novamedika_bot](https://t.me/Novamedika_bot)
 - **Website:** [spravka.novamedika.com](https://spravka.novamedika.com)
 
 ---
