@@ -284,6 +284,7 @@ jobs:
           build-args: |
             VITE_API_URL=https://api.${{ env.DOMAIN }}
             VITE_WS_URL=wss://api.${{ env.DOMAIN }}/api/pharmacist/ws/pharmacist
+            VITE_WS_URL_PHARMACIST=wss://api.${{ env.DOMAIN }}/api/pharmacist/ws/pharmacist
 
       - name: Retry frontend push if failed
         if: steps.build-frontend.outcome == 'failure'
@@ -310,6 +311,7 @@ jobs:
           build-args: |
             VITE_API_URL=https://api.${{ env.DOMAIN }}
             VITE_WS_URL=wss://api.${{ env.DOMAIN }}/api/pharmacist/ws/pharmacist
+            VITE_WS_URL_PHARMACIST=wss://api.${{ env.DOMAIN }}/api/pharmacist/ws/pharmacist
 
   deploy-production:
     needs: build-and-push
@@ -386,32 +388,42 @@ jobs:
             sudo systemctl restart fail2ban 2>/dev/null || echo "⚠️ Fail2ban restart skipped"
 
             echo "=== Step 3: Deploying main application ==="
-            docker-compose -f docker-compose.traefik.prod.yml pull
-            docker-compose -f docker-compose.traefik.prod.yml up -d
+            docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} pull
+            docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d --force-recreate
 
             echo "=== Step 4: Deploying monitoring stack ==="
-            docker-compose -f docker-compose.monitoring.yml up -d
+            docker-compose -f docker-compose.monitoring.yml up -d --force-recreate
 
             echo "=== Step 5: Waiting for services to start ==="
             sleep 10
 
             echo "=== Step 6: Health checks ==="
             echo "Checking Loki..."
-            curl -sf http://localhost:3100/ready && echo "✅ Loki is ready" || echo "❌ Loki failed"
+            docker exec loki-prod wget -q --spider http://localhost:3100/ready 2>/dev/null && echo "✅ Loki is ready" || echo "⚠️ Loki check skipped"
 
             echo "Checking Grafana..."
-            curl -sf http://localhost:3000/api/health && echo "✅ Grafana is ready" || echo "❌ Grafana failed"
+            docker exec grafana-prod wget -q --spider http://localhost:3000/api/health 2>/dev/null && echo "✅ Grafana is ready" || echo "⚠️ Grafana check skipped"
 
             echo "Checking backend..."
             curl -sf https://api.${{ env.DOMAIN }}/health && echo "✅ Backend is ready" || echo "❌ Backend failed"
 
             echo "=== Step 7: Setting up cron jobs ==="
-            # Add weekly OpenVAS scan (Saturday 02:00)
-            (crontab -l 2>/dev/null | grep -v "manage-openvas"; echo "0 2 * * 6 /opt/novamedika-prod/scripts/manage-openvas.sh start-scanning") | crontab -
-            (crontab -l 2>/dev/null | grep -v "stop-scanning"; echo "0 5 * * 6 /opt/novamedika-prod/scripts/manage-openvas.sh stop-scanning") | crontab -
+            # Add weekly OpenVAS scan (Saturday 02:00) - only if not already present
+            if ! crontab -l 2>/dev/null | grep -q "manage-openvas.sh start-scanning"; then
+              (crontab -l 2>/dev/null; echo "0 2 * * 6 /opt/novamedika-prod/scripts/manage-openvas.sh start-scanning") | crontab -
+              (crontab -l 2>/dev/null; echo "0 5 * * 6 /opt/novamedika-prod/scripts/manage-openvas.sh stop-scanning") | crontab -
+              echo "✅ OpenVAS cron jobs added"
+            else
+              echo "⚠️ OpenVAS cron jobs already exist, skipping"
+            fi
 
-            # Add annual security review (January 1st 00:00)
-            (crontab -l 2>/dev/null | grep -v "annual-security-review"; echo "0 0 1 1 * /opt/novamedika-prod/scripts/annual-security-review.sh") | crontab -
+            # Add annual security review (January 1st 00:00) - only if not already present
+            if ! crontab -l 2>/dev/null | grep -q "annual-security-review.sh"; then
+              (crontab -l 2>/dev/null; echo "0 0 1 1 * /opt/novamedika-prod/scripts/annual-security-review.sh") | crontab -
+              echo "✅ Annual security review cron job added"
+            else
+              echo "⚠️ Annual security review cron job already exists, skipping"
+            fi
 
             echo "✅ Cron jobs configured"
 

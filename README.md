@@ -79,19 +79,19 @@ npm run prod:restart # Перезапуск всех контейнеров
 
 **Полная документация по compliance:**
 
-| Документ | Описание | Ссылка |
-|----------|----------|--------|
-| **Нормативная база** | Законы, указы, приказы ОАЦ | [`origin-docs/`](origin-docs/) |
-| **Реестр документов** | Полный реестр с анализом | [`origin-docs/NORMATIVNYE-DOKUMENTY-REGISTER.md`](origin-docs/NORMATIVNYE-DOKUMENTY-REGISTER.md) |
-| **Документы compliance** | 15 документов для аттестации | [`oac/docs/`](oac/docs/) |
-| **Руководства** | Инструкции для персонала | [`oac/guides/`](oac/guides/) |
-| **Архитектура** | ADR и тех. решения | [`oac/architecture/`](oac/architecture/) |
-| **Аудиты** | Отчёты о проверках | [`oac/audits/`](oac/audits/) |
-| **Telegram-специфика** | Трансграничная передача | [`oac/telegram/`](oac/telegram/) |
-| **Правила организации** | Как работать с документами ОАЦ | [`oac/DOCUMENTS-ORGANIZATION-RULES.md`](oac/DOCUMENTS-ORGANIZATION-RULES.md) |
-| **Шпаргалка** | Быстрый справочник | [`oac/QUICK-REFERENCE.md`](oac/QUICK-REFERENCE.md) |
-| **Журнал изменений** | История обновлений | [`oac/CHANGELOG.md`](oac/CHANGELOG.md) |
-| **Проектная документация** | AI-гайды, конфигурация | [`docs/`](docs/) |
+| Документ                   | Описание                       | Ссылка                                                                                           |
+| -------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------ |
+| **Нормативная база**       | Законы, указы, приказы ОАЦ     | [`origin-docs/`](origin-docs/)                                                                   |
+| **Реестр документов**      | Полный реестр с анализом       | [`origin-docs/NORMATIVNYE-DOKUMENTY-REGISTER.md`](origin-docs/NORMATIVNYE-DOKUMENTY-REGISTER.md) |
+| **Документы compliance**   | 15 документов для аттестации   | [`oac/docs/`](oac/docs/)                                                                         |
+| **Руководства**            | Инструкции для персонала       | [`oac/guides/`](oac/guides/)                                                                     |
+| **Архитектура**            | ADR и тех. решения             | [`oac/architecture/`](oac/architecture/)                                                         |
+| **Аудиты**                 | Отчёты о проверках             | [`oac/audits/`](oac/audits/)                                                                     |
+| **Telegram-специфика**     | Трансграничная передача        | [`oac/telegram/`](oac/telegram/)                                                                 |
+| **Правила организации**    | Как работать с документами ОАЦ | [`oac/DOCUMENTS-ORGANIZATION-RULES.md`](oac/DOCUMENTS-ORGANIZATION-RULES.md)                     |
+| **Шпаргалка**              | Быстрый справочник             | [`oac/QUICK-REFERENCE.md`](oac/QUICK-REFERENCE.md)                                               |
+| **Журнал изменений**       | История обновлений             | [`oac/CHANGELOG.md`](oac/CHANGELOG.md)                                                           |
+| **Проектная документация** | AI-гайды, конфигурация         | [`docs/`](docs/)                                                                                 |
 
 ### 💡 Ключевые документы
 
@@ -140,6 +140,7 @@ py oac/check_normative_docs.py
 5. Откройте Pull Request
 
 ---
+
 ## 📞 Контакты
 
 - **Email:** aleksandrandrph@gmail.com

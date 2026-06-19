@@ -26,58 +26,49 @@ export const authService = {
       console.log('[authService] Login already in progress, returning existing promise');
       return loginPromise;
     }
-    
+
     // Check if we're in Telegram environment
     if (!window.Telegram?.WebApp) {
       throw new Error('Not in Telegram WebApp environment. Please open from Telegram bot.');
     }
-    
+
     // Get initData from Telegram SDK
     const initData = window.Telegram.WebApp.initData;
-    
+
     if (!initData) {
       throw new Error('Telegram initData not available. Please reload the WebApp.');
     }
-    
+
     // Create and store the login promise
-    loginPromise = fetch('/api/pharmacist/login/telegram/', {
-      method: 'POST',
+    loginPromise = api.post('/api/pharmacist/login/telegram/', {}, {
       headers: {
         'Authorization': `tma ${initData}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({}) // Empty body as data is in header
-    }).then(async response => {
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        
-        // Handle specific Telegram session errors
-        if (errorData.detail && errorData.detail.includes('QUERY_ID_INVALID')) {
-          throw new Error('Telegram session expired. Please restart the Mini App.');
-        }
-        
-        // Handle inactive pharmacist (403)
-        if (response.status === 403) {
-          throw new Error(errorData.detail || 'Доступ запрещен. Вы не зарегистрированы как активный фармацевт.');
-        }
-        
-        throw new Error(errorData.detail || 'Login failed');
       }
-      
-      const data = await response.json();
+    }).then(response => {
+      const data = response.data;
       if (data.session_token) {
         this.setSessionToken(data.session_token);
       }
-      
+
       // Clear the login promise after successful completion
       loginPromise = null;
       return data;
     }).catch(error => {
+      // Handle specific Telegram session errors
+      if (error.response?.data?.detail && error.response.data.detail.includes('QUERY_ID_INVALID')) {
+        throw new Error('Telegram session expired. Please restart the Mini App.');
+      }
+
+      // Handle inactive pharmacist (403)
+      if (error.response?.status === 403) {
+        throw new Error(error.response.data.detail || 'Доступ запрещен. Вы не зарегистрированы как активный фармацевт.');
+      }
+
       // Clear the login promise on error
       loginPromise = null;
       throw error;
     });
-    
+
     return loginPromise;
   },
 

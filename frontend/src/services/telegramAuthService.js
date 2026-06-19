@@ -1,5 +1,6 @@
 // Telegram WebApp authentication for users
 // Auto-login via initData when in Telegram environment
+import api from "../api/client";
 import userAuthService from "./userAuthService";
 import { logger } from "../utils/logger";
 
@@ -91,24 +92,13 @@ class TelegramAuthService {
     try {
       console.log("[TelegramAuthService] Starting Telegram WebApp login");
 
-      const response = await fetch("/api/auth/login/telegram/", {
-        method: "POST",
+      const response = await api.post("/api/auth/login/telegram/", {}, {
         headers: {
           Authorization: `tma ${this.initData}`,
-          "Content-Type": "application/json",
         },
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        logger.error("[TelegramAuthService] Login failed", {
-          status: response.status,
-          error: errorData.detail || "Unknown error",
-        });
-        return false;
-      }
-
-      const data = await response.json();
+      const data = response.data;
       console.log("[TelegramAuthService] Login successful, storing tokens");
 
       // Store tokens using userAuthService

@@ -1,5 +1,5 @@
 import React from 'react';
-import { HashRouter, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
+import { Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { AuthProvider } from './components/auth/AuthProvider';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import PharmacistContent from './PharmacistContent';
@@ -97,22 +97,20 @@ function TokenAuthHandler() {
 export default function PharmacistDashboard() {
   return (
     <ErrorBoundary>
-      <HashRouter>
-        <AuthProvider>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route
-              path="/*"
-              element={
-                <ProtectedRoute>
-                  <TokenAuthHandler />
-                  <PharmacistContent />
-                </ProtectedRoute>
-              }
-            />
-          </Routes>
-        </AuthProvider>
-      </HashRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route
+            path="/*"
+            element={
+              <ProtectedRoute>
+                <TokenAuthHandler />
+                <PharmacistContent />
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </AuthProvider>
     </ErrorBoundary>
   );
 }

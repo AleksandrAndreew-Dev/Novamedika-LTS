@@ -9,7 +9,7 @@ class WebSocketService {
     this.reconnectAttempts = 0;
     this.eventHandlers = new Map();
     this.isConnected = false;
-    this.url = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/pharmacist';
+    this.url = import.meta.env.VITE_WS_URL_PHARMACIST || import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/pharmacist';
   }
 
   /**
