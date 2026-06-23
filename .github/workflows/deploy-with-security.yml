@@ -21,6 +21,11 @@ on:
         required: false
         default: true
         type: boolean
+      fast_deploy:
+        description: "Fast deploy - skip monitoring, fail2ban, cron jobs, health checks"
+        required: false
+        default: false
+        type: boolean
 
 env:
   REGISTRY: ghcr.io
@@ -378,59 +383,69 @@ jobs:
           script: |
             cd /opt/novamedika-prod/
 
+            FAST_DEPLOY=${{ github.event.inputs.fast_deploy == 'true' }}
+
             echo "=== Step 1: Making scripts executable ==="
             chmod +x scripts/*.sh
 
-            echo "=== Step 2: Setting up Fail2ban configuration ==="
-            sudo cp config/fail2ban-jail.local /etc/fail2ban/jail.local 2>/dev/null || echo "⚠️ Fail2ban not installed"
-            sudo cp config/fail2ban-filter-log-cleared.conf /etc/fail2ban/filter.d/log-cleared.conf 2>/dev/null || true
-            sudo cp config/fail2ban-filter-docker-backend-auth.conf /etc/fail2ban/filter.d/docker-backend-auth.conf 2>/dev/null || true
-            sudo systemctl restart fail2ban 2>/dev/null || echo "⚠️ Fail2ban restart skipped"
+            if [ "$FAST_DEPLOY" = "true" ]; then
+              echo "⚡ Fast deploy mode - skipping Fail2ban, monitoring, cron jobs, health checks"
+            else
+              echo "=== Step 2: Setting up Fail2ban configuration ==="
+              sudo cp config/fail2ban-jail.local /etc/fail2ban/jail.local 2>/dev/null || echo "⚠️ Fail2ban not installed"
+              sudo cp config/fail2ban-filter-log-cleared.conf /etc/fail2ban/filter.d/log-cleared.conf 2>/dev/null || true
+              sudo cp config/fail2ban-filter-docker-backend-auth.conf /etc/fail2ban/filter.d/docker-backend-auth.conf 2>/dev/null || true
+              sudo systemctl restart fail2ban 2>/dev/null || echo "⚠️ Fail2ban restart skipped"
+            fi
 
             echo "=== Step 3: Deploying main application ==="
             docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} pull
             docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d --force-recreate
 
-            echo "=== Step 4: Deploying monitoring stack ==="
-            docker-compose -f docker-compose.monitoring.yml up -d --force-recreate
+            if [ "$FAST_DEPLOY" != "true" ]; then
+              echo "=== Step 4: Deploying monitoring stack ==="
+              docker-compose -f docker-compose.monitoring.yml up -d --force-recreate
 
-            echo "=== Step 5: Waiting for services to start ==="
-            sleep 10
+              echo "=== Step 5: Waiting for services to start ==="
+              sleep 10
 
-            echo "=== Step 6: Health checks ==="
-            echo "Checking Loki..."
-            docker exec loki-prod wget -q --spider http://localhost:3100/ready 2>/dev/null && echo "✅ Loki is ready" || echo "⚠️ Loki check skipped"
+              echo "=== Step 6: Health checks ==="
+              echo "Checking Loki..."
+              docker exec loki-prod wget -q --spider http://localhost:3100/ready 2>/dev/null && echo "✅ Loki is ready" || echo "⚠️ Loki check skipped"
 
-            echo "Checking Grafana..."
-            docker exec grafana-prod wget -q --spider http://localhost:3000/api/health 2>/dev/null && echo "✅ Grafana is ready" || echo "⚠️ Grafana check skipped"
+              echo "Checking Grafana..."
+              docker exec grafana-prod wget -q --spider http://localhost:3000/api/health 2>/dev/null && echo "✅ Grafana is ready" || echo "⚠️ Grafana check skipped"
 
-            echo "Checking backend..."
-            curl -sf https://api.${{ env.DOMAIN }}/health && echo "✅ Backend is ready" || echo "❌ Backend failed"
+              echo "Checking backend..."
+              curl -sf https://api.${{ env.DOMAIN }}/health && echo "✅ Backend is ready" || echo "❌ Backend failed"
 
-            echo "=== Step 7: Setting up cron jobs ==="
-            # Add weekly OpenVAS scan (Saturday 02:00) - only if not already present
-            if ! crontab -l 2>/dev/null | grep -q "manage-openvas.sh start-scanning"; then
-              (crontab -l 2>/dev/null; echo "0 2 * * 6 /opt/novamedika-prod/scripts/manage-openvas.sh start-scanning") | crontab -
-              (crontab -l 2>/dev/null; echo "0 5 * * 6 /opt/novamedika-prod/scripts/manage-openvas.sh stop-scanning") | crontab -
-              echo "✅ OpenVAS cron jobs added"
-            else
-              echo "⚠️ OpenVAS cron jobs already exist, skipping"
+              echo "=== Step 7: Setting up cron jobs ==="
+              # Add weekly OpenVAS scan (Saturday 02:00) - only if not already present
+              if ! crontab -l 2>/dev/null | grep -q "manage-openvas.sh start-scanning"; then
+                (crontab -l 2>/dev/null; echo "0 2 * * 6 /opt/novamedika-prod/scripts/manage-openvas.sh start-scanning") | crontab -
+                (crontab -l 2>/dev/null; echo "0 5 * * 6 /opt/novamedika-prod/scripts/manage-openvas.sh stop-scanning") | crontab -
+                echo "✅ OpenVAS cron jobs added"
+              else
+                echo "⚠️ OpenVAS cron jobs already exist, skipping"
+              fi
+
+              # Add annual security review (January 1st 00:00) - only if not already present
+              if ! crontab -l 2>/dev/null | grep -q "annual-security-review.sh"; then
+                (crontab -l 2>/dev/null; echo "0 0 1 1 * /opt/novamedika-prod/scripts/annual-security-review.sh") | crontab -
+                echo "✅ Annual security review cron job added"
+              else
+                echo "⚠️ Annual security review cron job already exist, skipping"
+              fi
+
+              echo "✅ Cron jobs configured"
             fi
-
-            # Add annual security review (January 1st 00:00) - only if not already present
-            if ! crontab -l 2>/dev/null | grep -q "annual-security-review.sh"; then
-              (crontab -l 2>/dev/null; echo "0 0 1 1 * /opt/novamedika-prod/scripts/annual-security-review.sh") | crontab -
-              echo "✅ Annual security review cron job added"
-            else
-              echo "⚠️ Annual security review cron job already exists, skipping"
-            fi
-
-            echo "✅ Cron jobs configured"
 
             echo "=== Deployment complete ==="
             echo "Application: https://${{ env.DOMAIN }}"
-            echo "Grafana: http://$(hostname -I | awk '{print $1}'):3000"
-            echo "Monitoring stack deployed with Loki/Promtail/Grafana"
+            if [ "$FAST_DEPLOY" != "true" ]; then
+              echo "Grafana: http://$(hostname -I | awk '{print $1}'):3000"
+              echo "Monitoring stack deployed with Loki/Promtail/Grafana"
+            fi
 
   # NEW: Optional vulnerability scan after deployment
   vulnerability-scan:
@@ -440,7 +455,8 @@ jobs:
     if: |
       github.ref == 'refs/heads/main' &&
       github.event_name == 'push' &&
-      (github.event.inputs.enable_security_scan == 'true' || !github.event.inputs)
+      (github.event.inputs.enable_security_scan == 'true' || !github.event.inputs) &&
+      github.event.inputs.fast_deploy != 'true'
 
     steps:
       - name: Checkout code
