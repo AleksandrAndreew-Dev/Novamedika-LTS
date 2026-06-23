@@ -22,8 +22,7 @@ def get_pharmacist_webapp_url() -> str:
     """
     # Базовый URL - используем path-based routing вместо subdomain
     base_url = os.getenv(
-        "PHARMACIST_DASHBOARD_URL",
-        "https://spravka.novamedika.com/pharmacist"
+        "PHARMACIST_DASHBOARD_URL", "https://spravka.novamedika.com/pharmacist"
     )
 
     # НЕ добавляем query параметры - Telegram их удалит!
@@ -31,7 +30,9 @@ def get_pharmacist_webapp_url() -> str:
     return base_url
 
 
-def get_pharmacist_inline_keyboard_with_token(telegram_id: int, pharmacist_uuid: str | None = None):
+def get_pharmacist_inline_keyboard_with_token(
+    telegram_id: int, pharmacist_uuid: str | None = None
+):
     """Inline-клавиатура фармацевта с WebApp URL (без токена в URL)
 
     Args:
@@ -46,20 +47,27 @@ def get_pharmacist_inline_keyboard_with_token(telegram_id: int, pharmacist_uuid:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="\U0001f7e2 Онлайн", callback_data="go_online"),
+                InlineKeyboardButton(
+                    text="\U0001f7e2 Онлайн", callback_data="go_online"
+                ),
                 InlineKeyboardButton(text="\u26ab Офлайн", callback_data="go_offline"),
             ],
             [
-                InlineKeyboardButton(text="\U0001f4cb Вопросы", callback_data="view_questions"),
+                InlineKeyboardButton(
+                    text="\U0001f4cb Вопросы", callback_data="view_questions"
+                ),
                 InlineKeyboardButton(
                     text="\U0001f4ca Статистика", callback_data="questions_stats"
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    text="\U0001f4dc История", callback_data="my_questions_from_completed"
+                    text="\U0001f4dc История",
+                    callback_data="my_questions_from_completed",
                 ),
-                InlineKeyboardButton(text="\u2753 Помощь", callback_data="pharmacist_help"),
+                InlineKeyboardButton(
+                    text="\u2753 Помощь", callback_data="pharmacist_help"
+                ),
             ],
             [
                 InlineKeyboardButton(
@@ -98,7 +106,14 @@ def get_user_inline_keyboard():
             [
                 InlineKeyboardButton(text="\u2753 Помощь", callback_data="user_help"),
                 InlineKeyboardButton(
-                    text="\U0001f4dc История", callback_data="my_questions_from_completed"
+                    text="\U0001f4dc История",
+                    callback_data="my_questions_from_completed",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="👨‍⚕️ Я фармацевт / Регистрация",
+                    callback_data="i_am_pharmacist",
                 ),
             ],
             [
@@ -116,7 +131,7 @@ def get_user_inline_keyboard():
             [
                 InlineKeyboardButton(
                     text="\U0001f512 Политика конфиденциальности",
-                    callback_data="show_privacy_policy"
+                    callback_data="show_privacy_policy",
                 )
             ],
         ],
@@ -139,7 +154,7 @@ def get_webapp_only_keyboard():
                     text="\U0001f50d Поиск лекарств",
                     web_app=WebAppInfo(url=webapp_url),
                 )
-            ]
+            ],
         ],
         resize_keyboard=True,
     )
