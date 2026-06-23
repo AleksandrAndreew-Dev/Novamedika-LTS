@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "../api/client";
 import userAuthService from "../services/userAuthService";
@@ -20,6 +20,7 @@ export default function Chat() {
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [isTelegramUser, setIsTelegramUser] = useState(false);
   const [isAnonymous, setIsAnonymous] = useState(false);
+  const pollingRef = useRef(null);
 
   // Определяем, анонимный ли пользователь (создал вопрос через /api/public/questions/)
   const isAnonymousQuestion = () => {
@@ -62,11 +63,62 @@ export default function Chat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // Polling for new messages (every 5 seconds)
+  useEffect(() => {
+    if (
+      !id ||
+      (!isAnonymous && !isTelegramUser && !userAuthService.isAuthenticated())
+    )
+      return;
+
+    const poll = async () => {
+      try {
+        const endpoint = isAnonymous
+          ? `/api/public/questions/${id}/messages`
+          : `/api/consultations/${id}/messages`;
+        const headers = isAnonymous ? {} : getAuthHeaders(isTelegramUser);
+        const res = await api.get(endpoint, { headers });
+        const newMessages = res.data;
+
+        setMessages((prev) => {
+          const prevIds = new Set(prev.map((m) => m.uuid || m.id));
+          const added = newMessages.filter((m) => !prevIds.has(m.uuid || m.id));
+          if (added.length === 0) return prev;
+          const updated = [...prev, ...added];
+          updated.sort(
+            (a, b) => new Date(a.created_at) - new Date(b.created_at),
+          );
+          return updated;
+        });
+      } catch {
+        // Silent fail
+      }
+    };
+
+    if (messages.length === 0) {
+      const initialLoad = setTimeout(poll, 500);
+      pollingRef.current = setInterval(poll, 5000);
+      return () => {
+        clearTimeout(initialLoad);
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      };
+    }
+
+    pollingRef.current = setInterval(poll, 5000);
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [id, isAnonymous, isTelegramUser, messages.length]);
+
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
-  const getAuthHeaders = (inTelegram) => {
+  const getAuthHeaders = useCallback((inTelegram) => {
     const token = userAuthService.getAccessToken();
     if (token) {
       return { Authorization: `Bearer ${token}` };
@@ -76,7 +128,7 @@ export default function Chat() {
       return { Authorization: `tma ${telegramAuthService.initData}` };
     }
     return {};
-  };
+  }, []);
 
   const loadConsultationData = async (inTelegram = false, anon = false) => {
     try {

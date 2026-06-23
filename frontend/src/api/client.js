@@ -19,20 +19,25 @@ api.interceptors.request.use(
     if (apiKey) {
       config.headers["X-API-KEY"] = apiKey;
     }
-    
-    // Добавляем session token для фармацевта если есть в localStorage
-    const pharmacistToken = localStorage.getItem('pharmacist_session_token');
-    if (pharmacistToken && !config.headers['Authorization']) {
-      config.headers['Authorization'] = `Bearer ${pharmacistToken}`;
+
+    // Приоритет: user token → pharmacist token → nothing
+    const userToken = localStorage.getItem("user_access_token");
+    if (userToken) {
+      config.headers["Authorization"] = `Bearer ${userToken}`;
+    } else {
+      const pharmacistToken = localStorage.getItem("pharmacist_session_token");
+      if (pharmacistToken) {
+        config.headers["Authorization"] = `Bearer ${pharmacistToken}`;
+      }
     }
-    
+
     // Log outgoing requests for debugging
     logger.debug(`API Request: ${config.method?.toUpperCase()} ${config.url}`, {
       baseURL: config.baseURL,
       headers: Object.keys(config.headers || {}).reduce((acc, key) => {
         // Don't log sensitive headers
-        if (key.toLowerCase() === 'authorization') {
-          acc[key] = '[REDACTED]';
+        if (key.toLowerCase() === "authorization") {
+          acc[key] = "[REDACTED]";
         } else {
           acc[key] = config.headers[key];
         }
@@ -40,11 +45,11 @@ api.interceptors.request.use(
       }, {}),
       data: config.data,
     });
-    
+
     return config;
   },
   (error) => {
-    logger.error('API Request Error:', error);
+    logger.error("API Request Error:", error);
     return Promise.reject(error);
   },
 );
@@ -79,10 +84,13 @@ function getErrorMessage(error) {
 api.interceptors.response.use(
   (response) => {
     // Log successful responses for debugging
-    logger.debug(`API Response: ${response.config.method?.toUpperCase()} ${response.config.url} - ${response.status}`, {
-      status: response.status,
-      data: response.data,
-    });
+    logger.debug(
+      `API Response: ${response.config.method?.toUpperCase()} ${response.config.url} - ${response.status}`,
+      {
+        status: response.status,
+        data: response.data,
+      },
+    );
     return response;
   },
   (error) => {
@@ -96,7 +104,7 @@ api.interceptors.response.use(
         status: error.response?.status,
         responseData: error.response?.data,
         errorMessage: error.message,
-      }
+      },
     );
 
     // Добавляем human-readable сообщение к объекту ошибки

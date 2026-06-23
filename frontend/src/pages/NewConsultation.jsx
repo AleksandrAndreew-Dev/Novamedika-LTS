@@ -45,31 +45,41 @@ export default function NewConsultation() {
         }
 
         // 2. После autoLogin проверяем наличие JWT (await гарантирует актуальность)
+        // 3. Создаём консультацию. Сначала пробуем JWT, падаем на public
         if (userAuthService.isAuthenticated()) {
           console.log("[NewConsultation] Creating consultation via JWT");
-          const response = await api.post("/api/consultations/", {
-            text: "Новый вопрос фармацевту",
-            category: "general",
-          });
-          console.log(
-            "[NewConsultation] ✅ Consultation created:",
-            response.data.uuid,
-          );
-          navigate(`/chat/${response.data.uuid}`, { replace: true });
-        } else {
-          // Анонимный пользователь — без регистрации
-          console.log("[NewConsultation] Creating public question (anonymous)");
-          const response = await api.post("/api/public/questions/", {
-            text: "Новый вопрос фармацевту",
-            category: "general",
-            anon_user_id: getAnonUserId(),
-          });
-          console.log(
-            "[NewConsultation] ✅ Public question created:",
-            response.uuid,
-          );
-          navigate(`/chat/${response.uuid}`, { replace: true });
+          try {
+            const response = await api.post("/api/consultations/", {
+              text: "Новый вопрос фармацевту",
+              category: "general",
+            });
+            console.log(
+              "[NewConsultation] ✅ Consultation created:",
+              response.data.uuid,
+            );
+            navigate(`/chat/${response.data.uuid}`, { replace: true });
+            return;
+          } catch (jwtErr) {
+            console.warn(
+              "[NewConsultation] JWT consultation failed, falling back to public:",
+              jwtErr.response?.status,
+            );
+            // Fall through to public question
+          }
         }
+
+        // Анонимный пользователь — без регистрации (fallback)
+        console.log("[NewConsultation] Creating public question (anonymous)");
+        const response = await api.post("/api/public/questions/", {
+          text: "Новый вопрос фармацевту",
+          category: "general",
+          anon_user_id: getAnonUserId(),
+        });
+        console.log(
+          "[NewConsultation] ✅ Public question created:",
+          response.uuid,
+        );
+        navigate(`/chat/${response.uuid}`, { replace: true });
       } catch (err) {
         console.error("[NewConsultation] Failed to create consultation:", err);
 
