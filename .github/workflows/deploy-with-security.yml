@@ -383,7 +383,12 @@ jobs:
           script: |
             cd /opt/novamedika-prod/
 
-            FAST_DEPLOY=${{ github.event.inputs.fast_deploy == 'true' }}
+            # Fast deploy by default for push events, full deploy only for manual workflow_dispatch
+            if [ "${{ github.event_name }}" = "push" ]; then
+              FAST_DEPLOY=true
+            else
+              FAST_DEPLOY=${{ github.event.inputs.fast_deploy == 'true' }}
+            fi
 
             echo "=== Step 1: Making scripts executable ==="
             chmod +x scripts/*.sh
