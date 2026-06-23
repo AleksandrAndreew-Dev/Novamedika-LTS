@@ -59,11 +59,51 @@ class BotManager:
             self._storage = await self._create_storage()
             self.dp = Dispatcher(storage=self._storage)
 
+            # Настраиваем middleware и роутеры для авто-реинициализации
+            await self._setup_dispatcher()
+
             logger.info("Bot initialized successfully with RedisStorage")
             return self.bot, self.dp
         except Exception as e:
             logger.error(f"Failed to initialize bot: {e}")
             return None, None
+
+    async def _setup_dispatcher(self):
+        """Настройка middleware и роутеров для dispatcher"""
+        from bot.middleware.role_middleware import RoleMiddleware
+        from bot.middleware.db import DbMiddleware
+        from aiogram.utils.callback_answer import CallbackAnswerMiddleware
+        from bot.handlers import (
+            registration_router,
+            qa_handlers_router,
+            dialog_management_router,
+            user_questions_router,
+            common_router,
+        )
+        from bot.handlers.clarify_handlers import router as clarify_router
+
+        # Register middleware
+        self.dp.message.middleware(DbMiddleware())
+        self.dp.message.middleware(RoleMiddleware())
+        self.dp.callback_query.middleware(DbMiddleware())
+        self.dp.callback_query.middleware(RoleMiddleware())
+        self.dp.callback_query.middleware(CallbackAnswerMiddleware())
+        self.dp.inline_query.middleware(DbMiddleware())
+        self.dp.inline_query.middleware(RoleMiddleware())
+        self.dp.chosen_inline_result.middleware(DbMiddleware())
+        self.dp.chosen_inline_result.middleware(RoleMiddleware())
+        self.dp.poll.middleware(DbMiddleware())
+        self.dp.poll.middleware(RoleMiddleware())
+
+        # Include routers
+        self.dp.include_router(registration_router)
+        self.dp.include_router(qa_handlers_router)
+        self.dp.include_router(dialog_management_router)
+        self.dp.include_router(user_questions_router)
+        self.dp.include_router(clarify_router)
+        self.dp.include_router(common_router)
+
+        logger.info("Dispatcher middleware and routers configured")
 
     def get_bot(self) -> Bot | None:
         return self.bot

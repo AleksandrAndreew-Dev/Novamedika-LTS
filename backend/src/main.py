@@ -109,97 +109,11 @@ async def lifespan(app: FastAPI):
     logger.info(f"Worker PID {worker_pid}: Initializing bot instance")
 
     # Каждый worker инициализирует своего бота (необходимо для обработки webhook)
+    # Middleware и роутеры настраиваются внутри bot_manager.initialize()
     bot, dp = await bot_manager.initialize()
 
     if bot and dp:
         logger.info(f"Worker PID {worker_pid}: Bot initialized successfully")
-
-        # Register middleware on specific event types to avoid breaking FSM middleware chain
-        dp.message.middleware(DbMiddleware())
-        dp.message.middleware(RoleMiddleware())
-        dp.callback_query.middleware(DbMiddleware())
-        dp.callback_query.middleware(RoleMiddleware())
-        # Automatically answer all callback queries to prevent "unhandled" warnings
-        dp.callback_query.middleware(CallbackAnswerMiddleware())
-        dp.inline_query.middleware(DbMiddleware())
-        dp.inline_query.middleware(RoleMiddleware())
-        dp.chosen_inline_result.middleware(DbMiddleware())
-        dp.chosen_inline_result.middleware(RoleMiddleware())
-        dp.poll.middleware(DbMiddleware())
-        dp.poll.middleware(RoleMiddleware())
-
-        # Порядок роутеров важен: специфичные handlers ДО общих fallback-обработчиков
-        # registration_router должен быть первым, чтобы state-based handlers работали до unknown_command
-        # common_router содержит общее меню и catch-all handlers, поэтому его нужно подключать последним
-        logger.info(f"Worker PID {worker_pid}: Including routers...")
-
-        try:
-            dp.include_router(registration_router)
-            logger.info(
-                f"Worker PID {worker_pid}: ✅ registration_router included successfully"
-            )
-        except Exception as e:
-            logger.error(
-                f"Worker PID {worker_pid}: ❌ Failed to include registration_router: {e}",
-                exc_info=True,
-            )
-
-        try:
-            dp.include_router(qa_handlers_router)
-            logger.info(
-                f"Worker PID {worker_pid}: ✅ qa_handlers_router included successfully"
-            )
-        except Exception as e:
-            logger.error(
-                f"Worker PID {worker_pid}: ❌ Failed to include qa_handlers_router: {e}",
-                exc_info=True,
-            )
-
-        try:
-            dp.include_router(dialog_management_router)
-            logger.info(
-                f"Worker PID {worker_pid}: ✅ dialog_management_router included successfully"
-            )
-        except Exception as e:
-            logger.error(
-                f"Worker PID {worker_pid}: ❌ Failed to include dialog_management_router: {e}",
-                exc_info=True,
-            )
-
-        try:
-            dp.include_router(user_questions_router)
-            logger.info(
-                f"Worker PID {worker_pid}: ✅ user_questions_router included successfully"
-            )
-        except Exception as e:
-            logger.error(
-                f"Worker PID {worker_pid}: ❌ Failed to include user_questions_router: {e}",
-                exc_info=True,
-            )
-
-        try:
-            dp.include_router(clarify_router)
-            logger.info(
-                f"Worker PID {worker_pid}: ✅ clarify_router included successfully"
-            )
-        except Exception as e:
-            logger.error(
-                f"Worker PID {worker_pid}: ❌ Failed to include clarify_router: {e}",
-                exc_info=True,
-            )
-
-        try:
-            dp.include_router(common_router)
-            logger.info(
-                f"Worker PID {worker_pid}: ✅ common_router included successfully"
-            )
-        except Exception as e:
-            logger.error(
-                f"Worker PID {worker_pid}: ❌ Failed to include common_router: {e}",
-                exc_info=True,
-            )
-
-        logger.info(f"Worker PID {worker_pid}: All routers included")
 
         # DIAGNOSTIC: Verify callback handlers are registered
         try:

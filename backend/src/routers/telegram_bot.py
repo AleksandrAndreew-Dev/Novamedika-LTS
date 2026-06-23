@@ -51,9 +51,15 @@ async def telegram_webhook(request: Request):
         # ✅ Используем уже инициализированные bot и dp
         bot = bot_manager.get_bot()
         dp = bot_manager.get_dp()
+        
+        # Авто-реинициализация после /qa/drop (если bot/dp были сброшены)
         if not bot or not dp:
-            logger.error("Bot or dispatcher not initialized in bot_manager")
-            raise HTTPException(status_code=503, detail="Bot service not ready")
+            logger.warning("Bot or dispatcher not initialized, attempting auto-reinitialization...")
+            bot, dp = await bot_manager.initialize()
+            if not bot or not dp:
+                logger.error("Bot auto-reinitialization failed")
+                raise HTTPException(status_code=503, detail="Bot service not ready")
+            logger.info("✅ Bot auto-reinitialized successfully")
 
         # Получение JSON
         try:
