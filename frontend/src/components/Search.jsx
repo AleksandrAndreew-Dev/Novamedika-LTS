@@ -14,13 +14,11 @@ const SearchResults = lazy(() => import("./SearchResults"));
 import { useTelegramWebApp } from "../telegram/TelegramContext";
 import { api } from "../api/client";
 import { logger } from "../utils/logger";
-import AskPharmacist from "./AskPharmacist";
 import { useChat } from "../context/ChatContext";
 
 export default function Search() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [showAskForm, setShowAskForm] = useState(false);
   const [showMyQuestions, setShowMyQuestions] = useState(false);
   const [cities, setCities] = useState([]);
 

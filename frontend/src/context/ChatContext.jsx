@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import {
   createContext,
   useContext,
@@ -50,7 +51,7 @@ export function ChatProvider({ children }) {
     }
   }, [isWidgetOpen]);
 
-  // Polling for new messages when widget is open and has active consultation
+  // Polling for new messages
   useEffect(() => {
     if (!currentConsultationId) return;
 
@@ -62,7 +63,6 @@ export function ChatProvider({ children }) {
           false,
         );
         setMessages((prev) => {
-          // Check if we have new messages
           const prevIds = new Set(prev.map((m) => m.uuid || m.id));
           const added = newMessages.filter((m) => !prevIds.has(m.uuid || m.id));
           if (added.length === 0) return prev;
@@ -77,12 +77,10 @@ export function ChatProvider({ children }) {
       }
     };
 
-    // Initial fetch
     if (messages.length === 0) {
       poll();
     }
 
-    // Start polling
     pollingRef.current = setInterval(poll, 5000);
 
     return () => {
@@ -104,7 +102,7 @@ export function ChatProvider({ children }) {
         false,
       );
       setMessages(data);
-    } catch (err) {
+    } catch {
       setError("Не удалось загрузить сообщения");
     } finally {
       setLoading(false);
@@ -122,9 +120,9 @@ export function ChatProvider({ children }) {
       setCurrentConsultationId(data.uuid);
       setMessages([]);
       return data;
-    } catch (err) {
+    } catch (e) {
       setError("Не удалось создать консультацию");
-      throw err;
+      throw e;
     } finally {
       setLoading(false);
     }
@@ -133,17 +131,13 @@ export function ChatProvider({ children }) {
   const sendMessage = useCallback(
     async (text) => {
       if (!currentConsultationId || !text.trim()) return;
-      try {
-        const data = await chatService.sendMessage(
-          currentConsultationId,
-          text,
-          isAnonymous,
-          false,
-        );
-        setMessages((prev) => [...prev, data]);
-      } catch (err) {
-        throw err;
-      }
+      const data = await chatService.sendMessage(
+        currentConsultationId,
+        text,
+        isAnonymous,
+        false,
+      );
+      setMessages((prev) => [...prev, data]);
     },
     [currentConsultationId, isAnonymous],
   );
@@ -183,5 +177,3 @@ export function useChat() {
   }
   return ctx;
 }
-
-export default ChatContext;

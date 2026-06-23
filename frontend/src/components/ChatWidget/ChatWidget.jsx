@@ -7,15 +7,12 @@ import "./ChatWidget.css";
 export default function ChatWidget() {
   const {
     currentConsultationId,
-    setCurrentConsultationId,
     messages,
     isWidgetOpen,
     openWidget,
     closeWidget,
     loading,
-    error,
     unreadCount,
-    isAnonymous,
     loadMessages,
     createConsultation,
     sendMessage,
@@ -81,21 +78,6 @@ export default function ChatWidget() {
       hour: "2-digit",
       minute: "2-digit",
     });
-  };
-
-  const getStatusText = (status) => {
-    switch (status) {
-      case "pending":
-        return "В ожидании ответа";
-      case "answered":
-        return "Получен ответ";
-      case "completed":
-        return "Завершено";
-      case "in_progress":
-        return "В работе";
-      default:
-        return status || "В ожидании";
-    }
   };
 
   const countUnread = messages.filter(
