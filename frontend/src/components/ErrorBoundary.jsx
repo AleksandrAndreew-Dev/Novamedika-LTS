@@ -14,6 +14,42 @@ class ErrorBoundary extends React.Component {
   componentDidCatch(error, errorInfo) {
     this.setState({ errorInfo });
     logger.error("ErrorBoundary caught:", error, errorInfo);
+
+    // Send client-side error to backend for diagnostics
+    try {
+      const payload = {
+        error: error?.message || String(error) || "",
+        componentStack: errorInfo?.componentStack || null,
+        url: window.location.href,
+        userAgent: navigator.userAgent,
+        timestamp: new Date().toISOString(),
+      };
+
+      // Use API_BASE_URL from config (handles proxy vs direct API domain)
+      const apiUrl =
+        (
+          window.APP_CONFIG?.API_BASE_URL ||
+          import.meta.env.VITE_API_URL ||
+          "https://api.spravka.novamedika.com"
+        ).replace(/\/$/, "") + "/api/log/client-error";
+
+      // Use sendBeacon for reliability (works during page unload too)
+      if (navigator.sendBeacon) {
+        const blob = new Blob([JSON.stringify(payload)], {
+          type: "application/json",
+        });
+        navigator.sendBeacon(apiUrl, blob);
+      } else {
+        fetch(apiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          keepalive: true,
+        }).catch(() => {});
+      }
+    } catch (e) {
+      // Silently fail - don't cascade errors
+    }
   }
 
   handleReset = () => {
@@ -26,26 +62,29 @@ class ErrorBoundary extends React.Component {
   // Helper function to determine error type and provide specific guidance
   getErrorMessage = () => {
     const { error } = this.state;
-    
+
     if (!error) return "Произошла ошибка при загрузке компонента.";
-    
+
     // Check for common error patterns
-    if (error.message?.includes('auth') || error.message?.includes('token')) {
+    if (error.message?.includes("auth") || error.message?.includes("token")) {
       return "Ошибка аутентификации. Попробуйте открыть панель заново из Telegram.";
     }
-    
-    if (error.message?.includes('network') || error.message?.includes('Network')) {
+
+    if (
+      error.message?.includes("network") ||
+      error.message?.includes("Network")
+    ) {
       return "Ошибка сети. Проверьте подключение к интернету и попробуйте снова.";
     }
-    
-    if (error.message?.includes('401') || error.message?.includes('403')) {
+
+    if (error.message?.includes("401") || error.message?.includes("403")) {
       return "Ошибка доступа. Пожалуйста, откройте панель заново из Telegram.";
     }
-    
-    if (error.message?.includes('404')) {
+
+    if (error.message?.includes("404")) {
       return "Ресурс не найден. Возможно, изменился адрес страницы.";
     }
-    
+
     return "Произошла ошибка при загрузке компонента. Попробуйте обновить страницу.";
   };
 
@@ -95,7 +134,7 @@ class ErrorBoundary extends React.Component {
               <button
                 onClick={() => {
                   // Redirect to main Telegram bot
-                  window.open('https://t.me/novamedika_bot', '_blank');
+                  window.open("https://t.me/novamedika_bot", "_blank");
                 }}
                 className="bg-gray-100 text-gray-800 font-medium py-3 px-6 rounded-lg transition-colors hover:bg-gray-200 min-h-[44px]"
               >

@@ -320,6 +320,7 @@ from routers import (
     pharmacist_dashboard,
     admin,
     prescriptions,
+    client_logs,
 )
 
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])  # User auth
@@ -346,6 +347,9 @@ app.include_router(admin.router, tags=["admin"])  # Admin endpoints для audit
 app.include_router(
     prescriptions.router, tags=["prescriptions"]
 )  # Prescription photo upload via Telegram Web App
+app.include_router(
+    client_logs.router
+)  # Client-side error logging from Telegram Web App
 
 
 @app.get("/")
