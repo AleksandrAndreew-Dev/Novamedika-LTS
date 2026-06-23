@@ -23,26 +23,22 @@ export default function Chat() {
 
   // Определяем, анонимный ли пользователь (создал вопрос через /api/public/questions/)
   const isAnonymousQuestion = () => {
-    // Если нет JWT и не в Telegram — используем /api/public/ endpoints
-    const hasToken = userAuthService.isAuthenticated();
-    const inTelegram = telegramAuthService.canAuthViaWebApp();
-    return !hasToken && !inTelegram;
+    // Если нет JWT — используем /api/public/ endpoints (включая Telegram без JWT)
+    return !userAuthService.isAuthenticated();
   };
 
   useEffect(() => {
     const initChat = async () => {
       try {
         // 1. Попытка Telegram WebApp auto-login (если в Telegram)
-        const inTelegram = telegramAuthService.canAuthViaWebApp();
-        setIsTelegramUser(inTelegram);
-
-        if (inTelegram) {
+        if (telegramAuthService.canAuthViaWebApp()) {
+          setIsTelegramUser(true);
           const success = await telegramAuthService.autoLogin();
           if (success) {
             console.log("[Chat] ✅ Telegram auto-login successful");
           } else {
             console.log(
-              "[Chat] ⚠️ Telegram auto-login failed, using initData as fallback",
+              "[Chat] ⚠️ Telegram auto-login failed — continuing as anonymous",
             );
           }
         }
@@ -52,7 +48,7 @@ export default function Chat() {
         setIsAnonymous(anon);
 
         // 3. Загружаем данные консультации
-        await loadConsultationData(inTelegram, anon);
+        await loadConsultationData(anon);
       } catch (err) {
         console.error("[Chat] Init error:", err);
         setError("Не удалось загрузить консультацию");
