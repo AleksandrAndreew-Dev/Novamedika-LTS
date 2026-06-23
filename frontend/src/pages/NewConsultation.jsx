@@ -32,11 +32,11 @@ export default function NewConsultation() {
         setLoading(true);
 
         // 1. Telegram auto-login если в WebApp
-        let isTelegramUser = false;
+
         if (telegramAuthService.canAuthViaWebApp()) {
           console.log("[NewConsultation] Attempting Telegram auto-login");
           const success = await telegramAuthService.autoLogin();
-          isTelegramUser = success;
+
           if (success) {
             console.log("[NewConsultation] ✅ Telegram auto-login successful");
           } else {
