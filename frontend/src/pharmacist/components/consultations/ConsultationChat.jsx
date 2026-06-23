@@ -240,9 +240,9 @@ export default function ConsultationChat({
           </div>
         ) : (
           messages.map((msg, idx) => {
-            const isPharmacist = msg.sender === "pharmacist";
+            const isPharmacist = msg.sender_type === "pharmacist";
             const prevMsg = idx > 0 ? messages[idx - 1] : null;
-            const showAvatar = !isPharmacist && (!prevMsg || prevMsg.sender === "pharmacist");
+            const showAvatar = !isPharmacist && (!prevMsg || prevMsg.sender_type === "pharmacist");
 
             return (
               <div key={msg.uuid || idx} className={`flex ${isPharmacist ? "justify-end" : "justify-start"} mb-0.5 animate-fadeIn`}>

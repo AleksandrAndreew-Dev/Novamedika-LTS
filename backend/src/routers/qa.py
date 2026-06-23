@@ -752,6 +752,23 @@ async def create_public_question(
             f"Public question created by anon user {user.uuid}: {new_question.uuid}"
         )
 
+        # Broadcast to pharmacist dashboard via WebSocket
+        try:
+            from routers.pharmacist_dashboard import ws_manager
+
+            await ws_manager.broadcast_new_question(
+                {
+                    "uuid": str(new_question.uuid),
+                    "text": new_question.text,
+                    "status": new_question.status,
+                    "created_at": new_question.created_at.isoformat(),
+                    "user_name": "Гость",
+                    "message_count": 0,
+                }
+            )
+        except Exception as ws_err:
+            logger.warning(f"WebSocket broadcast failed (non-critical): {ws_err}")
+
         return {
             "uuid": str(new_question.uuid),
             "user_uuid": str(user.uuid),

@@ -485,8 +485,11 @@ async def send_message(
 
     # Save message to database
     msg = DialogMessage(
+        uuid=uuid.uuid4(),
         question_id=question_id,
         sender_type="pharmacist",
+        sender_id=pharmacist.uuid,
+        message_type="answer",
         text=data.text,
         created_at=datetime.utcnow(),
     )
