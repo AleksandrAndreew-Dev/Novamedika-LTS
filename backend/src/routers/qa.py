@@ -704,7 +704,6 @@ async def create_public_question(
     question: PublicQuestionCreate,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(get_api_key),
 ):
     """
     Создать вопрос от анонимного пользователя (без JWT).
@@ -783,7 +782,6 @@ async def get_public_question(
     question_id: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(get_api_key),
 ):
     """
     Получить вопрос анонимного пользователя (без JWT).
@@ -834,7 +832,6 @@ async def get_public_question_messages(
     question_id: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(get_api_key),
 ):
     """
     Получить сообщения анонимного пользователя (без JWT).
@@ -887,7 +884,6 @@ async def send_public_question_message(
     message: PublicMessageCreate,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(get_api_key),
 ):
     """
     Отправить сообщение в вопрос анонимного пользователя (без JWT).

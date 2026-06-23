@@ -12,7 +12,6 @@ export default function NewConsultation() {
   const [toast, setToast] = useState(null);
   const createdRef = useRef(false);
 
-  // Генерация/получение anon_user_id для неавторизованных пользователей
   const getAnonUserId = () => {
     let anonId = localStorage.getItem("anon_user_id");
     if (!anonId) {
@@ -24,66 +23,68 @@ export default function NewConsultation() {
 
   useEffect(() => {
     const autoCreateChat = async () => {
-      // Предотвращаем повторное создание (React StrictMode)
       if (createdRef.current) return;
       createdRef.current = true;
 
       try {
         setLoading(true);
 
-        // 1. Telegram auto-login если в WebApp
-
         if (telegramAuthService.canAuthViaWebApp()) {
           console.log("[NewConsultation] Attempting Telegram auto-login");
           const success = await telegramAuthService.autoLogin();
-
           if (success) {
-            console.log("[NewConsultation] ✅ Telegram auto-login successful");
+            console.log("[NewConsultation] Telegram auto-login successful");
           } else {
-            console.log("[NewConsultation] ⚠️ Telegram auto-login failed");
+            console.log("[NewConsultation] Telegram auto-login failed");
           }
         }
 
-        // 2. После autoLogin проверяем наличие JWT (await гарантирует актуальность)
-        // 3. Создаём консультацию. Сначала пробуем JWT, падаем на public
         if (userAuthService.isAuthenticated()) {
           console.log("[NewConsultation] Creating consultation via JWT");
           try {
-            const response = await api.post("/api/consultations/", {
-              text: "Новый вопрос фармацевту",
-              category: "general",
-            });
-            console.log(
-              "[NewConsultation] ✅ Consultation created:",
-              response.data.uuid,
+            const jwtResponse = await api.post(
+              "/api/consultations/",
+              {
+                text: "Новый вопрос фармацевту",
+                category: "general",
+              },
+              {
+                headers: { "X-API-KEY": import.meta.env.VITE_API_KEY || "" },
+              },
             );
-            navigate(`/chat/${response.data.uuid}`, { replace: true });
+            console.log(
+              "[NewConsultation] Consultation created:",
+              jwtResponse.data.uuid,
+            );
+            navigate(`/chat/${jwtResponse.data.uuid}`, { replace: true });
             return;
           } catch (jwtErr) {
             console.warn(
               "[NewConsultation] JWT consultation failed, falling back to public:",
               jwtErr.response?.status,
             );
-            // Fall through to public question
           }
         }
 
-        // Анонимный пользователь — без регистрации (fallback)
         console.log("[NewConsultation] Creating public question (anonymous)");
-        const response = await api.post("/api/public/questions/", {
-          text: "Новый вопрос фармацевту",
-          category: "general",
-          anon_user_id: getAnonUserId(),
-        });
-        console.log(
-          "[NewConsultation] ✅ Public question created:",
-          response.uuid,
+        const anonResponse = await api.post(
+          "/api/public/questions/",
+          {
+            text: "Новый вопрос фармацевту",
+            category: "general",
+            anon_user_id: getAnonUserId(),
+          },
+          {
+            headers: { "X-API-KEY": import.meta.env.VITE_API_KEY || "" },
+          },
         );
-        navigate(`/chat/${response.uuid}`, { replace: true });
+        console.log(
+          "[NewConsultation] Public question created:",
+          anonResponse.data.uuid,
+        );
+        navigate(`/chat/${anonResponse.data.uuid}`, { replace: true });
       } catch (err) {
         console.error("[NewConsultation] Failed to create consultation:", err);
-
-        // Показываем кнопку для повторной попытки
         setError(
           err.response?.data?.detail ||
             err.userMessage ||
@@ -138,7 +139,6 @@ export default function NewConsultation() {
         </div>
       ) : null}
 
-      {/* Toast Notifications */}
       {toast && (
         <Toast
           message={toast.message}

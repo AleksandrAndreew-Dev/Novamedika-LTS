@@ -14,9 +14,9 @@ export const api = axios.create({
 // Request interceptor — добавляем API key и Authorization token если есть
 api.interceptors.request.use(
   (config) => {
-    // Добавляем API key если есть
+    // Добавляем API key если есть (только если не установлен явно)
     const apiKey = import.meta.env.VITE_API_KEY;
-    if (apiKey) {
+    if (apiKey && !config.headers["X-API-KEY"]) {
       config.headers["X-API-KEY"] = apiKey;
     }
 
