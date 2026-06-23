@@ -224,7 +224,6 @@ async def login_user(
             user_id=user.uuid,
             token=refresh_token,
             expires_at=get_utc_now_naive() + refresh_token_expires,
-            is_active=True,
         )
         db.add(new_refresh_token)
         await db.commit()
@@ -311,7 +310,6 @@ async def refresh_token_endpoint(
             user_id=user.uuid,
             token=new_refresh_token_str,
             expires_at=get_utc_now_naive() + refresh_token_expires,
-            is_active=True,
         )
         db.add(new_refresh_token)
         await db.commit()
@@ -476,7 +474,6 @@ async def login_with_telegram(
             user_id=user.uuid,
             token=refresh_token,
             expires_at=get_utc_now_naive() + refresh_token_expires,
-            is_active=True,
         )
         db.add(new_refresh_token)
         await db.commit()

@@ -9,8 +9,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["client-logs"])
 
-# Путь для сохранения клиентских логов
-CLIENT_LOG_DIR = os.getenv("CLIENT_LOG_DIR", "/opt/novamedika-prod/logs")
+# Путь для сохранения клиентских логов (tmp — гарантированно writable)
+CLIENT_LOG_DIR = os.getenv("CLIENT_LOG_DIR", "/tmp/novamedika-client-logs")
 CLIENT_LOG_FILE = os.path.join(CLIENT_LOG_DIR, "client-errors.jsonl")
 
 
