@@ -419,7 +419,7 @@ class SendMessageRequest(BaseModel):
 class DialogMessageResponse(BaseModel):
     uuid: str
     question_id: str
-    sender: str  # "pharmacist" or "user"
+    sender_type: str  # "pharmacist" or "user"
     text: str
     created_at: datetime
 
@@ -486,7 +486,7 @@ async def send_message(
     # Save message to database
     msg = DialogMessage(
         question_id=question_id,
-        sender="pharmacist",
+        sender_type="pharmacist",
         text=data.text,
         created_at=datetime.utcnow(),
     )

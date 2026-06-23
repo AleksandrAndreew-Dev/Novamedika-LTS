@@ -5,14 +5,14 @@ import telegramAuthService from "./telegramAuthService";
 /**
  * Unified chat service — extracted from Chat.jsx + AskPharmacist.jsx
  * Handles both authorized (JWT/TMA) and anonymous modes
+ *
+ * NOTE: JWT Bearer token добавляется автоматически через interceptor в client.js.
+ * Явно передаём headers только для TMA auth (Telegram Mini App),
+ * так как interceptor не обрабатывает этот тип.
  */
 
-const getAuthHeaders = (inTelegram = false) => {
-  const token = userAuthService.getAccessToken();
-  if (token) {
-    return { Authorization: `Bearer ${token}` };
-  }
-  if (inTelegram && telegramAuthService.initData) {
+const getTmaHeaders = () => {
+  if (telegramAuthService.initData) {
     return { Authorization: `tma ${telegramAuthService.initData}` };
   }
   return {};
@@ -53,11 +53,11 @@ export const chatService = {
       return response.data;
     }
     const inTelegram = !!telegramAuthService.initData;
-    const headers = getAuthHeaders(inTelegram);
+    const config = inTelegram ? { headers: getTmaHeaders() } : {};
     const response = await api.post(
       "/api/consultations/",
       { text: text.trim(), category },
-      { headers },
+      config,
     );
     return response.data;
   },
@@ -74,10 +74,11 @@ export const chatService = {
         messages: messagesRes.data,
       };
     }
-    const headers = getAuthHeaders(inTelegram);
+    // JWT добавляется interceptor-ом; явные headers нужны только для TMA
+    const config = inTelegram ? { headers: getTmaHeaders() } : {};
     const [consultationRes, messagesRes] = await Promise.all([
-      api.get(`/api/consultations/${id}`, { headers }),
-      api.get(`/api/consultations/${id}/messages`, { headers }),
+      api.get(`/api/consultations/${id}`, config),
+      api.get(`/api/consultations/${id}/messages`, config),
     ]);
     return {
       consultation: consultationRes.data,
@@ -93,11 +94,11 @@ export const chatService = {
       });
       return response.data;
     }
-    const headers = getAuthHeaders(inTelegram);
+    const config = inTelegram ? { headers: getTmaHeaders() } : {};
     const response = await api.post(
       `/api/consultations/${id}/messages`,
       { text: text.trim() },
-      { headers },
+      config,
     );
     return response.data;
   },
@@ -108,8 +109,8 @@ export const chatService = {
       const res = await api.get(`/api/public/questions/${id}/messages`);
       return res.data;
     }
-    const headers = getAuthHeaders(inTelegram);
-    const res = await api.get(`/api/consultations/${id}/messages`, { headers });
+    const config = inTelegram ? { headers: getTmaHeaders() } : {};
+    const res = await api.get(`/api/consultations/${id}/messages`, config);
     return res.data;
   },
 

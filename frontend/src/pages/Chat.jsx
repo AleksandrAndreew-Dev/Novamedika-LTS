@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import api from "../api/client";
 import userAuthService from "../services/userAuthService";
 import telegramAuthService from "../services/telegramAuthService";
+import chatService from "../services/chatService";
 import Toast from "../components/Toast";
 
 export default function Chat() {
@@ -32,8 +33,9 @@ export default function Chat() {
     const initChat = async () => {
       try {
         // 1. Попытка Telegram WebApp auto-login (если в Telegram)
+        let telegramUser = false;
         if (telegramAuthService.canAuthViaWebApp()) {
-          setIsTelegramUser(true);
+          telegramUser = true;
           const success = await telegramAuthService.autoLogin();
           if (success) {
             console.log("[Chat] ✅ Telegram auto-login successful");
@@ -45,12 +47,12 @@ export default function Chat() {
         }
 
         // 2. После autoLogin проверяем — если JWT появился, используем авторизованный режим
-        //    Иначе — анонимный режим через /api/public/
         const anon = isAnonymousQuestion();
+        setIsTelegramUser(telegramUser);
         setIsAnonymous(anon);
 
-        // 3. Загружаем данные консультации (с учётом статуса анонимности после autoLogin)
-        await loadConsultationData(isTelegramUser, anon);
+        // 3. Загружаем данные консультации (после установки всех флагов)
+        await loadConsultationData(telegramUser, anon);
       } catch (err) {
         console.error("[Chat] Init error:", err);
         setError("Не удалось загрузить консультацию");
@@ -95,40 +97,38 @@ export default function Chat() {
       }
     };
 
-    if (messages.length === 0) {
-      const initialLoad = setTimeout(poll, 500);
-      pollingRef.current = setInterval(poll, 5000);
-      return () => {
-        clearTimeout(initialLoad);
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      };
-    }
-
+    // Initial load after short delay
+    const initialLoad = setTimeout(poll, 500);
     pollingRef.current = setInterval(poll, 5000);
+
     return () => {
+      clearTimeout(initialLoad);
       if (pollingRef.current) {
         clearInterval(pollingRef.current);
         pollingRef.current = null;
       }
     };
-  }, [id, isAnonymous, isTelegramUser, messages.length]);
+  }, [id, isAnonymous, isTelegramUser, getAuthHeaders]); // removed messages.length, added getAuthHeaders
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
-  const getAuthHeaders = useCallback((inTelegram) => {
-    const token = userAuthService.getAccessToken();
-    if (token) {
-      return { Authorization: `Bearer ${token}` };
-    }
-    // Fallback для Telegram WebApp без JWT — используем initData
-    if (inTelegram && telegramAuthService.initData) {
-      return { Authorization: `tma ${telegramAuthService.initData}` };
-    }
-    return {};
-  }, []);
+  // Auth headers теперь берутся из interceptor в client.js,
+  // используем chatService.getAuthHeaders только для явных случаев
+  const getAuthHeaders = useCallback(
+    (inTelegram) => {
+      const token = userAuthService.getAccessToken();
+      if (token) {
+        return { Authorization: `Bearer ${token}` };
+      }
+      if (inTelegram && telegramAuthService.initData) {
+        return { Authorization: `tma ${telegramAuthService.initData}` };
+      }
+      return {};
+    },
+    [userAuthService, telegramAuthService],
+  );
 
   const loadConsultationData = async (inTelegram = false, anon = false) => {
     try {

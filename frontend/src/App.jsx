@@ -364,8 +364,33 @@ function App() {
                 <Route path="/*" element={<Search />} />
               </Routes>
 
-              {/* ChatWidget — только для веб-версии (не Telegram) */}
-              {!window.Telegram?.WebApp?.initData && <ChatWidget />}
+              {/* ChatWidget — для веб-версии; в Telegram показываем fallback-ссылку */}
+              {window.Telegram?.WebApp?.initData ? (
+                <a
+                  href={
+                    window.Telegram.WebApp.initDataUnsafe?.start_param
+                      ? `/?start=${window.Telegram.WebApp.initDataUnsafe.start_param}`
+                      : "/chat/new"
+                  }
+                  className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 shadow-lg flex items-center justify-center text-white hover:shadow-xl transition-shadow active:scale-90"
+                  aria-label="Чат с фармацевтом"
+                >
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                </a>
+              ) : (
+                <ChatWidget />
+              )}
 
               {/* Toast уведомления */}
               {toast && (
