@@ -56,13 +56,22 @@ class BotManager:
             self.bot = Bot(
                 token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML)
             )
-            self._storage = await self._create_storage()
-            self.dp = Dispatcher(storage=self._storage)
-
-            # Настраиваем middleware и роутеры для авто-реинициализации
-            await self._setup_dispatcher()
-
-            logger.info("Bot initialized successfully with RedisStorage")
+            # Переиспользуем существующий Dispatcher, если он уже был создан.
+            # Это необходимо для корректного auto-restart после /qa/drop:
+            # роутеры уже зарегистрированы в старом dp, и повторный include_router
+            # вызовет ошибку "Router is already attached".
+            if not self.dp:
+                self._storage = await self._create_storage()
+                self.dp = Dispatcher(storage=self._storage)
+                # Настраиваем middleware и роутеры только для нового Dispatcher
+                await self._setup_dispatcher()
+                logger.info(
+                    "Bot initialized successfully with RedisStorage (new dispatcher)"
+                )
+            else:
+                logger.info(
+                    "Bot initialized successfully with RedisStorage (reused dispatcher)"
+                )
             return self.bot, self.dp
         except Exception as e:
             logger.error(f"Failed to initialize bot: {e}")
@@ -113,7 +122,9 @@ class BotManager:
 
     async def reset(self):
         """Сброс бота и FSM storage для auto-restart после /qa/drop"""
-        logger.warning("🔄 BotManager reset initiated — cleaning up FSM storage and bot instances")
+        logger.warning(
+            "🔄 BotManager reset initiated — cleaning up FSM storage and bot instances"
+        )
 
         # Закрываем FSM storage
         if self._storage:
@@ -138,8 +149,12 @@ class BotManager:
                 logger.warning(f"Bot session close error (non-critical): {e}")
             self.bot = None
 
-        self.dp = None
-        logger.warning("✅ BotManager reset complete — will reinitialize on next webhook")
+        # Dispatcher НЕ обнуляем — роутеры уже зарегистрированы, и повторный
+        # include_router вызовет ошибку "Router is already attached".
+        # При следующем initialize() создастся новый Bot, а Dispatcher переиспользуется.
+        logger.warning(
+            "✅ BotManager reset complete — dp preserved, will reinitialize on next webhook"
+        )
 
     async def shutdown(self):
         if self.bot:
