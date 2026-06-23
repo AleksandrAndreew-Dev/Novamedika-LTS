@@ -6,6 +6,7 @@ WORKDIR /app
 ARG VITE_API_URL
 ARG VITE_WS_URL
 ARG VITE_WS_URL_PHARMACIST
+ARG VITE_API_KEY
 
 # Копируем package files
 COPY package*.json ./
@@ -16,7 +17,7 @@ RUN npm ci
 COPY . .
 
 # Собираем приложение с переменными окружения
-RUN VITE_API_URL=${VITE_API_URL} VITE_WS_URL=${VITE_WS_URL} VITE_WS_URL_PHARMACIST=${VITE_WS_URL_PHARMACIST} npm run build
+RUN VITE_API_URL=${VITE_API_URL} VITE_WS_URL=${VITE_WS_URL} VITE_WS_URL_PHARMACIST=${VITE_WS_URL_PHARMACIST} VITE_API_KEY=${VITE_API_KEY} npm run build
 
 FROM nginx:alpine as prod
 
