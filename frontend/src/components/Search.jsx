@@ -15,6 +15,7 @@ import { useTelegramWebApp } from "../telegram/TelegramContext";
 import { api } from "../api/client";
 import { logger } from "../utils/logger";
 import AskPharmacist from "./AskPharmacist";
+import { useChat } from "../context/ChatContext";
 
 export default function Search() {
   const [step, setStep] = useState(1);
@@ -49,6 +50,7 @@ export default function Search() {
 
   const navigate = useNavigate();
   const abortRef = useRef(null);
+  const { openWidget, isWidgetOpen } = useChat();
 
   const { tg, isTelegram } = useTelegramWebApp();
 
@@ -541,11 +543,11 @@ export default function Search() {
         </div>
       </div>
 
-      {/* Кнопка "Задать вопрос фармацевту" — везде, кроме Telegram WebApp */}
-      {!isTelegram && (
+      {/* Кнопка "Задать вопрос фармацевту" — везде, кроме Telegram WebApp. Не показываем если виджет уже открыт */}
+      {!isTelegram && !isWidgetOpen && (
         <div className="fixed bottom-24 right-4 z-40">
           <button
-            onClick={() => setShowAskForm(true)}
+            onClick={() => openWidget()}
             className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-full px-5 py-3 shadow-lg hover:shadow-xl transition-all text-sm font-medium flex items-center gap-2 hover:scale-105 active:scale-95"
           >
             <svg
@@ -565,9 +567,6 @@ export default function Search() {
           </button>
         </div>
       )}
-
-      {/* Модальное окно вопроса фармацевту */}
-      {showAskForm && <AskPharmacist onClose={() => setShowAskForm(false)} />}
 
       {/* Мои консультации — кнопка для анонимных пользователей */}
       {!isTelegram && anonQuestions.length > 0 && (

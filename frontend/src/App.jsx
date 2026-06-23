@@ -15,6 +15,8 @@ import Login from "./pages/Login";
 import UserDashboard from "./pages/UserDashboard";
 import Chat from "./pages/Chat";
 import NewConsultation from "./pages/NewConsultation";
+import { ChatProvider } from "./context/ChatContext";
+import ChatWidget from "./components/ChatWidget/ChatWidget";
 
 function App() {
   const [toast, setToast] = useState(null); // { message, type }
@@ -216,157 +218,166 @@ function App() {
     <TelegramProvider>
       <TelegramWrapper>
         <BrowserRouter>
-          <div className="App">
-            {/* Компонент предупреждения о таймауте */}
-            <SessionTimeoutWarning
-              showWarning={showWarning}
-              secondsLeft={secondsLeft}
-              onExtend={extendSession}
-            />
+          <ChatProvider>
+            <div className="App">
+              {/* Компонент предупреждения о таймауте */}
+              <SessionTimeoutWarning
+                showWarning={showWarning}
+                secondsLeft={secondsLeft}
+                onExtend={extendSession}
+              />
 
-            {/* Баннер cookies и согласий */}
-            {showCookieBanner && (
-              <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-                  <div className="p-6">
-                    <div className="text-center mb-6">
-                      <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <svg
-                          className="w-8 h-8 text-white"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-                          />
-                        </svg>
-                      </div>
-                      <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                        Защита персональных данных
-                      </h2>
-                      <p className="text-gray-600 text-sm">
-                        Для использования сервиса необходимо дать согласие на
-                        обработку персональных данных
-                      </p>
-                    </div>
-
-                    <div className="space-y-4 mb-6">
-                      <label className="flex items-start gap-3 cursor-pointer group p-3 rounded-xl hover:bg-gray-50 transition-colors">
-                        <input
-                          type="checkbox"
-                          checked={consents.privacyPolicy}
-                          onChange={() => handleConsentChange("privacyPolicy")}
-                          required
-                          className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
-                        />
-                        <span className="text-sm text-gray-700 leading-relaxed">
-                          Я согласен на обработку моих персональных данных в
-                          соответствии с{" "}
-                          <a
-                            href="/privacy-policy"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:text-blue-800 underline font-medium"
+              {/* Баннер cookies и согласий */}
+              {showCookieBanner && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                  <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+                    <div className="p-6">
+                      <div className="text-center mb-6">
+                        <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <svg
+                            className="w-8 h-8 text-white"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
                           >
-                            Политикой конфиденциальности
-                          </a>
-                          . Срок хранения: 1 год после последнего обращения.
-                        </span>
-                      </label>
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+                            />
+                          </svg>
+                        </div>
+                        <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                          Защита персональных данных
+                        </h2>
+                        <p className="text-gray-600 text-sm">
+                          Для использования сервиса необходимо дать согласие на
+                          обработку персональных данных
+                        </p>
+                      </div>
 
-                      <label className="flex items-start gap-3 cursor-pointer group p-3 rounded-xl hover:bg-gray-50 transition-colors">
-                        <input
-                          type="checkbox"
-                          checked={consents.dataProcessing}
-                          onChange={() => handleConsentChange("dataProcessing")}
-                          required
-                          className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
-                        />
-                        <span className="text-sm text-gray-700 leading-relaxed">
-                          Я согласен на обработку данных для поиска лекарств и
-                          проведения онлайн-консультаций с фармацевтами.
-                        </span>
-                      </label>
+                      <div className="space-y-4 mb-6">
+                        <label className="flex items-start gap-3 cursor-pointer group p-3 rounded-xl hover:bg-gray-50 transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={consents.privacyPolicy}
+                            onChange={() =>
+                              handleConsentChange("privacyPolicy")
+                            }
+                            required
+                            className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
+                          />
+                          <span className="text-sm text-gray-700 leading-relaxed">
+                            Я согласен на обработку моих персональных данных в
+                            соответствии с{" "}
+                            <a
+                              href="/privacy-policy"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-800 underline font-medium"
+                            >
+                              Политикой конфиденциальности
+                            </a>
+                            . Срок хранения: 1 год после последнего обращения.
+                          </span>
+                        </label>
 
-                      <label className="flex items-start gap-3 cursor-pointer group p-3 rounded-xl hover:bg-gray-50 transition-colors">
-                        <input
-                          type="checkbox"
-                          checked={consents.securityProtection}
-                          onChange={() =>
-                            handleConsentChange("securityProtection")
-                          }
-                          required
-                          className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
-                        />
-                        <span className="text-sm text-gray-700 leading-relaxed">
-                          Я подтверждаю, что ознакомлен с тем, что мои данные
-                          будут зашифрованы и защищены в соответствии с
-                          требованиями ОАЦ РБ (класс ИС 3-ин).
-                        </span>
-                      </label>
-                    </div>
+                        <label className="flex items-start gap-3 cursor-pointer group p-3 rounded-xl hover:bg-gray-50 transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={consents.dataProcessing}
+                            onChange={() =>
+                              handleConsentChange("dataProcessing")
+                            }
+                            required
+                            className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
+                          />
+                          <span className="text-sm text-gray-700 leading-relaxed">
+                            Я согласен на обработку данных для поиска лекарств и
+                            проведения онлайн-консультаций с фармацевтами.
+                          </span>
+                        </label>
 
-                    <div className="flex flex-col space-y-3">
-                      <button
-                        onClick={handleAcceptCookies}
-                        disabled={!allConsentsGiven}
-                        className={`font-medium py-3 px-4 rounded-xl transition-all text-sm ${
-                          allConsentsGiven
-                            ? "bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg"
-                            : "bg-gray-200 text-gray-500 cursor-not-allowed"
-                        }`}
-                      >
-                        Принять и продолжить
-                      </button>
-                      <a
-                        href="/privacy-policy"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-800 font-medium py-2 text-sm text-center underline"
-                      >
-                        Подробнее о политике конфиденциальности
-                      </a>
+                        <label className="flex items-start gap-3 cursor-pointer group p-3 rounded-xl hover:bg-gray-50 transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={consents.securityProtection}
+                            onChange={() =>
+                              handleConsentChange("securityProtection")
+                            }
+                            required
+                            className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
+                          />
+                          <span className="text-sm text-gray-700 leading-relaxed">
+                            Я подтверждаю, что ознакомлен с тем, что мои данные
+                            будут зашифрованы и защищены в соответствии с
+                            требованиями ОАЦ РБ (класс ИС 3-ин).
+                          </span>
+                        </label>
+                      </div>
+
+                      <div className="flex flex-col space-y-3">
+                        <button
+                          onClick={handleAcceptCookies}
+                          disabled={!allConsentsGiven}
+                          className={`font-medium py-3 px-4 rounded-xl transition-all text-sm ${
+                            allConsentsGiven
+                              ? "bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg"
+                              : "bg-gray-200 text-gray-500 cursor-not-allowed"
+                          }`}
+                        >
+                          Принять и продолжить
+                        </button>
+                        <a
+                          href="/privacy-policy"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800 font-medium py-2 text-sm text-center underline"
+                        >
+                          Подробнее о политике конфиденциальности
+                        </a>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            <Routes>
-              <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-              <Route path="/login" element={<Login />} />
-              <Route
-                path="/register"
-                element={
-                  <div className="min-h-screen flex items-center justify-center">
-                    Registration page coming soon
-                  </div>
-                }
-              />
-              <Route path="/dashboard" element={<UserDashboard />} />
-              <Route path="/chat/new" element={<NewConsultation />} />
-              <Route path="/chat/:id" element={<Chat />} />
-              <Route
-                path="/prescriptions/upload"
-                element={<UploadPrescription />}
-              />
-              <Route path="/*" element={<Search />} />
-            </Routes>
+              <Routes>
+                <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                <Route path="/login" element={<Login />} />
+                <Route
+                  path="/register"
+                  element={
+                    <div className="min-h-screen flex items-center justify-center">
+                      Registration page coming soon
+                    </div>
+                  }
+                />
+                <Route path="/dashboard" element={<UserDashboard />} />
+                <Route path="/chat/new" element={<NewConsultation />} />
+                <Route path="/chat/:id" element={<Chat />} />
+                <Route
+                  path="/prescriptions/upload"
+                  element={<UploadPrescription />}
+                />
+                <Route path="/*" element={<Search />} />
+              </Routes>
 
-            {/* Toast уведомления */}
-            {toast && (
-              <Toast
-                message={toast.message}
-                type={toast.type}
-                onClose={() => setToast(null)}
-                duration={toast.type === "error" ? 5000 : 3000}
-              />
-            )}
-          </div>
+              {/* ChatWidget — только для веб-версии (не Telegram) */}
+              {!window.Telegram?.WebApp?.initData && <ChatWidget />}
+
+              {/* Toast уведомления */}
+              {toast && (
+                <Toast
+                  message={toast.message}
+                  type={toast.type}
+                  onClose={() => setToast(null)}
+                  duration={toast.type === "error" ? 5000 : 3000}
+                />
+              )}
+            </div>
+          </ChatProvider>
         </BrowserRouter>
       </TelegramWrapper>
     </TelegramProvider>
