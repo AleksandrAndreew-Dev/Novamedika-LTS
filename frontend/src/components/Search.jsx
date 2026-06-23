@@ -6,6 +6,7 @@ import React, {
   lazy,
   Suspense,
 } from "react";
+import { useNavigate } from "react-router-dom";
 import SearchBar from "./SearchBar";
 import ErrorBoundary from "./ErrorBoundary";
 const FormSelection = lazy(() => import("./FormSelection"));
@@ -19,7 +20,17 @@ export default function Search() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [showAskForm, setShowAskForm] = useState(false);
+  const [showMyQuestions, setShowMyQuestions] = useState(false);
   const [cities, setCities] = useState([]);
+
+  // Чтение истории анонимных вопросов из localStorage
+  const [anonQuestions] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("anon_questions") || "[]");
+    } catch {
+      return [];
+    }
+  });
 
   const [searchData, setSearchData] = useState({
     name: "",
@@ -36,6 +47,7 @@ export default function Search() {
   });
   const [error, setError] = useState(null);
 
+  const navigate = useNavigate();
   const abortRef = useRef(null);
 
   const { tg, isTelegram } = useTelegramWebApp();
@@ -536,8 +548,18 @@ export default function Search() {
             onClick={() => setShowAskForm(true)}
             className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-full px-5 py-3 shadow-lg hover:shadow-xl transition-all text-sm font-medium flex items-center gap-2 hover:scale-105 active:scale-95"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+              />
             </svg>
             Задать вопрос
           </button>
@@ -546,6 +568,118 @@ export default function Search() {
 
       {/* Модальное окно вопроса фармацевту */}
       {showAskForm && <AskPharmacist onClose={() => setShowAskForm(false)} />}
+
+      {/* Мои консультации — кнопка для анонимных пользователей */}
+      {!isTelegram && anonQuestions.length > 0 && (
+        <div className="fixed bottom-40 left-4 z-40">
+          <button
+            onClick={() => setShowMyQuestions(!showMyQuestions)}
+            className="bg-white text-blue-600 border border-blue-200 rounded-full px-4 py-2.5 shadow-lg hover:shadow-xl transition-all text-sm font-medium flex items-center gap-2 hover:scale-105 active:scale-95"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+              />
+            </svg>
+            Мои консультации
+            <span className="bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+              {anonQuestions.length}
+            </span>
+          </button>
+        </div>
+      )}
+
+      {/* Панель списка консультаций */}
+      {showMyQuestions && anonQuestions.length > 0 && (
+        <div
+          className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setShowMyQuestions(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-sm w-full max-h-[70vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="font-semibold text-gray-900">Мои консультации</h3>
+              <button
+                onClick={() => setShowMyQuestions(false)}
+                className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+                aria-label="Закрыть"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+            <div className="overflow-y-auto max-h-[50vh]">
+              {[...anonQuestions].reverse().map((q, idx) => (
+                <button
+                  key={q.uuid || idx}
+                  onClick={() => {
+                    setShowMyQuestions(false);
+                    navigate(`/chat/${q.uuid}`);
+                  }}
+                  className="w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors flex items-start gap-3"
+                >
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-semibold flex-shrink-0 mt-0.5">
+                    💬
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-900 truncate">{q.text}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {q.created_at
+                        ? new Date(q.created_at).toLocaleDateString("ru-RU")
+                        : ""}
+                    </p>
+                  </div>
+                  <svg
+                    className="w-4 h-4 text-gray-300 flex-shrink-0 mt-1"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 5l7 7-7 7"
+                    />
+                  </svg>
+                </button>
+              ))}
+            </div>
+            <div className="p-3 border-t border-gray-100">
+              <button
+                onClick={() => {
+                  setShowMyQuestions(false);
+                  navigate("/chat/new");
+                }}
+                className="w-full py-2.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white text-sm font-medium rounded-xl hover:from-blue-600 hover:to-purple-700 transition-all"
+              >
+                + Новая консультация
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="bg-white border-t border-telegram-border mt-8">

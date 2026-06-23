@@ -43,12 +43,13 @@ export default function Chat() {
           }
         }
 
-        // 2. Определяем режим анонимности
+        // 2. После autoLogin проверяем — если JWT появился, используем авторизованный режим
+        //    Иначе — анонимный режим через /api/public/
         const anon = isAnonymousQuestion();
         setIsAnonymous(anon);
 
-        // 3. Загружаем данные консультации
-        await loadConsultationData(anon);
+        // 3. Загружаем данные консультации (с учётом статуса анонимности после autoLogin)
+        await loadConsultationData(isTelegramUser, anon);
       } catch (err) {
         console.error("[Chat] Init error:", err);
         setError("Не удалось загрузить консультацию");
@@ -305,26 +306,43 @@ export default function Chat() {
             </span>
           </div>
         </div>
-        <button
-          onClick={() => setToast({ message: "Консультация", type: "success" })}
-          className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full transition-colors"
-          aria-label="Информация"
-        >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+        <div className="flex items-center gap-1">
+          {isAnonymous && (
+            <span
+              className="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 rounded-full px-2 py-0.5 font-medium leading-normal"
+              title="Анонимный режим — данные хранятся локально"
+            >
+              Аноним
+            </span>
+          )}
+          <button
+            onClick={() =>
+              setToast({
+                message: isAnonymous
+                  ? "Вы в анонимном режиме. История чата хранится локально."
+                  : "Консультация",
+                type: "success",
+              })
+            }
+            className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full transition-colors"
+            aria-label="Информация"
           >
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="16" x2="12" y2="12"></line>
-            <line x1="12" y1="8" x2="12.01" y2="8"></line>
-          </svg>
-        </button>
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+          </button>
+        </div>
       </header>
 
       {/* ===== MESSAGES ===== */}

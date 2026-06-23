@@ -31,14 +31,20 @@ export default function NewConsultation() {
       try {
         setLoading(true);
 
-        // 1. Telegram auto-login если в WebApp (пробуем, но не критично)
+        // 1. Telegram auto-login если в WebApp
+        let isTelegramUser = false;
         if (telegramAuthService.canAuthViaWebApp()) {
           console.log("[NewConsultation] Attempting Telegram auto-login");
-          await telegramAuthService.autoLogin();
+          const success = await telegramAuthService.autoLogin();
+          isTelegramUser = success;
+          if (success) {
+            console.log("[NewConsultation] ✅ Telegram auto-login successful");
+          } else {
+            console.log("[NewConsultation] ⚠️ Telegram auto-login failed");
+          }
         }
 
-        // 2. Если есть JWT — используем /api/consultations/ (зарегистрированный пользователь)
-        //    Иначе — /api/public/questions/ (анонимный, регистрация не нужна)
+        // 2. После autoLogin проверяем наличие JWT (await гарантирует актуальность)
         if (userAuthService.isAuthenticated()) {
           console.log("[NewConsultation] Creating consultation via JWT");
           const response = await api.post("/api/consultations/", {
