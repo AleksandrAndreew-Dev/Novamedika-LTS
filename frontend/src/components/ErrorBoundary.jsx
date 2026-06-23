@@ -47,7 +47,7 @@ class ErrorBoundary extends React.Component {
           keepalive: true,
         }).catch(() => {});
       }
-    } catch (e) {
+    } catch (_) {
       // Silently fail - don't cascade errors
     }
   }

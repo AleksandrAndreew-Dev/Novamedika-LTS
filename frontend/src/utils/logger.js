@@ -38,7 +38,7 @@ function sendToServer(message) {
         keepalive: true,
       }).catch(() => {});
     }
-  } catch (e) {
+  } catch (_) {
     // Silently fail
   }
 }
