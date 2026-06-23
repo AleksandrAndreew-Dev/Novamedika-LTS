@@ -801,6 +801,8 @@ async def create_public_question(
             "created_at": new_question.created_at.isoformat(),
         }
 
+    except HTTPException:
+        raise
     except ValueError:
         raise HTTPException(status_code=400, detail="Неверный формат ID")
     except Exception as e:
@@ -858,6 +860,8 @@ async def get_public_question(
             ],
         }
 
+    except HTTPException:
+        raise
     except ValueError:
         raise HTTPException(status_code=400, detail="Неверный формат ID")
     except Exception as e:
@@ -909,6 +913,8 @@ async def get_public_question_messages(
             for m in messages
         ]
 
+    except HTTPException:
+        raise
     except ValueError:
         raise HTTPException(status_code=400, detail="Неверный формат ID")
     except Exception as e:
@@ -970,6 +976,8 @@ async def send_public_question_message(
             "created_at": new_message.created_at.isoformat(),
         }
 
+    except HTTPException:
+        raise
     except ValueError:
         raise HTTPException(status_code=400, detail="Неверный формат ID")
     except Exception as e:

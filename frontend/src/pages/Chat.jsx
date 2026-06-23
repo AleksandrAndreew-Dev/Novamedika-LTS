@@ -87,10 +87,10 @@ export default function Chat() {
 
     const poll = async () => {
       try {
-        const endpoint = isAnonymous
+        const endpoint = currentlyAnonymous
           ? `/api/public/questions/${id}/messages`
           : `/api/consultations/${id}/messages`;
-        const headers = isAnonymous ? {} : getAuthHeaders(isTelegramUser);
+        const headers = currentlyAnonymous ? {} : getAuthHeaders(isTelegramUser);
         const res = await api.get(endpoint, { headers });
         const newMessages = res.data;
 
@@ -120,7 +120,7 @@ export default function Chat() {
         pollingRef.current = null;
       }
     };
-  }, [id, isAnonymous, isTelegramUser, getAuthHeaders]); // removed messages.length, added getAuthHeaders
+  }, [id, isTelegramUser, getAuthHeaders]); // isAnonymous removed - checked dynamically in poll
 
   useEffect(() => {
     scrollToBottom();
