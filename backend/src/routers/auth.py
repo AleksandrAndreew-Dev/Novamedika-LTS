@@ -220,7 +220,7 @@ async def login_user(
 
         # Store refresh token in database
         new_refresh_token = RefreshToken(
-            uuid=uuid.uuid4(),
+            id=str(uuid.uuid4()),
             user_id=user.uuid,
             token=refresh_token,
             expires_at=get_utc_now_naive() + refresh_token_expires,
@@ -307,7 +307,7 @@ async def refresh_token_endpoint(
 
         # Store new refresh token
         new_refresh_token = RefreshToken(
-            uuid=uuid.uuid4(),
+            id=str(uuid.uuid4()),
             user_id=user.uuid,
             token=new_refresh_token_str,
             expires_at=get_utc_now_naive() + refresh_token_expires,
@@ -472,7 +472,7 @@ async def login_with_telegram(
 
         # Store refresh token in database
         new_refresh_token = RefreshToken(
-            uuid=uuid.uuid4(),
+            id=str(uuid.uuid4()),
             user_id=user.uuid,
             token=refresh_token,
             expires_at=get_utc_now_naive() + refresh_token_expires,

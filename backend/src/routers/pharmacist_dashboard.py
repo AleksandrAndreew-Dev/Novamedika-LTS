@@ -12,7 +12,7 @@ from fastapi import (
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 from sqlalchemy.orm import selectinload
-from typing import List, Optional
+from typing import List, Optional, Set
 import uuid
 from datetime import datetime, timedelta
 import logging
@@ -27,6 +27,46 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     tags=["Pharmacist Dashboard"],
 )
+
+
+class WebSocketConnectionManager:
+    """Manage WebSocket connections for pharmacist dashboard"""
+
+    def __init__(self):
+        self.active_connections: Set[WebSocket] = set()
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.add(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.discard(websocket)
+
+    async def broadcast(self, message: dict):
+        """Send message to all connected pharmacists"""
+        disconnected = set()
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except Exception:
+                disconnected.add(connection)
+        # Cleanup disconnected
+        for conn in disconnected:
+            self.active_connections.discard(conn)
+
+    async def broadcast_new_question(self, question_data: dict):
+        """Broadcast new question notification to all connected pharmacists"""
+        await self.broadcast({"type": "new_question", "data": question_data})
+
+    async def broadcast_message_update(self, question_id: str, message_data: dict):
+        """Broadcast new message in consultation"""
+        await self.broadcast(
+            {"type": "message_update", "question_id": question_id, "data": message_data}
+        )
+
+
+# Global WebSocket manager instance
+ws_manager = WebSocketConnectionManager()
 
 
 # Pydantic Schemas
@@ -482,7 +522,10 @@ async def websocket_endpoint(
 ):
     """WebSocket connection for real-time consultation updates"""
 
-    await websocket.accept()
+    await ws_manager.connect(websocket)
+    logger.info(
+        f"Pharmacist WebSocket connected. Total: {len(ws_manager.active_connections)}"
+    )
 
     try:
         # Keep connection alive and handle messages
@@ -492,4 +535,10 @@ async def websocket_endpoint(
             # For now, just keep connection alive
 
     except WebSocketDisconnect:
-        logger.info("Pharmacist WebSocket disconnected")
+        ws_manager.disconnect(websocket)
+        logger.info(
+            f"Pharmacist WebSocket disconnected. Total: {len(ws_manager.active_connections)}"
+        )
+    except Exception as e:
+        ws_manager.disconnect(websocket)
+        logger.error(f"Pharmacist WebSocket error: {e}")
