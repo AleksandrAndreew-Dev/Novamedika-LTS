@@ -2,7 +2,7 @@ import React from "react";
 import { useAuth } from "../../hooks/useAuth";
 
 export default function ProtectedRoute({ children }) {
-  const { isAuthenticated, isLoading, error, checkAuth } = useAuth();
+  const { isAuthenticated, isLoading, error } = useAuth();
 
   // Show loading state while checking authentication
   if (isLoading) {
