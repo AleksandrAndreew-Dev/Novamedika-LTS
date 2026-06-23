@@ -9,6 +9,8 @@ export default function Chat() {
   const { id } = useParams();
   const navigate = useNavigate();
   const messagesEndRef = useRef(null);
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlForceAnon = urlParams.get("anon") === "1";
 
   const [consultation, setConsultation] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -19,7 +21,7 @@ export default function Chat() {
   const [toast, setToast] = useState(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [isTelegramUser, setIsTelegramUser] = useState(false);
-  const [isAnonymous, setIsAnonymous] = useState(false);
+  const [isAnonymous, setIsAnonymous] = useState(urlForceAnon);
   const pollingRef = useRef(null);
 
   // Определяем, анонимный ли пользователь (создал вопрос через /api/public/questions/)
@@ -87,10 +89,11 @@ export default function Chat() {
 
     const poll = async () => {
       try {
-        const endpoint = currentlyAnonymous
+        const anon = isAnonymousQuestion();
+        const endpoint = anon
           ? `/api/public/questions/${id}/messages`
           : `/api/consultations/${id}/messages`;
-        const headers = currentlyAnonymous ? {} : getAuthHeaders(isTelegramUser);
+        const headers = anon ? {} : getAuthHeaders(isTelegramUser);
         const res = await api.get(endpoint, { headers });
         const newMessages = res.data;
 
@@ -120,7 +123,7 @@ export default function Chat() {
         pollingRef.current = null;
       }
     };
-  }, [id, isTelegramUser, getAuthHeaders]); // isAnonymous removed - checked dynamically in poll
+  }, [id, isTelegramUser, isAnonymous, getAuthHeaders]);
 
   useEffect(() => {
     scrollToBottom();

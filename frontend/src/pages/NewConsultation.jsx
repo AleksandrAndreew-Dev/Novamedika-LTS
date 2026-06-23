@@ -82,7 +82,8 @@ export default function NewConsultation() {
           "[NewConsultation] Public question created:",
           anonResponse.data.uuid,
         );
-        navigate(`/chat/${anonResponse.data.uuid}`, { replace: true });
+        // Force anonymous mode in Chat by passing ?anon=1
+        navigate(`/chat/${anonResponse.data.uuid}?anon=1`, { replace: true });
       } catch (err) {
         console.error("[NewConsultation] Failed to create consultation:", err);
         setError(
