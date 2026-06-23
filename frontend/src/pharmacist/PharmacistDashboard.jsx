@@ -9,7 +9,6 @@ import {
 import { AuthProvider } from "./components/auth/AuthProvider";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import PharmacistContent from "./PharmacistContent";
-import Login from "./components/auth/Login";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import { useAuth } from "./hooks/useAuth";
 import { useState, useEffect, useRef } from "react";
@@ -129,7 +128,6 @@ export default function PharmacistDashboard() {
       <HashRouter>
         <AuthProvider>
           <Routes>
-            <Route path="/login" element={<Login />} />
             <Route
               path="/*"
               element={

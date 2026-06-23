@@ -20,14 +20,19 @@ api.interceptors.request.use(
       config.headers["X-API-KEY"] = apiKey;
     }
 
-    // Приоритет: user token → pharmacist token → nothing
-    const userToken = localStorage.getItem("user_access_token");
-    if (userToken) {
-      config.headers["Authorization"] = `Bearer ${userToken}`;
-    } else {
-      const pharmacistToken = localStorage.getItem("pharmacist_session_token");
-      if (pharmacistToken) {
-        config.headers["Authorization"] = `Bearer ${pharmacistToken}`;
+    // Не перезаписываем Authorization если он уже явно установлен (например tma <initData>)
+    if (!config.headers["Authorization"]) {
+      // Приоритет: user token → pharmacist token → nothing
+      const userToken = localStorage.getItem("user_access_token");
+      if (userToken) {
+        config.headers["Authorization"] = `Bearer ${userToken}`;
+      } else {
+        const pharmacistToken = localStorage.getItem(
+          "pharmacist_session_token",
+        );
+        if (pharmacistToken) {
+          config.headers["Authorization"] = `Bearer ${pharmacistToken}`;
+        }
       }
     }
 

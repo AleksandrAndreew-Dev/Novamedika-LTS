@@ -28,6 +28,19 @@ export default function Chat() {
     return !userAuthService.isAuthenticated();
   };
 
+  // Auth headers теперь берутся из interceptor в client.js,
+  // используем chatService.getAuthHeaders только для явных случаев
+  const getAuthHeaders = useCallback((inTelegram) => {
+    const token = userAuthService.getAccessToken();
+    if (token) {
+      return { Authorization: `Bearer ${token}` };
+    }
+    if (inTelegram && telegramAuthService.initData) {
+      return { Authorization: `tma ${telegramAuthService.initData}` };
+    }
+    return {};
+  }, []);
+
   useEffect(() => {
     const initChat = async () => {
       try {
@@ -112,19 +125,6 @@ export default function Chat() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
-
-  // Auth headers теперь берутся из interceptor в client.js,
-  // используем chatService.getAuthHeaders только для явных случаев
-  const getAuthHeaders = useCallback((inTelegram) => {
-    const token = userAuthService.getAccessToken();
-    if (token) {
-      return { Authorization: `Bearer ${token}` };
-    }
-    if (inTelegram && telegramAuthService.initData) {
-      return { Authorization: `tma ${telegramAuthService.initData}` };
-    }
-    return {};
-  }, []);
 
   const loadConsultationData = async (inTelegram = false, anon = false) => {
     try {

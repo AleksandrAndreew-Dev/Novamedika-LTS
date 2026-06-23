@@ -544,7 +544,7 @@ async def send_message(
     await db.commit()
     await db.refresh(msg)
 
-    # Send message to user via Telegram bot
+    # Send message to user via Telegram bot (with retry)
     try:
         bot = app.state.bot
         user_result = await db.execute(
@@ -553,13 +553,30 @@ async def send_message(
         user = user_result.scalar_one_or_none()
 
         if user and user.telegram_id:
-            await bot.send_message(
-                chat_id=user.telegram_id,
-                text=f"💊 *Ответ фармацевта:*\n{data.text}",
-                parse_mode="Markdown",
-            )
+            import asyncio
+
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    await bot.send_message(
+                        chat_id=user.telegram_id,
+                        text=f"💊 *Ответ фармацевта:*\n{data.text}",
+                        parse_mode="Markdown",
+                    )
+                    break
+                except Exception as retry_err:
+                    if attempt < max_retries - 1:
+                        wait = 2**attempt
+                        logger.warning(
+                            f"Retry {attempt+1}/{max_retries} sending bot message in {wait}s: {retry_err}"
+                        )
+                        await asyncio.sleep(wait)
+                    else:
+                        logger.error(
+                            f"Failed to send message to user after {max_retries} retries: {retry_err}"
+                        )
     except Exception as e:
-        logger.error(f"Failed to send message to user via bot: {e}")
+        logger.error(f"Failed to send message to user via bot (setup): {e}")
         # Don't fail the request if bot message fails
 
     return msg
