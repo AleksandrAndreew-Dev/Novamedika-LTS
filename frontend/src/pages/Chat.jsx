@@ -3,7 +3,6 @@ import { useParams, useNavigate } from "react-router-dom";
 import api from "../api/client";
 import userAuthService from "../services/userAuthService";
 import telegramAuthService from "../services/telegramAuthService";
-import chatService from "../services/chatService";
 import Toast from "../components/Toast";
 
 export default function Chat() {
@@ -116,19 +115,16 @@ export default function Chat() {
 
   // Auth headers теперь берутся из interceptor в client.js,
   // используем chatService.getAuthHeaders только для явных случаев
-  const getAuthHeaders = useCallback(
-    (inTelegram) => {
-      const token = userAuthService.getAccessToken();
-      if (token) {
-        return { Authorization: `Bearer ${token}` };
-      }
-      if (inTelegram && telegramAuthService.initData) {
-        return { Authorization: `tma ${telegramAuthService.initData}` };
-      }
-      return {};
-    },
-    [userAuthService, telegramAuthService],
-  );
+  const getAuthHeaders = useCallback((inTelegram) => {
+    const token = userAuthService.getAccessToken();
+    if (token) {
+      return { Authorization: `Bearer ${token}` };
+    }
+    if (inTelegram && telegramAuthService.initData) {
+      return { Authorization: `tma ${telegramAuthService.initData}` };
+    }
+    return {};
+  }, []);
 
   const loadConsultationData = async (inTelegram = false, anon = false) => {
     try {
