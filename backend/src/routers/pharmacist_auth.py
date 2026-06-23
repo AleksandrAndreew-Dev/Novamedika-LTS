@@ -34,15 +34,19 @@ router = APIRouter()
 
 class PharmacistRegisterRequest(BaseModel):
     """Модель запроса для регистрации фармацевта"""
+
     telegram_user_id: int = Field(..., description="Telegram ID пользователя")
     first_name: Optional[str] = Field(None, description="Имя из Telegram")
     last_name: Optional[str] = Field(None, description="Фамилия из Telegram")
     telegram_username: Optional[str] = Field(None, description="Username из Telegram")
-    pharmacy_info: Optional[dict] = Field(default_factory=dict, description="Информация об аптеке")
+    pharmacy_info: Optional[dict] = Field(
+        default_factory=dict, description="Информация об аптеке"
+    )
 
 
 class PharmacistLoginRequest(BaseModel):
     """Модель запроса для логина фармацевта"""
+
     telegram_user_id: int = Field(..., description="Telegram ID пользователя")
     first_name: Optional[str] = Field(None, description="Имя из Telegram")
     last_name: Optional[str] = Field(None, description="Фамилия из Telegram")
@@ -51,6 +55,7 @@ class PharmacistLoginRequest(BaseModel):
 
 class TelegramLoginRequest(BaseModel):
     """Модель запроса для валидации Telegram initData (пустая, так как данные передаются в заголовке)"""
+
     pass
 
 
@@ -158,26 +163,31 @@ async def pharmacist_login(
 
         # Берем первого активного фармацевта
         pharmacist = pharmacists[0]
-        
+
         # Обновляем данные пользователя из Telegram, если они предоставлены
         user = pharmacist.user
         updated_fields = []
-        
+
         if login_data.first_name and user.first_name != login_data.first_name:
             user.first_name = login_data.first_name
             updated_fields.append("first_name")
-            
+
         if login_data.last_name and user.last_name != login_data.last_name:
             user.last_name = login_data.last_name
             updated_fields.append("last_name")
-            
-        if login_data.telegram_username and user.telegram_username != login_data.telegram_username:
+
+        if (
+            login_data.telegram_username
+            and user.telegram_username != login_data.telegram_username
+        ):
             user.telegram_username = login_data.telegram_username
             updated_fields.append("telegram_username")
-        
+
         # Сохраняем изменения, если были обновления
         if updated_fields:
-            logger.info(f"Updated user fields for telegram_id {login_data.telegram_user_id}: {updated_fields}")
+            logger.info(
+                f"Updated user fields for telegram_id {login_data.telegram_user_id}: {updated_fields}"
+            )
             await db.commit()
             await db.refresh(user)
 
@@ -196,7 +206,7 @@ async def pharmacist_login(
         session_token = await create_session_token(
             telegram_id=login_data.telegram_user_id,
             pharmacist_uuid=str(pharmacist.uuid),
-            user_id=str(pharmacist.user_id)
+            user_id=str(pharmacist.user_id),
         )
 
         return {
@@ -227,63 +237,61 @@ async def telegram_webapp_login(
 ):
     """
     Валидация Telegram WebApp initData и выдача session token
-    
-    Этот эндпоинт принимает rawData из заголовка Authorization: tma <initData>, 
+
+    Этот эндпоинт принимает rawData из заголовка Authorization: tma <initData>,
     проверяет подпись и выдает простой session token для аутентификации фармацевта.
     """
     try:
         # Импортируем утилиту aiogram для валидации
         from aiogram.utils.web_app import safe_parse_webapp_init_data
         from sqlalchemy.exc import IntegrityError
-        
+
         # Получаем initData из заголовка Authorization
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("tma "):
             raise HTTPException(
                 status_code=401,
-                detail="Invalid authorization header format. Use 'tma <initData>'"
+                detail="Invalid authorization header format. Use 'tma <initData>'",
             )
-        
+
         init_data_raw = auth_header[4:]  # убираем префикс "tma "
-        
+
         # Получаем токен бота из окружения
         bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
         if not bot_token:
             logger.error("TELEGRAM_BOT_TOKEN not configured")
-            raise HTTPException(
-                status_code=500,
-                detail="Server configuration error"
-            )
-        
+            raise HTTPException(status_code=500, detail="Server configuration error")
+
         # Валидируем initData подпись
         try:
             validated_data = safe_parse_webapp_init_data(
-                token=bot_token,
-                init_data=init_data_raw
+                token=bot_token, init_data=init_data_raw
             )
         except ValueError as e:
             logger.warning(f"Invalid initData signature: {e}")
             raise HTTPException(
-                status_code=401,
-                detail="Invalid Telegram initData signature"
+                status_code=401, detail="Invalid Telegram initData signature"
             )
-        
+
         # Извлекаем информацию о пользователе
         if not validated_data.user:
             logger.warning("No user data in validated initData")
             raise HTTPException(
-                status_code=401,
-                detail="Invalid Telegram initData: no user data"
+                status_code=401, detail="Invalid Telegram initData: no user data"
             )
-            
+
         telegram_id = validated_data.user.id
         first_name = validated_data.user.first_name or ""
         last_name = validated_data.user.last_name or ""
         username = validated_data.user.username or ""
-        
-        logger.info(f"Telegram login attempt: telegram_id={telegram_id}, user={first_name} {last_name}")
-        
-        # Находим фармацевта по telegram_id
+
+        logger.info(
+            f"Telegram login attempt: telegram_id={telegram_id}, user={first_name} {last_name}"
+        )
+
+        # Находим фармацевта по telegram_id (сначала через незашифрованное поле, потом через encrypted)
+        from utils.encryption import encrypt_bigint
+
         result = await db.execute(
             select(Pharmacist)
             .join(User, Pharmacist.user_id == User.uuid)
@@ -292,63 +300,89 @@ async def telegram_webapp_login(
             .where(Pharmacist.is_active == True)
         )
         pharmacist = result.scalar_one_or_none()
-        
+
+        # Fallback: поиск по telegram_id_encrypted если не нашли по прямому полю
         if not pharmacist:
-            logger.warning(f"Pharmacist not found or inactive for telegram_id={telegram_id}")
+            telegram_id_encrypted = encrypt_bigint(telegram_id)
+            result = await db.execute(
+                select(Pharmacist)
+                .join(User, Pharmacist.user_id == User.uuid)
+                .options(selectinload(Pharmacist.user))
+                .where(User.telegram_id_encrypted == telegram_id_encrypted)
+                .where(Pharmacist.is_active == True)
+            )
+            pharmacist = result.scalar_one_or_none()
+            if pharmacist:
+                logger.info(
+                    f"Found pharmacist via telegram_id_encrypted for telegram_id={telegram_id}"
+                )
+                # Синхронизируем незашифрованное поле
+                pharmacist.user.telegram_id = telegram_id
+                await db.commit()
+
+        if not pharmacist:
+            logger.warning(
+                f"Pharmacist not found or inactive for telegram_id={telegram_id}"
+            )
             raise HTTPException(
                 status_code=403,
-                detail=f"Доступ запрещен. Пользователь с Telegram ID {telegram_id} не зарегистрирован как активный фармацевт."
+                detail=f"Доступ запрещен. Пользователь с Telegram ID {telegram_id} не зарегистрирован как активный фармацевт.",
             )
-        
+
         # Обновляем данные пользователя из Telegram
         user = pharmacist.user
         updated_fields = []
-        
+
         if first_name and user.first_name != first_name:
             user.first_name = first_name
             updated_fields.append("first_name")
-            
+
         if last_name and user.last_name != last_name:
             user.last_name = last_name
             updated_fields.append("last_name")
-            
+
         if username and user.telegram_username != username:
             user.telegram_username = username
             updated_fields.append("telegram_username")
-        
+
         # Сохраняем изменения, если были обновления
         if updated_fields:
-            logger.info(f"Updated user fields for telegram_id {telegram_id}: {updated_fields}")
+            logger.info(
+                f"Updated user fields for telegram_id {telegram_id}: {updated_fields}"
+            )
             await db.commit()
             await db.refresh(user)
-        
+
         # Обновляем статус онлайн и время последней активности
         pharmacist.is_online = True
         pharmacist.last_seen = get_utc_now_naive()
         await db.commit()
-        
+
         # Создаём простой session token вместо JWT
         session_token = await create_session_token(
             telegram_id=telegram_id,
             pharmacist_uuid=str(pharmacist.uuid),
-            user_id=str(pharmacist.user_id)
+            user_id=str(pharmacist.user_id),
         )
-        
-        logger.info(f"✅ Telegram login successful for pharmacist user_id={pharmacist.user_id}, pharmacist_uuid={pharmacist.uuid}")
-        
+
+        logger.info(
+            f"✅ Telegram login successful for pharmacist user_id={pharmacist.user_id}, pharmacist_uuid={pharmacist.uuid}"
+        )
+
         return {
             "session_token": session_token,
             "token_type": "session",
             "expires_in": 86400,  # 24 часа
+            "pharmacist_exists": True,
+            "pharmacist_uuid": str(pharmacist.uuid),
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.exception("Telegram WebApp login failed")
         raise HTTPException(
-            status_code=500,
-            detail="Login failed. Please try again later."
+            status_code=500, detail="Login failed. Please try again later."
         )
 
 
@@ -358,7 +392,7 @@ async def get_current_pharmacist_profile(
 ):
     """
     Get current authenticated pharmacist profile
-    
+
     This endpoint returns the profile of the currently authenticated pharmacist.
     It requires a valid session token in the Authorization header.
     """
@@ -368,6 +402,5 @@ async def get_current_pharmacist_profile(
     except Exception as e:
         logger.exception("Failed to get pharmacist profile")
         raise HTTPException(
-            status_code=500,
-            detail="Failed to retrieve pharmacist profile"
+            status_code=500, detail="Failed to retrieve pharmacist profile"
         )

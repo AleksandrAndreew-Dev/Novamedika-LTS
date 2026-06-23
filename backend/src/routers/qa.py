@@ -400,6 +400,18 @@ async def create_consultation(
         )
 
         db.add(new_question)
+        await db.flush()
+
+        # Создаём начальное сообщение в диалоге
+        initial_message = DialogMessage(
+            uuid=uuid.uuid4(),
+            question_id=new_question.uuid,
+            sender_type="user",
+            sender_id=current_user.uuid,
+            message_type="question",
+            text=consultation.text,
+        )
+        db.add(initial_message)
         await db.commit()
         await db.refresh(new_question)
 
@@ -745,6 +757,18 @@ async def create_public_question(
         )
 
         db.add(new_question)
+        await db.flush()
+
+        # Создаём начальное сообщение в диалоге
+        initial_message = DialogMessage(
+            uuid=uuid.uuid4(),
+            question_id=new_question.uuid,
+            sender_type="user",
+            sender_id=user.uuid,
+            message_type="question",
+            text=question.text,
+        )
+        db.add(initial_message)
         await db.commit()
         await db.refresh(new_question)
 

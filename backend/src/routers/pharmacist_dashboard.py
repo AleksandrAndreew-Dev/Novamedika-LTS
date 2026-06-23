@@ -420,7 +420,9 @@ class DialogMessageResponse(BaseModel):
     uuid: str
     question_id: str
     sender_type: str  # "pharmacist" or "user"
-    text: str
+    sender_id: str
+    message_type: str
+    text: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -445,9 +447,23 @@ async def get_dialog(
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    # Check if pharmacist is assigned or can access this question
-    if question.assigned_to != pharmacist.uuid and question.taken_by != pharmacist.uuid:
-        raise HTTPException(status_code=403, detail="Not assigned to this question")
+    # Auto-assign if pharmacist is not yet assigned and question is still pending
+    is_assigned = (
+        question.assigned_to == pharmacist.uuid or question.taken_by == pharmacist.uuid
+    )
+    if not is_assigned:
+        if question.status == "pending":
+            question.taken_by = pharmacist.uuid
+            question.assigned_to = pharmacist.uuid
+            question.status = "in_progress"
+            question.taken_at = datetime.utcnow()
+            question.updated_at = datetime.utcnow()
+            await db.commit()
+            logger.info(
+                f"Pharmacist {pharmacist.uuid} auto-assigned question {question_id}"
+            )
+        else:
+            raise HTTPException(status_code=403, detail="Not assigned to this question")
 
     # Get dialog messages
     messages_result = await db.execute(
@@ -479,9 +495,22 @@ async def send_message(
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    # Check assignment
-    if question.assigned_to != pharmacist.uuid and question.taken_by != pharmacist.uuid:
-        raise HTTPException(status_code=403, detail="Not assigned to this question")
+    # Auto-assign if not yet assigned (soft check - allows first message)
+    is_assigned = (
+        question.assigned_to == pharmacist.uuid or question.taken_by == pharmacist.uuid
+    )
+    if not is_assigned:
+        if question.status == "pending":
+            question.taken_by = pharmacist.uuid
+            question.assigned_to = pharmacist.uuid
+            question.status = "in_progress"
+            question.taken_at = datetime.utcnow()
+            question.updated_at = datetime.utcnow()
+            logger.info(
+                f"Pharmacist {pharmacist.uuid} auto-assigned question {question_id} via send_message"
+            )
+        else:
+            raise HTTPException(status_code=403, detail="Not assigned to this question")
 
     # Save message to database
     msg = DialogMessage(
@@ -494,6 +523,24 @@ async def send_message(
         created_at=datetime.utcnow(),
     )
     db.add(msg)
+    await db.flush()
+
+    # Broadcast via WebSocket to connected pharmacies (and user via ws_manager)
+    try:
+        await ws_manager.broadcast_message_update(
+            question_id=str(question_id),
+            message_data={
+                "uuid": str(msg.uuid),
+                "question_id": str(question_id),
+                "sender_type": "pharmacist",
+                "sender_id": str(pharmacist.uuid),
+                "text": data.text,
+                "created_at": msg.created_at.isoformat(),
+            },
+        )
+    except Exception as ws_err:
+        logger.warning(f"WebSocket broadcast failed (non-critical): {ws_err}")
+
     await db.commit()
     await db.refresh(msg)
 
