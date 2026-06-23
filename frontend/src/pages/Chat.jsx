@@ -19,6 +19,15 @@ export default function Chat() {
   const [toast, setToast] = useState(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [isTelegramUser, setIsTelegramUser] = useState(false);
+  const [isAnonymous, setIsAnonymous] = useState(false);
+
+  // Определяем, анонимный ли пользователь (создал вопрос через /api/public/questions/)
+  const isAnonymousQuestion = () => {
+    // Если нет JWT и не в Telegram — используем /api/public/ endpoints
+    const hasToken = userAuthService.isAuthenticated();
+    const inTelegram = telegramAuthService.canAuthViaWebApp();
+    return !hasToken && !inTelegram;
+  };
 
   useEffect(() => {
     const initChat = async () => {
@@ -35,13 +44,15 @@ export default function Chat() {
             console.log(
               "[Chat] ⚠️ Telegram auto-login failed, using initData as fallback",
             );
-            // Продолжаем без JWT — backend может идентифицировать пользователя
-            // через initData в заголовке Authorization: tma <initData>
           }
         }
 
-        // 2. Загружаем данные консультации
-        await loadConsultationData(inTelegram);
+        // 2. Определяем режим анонимности
+        const anon = isAnonymousQuestion();
+        setIsAnonymous(anon);
+
+        // 3. Загружаем данные консультации
+        await loadConsultationData(inTelegram, anon);
       } catch (err) {
         console.error("[Chat] Init error:", err);
         setError("Не удалось загрузить консультацию");
@@ -70,9 +81,21 @@ export default function Chat() {
     return {};
   };
 
-  const loadConsultationData = async (inTelegram = false) => {
+  const loadConsultationData = async (inTelegram = false, anon = false) => {
     try {
       setLoading(true);
+
+      // Анонимные пользователи — используем /api/public/ endpoints
+      if (anon) {
+        const [consultationRes, messagesRes] = await Promise.all([
+          api.get(`/api/public/questions/${id}`),
+          api.get(`/api/public/questions/${id}/messages`),
+        ]);
+
+        if (consultationRes) setConsultation(consultationRes.data);
+        if (messagesRes) setMessages(messagesRes.data);
+        return;
+      }
 
       const headers = getAuthHeaders(inTelegram);
 
@@ -96,16 +119,14 @@ export default function Chat() {
           },
           { headers },
         );
-        // Редирект на новую консультацию
         navigate(`/chat/${createRes.data.uuid}`, { replace: true });
       }
     } catch (err) {
       console.error("Failed to load consultation:", err);
-      if (err.response?.status === 401) {
+      if (!anon && err.response?.status === 401) {
         if (!inTelegram) {
           navigate("/login");
         }
-        // В Telegram — показываем ошибку, но не редиректим
         setError("Не удалось загрузить консультацию. Попробуйте позже.");
       } else if (err.response?.status === 404) {
         setError("Консультация не найдена");
@@ -120,17 +141,27 @@ export default function Chat() {
     if (!newMessage.trim()) return;
 
     const inTelegram = isTelegramUser;
-    const headers = getAuthHeaders(inTelegram);
+    const anon = isAnonymous;
 
     try {
       setSending(true);
-      const response = await api.post(
-        `/api/consultations/${id}/messages`,
-        {
+
+      let response;
+      if (anon) {
+        // Аноним — через /api/public/questions/{id}/messages
+        response = await api.post(`/api/public/questions/${id}/messages`, {
           text: newMessage.trim(),
-        },
-        { headers },
-      );
+        });
+      } else {
+        // JWT или TMA — через /api/consultations/{id}/messages
+        const headers = getAuthHeaders(inTelegram);
+        response = await api.post(
+          `/api/consultations/${id}/messages`,
+          { text: newMessage.trim() },
+          { headers },
+        );
+      }
+
       setMessages((prev) => [...prev, response.data]);
       setNewMessage("");
     } catch (err) {

@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import api from '../api/client';
-import userAuthService from '../services/userAuthService';
-import telegramAuthService from '../services/telegramAuthService';
-import Toast from '../components/Toast';
+import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import api from "../api/client";
+import userAuthService from "../services/userAuthService";
+import telegramAuthService from "../services/telegramAuthService";
+import Toast from "../components/Toast";
 
 export default function NewConsultation() {
   const navigate = useNavigate();
@@ -11,6 +11,16 @@ export default function NewConsultation() {
   const [error, setError] = useState(null);
   const [toast, setToast] = useState(null);
   const createdRef = useRef(false);
+
+  // Генерация/получение anon_user_id для неавторизованных пользователей
+  const getAnonUserId = () => {
+    let anonId = localStorage.getItem("anon_user_id");
+    if (!anonId) {
+      anonId = crypto.randomUUID();
+      localStorage.setItem("anon_user_id", anonId);
+    }
+    return anonId;
+  };
 
   useEffect(() => {
     const autoCreateChat = async () => {
@@ -22,52 +32,57 @@ export default function NewConsultation() {
         setLoading(true);
 
         // 1. Telegram auto-login если в WebApp
-        if (telegramAuthService.canAuthViaWebApp()) {
-          console.log('[NewConsultation] Attempting Telegram auto-login');
+        const inTelegram = telegramAuthService.canAuthViaWebApp();
+        if (inTelegram) {
+          console.log("[NewConsultation] Attempting Telegram auto-login");
           const success = await telegramAuthService.autoLogin();
           if (!success) {
-            console.log('[NewConsultation] Telegram auto-login failed');
-            // Пробуем проверить есть ли уже токен в localStorage
-            if (!userAuthService.isAuthenticated()) {
-              navigate('/login');
-              return;
-            }
+            console.log(
+              "[NewConsultation] Telegram auto-login failed — continuing without JWT",
+            );
           }
-        } else if (!userAuthService.isAuthenticated()) {
-          // Не в Telegram и нет токена — редирект на логин
-          console.log('[NewConsultation] Not authenticated, redirecting to login');
-          navigate('/login');
-          return;
         }
 
-        // 2. Создаём консультацию автоматически (без формы)
-        console.log('[NewConsultation] Creating consultation automatically');
-        const response = await api.post('/api/consultations/', {
-          text: 'Новый вопрос фармацевту',
-          category: 'general',
-        });
-
-        console.log('[NewConsultation] ✅ Consultation created:', response.data.uuid);
-
-        // 3. Сразу редиректим в чат
-        navigate(`/chat/${response.data.uuid}`, { replace: true });
+        // 2. Если есть JWT — используем /api/consultations/ (зарегистрированный пользователь)
+        //    Иначе — /api/public/questions/ (анонимный, регистрация не нужна)
+        if (userAuthService.isAuthenticated() || inTelegram) {
+          console.log("[NewConsultation] Creating consultation via JWT");
+          const response = await api.post("/api/consultations/", {
+            text: "Новый вопрос фармацевту",
+            category: "general",
+          });
+          console.log(
+            "[NewConsultation] ✅ Consultation created:",
+            response.data.uuid,
+          );
+          navigate(`/chat/${response.data.uuid}`, { replace: true });
+        } else {
+          // Анонимный пользователь — без регистрации
+          console.log("[NewConsultation] Creating public question (anonymous)");
+          const response = await api.post("/api/public/questions/", {
+            text: "Новый вопрос фармацевту",
+            category: "general",
+            anon_user_id: getAnonUserId(),
+          });
+          console.log(
+            "[NewConsultation] ✅ Public question created:",
+            response.uuid,
+          );
+          navigate(`/chat/${response.uuid}`, { replace: true });
+        }
       } catch (err) {
-        console.error('[NewConsultation] Failed to create consultation:', err);
-
-        if (err.response?.status === 401) {
-          navigate('/login');
-          return;
-        }
+        console.error("[NewConsultation] Failed to create consultation:", err);
 
         // Показываем кнопку для повторной попытки
         setError(
           err.response?.data?.detail ||
-          err.userMessage ||
-          'Не удалось создать чат. Попробуйте ещё раз.'
+            err.userMessage ||
+            "Не удалось создать чат. Попробуйте ещё раз.",
         );
         setToast({
-          message: 'Не удалось создать чат. Проверьте подключение и попробуйте снова.',
-          type: 'error',
+          message:
+            "Не удалось создать чат. Проверьте подключение и попробуйте снова.",
+          type: "error",
         });
       } finally {
         setLoading(false);
@@ -119,7 +134,7 @@ export default function NewConsultation() {
           message={toast.message}
           type={toast.type}
           onClose={() => setToast(null)}
-          duration={toast.type === 'error' ? 5000 : 3000}
+          duration={toast.type === "error" ? 5000 : 3000}
         />
       )}
     </div>

@@ -328,8 +328,8 @@ app.include_router(
     pharmacist_auth.router, prefix="/api/pharmacist", tags=["pharmacist-auth"]
 )
 app.include_router(
-    qa.router, tags=["qa"]
-)  # No prefix - frontend uses paths without /api
+    qa.router, prefix="/api", tags=["qa"]
+)  # Prefix /api — frontend uses /api/questions/, /api/consultations/
 app.include_router(telegram_bot.router, tags=["bot"])
 app.include_router(
     search.router, tags=["search"]

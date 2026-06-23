@@ -326,7 +326,12 @@ async def get_questions_stats(
 
     except Exception as e:
         logger.warning(f"get_questions_stats fallback (zeros) after error: {e}")
-        return {"total": 0, "pending": 0, "answered": 0, "answer_rate": 0}  # ← Graceful fallback
+        return {
+            "total": 0,
+            "pending": 0,
+            "answered": 0,
+            "answer_rate": 0,
+        }  # ← Graceful fallback
 
 
 # ============================================================================
@@ -336,6 +341,7 @@ async def get_questions_stats(
 
 class ConsultationCreate(BaseModel):
     """Модель для создания консультации"""
+
     text: str
     category: str = "general"
     context_data: Optional[Dict[str, Any]] = None
@@ -343,11 +349,13 @@ class ConsultationCreate(BaseModel):
 
 class MessageCreate(BaseModel):
     """Модель для отправки сообщения"""
+
     text: str
 
 
 class MessageResponse(BaseModel):
     """Модель ответа сообщения"""
+
     uuid: uuid.UUID
     question_id: uuid.UUID
     message_type: str
@@ -363,6 +371,7 @@ class MessageResponse(BaseModel):
 
 class ConsultationStats(BaseModel):
     """Модель статистики консультаций"""
+
     total_count: int
     pending_count: int
     answered_count: int
@@ -394,7 +403,9 @@ async def create_consultation(
         await db.commit()
         await db.refresh(new_question)
 
-        logger.info(f"New consultation created by user {current_user.uuid}: {new_question.uuid}")
+        logger.info(
+            f"New consultation created by user {current_user.uuid}: {new_question.uuid}"
+        )
 
         return QuestionResponse.model_validate(new_question)
 
@@ -421,13 +432,19 @@ async def get_user_consultations(
     Поддерживает пагинацию и фильтрацию по статусу.
     """
     try:
-        query = select(Question).options(
-            selectinload(Question.user),
-            selectinload(Question.assigned_pharmacist).selectinload(Pharmacist.user),
-            selectinload(Question.answers)
-            .selectinload(Answer.pharmacist)
-            .selectinload(Pharmacist.user),
-        ).where(Question.user_id == current_user.uuid)
+        query = (
+            select(Question)
+            .options(
+                selectinload(Question.user),
+                selectinload(Question.assigned_pharmacist).selectinload(
+                    Pharmacist.user
+                ),
+                selectinload(Question.answers)
+                .selectinload(Answer.pharmacist)
+                .selectinload(Pharmacist.user),
+            )
+            .where(Question.user_id == current_user.uuid)
+        )
 
         # Apply status filter if provided
         if status_filter:
@@ -469,14 +486,18 @@ async def get_consultation_details(
             select(Question)
             .options(
                 selectinload(Question.user),
-                selectinload(Question.assigned_pharmacist).selectinload(Pharmacist.user),
+                selectinload(Question.assigned_pharmacist).selectinload(
+                    Pharmacist.user
+                ),
                 selectinload(Question.answers)
                 .selectinload(Answer.pharmacist)
                 .selectinload(Pharmacist.user),
                 selectinload(Question.dialog_messages),
             )
             .where(Question.uuid == uuid.UUID(consultation_id))
-            .where(Question.user_id == current_user.uuid)  # Security: only own consultations
+            .where(
+                Question.user_id == current_user.uuid
+            )  # Security: only own consultations
         )
         question = result.scalar_one_or_none()
 
@@ -515,8 +536,7 @@ async def get_consultation_stats(
         # Pending count
         pending_result = await db.execute(
             select(Question).where(
-                Question.user_id == current_user.uuid,
-                Question.status == "pending"
+                Question.user_id == current_user.uuid, Question.status == "pending"
             )
         )
         pending = pending_result.scalars().all()
@@ -524,8 +544,7 @@ async def get_consultation_stats(
         # Answered count
         answered_result = await db.execute(
             select(Question).where(
-                Question.user_id == current_user.uuid,
-                Question.status == "answered"
+                Question.user_id == current_user.uuid, Question.status == "answered"
             )
         )
         answered = answered_result.scalars().all()
@@ -533,8 +552,7 @@ async def get_consultation_stats(
         # Completed count
         completed_result = await db.execute(
             select(Question).where(
-                Question.user_id == current_user.uuid,
-                Question.status == "completed"
+                Question.user_id == current_user.uuid, Question.status == "completed"
             )
         )
         completed = completed_result.scalars().all()
@@ -554,7 +572,9 @@ async def get_consultation_stats(
         )
 
 
-@router.get("/consultations/{consultation_id}/messages", response_model=List[MessageResponse])
+@router.get(
+    "/consultations/{consultation_id}/messages", response_model=List[MessageResponse]
+)
 async def get_consultation_messages(
     consultation_id: str,
     current_user: User = Depends(get_current_user_jwt),
@@ -570,7 +590,7 @@ async def get_consultation_messages(
         result = await db.execute(
             select(Question).where(
                 Question.uuid == uuid.UUID(consultation_id),
-                Question.user_id == current_user.uuid
+                Question.user_id == current_user.uuid,
             )
         )
         question = result.scalar_one_or_none()
@@ -601,7 +621,9 @@ async def get_consultation_messages(
         )
 
 
-@router.post("/consultations/{consultation_id}/messages", response_model=MessageResponse)
+@router.post(
+    "/consultations/{consultation_id}/messages", response_model=MessageResponse
+)
 async def send_consultation_message(
     consultation_id: str,
     message: MessageCreate,
@@ -618,7 +640,7 @@ async def send_consultation_message(
         result = await db.execute(
             select(Question).where(
                 Question.uuid == uuid.UUID(consultation_id),
-                Question.user_id == current_user.uuid
+                Question.user_id == current_user.uuid,
             )
         )
         question = result.scalar_one_or_none()
@@ -645,7 +667,9 @@ async def send_consultation_message(
         await db.commit()
         await db.refresh(new_message)
 
-        logger.info(f"New message sent in consultation {consultation_id} by user {current_user.uuid}")
+        logger.info(
+            f"New message sent in consultation {consultation_id} by user {current_user.uuid}"
+        )
 
         return MessageResponse.model_validate(new_message)
 
@@ -669,6 +693,7 @@ async def send_consultation_message(
 
 class PublicQuestionCreate(BaseModel):
     """Модель для создания вопроса анонимным пользователем"""
+
     text: str
     category: str = "general"
     anon_user_id: Optional[str] = None  # UUID, генерируется на фронтенде
@@ -688,12 +713,14 @@ async def create_public_question(
     и не находятся в Telegram. Создаёт временного пользователя.
     """
     try:
-        anon_id = uuid.uuid4() if not question.anon_user_id else uuid.UUID(question.anon_user_id)
+        anon_id = (
+            uuid.uuid4()
+            if not question.anon_user_id
+            else uuid.UUID(question.anon_user_id)
+        )
 
         # Создаём или находим анонимного пользователя по anon_user_id
-        result = await db.execute(
-            select(User).where(User.uuid == anon_id)
-        )
+        result = await db.execute(select(User).where(User.uuid == anon_id))
         user = result.scalar_one_or_none()
 
         if not user:
@@ -722,7 +749,9 @@ async def create_public_question(
         await db.commit()
         await db.refresh(new_question)
 
-        logger.info(f"Public question created by anon user {user.uuid}: {new_question.uuid}")
+        logger.info(
+            f"Public question created by anon user {user.uuid}: {new_question.uuid}"
+        )
 
         return {
             "uuid": str(new_question.uuid),
@@ -740,6 +769,178 @@ async def create_public_question(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ошибка при создании вопроса: {str(e)}",
+        )
+
+
+class PublicMessageCreate(BaseModel):
+    """Модель для отправки сообщения анонимным пользователем"""
+
+    text: str
+
+
+@router.get("/public/questions/{question_id}")
+async def get_public_question(
+    question_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
+    """
+    Получить вопрос анонимного пользователя (без JWT).
+
+    Доступен только для вопросов, созданных через /api/public/questions/.
+    """
+    try:
+        result = await db.execute(
+            select(Question)
+            .options(
+                selectinload(Question.answers),
+            )
+            .where(Question.uuid == uuid.UUID(question_id))
+        )
+        question = result.scalar_one_or_none()
+
+        if not question:
+            raise HTTPException(status_code=404, detail="Вопрос не найден")
+
+        return {
+            "uuid": str(question.uuid),
+            "text": question.text,
+            "status": question.status,
+            "category": question.category,
+            "created_at": question.created_at.isoformat(),
+            "answers": [
+                {
+                    "uuid": str(a.uuid),
+                    "text": a.text,
+                    "created_at": a.created_at.isoformat(),
+                }
+                for a in question.answers
+            ],
+        }
+
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Неверный формат ID")
+    except Exception as e:
+        logger.exception("Failed to get public question")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при получении вопроса: {str(e)}",
+        )
+
+
+@router.get("/public/questions/{question_id}/messages")
+async def get_public_question_messages(
+    question_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
+    """
+    Получить сообщения анонимного пользователя (без JWT).
+    """
+    try:
+        # Верифицируем, что вопрос существует
+        result = await db.execute(
+            select(Question).where(Question.uuid == uuid.UUID(question_id))
+        )
+        question = result.scalar_one_or_none()
+
+        if not question:
+            raise HTTPException(status_code=404, detail="Вопрос не найден")
+
+        # Получаем сообщения диалога
+        messages_result = await db.execute(
+            select(DialogMessage)
+            .where(DialogMessage.question_id == uuid.UUID(question_id))
+            .where(DialogMessage.is_deleted == False)
+            .order_by(DialogMessage.created_at.asc())
+        )
+        messages = messages_result.scalars().all()
+
+        return [
+            {
+                "uuid": str(m.uuid),
+                "question_id": str(m.question_id),
+                "message_type": m.message_type,
+                "sender_type": m.sender_type,
+                "sender_id": str(m.sender_id),
+                "text": m.text,
+                "created_at": m.created_at.isoformat(),
+            }
+            for m in messages
+        ]
+
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Неверный формат ID")
+    except Exception as e:
+        logger.exception("Failed to get public question messages")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при получении сообщений: {str(e)}",
+        )
+
+
+@router.post("/public/questions/{question_id}/messages")
+async def send_public_question_message(
+    question_id: str,
+    message: PublicMessageCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
+    """
+    Отправить сообщение в вопрос анонимного пользователя (без JWT).
+
+    Используется для веб-пользователей, которые не авторизованы.
+    """
+    try:
+        result = await db.execute(
+            select(Question).where(Question.uuid == uuid.UUID(question_id))
+        )
+        question = result.scalar_one_or_none()
+
+        if not question:
+            raise HTTPException(status_code=404, detail="Вопрос не найден")
+
+        # Создаём новое сообщение
+        new_message = DialogMessage(
+            uuid=uuid.uuid4(),
+            question_id=question.uuid,
+            message_type="question",
+            sender_type="user",
+            sender_id=question.user_id,
+            text=message.text,
+        )
+
+        db.add(new_message)
+        # Обновляем статус вопроса
+        if question.status in ["answered", "completed"]:
+            question.status = "pending"
+
+        await db.commit()
+        await db.refresh(new_message)
+
+        logger.info(f"New message in public question {question_id}")
+
+        return {
+            "uuid": str(new_message.uuid),
+            "question_id": str(new_message.question_id),
+            "message_type": new_message.message_type,
+            "sender_type": new_message.sender_type,
+            "sender_id": str(new_message.sender_id),
+            "text": new_message.text,
+            "created_at": new_message.created_at.isoformat(),
+        }
+
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Неверный формат ID")
+    except Exception as e:
+        await db.rollback()
+        logger.exception("Failed to send public question message")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при отправке сообщения: {str(e)}",
         )
 
 
