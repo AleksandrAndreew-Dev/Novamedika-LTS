@@ -419,7 +419,14 @@ async def create_consultation(
             f"New consultation created by user {current_user.uuid}: {new_question.uuid}"
         )
 
-        return QuestionResponse.model_validate(new_question)
+        # Return dict to avoid MissingGreenlet on lazy-loaded relations
+        return {
+            "uuid": str(new_question.uuid),
+            "text": new_question.text,
+            "status": new_question.status,
+            "category": new_question.category,
+            "created_at": new_question.created_at.isoformat(),
+        }
 
     except Exception as e:
         await db.rollback()
@@ -1038,6 +1045,45 @@ async def send_public_question_message(
             )
         except Exception as ws_err:
             logger.warning(f"WebSocket broadcast failed (non-critical): {ws_err}")
+
+        # Telegram notification to available pharmacists
+        try:
+            # Get all active pharmacists
+            ph_result = await db.execute(
+                select(Pharmacist)
+                .options(selectinload(Pharmacist.user))
+                .where(Pharmacist.is_active == True)
+            )
+            pharmacists = ph_result.scalars().all()
+
+            if pharmacists:
+                from bot.core import bot_manager
+
+                bot, _ = await bot_manager.initialize()
+                if bot:
+                    for pharmacist in pharmacists:
+                        if pharmacist.user and pharmacist.user.telegram_id:
+                            try:
+                                await bot.send_message(
+                                    chat_id=pharmacist.user.telegram_id,
+                                    text=(
+                                        f"💬 <b>Новое сообщение от пользователя</b>\n\n"
+                                        f"{message.text}\n\n"
+                                        f"➡️ <i>Ответьте через панель фармацевта</i>"
+                                    ),
+                                    parse_mode="HTML",
+                                )
+                            except Exception as tg_err:
+                                logger.warning(
+                                    f"Telegram notification to pharmacist {pharmacist.user.telegram_id} failed: {tg_err}"
+                                )
+                            logger.info(
+                                f"Telegram notification sent to pharmacist {pharmacist.user.telegram_id}"
+                            )
+        except Exception as tg_err:
+            logger.warning(
+                f"Telegram notification to pharmacists failed (non-critical): {tg_err}"
+            )
 
         logger.info(f"New message in public question {question_id}")
 
