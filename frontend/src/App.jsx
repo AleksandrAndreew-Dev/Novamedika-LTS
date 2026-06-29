@@ -422,14 +422,34 @@ function App() {
                       </div>
 
                       <div className="space-y-4 mb-6">
-                        <label
-                          htmlFor="consent-privacy"
+                        <div
                           className="flex items-start gap-3 cursor-pointer group p-3 rounded-xl hover:bg-gray-50 transition-colors"
-                          style={{
-                            touchAction:
-                              'manipulation',
-                            pointerEvents:
-                              'auto',
+                          onClick={() =>
+                            handleConsentChange(
+                              'privacyPolicy',
+                            )
+                          }
+                          role="checkbox"
+                          aria-checked={
+                            consents.privacyPolicy
+                          }
+                          tabIndex={
+                            0
+                          }
+                          onKeyDown={(
+                            e,
+                          ) => {
+                            if (
+                              e.key ===
+                                'Enter' ||
+                              e.key ===
+                                ' '
+                            ) {
+                              e.preventDefault();
+                              handleConsentChange(
+                                'privacyPolicy',
+                              );
+                            }
                           }}
                         >
                           <input
@@ -438,24 +458,10 @@ function App() {
                             checked={
                               consents.privacyPolicy
                             }
-                            onChange={() =>
-                              handleConsentChange(
-                                'privacyPolicy',
-                              )
-                            }
-                            onClick={(
-                              e,
-                            ) =>
-                              e.stopPropagation()
-                            }
+                            onChange={() => {}}
                             required
-                            style={{
-                              touchAction:
-                                'manipulation',
-                              pointerEvents:
-                                'auto',
-                            }}
-                            className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
+                            className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 pointer-events-none"
+                            readOnly
                           />
                           <span className="text-sm text-gray-700 leading-relaxed">
                             Я
@@ -491,16 +497,36 @@ function App() {
                             последнего
                             обращения.
                           </span>
-                        </label>
+                        </div>
 
-                        <label
-                          htmlFor="consent-processing"
+                        <div
                           className="flex items-start gap-3 cursor-pointer group p-3 rounded-xl hover:bg-gray-50 transition-colors"
-                          style={{
-                            touchAction:
-                              'manipulation',
-                            pointerEvents:
-                              'auto',
+                          onClick={() =>
+                            handleConsentChange(
+                              'dataProcessing',
+                            )
+                          }
+                          role="checkbox"
+                          aria-checked={
+                            consents.dataProcessing
+                          }
+                          tabIndex={
+                            0
+                          }
+                          onKeyDown={(
+                            e,
+                          ) => {
+                            if (
+                              e.key ===
+                                'Enter' ||
+                              e.key ===
+                                ' '
+                            ) {
+                              e.preventDefault();
+                              handleConsentChange(
+                                'dataProcessing',
+                              );
+                            }
                           }}
                         >
                           <input
@@ -509,24 +535,10 @@ function App() {
                             checked={
                               consents.dataProcessing
                             }
-                            onChange={() =>
-                              handleConsentChange(
-                                'dataProcessing',
-                              )
-                            }
-                            onClick={(
-                              e,
-                            ) =>
-                              e.stopPropagation()
-                            }
+                            onChange={() => {}}
                             required
-                            style={{
-                              touchAction:
-                                'manipulation',
-                              pointerEvents:
-                                'auto',
-                            }}
-                            className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
+                            className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 pointer-events-none"
+                            readOnly
                           />
                           <span className="text-sm text-gray-700 leading-relaxed">
                             Я
@@ -543,16 +555,36 @@ function App() {
                             с
                             фармацевтами.
                           </span>
-                        </label>
+                        </div>
 
-                        <label
-                          htmlFor="consent-security"
+                        <div
                           className="flex items-start gap-3 cursor-pointer group p-3 rounded-xl hover:bg-gray-50 transition-colors"
-                          style={{
-                            touchAction:
-                              'manipulation',
-                            pointerEvents:
-                              'auto',
+                          onClick={() =>
+                            handleConsentChange(
+                              'securityProtection',
+                            )
+                          }
+                          role="checkbox"
+                          aria-checked={
+                            consents.securityProtection
+                          }
+                          tabIndex={
+                            0
+                          }
+                          onKeyDown={(
+                            e,
+                          ) => {
+                            if (
+                              e.key ===
+                                'Enter' ||
+                              e.key ===
+                                ' '
+                            ) {
+                              e.preventDefault();
+                              handleConsentChange(
+                                'securityProtection',
+                              );
+                            }
                           }}
                         >
                           <input
@@ -561,24 +593,10 @@ function App() {
                             checked={
                               consents.securityProtection
                             }
-                            onChange={() =>
-                              handleConsentChange(
-                                'securityProtection',
-                              )
-                            }
-                            onClick={(
-                              e,
-                            ) =>
-                              e.stopPropagation()
-                            }
+                            onChange={() => {}}
                             required
-                            style={{
-                              touchAction:
-                                'manipulation',
-                              pointerEvents:
-                                'auto',
-                            }}
-                            className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
+                            className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 pointer-events-none"
+                            readOnly
                           />
                           <span className="text-sm text-gray-700 leading-relaxed">
                             Я
@@ -604,7 +622,7 @@ function App() {
                             ИС
                             3-ин).
                           </span>
-                        </label>
+                        </div>
                       </div>
 
                       <div className="flex flex-col space-y-3">

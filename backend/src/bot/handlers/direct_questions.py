@@ -11,6 +11,7 @@ import logging
 from db.qa_models import User, Question, Pharmacist
 from utils.time_utils import get_utc_now_naive
 from bot.services.notification_service import notify_pharmacists_about_new_question
+from routers.pharmacist_dashboard import ws_manager
 from bot.handlers.qa_states import UserQAStates, QAStates
 from bot.handlers.registration import RegistrationStates
 from bot.services.dialog_service import DialogService
@@ -136,6 +137,22 @@ async def send_user_message_to_pharmacist(
                 parse_mode="HTML",
                 reply_markup=user_keyboard,
             )
+
+        # WebSocket broadcast to pharmacist WebView
+        try:
+            await ws_manager.broadcast_message_update(
+                question_id=str(question.uuid),
+                message_data={
+                    "uuid": "",
+                    "question_id": str(question.uuid),
+                    "sender_type": "user",
+                    "text": text_content or "",
+                    "created_at": get_utc_now_naive().isoformat(),
+                },
+            )
+            logger.info(f"WebSocket broadcast sent for user message to {question.uuid}")
+        except Exception as e:
+            logger.warning(f"WebSocket broadcast failed (non-critical): {e}")
 
         return True
 

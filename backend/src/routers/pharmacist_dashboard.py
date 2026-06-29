@@ -475,6 +475,18 @@ async def assign_question(
 
     logger.info(f"Pharmacist {pharmacist.uuid} assigned question {question_id}")
 
+    # Broadcast to all pharmacists that this question has been taken
+    try:
+        await ws_manager.broadcast(
+            {
+                "type": "question_assigned",
+                "question_id": question_id,
+                "assigned_to": str(pharmacist.uuid),
+            }
+        )
+    except Exception as e:
+        logger.warning(f"Assignment broadcast failed (non-critical): {e}")
+
     return {"message": "Question assigned successfully"}
 
 

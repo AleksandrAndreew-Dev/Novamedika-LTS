@@ -214,6 +214,34 @@ api.interceptors.response.use(
       },
     );
 
+    // Auto re-auth on 401 for pharmacist endpoints
+    if (
+      error.response
+        ?.status === 401 &&
+      error.config?.url?.startsWith(
+        '/api/pharmacist/',
+      )
+    ) {
+      const pharmacistToken =
+        localStorage.getItem(
+          'pharmacist_session_token',
+        );
+      if (pharmacistToken) {
+        logger.info(
+          '[API] 401 on pharmacist endpoint — clearing session, triggering re-auth',
+        );
+        localStorage.removeItem(
+          'pharmacist_session_token',
+        );
+        // Dispatch event so AuthProvider re-initiates TMA login
+        window.dispatchEvent(
+          new CustomEvent(
+            'pharmacist:session_expired',
+          ),
+        );
+      }
+    }
+
     // Добавляем human-readable сообщение к объекту ошибки
     error.userMessage =
       message;
