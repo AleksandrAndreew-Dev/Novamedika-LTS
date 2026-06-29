@@ -15,6 +15,7 @@ from sqlalchemy import text, select, func
 from db.database import get_db
 from db.qa_models import User, Question, Pharmacist, Answer
 from services.user_service import get_or_create_user
+from auth.session_manager import clear_all_pharmacist_sessions
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ router = APIRouter()
 
 class ConsentCheckRequest(BaseModel):
     """Запрос на проверку согласия пользователя из Telegram WebApp"""
+
     telegram_id: int
     first_name: str | None = None
     last_name: str | None = None
@@ -31,6 +33,7 @@ class ConsentCheckRequest(BaseModel):
 
 class ConsentCheckResponse(BaseModel):
     """Ответ с статусом согласия пользователя"""
+
     has_consent: bool
     consent_privacy_policy: bool | None = None
     needs_webapp_consent: bool
@@ -51,10 +54,12 @@ async def telegram_webhook(request: Request):
         # ✅ Используем уже инициализированные bot и dp
         bot = bot_manager.get_bot()
         dp = bot_manager.get_dp()
-        
+
         # Авто-реинициализация после /qa/drop (если bot/dp были сброшены)
         if not bot or not dp:
-            logger.warning("Bot or dispatcher not initialized, attempting auto-reinitialization...")
+            logger.warning(
+                "Bot or dispatcher not initialized, attempting auto-reinitialization..."
+            )
             bot, dp = await bot_manager.initialize()
             if not bot or not dp:
                 logger.error("Bot auto-reinitialization failed")
@@ -222,6 +227,7 @@ from fastapi import Header
 
 from fastapi import Header, HTTPException, status
 
+
 # Admin API Keys для критичных операций
 # Читаются при каждом запросе для поддержки hot-reload без перезапуска
 def get_admin_api_keys():
@@ -277,6 +283,9 @@ async def drop_qa_database(
             f"tables: {cleared_tables}. "
             f"Bot auto-restart scheduled."
         )
+
+        # Clear all stale Redis sessions pointing to deleted pharmacist records
+        await clear_all_pharmacist_sessions()
 
         # Auto-restart: сброс bot_manager (FSM storage, bot session, dispatcher)
         await bot_manager.reset()
@@ -431,7 +440,11 @@ async def get_pending_questions(
                 }
             )
 
-        return {"status": "success", "questions": questions_data, "total": len(questions_data)}
+        return {
+            "status": "success",
+            "questions": questions_data,
+            "total": len(questions_data),
+        }
 
     except Exception as e:
         logger.error(f"Error getting pending questions: {e}")
@@ -479,7 +492,11 @@ async def check_webapp_consent(
         )
 
         # Проверяем статус согласия
-        has_basic_consent = user.consent_privacy_policy if hasattr(user, 'consent_privacy_policy') else False
+        has_basic_consent = (
+            user.consent_privacy_policy
+            if hasattr(user, "consent_privacy_policy")
+            else False
+        )
 
         # Для WebApp с функцией бронирования требуется явное согласие
         # даже если есть базовое согласие из бота
@@ -494,7 +511,11 @@ async def check_webapp_consent(
 
         return ConsentCheckResponse(
             has_consent=has_basic_consent,
-            consent_privacy_policy=user.consent_privacy_policy if hasattr(user, 'consent_privacy_policy') else None,
+            consent_privacy_policy=(
+                user.consent_privacy_policy
+                if hasattr(user, "consent_privacy_policy")
+                else None
+            ),
             needs_webapp_consent=needs_additional_consent,
         )
 
@@ -502,5 +523,5 @@ async def check_webapp_consent(
         logger.error(f"Error checking WebApp consent: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to check consent status"
+            detail="Failed to check consent status",
         )

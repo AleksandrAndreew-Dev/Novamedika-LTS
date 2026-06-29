@@ -10,7 +10,12 @@ class WebSocketService {
     this.eventHandlers =
       new Map();
     this.isConnected = false;
-    // Build WS URL dynamically from current page's origin
+  }
+
+  /**
+   * Build WebSocket URL with the latest session token
+   */
+  _buildUrl() {
     const protocol =
       window.location
         .protocol === 'https:'
@@ -28,12 +33,12 @@ class WebSocketService {
       import.meta.env
         ?.VITE_WS_URL ||
       `${protocol}//${host}/api/pharmacist/ws/pharmacist`;
-    // Append session token as query parameter for authentication
+    // Read token fresh from localStorage every time
     const token =
       localStorage.getItem(
         'pharmacist_session_token',
       );
-    this.url = token
+    return token
       ? `${baseUrl}?token=${encodeURIComponent(token)}`
       : baseUrl;
   }
@@ -54,11 +59,14 @@ class WebSocketService {
     }
 
     try {
+      // Build URL with latest token each connect attempt
+      const url =
+        this._buildUrl();
       logger.info(
-        `Connecting to WebSocket: ${this.url}`,
+        `Connecting to WebSocket: ${url}`,
       );
       this.ws = new WebSocket(
-        this.url,
+        url,
       );
 
       this.ws.onopen = () => {

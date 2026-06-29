@@ -117,6 +117,41 @@ async def delete_session(token: str) -> bool:
     return result > 0
 
 
+async def clear_all_pharmacist_sessions() -> int:
+    """Clear ALL pharmacist sessions from Redis.
+    Used after /qa/drop to prevent stale sessions pointing to deleted DB records.
+    Returns count of deleted sessions."""
+    redis_client = get_redis_client()
+    count = 0
+    cursor = 0
+    pattern = f"{SESSION_PREFIX}*"
+    while True:
+        cursor, keys = await redis_client.scan(cursor=cursor, match=pattern, count=100)
+        if keys:
+            # Get session data to extract telegram_id for map cleanup
+            for key in keys:
+                session_json = await redis_client.get(key)
+                if session_json:
+                    try:
+                        session = json.loads(session_json)
+                        telegram_id = session.get("telegram_id")
+                        if telegram_id:
+                            await redis_client.delete(
+                                f"{SESSION_MAP_PREFIX}{telegram_id}"
+                            )
+                    except json.JSONDecodeError:
+                        pass
+            await redis_client.delete(*keys)
+            count += len(keys)
+        if cursor == 0:
+            break
+    if count > 0:
+        logger.warning(
+            f"Cleared {count} stale pharmacist sessions from Redis after /qa/drop"
+        )
+    return count
+
+
 async def get_pharmacist_by_session(token: str, db: AsyncSession):
     """Get pharmacist object from session token"""
     session = await get_session(token)
@@ -143,8 +178,12 @@ async def get_pharmacist_by_session(token: str, db: AsyncSession):
 
     if not pharmacist:
         logger.warning(
-            f"Pharmacist not found in DB for uuid={pharmacist_uuid}, session_telegram_id={session_telegram_id}"
+            f"Pharmacist not found in DB for uuid={pharmacist_uuid}, session_telegram_id={session_telegram_id}. Auto-cleaning stale session."
         )
+        # Auto-clean stale session — DB record was deleted (e.g. via /qa/drop)
+        redis_client = get_redis_client()
+        map_key = f"{SESSION_MAP_PREFIX}{session_telegram_id}"
+        await redis_client.delete(f"{SESSION_PREFIX}{token}", map_key)
         return None
 
     # Log telegram_id match status, but do NOT reject if mismatched

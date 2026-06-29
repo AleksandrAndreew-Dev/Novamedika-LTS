@@ -60,6 +60,12 @@ api.interceptors.request.use(
             'Authorization'
           ] =
             `Bearer ${pharmacistToken}`;
+        } else {
+          // No token yet — mark request to allow retry after auth resolves
+          config._pendingAuth = true;
+          logger.warn(
+            `[API] No pharmacist session token for ${config.url}, will retry after auth`,
+          );
         }
       } else {
         // Обычные эндпоинты — user_access_token, fallback на pharmacist_token
@@ -213,6 +219,32 @@ api.interceptors.response.use(
           error.message,
       },
     );
+
+    // If request was marked as _pendingAuth (no token at send time), retry once after delay
+    if (
+      error.config
+        ?._pendingAuth &&
+      error.response
+        ?.status === 401
+    ) {
+      const token =
+        localStorage.getItem(
+          'pharmacist_session_token',
+        );
+      if (token) {
+        logger.info(
+          '[API] Retrying request — token now available',
+        );
+        delete error.config
+          ._pendingAuth;
+        error.config.headers[
+          'Authorization'
+        ] = `Bearer ${token}`;
+        return api(
+          error.config,
+        );
+      }
+    }
 
     // Auto re-auth on 401 for pharmacist endpoints (throttled)
     if (
