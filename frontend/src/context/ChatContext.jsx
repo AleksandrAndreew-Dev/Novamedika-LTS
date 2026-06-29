@@ -60,11 +60,11 @@ export function ChatProvider({
   const wsReconnectRef =
     useRef(null);
 
-  // WebSocket protocol
+  // WebSocket protocol — user chat widget (not pharmacist dashboard)
   const isSecure =
     window.location
       .protocol === 'https:';
-  const wsBaseUrl = `${isSecure ? 'wss' : 'ws'}://${window.location.host}/api/pharmacist`;
+  const wsBaseUrl = `${isSecure ? 'wss' : 'ws'}://${window.location.host}/api/ws/chat`;
   const reconnectDelay = 3000;
 
   // Sync anonymous status on auth change
@@ -122,10 +122,14 @@ export function ChatProvider({
       )
         return;
 
+      if (isAnonymous) {
+        // Анонимные пользователи — только polling (нет JWT для WebSocket)
+        return;
+      }
       try {
         const ws =
           new WebSocket(
-            `${wsBaseUrl}/ws/chat/${currentConsultationId}`,
+            `${wsBaseUrl}/${currentConsultationId}`,
           );
         wsRef.current = ws;
 

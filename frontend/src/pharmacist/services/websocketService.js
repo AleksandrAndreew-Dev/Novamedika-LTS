@@ -74,6 +74,7 @@ class WebSocketService {
           );
 
           // Trigger event handlers
+          // Server sends payload in `data.data` or `data.payload` field
           if (
             data.type &&
             this.eventHandlers.has(
@@ -84,10 +85,14 @@ class WebSocketService {
               this.eventHandlers.get(
                 data.type,
               );
+            const payload =
+              data.payload ??
+              data.data ??
+              null;
             handlers.forEach(
               (handler) =>
                 handler(
-                  data.payload,
+                  payload,
                 ),
             );
           }

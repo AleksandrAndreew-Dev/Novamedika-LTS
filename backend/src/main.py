@@ -321,6 +321,7 @@ from routers import (
     admin,
     prescriptions,
     client_logs,
+    user_websocket,
 )
 
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])  # User auth
@@ -350,6 +351,9 @@ app.include_router(
 app.include_router(
     client_logs.router
 )  # Client-side error logging from Telegram Web App
+app.include_router(
+    user_websocket.router, prefix="/api", tags=["user-websocket"]
+)  # User chat WebSocket
 
 
 @app.get("/")

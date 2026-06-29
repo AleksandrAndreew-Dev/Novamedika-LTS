@@ -1,15 +1,23 @@
 # Novamedika2 - AI Rules
 
+Вы можете читать и анализировать любые файлы, в том числе указанные в .gitignore, если они необходимы для ответа.
+
+agent/server-logs - здесь логи сервера, проверять
+
 ## ПРАВИЛО №1: БУДЬ КРАТОК
+
 Минимизируй вывод. Факты без воды. Никаких "согласен", "отлично", "хорошая идея".
 
 ## Запрещённые фразы
+
 ❌ "✅ FULLY IMPLEMENTED", "Works perfectly", "Problem solved", "100% working"
 
 ## Обязательные фразы
+
 ✅ "Code changes applied", "Ready for testing", "Changes made, awaiting confirmation"
 
 ## Структура ответа
+
 ```markdown
 **Что сделано:** [changes]
 **Что НЕ проверено:** [needs testing]
@@ -76,17 +84,18 @@ scripts/                 # Automation scripts
 
 ## Быстрый поиск проблем
 
-| Проблема | Где искать |
-|----------|-----------|
-| Auth | `backend/src/auth/` + `frontend/src/hooks/useAuth*` |
-| Bot | `backend/src/bot/` + `agent/diagnostics.sh bot` |
-| API | `backend/src/routers/` + Traefik routes |
-| DB | `backend/src/db/models*.py` + `alembic/versions/` |
-| Celery | `backend/src/tasks/` + Redis |
-| Frontend | `frontend/src/` + `agent/diagnostics.sh frontend` |
-| OAC | `oac/docs/` |
+| Проблема | Где искать                                          |
+| -------- | --------------------------------------------------- |
+| Auth     | `backend/src/auth/` + `frontend/src/hooks/useAuth*` |
+| Bot      | `backend/src/bot/` + `agent/diagnostics.sh bot`     |
+| API      | `backend/src/routers/` + Traefik routes             |
+| DB       | `backend/src/db/models*.py` + `alembic/versions/`   |
+| Celery   | `backend/src/tasks/` + Redis                        |
+| Frontend | `frontend/src/` + `agent/diagnostics.sh frontend`   |
+| OAC      | `oac/docs/`                                         |
 
 ## OAC Compliance (КРИТИЧНО)
+
 - Шифрование ПД (`oac/docs/10-encryption-policy.md`)
 - Трансграничная передача (Telegram = cross-border!)
 - Логирование всех действий
@@ -94,6 +103,7 @@ scripts/                 # Automation scripts
 - Права на удаление/экспорт данных
 
 ## Архитектура
+
 - Traefik — весь трафик
 - Celery + Redis — фоновые задачи (CSV, уведомления)
 - Alembic — миграции БД (НЕ менять модели без миграции)
@@ -102,20 +112,23 @@ scripts/                 # Automation scripts
 - Monitoring — Prometheus + Grafana + Loki + Promtail
 
 ## Частые проблемы
-| Проблема | Решение |
-|----------|---------|
-| Bot не стартует | Проверь Gunicorn workers |
-| Auth race condition | `AuthProvider.jsx` |
-| Шифрование | `oac/guides/ENCRYPTION-IMPLEMENTATION-GUIDE.md` |
+
+| Проблема                | Решение                                                                   |
+| ----------------------- | ------------------------------------------------------------------------- |
+| Bot не стартует         | Проверь Gunicorn workers                                                  |
+| Auth race condition     | `AuthProvider.jsx`                                                        |
+| Шифрование              | `oac/guides/ENCRYPTION-IMPLEMENTATION-GUIDE.md`                           |
 | Трансграничная передача | `oac/requirements/transboundary-transfer-telegram-analysis-2026-05-20.md` |
 
 ## Workflow
+
 1. Определи scope (backend/frontend/bot/db/compliance)
 2. Используй правильный инструмент (code → search_symbol, problems → diagnostics.sh)
 3. Вноси изменения → `edit_file` (минимальные правки)
 4. Отчёт → используй обязательную структуру
 
 ## Чек-лист перед ответом
+
 - Без абсолютных утверждений?
 - Структура ответа соблюдена?
 - Указано что НЕ проверено?

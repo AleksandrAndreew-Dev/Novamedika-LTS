@@ -265,12 +265,6 @@ async def get_current_user_jwt_or_tma(
         except Exception as e:
             logger.warning(f"TMA auth failed: {e}")
 
-    # Try 3: Check if user is in request scope (set by middleware)
-    if hasattr(request, "user"):
-        user = getattr(request, "user", None)
-        if user:
-            return user
-
     # No auth — return None for optional auth
     logger.info("No auth credentials found, returning None (anonymous)")
     return None
