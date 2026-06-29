@@ -130,10 +130,8 @@ export function ChatProvider({
       )
         return;
 
-      if (isAnonymous) {
-        // Анонимные пользователи — только polling (нет JWT для WebSocket)
-        return;
-      }
+      // Anonymous users can also use WebSocket — user_chat_websocket requires no auth
+      // The server endpoint /api/ws/chat/{consultation_id} accepts connections without token
       try {
         const ws =
           new WebSocket(

@@ -108,6 +108,11 @@ async def lifespan(app: FastAPI):
     worker_pid = os.getpid()
     logger.info(f"Worker PID {worker_pid}: Initializing bot instance")
 
+    # Запуск Redis Pub/Sub listener для межпроцессной синхронизации WebSocket
+    from routers.pharmacist_dashboard import start_redis_listener
+
+    start_redis_listener()
+
     # Каждый worker инициализирует своего бота (необходимо для обработки webhook)
     # Middleware и роутеры настраиваются внутри bot_manager.initialize()
     bot, dp = await bot_manager.initialize()

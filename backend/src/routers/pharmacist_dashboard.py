@@ -23,6 +23,10 @@ from auth.session_auth import get_current_pharmacist_session as get_current_phar
 from auth.session_manager import get_pharmacist_by_session
 from pydantic import BaseModel, Field
 from utils.time_utils import get_utc_now_naive
+import asyncio
+import json
+import redis.asyncio as aioredis
+from auth.session_manager import get_redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -130,8 +134,72 @@ class WebSocketConnectionManager:
         )
 
 
+# Redis Pub/Sub channel for cross-worker WebSocket sync
+REDIS_WS_CHANNEL = "ws:pharmacist:events"
+
+
+async def publish_to_redis(message: dict):
+    """Publish event to Redis Pub/Sub channel for cross-worker sync"""
+    try:
+        r = get_redis_client()
+        await r.publish(REDIS_WS_CHANNEL, json.dumps(message, default=str))
+    except Exception as e:
+        logger.warning(f"Redis publish failed (non-critical): {e}")
+
+
+async def redis_ws_listener():
+    """Background task: listen to Redis Pub/Sub and broadcast locally"""
+    while True:
+        try:
+            r = get_redis_client()
+            pubsub = r.pubsub()
+            await pubsub.subscribe(REDIS_WS_CHANNEL)
+            logger.info("Redis WS listener started")
+            async for msg in pubsub.listen():
+                if msg["type"] == "message":
+                    try:
+                        data = json.loads(msg["data"])
+                        event_type = data.get("type", "")
+                        if event_type == "message_update":
+                            await ws_manager.broadcast_message_update(
+                                data.get("question_id", ""),
+                                data.get("message_data", {}),
+                            )
+                        elif event_type == "new_question":
+                            await ws_manager.broadcast_new_question(
+                                data.get("question_data", {})
+                            )
+                        elif event_type == "question_assigned":
+                            await ws_manager.broadcast(data)
+                        else:
+                            await ws_manager.broadcast(data)
+                    except Exception as e:
+                        logger.warning(f"Redis WS message parse error: {e}")
+        except Exception as e:
+            logger.error(f"Redis WS listener error: {e}, restarting in 5s")
+            await asyncio.sleep(5)
+
+
 # Global WebSocket manager instance
 ws_manager = WebSocketConnectionManager()
+# Global reference for the listener task
+_redis_listener_task = None
+
+
+def start_redis_listener():
+    """Start the Redis Pub/Sub listener background task"""
+    global _redis_listener_task
+    if _redis_listener_task is None or _redis_listener_task.done():
+        _redis_listener_task = asyncio.create_task(redis_ws_listener())
+        logger.info("Redis WS listener task started")
+
+
+def stop_redis_listener():
+    """Stop the Redis Pub/Sub listener background task"""
+    global _redis_listener_task
+    if _redis_listener_task and not _redis_listener_task.done():
+        _redis_listener_task.cancel()
+        logger.info("Redis WS listener task stopped")
 
 
 # Pydantic Schemas
@@ -191,16 +259,26 @@ async def get_questions(
 ):
     """Get list of questions with filtering and pagination"""
 
+    # Map frontend filter values to DB status values
+    db_status_map = {
+        "new": "pending",
+        "in_progress": "in_progress",
+        "answered": "answered",
+        "completed": "completed",
+        "pending": "pending",
+    }
+    db_status = db_status_map.get(status, status) if status else None
+
     # Get total count
     count_query = select(func.count()).select_from(Question)
-    if status:
-        count_query = count_query.where(Question.status == status)
+    if db_status:
+        count_query = count_query.where(Question.status == db_status)
 
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
 
     # Get paginated questions
-    query = await get_questions_query(status)
+    query = await get_questions_query(db_status)
     query = query.offset((page - 1) * limit).limit(limit)
 
     result = await db.execute(query)
@@ -336,20 +414,23 @@ async def answer_question(
     await db.refresh(new_message)
 
     # 1. WebSocket broadcast (pharmacists + subscribed user)
+    ws_msg_data = {
+        "question_id": str(question.uuid),
+        "message_data": {
+            "uuid": str(new_message.uuid),
+            "question_id": str(new_message.question_id),
+            "sender_type": "pharmacist",
+            "text": new_message.text,
+            "created_at": new_message.created_at.isoformat(),
+        },
+    }
     try:
-        await ws_manager.broadcast_message_update(
-            question_id=str(question.uuid),
-            message_data={
-                "uuid": str(new_message.uuid),
-                "question_id": str(new_message.question_id),
-                "sender_type": "pharmacist",
-                "text": new_message.text,
-                "created_at": new_message.created_at.isoformat(),
-            },
-        )
+        await ws_manager.broadcast_message_update(**ws_msg_data)
         logger.info(f"WebSocket broadcast sent for answer to {question_id}")
     except Exception as e:
         logger.warning(f"WebSocket broadcast failed (non-critical): {e}")
+    # Publish to Redis for cross-worker sync
+    asyncio.ensure_future(publish_to_redis({"type": "message_update", **ws_msg_data}))
 
     # 2. Telegram notification to user (if user has telegram_id)
     try:
@@ -477,16 +558,18 @@ async def assign_question(
     logger.info(f"Pharmacist {pharmacist.uuid} assigned question {question_id}")
 
     # Broadcast to all pharmacists that this question has been taken
+    assign_data = {
+        "type": "question_assigned",
+        "question_id": question_id,
+        "assigned_to": str(pharmacist.uuid),
+    }
     try:
-        await ws_manager.broadcast(
-            {
-                "type": "question_assigned",
-                "question_id": question_id,
-                "assigned_to": str(pharmacist.uuid),
-            }
-        )
+        await ws_manager.broadcast(assign_data)
+        logger.info(f"Assignment broadcast sent for {question_id}")
     except Exception as e:
         logger.warning(f"Assignment broadcast failed (non-critical): {e}")
+    # Publish to Redis for cross-worker sync
+    asyncio.ensure_future(publish_to_redis(assign_data))
 
     return {"message": "Question assigned successfully"}
 
@@ -670,20 +753,23 @@ async def send_message(
     await db.flush()
 
     # Broadcast via WebSocket
+    ws_msg_data = {
+        "question_id": str(question_id),
+        "message_data": {
+            "uuid": str(msg.uuid),
+            "question_id": str(question_id),
+            "sender_type": "pharmacist",
+            "sender_id": str(pharmacist.uuid),
+            "text": data.text,
+            "created_at": msg.created_at.isoformat(),
+        },
+    }
     try:
-        await ws_manager.broadcast_message_update(
-            question_id=str(question_id),
-            message_data={
-                "uuid": str(msg.uuid),
-                "question_id": str(question_id),
-                "sender_type": "pharmacist",
-                "sender_id": str(pharmacist.uuid),
-                "text": data.text,
-                "created_at": msg.created_at.isoformat(),
-            },
-        )
+        await ws_manager.broadcast_message_update(**ws_msg_data)
     except Exception as ws_err:
         logger.warning(f"WebSocket broadcast failed (non-critical): {ws_err}")
+    # Publish to Redis for cross-worker sync
+    asyncio.ensure_future(publish_to_redis({"type": "message_update", **ws_msg_data}))
 
     await db.commit()
     await db.refresh(msg)
@@ -697,8 +783,6 @@ async def send_message(
         user = user_result.scalar_one_or_none()
 
         if user and user.telegram_id:
-            import asyncio
-
             max_retries = 3
             for attempt in range(max_retries):
                 try:
