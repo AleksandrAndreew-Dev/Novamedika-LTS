@@ -74,7 +74,7 @@ export default function Chat() {
       if (urlForceAnon)
         return true;
       return !userAuthService.isAuthenticated();
-    }, []);
+    }, [urlForceAnon]);
 
   // Auth headers теперь берутся из interceptor в client.js
   const getAuthHeaders =
