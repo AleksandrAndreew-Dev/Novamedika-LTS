@@ -32,6 +32,10 @@ function AuthProvider({
     useState(null);
   const loginInProgressRef =
     useRef(false); // Prevent concurrent login attempts
+  const lastAutoLoginRef =
+    useRef(0); // Timestamp of last successful auto-login (cooldown)
+  const lastAutoLoginAttemptRef =
+    useRef(0); // Timestamp of last auto-login attempt (throttle)
 
   // Single unified auto-login function as recommended in faq3.md
   const performAutoLogin =
@@ -46,7 +50,22 @@ function AuthProvider({
         return;
       }
 
+      // Throttle: prevent repeated calls within 3 seconds
+      const now = Date.now();
+      if (
+        now -
+          lastAutoLoginAttemptRef.current <
+        3000
+      ) {
+        console.log(
+          '[AuthProvider] Auto-login throttled — too frequent',
+        );
+        return;
+      }
+
       loginInProgressRef.current = true;
+      lastAutoLoginAttemptRef.current =
+        now;
       console.log(
         '[AuthProvider] Starting auto-login check...',
       );
@@ -91,6 +110,8 @@ function AuthProvider({
               setIsAuthenticated(
                 true,
               );
+              lastAutoLoginRef.current =
+                Date.now();
               console.log(
                 '[AuthProvider] Session is valid, active pharmacist:',
                 profile.user
@@ -203,6 +224,8 @@ function AuthProvider({
             setIsAuthenticated(
               true,
             );
+            lastAutoLoginRef.current =
+              Date.now();
             console.log(
               '[AuthProvider] ✅ Auto-login successful:',
               profile.user
@@ -317,6 +340,17 @@ function AuthProvider({
   useEffect(() => {
     const handleSessionExpired =
       () => {
+        // Cooldown: skip if auto-login succeeded less than 5 seconds ago
+        if (
+          Date.now() -
+            lastAutoLoginRef.current <
+          5000
+        ) {
+          console.log(
+            '[AuthProvider] Session expired event ignored — recent auto-login (cooldown)',
+          );
+          return;
+        }
         console.log(
           '[AuthProvider] Session expired event received, re-authenticating...',
         );

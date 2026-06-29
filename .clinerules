@@ -24,27 +24,6 @@ agent/server-logs - здесь логи сервера, проверять
 **Следующие шаги:** 1. [step] 2. [step]
 ```
 
-## Команды
-
-```bash
-# Диагностика
-bash agent/diagnostics.sh all       # Полная диагностика
-bash agent/diagnostics.sh status    # Статус контейнеров
-bash agent/diagnostics.sh logs      # Логи с ошибками
-bash agent/diagnostics.sh backend   # Логи backend
-bash agent/diagnostics.sh bot       # Диагностика бота
-
-# Продакшн
-npm run prod:up              # Запуск
-npm run prod:restart         # Рестарт
-npm run prod:logs            # Логи
-npm run prod:ps              # Статус
-
-# Безопасность
-py oac/check_normative_docs.py    # Проверка ОАЦ
-sh scripts/run-zap-scan.sh        # OWASP ZAP
-```
-
 ## Дерево проекта
 
 ```

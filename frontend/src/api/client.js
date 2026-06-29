@@ -214,7 +214,7 @@ api.interceptors.response.use(
       },
     );
 
-    // Auto re-auth on 401 for pharmacist endpoints
+    // Auto re-auth on 401 for pharmacist endpoints (throttled)
     if (
       error.response
         ?.status === 401 &&
@@ -222,18 +222,26 @@ api.interceptors.response.use(
         '/api/pharmacist/',
       )
     ) {
-      const pharmacistToken =
-        localStorage.getItem(
-          'pharmacist_session_token',
+      // Prevent re-auth loop: throttle to once per 5 seconds
+      const now = Date.now();
+      const lastDispatch =
+        window.__pharmacistSessionExpiredAt ||
+        0;
+      if (
+        now - lastDispatch <
+        5000
+      ) {
+        logger.debug(
+          '[API] 401 throttled — skipping re-auth dispatch (cooldown)',
         );
-      if (pharmacistToken) {
+      } else {
         logger.info(
-          '[API] 401 on pharmacist endpoint — clearing session, triggering re-auth',
+          '[API] 401 on pharmacist endpoint — triggering re-auth',
         );
-        localStorage.removeItem(
-          'pharmacist_session_token',
-        );
+        window.__pharmacistSessionExpiredAt =
+          now;
         // Dispatch event so AuthProvider re-initiates TMA login
+        // Token is managed by AuthProvider, not removed here
         window.dispatchEvent(
           new CustomEvent(
             'pharmacist:session_expired',
