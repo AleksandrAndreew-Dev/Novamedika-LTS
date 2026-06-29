@@ -271,12 +271,18 @@ export function ChatProvider({
     wsBaseUrl,
   ]);
 
+  // Flag to ensure we only do initial load once per consultation
+  const initialLoadDoneRef =
+    useRef(false);
+
   // Polling fallback (used when WebSocket is not available or for anonymous users)
   useEffect(() => {
     if (
       !currentConsultationId
     )
       return;
+
+    initialLoadDoneRef.current = false;
 
     const poll = async () => {
       try {
@@ -333,11 +339,7 @@ export function ChatProvider({
     // Only set up polling if WebSocket is not available or for anonymous
     // For anonymous users — always poll
     if (isAnonymous) {
-      if (
-        messages.length === 0
-      ) {
-        poll();
-      }
+      poll();
       pollingRef.current =
         setInterval(
           poll,
@@ -345,12 +347,7 @@ export function ChatProvider({
         );
     } else {
       // For non-anonymous: still poll as fallback, but less frequently
-      // Initial load if messages are empty
-      if (
-        messages.length === 0
-      ) {
-        poll();
-      }
+      poll();
       // Poll every 30s as safety fallback (WebSocket is primary)
       pollingRef.current =
         setInterval(
