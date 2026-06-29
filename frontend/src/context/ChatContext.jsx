@@ -65,6 +65,14 @@ export function ChatProvider({
     window.location
       .protocol === 'https:';
   const wsBaseUrl = `${isSecure ? 'wss' : 'ws'}://${window.location.host}/api/ws/chat`;
+  // Store baseUrl in ref to avoid stale closure in reconnect callback
+  const wsBaseUrlRef = useRef(
+    wsBaseUrl,
+  );
+  useEffect(() => {
+    wsBaseUrlRef.current =
+      wsBaseUrl;
+  }, [wsBaseUrl]);
   const reconnectDelay = 3000;
 
   // Sync anonymous status on auth change

@@ -10,6 +10,14 @@ class WebSocketService {
     this.eventHandlers =
       new Map();
     this.isConnected = false;
+    // Build WS URL dynamically from current page's origin
+    const protocol =
+      window.location
+        .protocol === 'https:'
+        ? 'wss:'
+        : 'ws:';
+    const host =
+      window.location.host;
     this.url =
       window.APP_CONFIG
         ?.WS_URL_PHARMACIST ||
@@ -19,7 +27,7 @@ class WebSocketService {
         ?.VITE_WS_URL_PHARMACIST ||
       import.meta.env
         ?.VITE_WS_URL ||
-      'wss://api.spravka.novamedika.com/api/pharmacist/ws/pharmacist';
+      `${protocol}//${host}/api/pharmacist/ws/pharmacist`;
   }
 
   /**
