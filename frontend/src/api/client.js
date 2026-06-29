@@ -18,8 +18,11 @@ export const api =
 api.interceptors.request.use(
   (config) => {
     // Добавляем API key если есть (только если не установлен явно)
-    const apiKey = import.meta
-      .env.VITE_API_KEY;
+    const apiKey =
+      window.APP_CONFIG
+        ?.API_KEY ||
+      import.meta.env
+        ?.VITE_API_KEY;
     if (
       apiKey &&
       !config.headers[

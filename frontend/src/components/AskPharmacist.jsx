@@ -1,66 +1,122 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import api from "../api/client";
-import Toast from "./Toast";
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import api from '../api/client';
+import Toast from './Toast';
 
-export default function AskPharmacist({ onClose }) {
-  const navigate = useNavigate();
-  const [questionText, setQuestionText] = useState("");
-  const [sending, setSending] = useState(false);
-  const [result, setResult] = useState(null);
-  const [toast, setToast] = useState(null);
+export default function AskPharmacist({
+  onClose,
+}) {
+  const navigate =
+    useNavigate();
+  const [
+    questionText,
+    setQuestionText,
+  ] = useState('');
+  const [
+    sending,
+    setSending,
+  ] = useState(false);
+  const [result, setResult] =
+    useState(null);
+  const [toast, setToast] =
+    useState(null);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (
+    e,
+  ) => {
     e.preventDefault();
-    if (!questionText.trim()) return;
+    if (!questionText.trim())
+      return;
 
     try {
       setSending(true);
 
       // Генерируем или получаем anon_user_id из localStorage
-      let anonUserId = localStorage.getItem("anon_user_id");
+      let anonUserId =
+        localStorage.getItem(
+          'anon_user_id',
+        );
       if (!anonUserId) {
-        anonUserId = crypto.randomUUID
-          ? crypto.randomUUID()
-          : "anon-" + Date.now() + "-" + Math.random().toString(36).slice(2);
-        localStorage.setItem("anon_user_id", anonUserId);
+        anonUserId =
+          crypto.randomUUID
+            ? crypto.randomUUID()
+            : 'anon-' +
+              Date.now() +
+              '-' +
+              Math.random()
+                .toString(36)
+                .slice(2);
+        localStorage.setItem(
+          'anon_user_id',
+          anonUserId,
+        );
       }
 
-      const response = await api.post(
-        "/api/public/questions/",
-        {
-          text: questionText.trim(),
-          category: "general",
-          anon_user_id: anonUserId,
-        },
-        {
-          headers: { "X-API-KEY": import.meta.env.VITE_API_KEY || "" },
-        },
-      );
+      const response =
+        await api.post(
+          '/api/public/questions/',
+          {
+            text: questionText.trim(),
+            category:
+              'general',
+            anon_user_id:
+              anonUserId,
+          },
+          {
+            headers: {
+              'X-API-KEY':
+                window
+                  .APP_CONFIG
+                  ?.API_KEY ||
+                import.meta
+                  .env
+                  ?.VITE_API_KEY ||
+                '',
+            },
+          },
+        );
 
-      const data = response.data;
+      const data =
+        response.data;
       setResult({
         uuid: data.uuid,
         text: data.text,
       });
 
-      setToast({ message: "✅ Вопрос отправлен фармацевту", type: "success" });
+      setToast({
+        message:
+          '✅ Вопрос отправлен фармацевту',
+        type: 'success',
+      });
 
       // Сохраняем в localStorage историю вопросов
-      const history = JSON.parse(
-        localStorage.getItem("anon_questions") || "[]",
-      );
+      const history =
+        JSON.parse(
+          localStorage.getItem(
+            'anon_questions',
+          ) || '[]',
+        );
       history.push({
         uuid: data.uuid,
         text: data.text,
-        created_at: new Date().toISOString(),
+        created_at:
+          new Date().toISOString(),
       });
-      localStorage.setItem("anon_questions", JSON.stringify(history));
+      localStorage.setItem(
+        'anon_questions',
+        JSON.stringify(
+          history,
+        ),
+      );
     } catch (err) {
-      console.error("[AskPharmacist] Failed:", err);
+      console.error(
+        '[AskPharmacist] Failed:',
+        err,
+      );
       setToast({
-        message: "Ошибка отправки вопроса. Попробуйте позже.",
-        type: "error",
+        message:
+          'Ошибка отправки вопроса. Попробуйте позже.',
+        type: 'error',
       });
     } finally {
       setSending(false);
@@ -75,7 +131,9 @@ export default function AskPharmacist({ onClose }) {
       >
         <div
           className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 relative"
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) =>
+            e.stopPropagation()
+          }
         >
           {/* Close button */}
           <button
@@ -93,8 +151,18 @@ export default function AskPharmacist({ onClose }) {
               strokeLinecap="round"
               strokeLinejoin="round"
             >
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
+              <line
+                x1="18"
+                y1="6"
+                x2="6"
+                y2="18"
+              ></line>
+              <line
+                x1="6"
+                y1="6"
+                x2="18"
+                y2="18"
+              ></line>
             </svg>
           </button>
 
@@ -109,7 +177,9 @@ export default function AskPharmacist({ onClose }) {
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeWidth={2}
+                strokeWidth={
+                  2
+                }
                 d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
               />
             </svg>
@@ -128,35 +198,49 @@ export default function AskPharmacist({ onClose }) {
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    strokeWidth={2}
+                    strokeWidth={
+                      2
+                    }
                     d="M5 13l4 4L19 7"
                   />
                 </svg>
               </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                Вопрос отправлен!
+                Вопрос
+                отправлен!
               </h3>
               <p className="text-sm text-gray-500 mb-4">
-                Фармацевт ответит в ближайшее время.
+                Фармацевт
+                ответит в
+                ближайшее
+                время.
               </p>
               <div className="flex flex-col gap-2">
                 <button
                   onClick={() => {
                     onClose();
-                    navigate(`/chat/${result.uuid}`);
+                    navigate(
+                      `/chat/${result.uuid}`,
+                    );
                   }}
                   className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-medium py-2.5 px-6 rounded-full transition-all text-sm"
                 >
-                  💬 Перейти в чат
+                  💬 Перейти в
+                  чат
                 </button>
                 <button
                   onClick={() => {
-                    setResult(null);
-                    setQuestionText("");
+                    setResult(
+                      null,
+                    );
+                    setQuestionText(
+                      '',
+                    );
                   }}
                   className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-6 rounded-full transition-colors text-sm"
                 >
-                  Задать ещё вопрос
+                  Задать ещё
+                  вопрос
                 </button>
               </div>
             </div>
@@ -164,30 +248,57 @@ export default function AskPharmacist({ onClose }) {
             /* Form state */
             <>
               <h3 className="text-lg font-semibold text-gray-900 text-center mb-1">
-                Задать вопрос фармацевту
+                Задать вопрос
+                фармацевту
               </h3>
               <p className="text-sm text-gray-500 text-center mb-5">
-                Опишите ваш вопрос, и фармацевт ответит вам
+                Опишите ваш
+                вопрос, и
+                фармацевт
+                ответит вам
               </p>
 
-              <form onSubmit={handleSubmit}>
+              <form
+                onSubmit={
+                  handleSubmit
+                }
+              >
                 <div className="mb-4">
                   <textarea
-                    value={questionText}
-                    onChange={(e) => setQuestionText(e.target.value)}
+                    value={
+                      questionText
+                    }
+                    onChange={(
+                      e,
+                    ) =>
+                      setQuestionText(
+                        e
+                          .target
+                          .value,
+                      )
+                    }
                     placeholder="Например: есть ли в наличии Цитрамон, какие есть аналоги?"
                     rows={4}
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm resize-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all text-gray-900 placeholder:text-gray-400"
-                    style={{ fontFamily: "inherit" }}
+                    style={{
+                      fontFamily:
+                        'inherit',
+                    }}
                   />
                   <p className="text-xs text-gray-400 mt-1 text-right">
-                    {questionText.length}/500
+                    {
+                      questionText.length
+                    }
+                    /500
                   </p>
                 </div>
 
                 <button
                   type="submit"
-                  disabled={sending || !questionText.trim()}
+                  disabled={
+                    sending ||
+                    !questionText.trim()
+                  }
                   className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium rounded-2xl transition-colors text-sm"
                 >
                   {sending ? (
@@ -214,20 +325,26 @@ export default function AskPharmacist({ onClose }) {
                       Отправка...
                     </span>
                   ) : (
-                    "Отправить вопрос"
+                    'Отправить вопрос'
                   )}
                 </button>
               </form>
 
               <p className="text-xs text-gray-400 text-center mt-4">
-                Нажимая "Отправить", вы соглашаетесь с обработкой данных
-                согласно{" "}
+                Нажимая
+                "Отправить",
+                вы
+                соглашаетесь с
+                обработкой
+                данных
+                согласно{' '}
                 <a
                   href="/privacy-policy"
                   target="_blank"
                   className="text-blue-500 underline"
                 >
-                  Политике конфиденциальности
+                  Политике
+                  конфиденциальности
                 </a>
               </p>
             </>
@@ -237,9 +354,13 @@ export default function AskPharmacist({ onClose }) {
 
       {toast && (
         <Toast
-          message={toast.message}
+          message={
+            toast.message
+          }
           type={toast.type}
-          onClose={() => setToast(null)}
+          onClose={() =>
+            setToast(null)
+          }
           duration={3000}
         />
       )}

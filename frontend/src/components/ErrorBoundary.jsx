@@ -1,49 +1,97 @@
-import React from "react";
-import { logger } from "../utils/logger";
+import React from 'react';
+import { logger } from '../utils/logger';
 
-class ErrorBoundary extends React.Component {
+class ErrorBoundary
+  extends React.Component
+{
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null, errorInfo: null };
+    this.state = {
+      hasError: false,
+      error: null,
+      errorInfo: null,
+    };
   }
 
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
+  static getDerivedStateFromError(
+    error,
+  ) {
+    return {
+      hasError: true,
+      error,
+    };
   }
 
-  componentDidCatch(error, errorInfo) {
-    this.setState({ errorInfo });
-    logger.error("ErrorBoundary caught:", error, errorInfo);
+  componentDidCatch(
+    error,
+    errorInfo,
+  ) {
+    this.setState({
+      errorInfo,
+    });
+    logger.error(
+      'ErrorBoundary caught:',
+      error,
+      errorInfo,
+    );
 
     // Send client-side error to backend for diagnostics
     try {
       const payload = {
-        error: error?.message || String(error) || "",
-        componentStack: errorInfo?.componentStack || null,
-        url: window.location.href,
-        userAgent: navigator.userAgent,
-        timestamp: new Date().toISOString(),
+        error:
+          error?.message ||
+          String(error) ||
+          '',
+        componentStack:
+          errorInfo?.componentStack ||
+          null,
+        url: window.location
+          .href,
+        userAgent:
+          navigator.userAgent,
+        timestamp:
+          new Date().toISOString(),
       };
 
       // Use API_BASE_URL from config (handles proxy vs direct API domain)
       const apiUrl =
         (
-          window.APP_CONFIG?.API_BASE_URL ||
-          import.meta.env.VITE_API_URL ||
-          "https://api.spravka.novamedika.com"
-        ).replace(/\/$/, "") + "/api/log/client-error";
+          window.APP_CONFIG
+            ?.API_BASE_URL ||
+          import.meta.env
+            ?.VITE_API_URL ||
+          'https://api.spravka.novamedika.com'
+        ).replace(/\/$/, '') +
+        '/api/log/client-error';
 
       // Use sendBeacon for reliability (works during page unload too)
-      if (navigator.sendBeacon) {
-        const blob = new Blob([JSON.stringify(payload)], {
-          type: "application/json",
-        });
-        navigator.sendBeacon(apiUrl, blob);
+      if (
+        navigator.sendBeacon
+      ) {
+        const blob = new Blob(
+          [
+            JSON.stringify(
+              payload,
+            ),
+          ],
+          {
+            type: 'application/json',
+          },
+        );
+        navigator.sendBeacon(
+          apiUrl,
+          blob,
+        );
       } else {
         fetch(apiUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          method: 'POST',
+          headers: {
+            'Content-Type':
+              'application/json',
+          },
+          body: JSON.stringify(
+            payload,
+          ),
           keepalive: true,
         }).catch(() => {});
       }
@@ -53,7 +101,11 @@ class ErrorBoundary extends React.Component {
   }
 
   handleReset = () => {
-    this.setState({ hasError: false, error: null, errorInfo: null });
+    this.setState({
+      hasError: false,
+      error: null,
+      errorInfo: null,
+    });
     if (this.props.onReset) {
       this.props.onReset();
     }
@@ -61,37 +113,66 @@ class ErrorBoundary extends React.Component {
 
   // Helper function to determine error type and provide specific guidance
   getErrorMessage = () => {
-    const { error } = this.state;
+    const { error } =
+      this.state;
 
-    if (!error) return "Произошла ошибка при загрузке компонента.";
+    if (!error)
+      return 'Произошла ошибка при загрузке компонента.';
 
     // Check for common error patterns
-    if (error.message?.includes("auth") || error.message?.includes("token")) {
-      return "Ошибка аутентификации. Попробуйте открыть панель заново из Telegram.";
+    if (
+      error.message?.includes(
+        'auth',
+      ) ||
+      error.message?.includes(
+        'token',
+      )
+    ) {
+      return 'Ошибка аутентификации. Попробуйте открыть панель заново из Telegram.';
     }
 
     if (
-      error.message?.includes("network") ||
-      error.message?.includes("Network")
+      error.message?.includes(
+        'network',
+      ) ||
+      error.message?.includes(
+        'Network',
+      )
     ) {
-      return "Ошибка сети. Проверьте подключение к интернету и попробуйте снова.";
+      return 'Ошибка сети. Проверьте подключение к интернету и попробуйте снова.';
     }
 
-    if (error.message?.includes("401") || error.message?.includes("403")) {
-      return "Ошибка доступа. Пожалуйста, откройте панель заново из Telegram.";
+    if (
+      error.message?.includes(
+        '401',
+      ) ||
+      error.message?.includes(
+        '403',
+      )
+    ) {
+      return 'Ошибка доступа. Пожалуйста, откройте панель заново из Telegram.';
     }
 
-    if (error.message?.includes("404")) {
-      return "Ресурс не найден. Возможно, изменился адрес страницы.";
+    if (
+      error.message?.includes(
+        '404',
+      )
+    ) {
+      return 'Ресурс не найден. Возможно, изменился адрес страницы.';
     }
 
-    return "Произошла ошибка при загрузке компонента. Попробуйте обновить страницу.";
+    return 'Произошла ошибка при загрузке компонента. Попробуйте обновить страницу.';
   };
 
   render() {
     if (this.state.hasError) {
-      if (this.props.fallback) {
-        return this.props.fallback(this.state.error, this.handleReset);
+      if (
+        this.props.fallback
+      ) {
+        return this.props.fallback(
+          this.state.error,
+          this.handleReset,
+        );
       }
 
       return (
@@ -107,62 +188,92 @@ class ErrorBoundary extends React.Component {
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  strokeWidth={2}
+                  strokeWidth={
+                    2
+                  }
                   d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
               </svg>
             </div>
             <h2 className="text-xl font-bold text-gray-900 mb-2">
-              Что-то пошло не так
+              Что-то пошло не
+              так
             </h2>
             <p className="text-gray-600 text-sm mb-6">
               {this.getErrorMessage()}
             </p>
             <div className="flex flex-col gap-3">
               <button
-                onClick={this.handleReset}
+                onClick={
+                  this
+                    .handleReset
+                }
                 className="bg-telegram-primary text-gray-900 font-medium py-3 px-6 rounded-lg transition-colors hover:bg-blue-600 min-h-[44px]"
               >
-                Повторить попытку
+                Повторить
+                попытку
               </button>
               <button
-                onClick={() => window.location.reload()}
+                onClick={() =>
+                  window.location.reload()
+                }
                 className="bg-gray-100 text-gray-800 font-medium py-3 px-6 rounded-lg transition-colors hover:bg-gray-200 min-h-[44px]"
               >
-                Обновить страницу
+                Обновить
+                страницу
               </button>
               <button
                 onClick={() => {
                   // Redirect to main Telegram bot
-                  window.open("https://t.me/novamedika_bot", "_blank");
+                  window.open(
+                    'https://t.me/novamedika_bot',
+                    '_blank',
+                  );
                 }}
                 className="bg-gray-100 text-gray-800 font-medium py-3 px-6 rounded-lg transition-colors hover:bg-gray-200 min-h-[44px]"
               >
-                На главную (Telegram)
+                На главную
+                (Telegram)
               </button>
             </div>
-            {import.meta.env.DEV && this.state.error && (
-              <details className="mt-4 text-left">
-                <summary className="text-xs text-gray-500 cursor-pointer">
-                  Технические детали (DEV)
-                </summary>
-                <pre className="text-xs text-red-600 bg-red-50 p-3 rounded mt-2 overflow-auto max-h-40">
-                  {this.state.error.toString()}
-                  {this.state.errorInfo?.componentStack && (
-                    <div className="mt-2">
-                      <strong>Stack:</strong>
-                      {this.state.errorInfo.componentStack}
-                    </div>
-                  )}
-                </pre>
-              </details>
-            )}
+            {import.meta.env
+              ?.DEV &&
+              this.state
+                .error && (
+                <details className="mt-4 text-left">
+                  <summary className="text-xs text-gray-500 cursor-pointer">
+                    Технические
+                    детали
+                    (DEV)
+                  </summary>
+                  <pre className="text-xs text-red-600 bg-red-50 p-3 rounded mt-2 overflow-auto max-h-40">
+                    {this.state.error.toString()}
+                    {this
+                      .state
+                      .errorInfo
+                      ?.componentStack && (
+                      <div className="mt-2">
+                        <strong>
+                          Stack:
+                        </strong>
+                        {
+                          this
+                            .state
+                            .errorInfo
+                            .componentStack
+                        }
+                      </div>
+                    )}
+                  </pre>
+                </details>
+              )}
           </div>
         </div>
       );
     }
 
-    return this.props.children;
+    return this.props
+      .children;
   }
 }
 

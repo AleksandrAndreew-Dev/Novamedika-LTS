@@ -7,63 +7,131 @@ class WebSocketService {
     this.reconnectInterval = 3000;
     this.maxReconnectAttempts = 10;
     this.reconnectAttempts = 0;
-    this.eventHandlers = new Map();
+    this.eventHandlers =
+      new Map();
     this.isConnected = false;
-    this.url = import.meta.env.VITE_WS_URL_PHARMACIST || import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/pharmacist';
+    this.url =
+      window.APP_CONFIG
+        ?.WS_URL_PHARMACIST ||
+      window.APP_CONFIG
+        ?.WS_URL ||
+      import.meta.env
+        ?.VITE_WS_URL_PHARMACIST ||
+      import.meta.env
+        ?.VITE_WS_URL ||
+      'wss://api.spravka.novamedika.com/api/pharmacist/ws/pharmacist';
   }
 
   /**
    * Connect to WebSocket server
    */
   connect() {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      logger.info('WebSocket already connected');
+    if (
+      this.ws &&
+      this.ws.readyState ===
+        WebSocket.OPEN
+    ) {
+      logger.info(
+        'WebSocket already connected',
+      );
       return;
     }
 
     try {
-      logger.info(`Connecting to WebSocket: ${this.url}`);
-      this.ws = new WebSocket(this.url);
+      logger.info(
+        `Connecting to WebSocket: ${this.url}`,
+      );
+      this.ws = new WebSocket(
+        this.url,
+      );
 
       this.ws.onopen = () => {
-        logger.info('WebSocket connected successfully');
+        logger.info(
+          'WebSocket connected successfully',
+        );
         this.isConnected = true;
         this.reconnectAttempts = 0;
-        
+
         // Subscribe to pharmacist events
-        this.send({ type: 'subscribe', channel: 'pharmacist' });
+        this.send({
+          type: 'subscribe',
+          channel:
+            'pharmacist',
+        });
       };
 
-      this.ws.onmessage = (event) => {
+      this.ws.onmessage = (
+        event,
+      ) => {
         try {
-          const data = JSON.parse(event.data);
-          logger.debug('WebSocket message received:', data);
-          
+          const data =
+            JSON.parse(
+              event.data,
+            );
+          logger.debug(
+            'WebSocket message received:',
+            data,
+          );
+
           // Trigger event handlers
-          if (data.type && this.eventHandlers.has(data.type)) {
-            const handlers = this.eventHandlers.get(data.type);
-            handlers.forEach(handler => handler(data.payload));
+          if (
+            data.type &&
+            this.eventHandlers.has(
+              data.type,
+            )
+          ) {
+            const handlers =
+              this.eventHandlers.get(
+                data.type,
+              );
+            handlers.forEach(
+              (handler) =>
+                handler(
+                  data.payload,
+                ),
+            );
           }
         } catch (error) {
-          logger.error('Failed to parse WebSocket message:', error);
+          logger.error(
+            'Failed to parse WebSocket message:',
+            error,
+          );
         }
       };
 
-      this.ws.onerror = (error) => {
-        logger.error('WebSocket error:', error);
+      this.ws.onerror = (
+        error,
+      ) => {
+        logger.error(
+          'WebSocket error:',
+          error,
+        );
       };
 
-      this.ws.onclose = (event) => {
-        logger.info(`WebSocket closed: ${event.code} ${event.reason}`);
+      this.ws.onclose = (
+        event,
+      ) => {
+        logger.info(
+          `WebSocket closed: ${event.code} ${event.reason}`,
+        );
         this.isConnected = false;
-        
+
         // Attempt to reconnect
-        if (!event.wasClean && this.reconnectAttempts < this.maxReconnectAttempts) {
+        if (
+          !event.wasClean &&
+          this
+            .reconnectAttempts <
+            this
+              .maxReconnectAttempts
+        ) {
           this.reconnect();
         }
       };
     } catch (error) {
-      logger.error('Failed to create WebSocket connection:', error);
+      logger.error(
+        'Failed to create WebSocket connection:',
+        error,
+      );
       this.reconnect();
     }
   }
@@ -73,10 +141,19 @@ class WebSocketService {
    */
   reconnect() {
     this.reconnectAttempts++;
-    const delay = this.reconnectInterval * Math.pow(2, this.reconnectAttempts - 1);
-    
-    logger.info(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${delay}ms`);
-    
+    const delay =
+      this.reconnectInterval *
+      Math.pow(
+        2,
+        this
+          .reconnectAttempts -
+          1,
+      );
+
+    logger.info(
+      `Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${delay}ms`,
+    );
+
     setTimeout(() => {
       this.connect();
     }, delay);
@@ -87,10 +164,19 @@ class WebSocketService {
    * @param {Object} data - Message data
    */
   send(data) {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(data));
+    if (
+      this.ws &&
+      this.ws.readyState ===
+        WebSocket.OPEN
+    ) {
+      this.ws.send(
+        JSON.stringify(data),
+      );
     } else {
-      logger.warn('WebSocket not connected, message not sent:', data);
+      logger.warn(
+        'WebSocket not connected, message not sent:',
+        data,
+      );
     }
   }
 
@@ -101,20 +187,42 @@ class WebSocketService {
    * @returns {Function} Unsubscribe function
    */
   on(eventType, handler) {
-    if (!this.eventHandlers.has(eventType)) {
-      this.eventHandlers.set(eventType, []);
+    if (
+      !this.eventHandlers.has(
+        eventType,
+      )
+    ) {
+      this.eventHandlers.set(
+        eventType,
+        [],
+      );
     }
-    
-    this.eventHandlers.get(eventType).push(handler);
-    logger.info(`Subscribed to event: ${eventType}`);
-    
+
+    this.eventHandlers
+      .get(eventType)
+      .push(handler);
+    logger.info(
+      `Subscribed to event: ${eventType}`,
+    );
+
     // Return unsubscribe function
     return () => {
-      const handlers = this.eventHandlers.get(eventType);
-      const index = handlers.indexOf(handler);
+      const handlers =
+        this.eventHandlers.get(
+          eventType,
+        );
+      const index =
+        handlers.indexOf(
+          handler,
+        );
       if (index > -1) {
-        handlers.splice(index, 1);
-        logger.info(`Unsubscribed from event: ${eventType}`);
+        handlers.splice(
+          index,
+          1,
+        );
+        logger.info(
+          `Unsubscribed from event: ${eventType}`,
+        );
       }
     };
   }
@@ -128,7 +236,9 @@ class WebSocketService {
       this.ws = null;
       this.isConnected = false;
       this.eventHandlers.clear();
-      logger.info('WebSocket disconnected');
+      logger.info(
+        'WebSocket disconnected',
+      );
     }
   }
 
@@ -137,7 +247,11 @@ class WebSocketService {
    * @returns {boolean}
    */
   isConnected() {
-    return this.isConnected && this.ws?.readyState === WebSocket.OPEN;
+    return (
+      this.isConnected &&
+      this.ws?.readyState ===
+        WebSocket.OPEN
+    );
   }
 
   /**
@@ -145,9 +259,13 @@ class WebSocketService {
    * @returns {number}
    */
   getReadyState() {
-    return this.ws?.readyState || WebSocket.CLOSED;
+    return (
+      this.ws?.readyState ||
+      WebSocket.CLOSED
+    );
   }
 }
 
-export const websocketService = new WebSocketService();
+export const websocketService =
+  new WebSocketService();
 export default websocketService;
