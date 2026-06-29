@@ -361,7 +361,7 @@ export default function Chat() {
                     messagesRes.data,
                   );
                 return;
-              } catch (jwtErr) {
+              } catch (_jwtErr) {
                 throw pubErr; // original 404 more relevant
               }
             }

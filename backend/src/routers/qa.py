@@ -11,7 +11,11 @@ from pydantic import BaseModel
 from db.database import get_db
 from db.qa_models import User, Question, Answer, Pharmacist, DialogMessage
 from db.qa_schemas import QuestionCreate, QuestionResponse, AnswerBase, AnswerResponse
-from auth.auth import get_current_pharmacist, get_current_user_jwt
+from auth.auth import (
+    get_current_pharmacist,
+    get_current_user_jwt,
+    get_current_user_jwt_or_tma,
+)
 from auth.security import get_api_key
 from services.user_service import get_or_create_user
 import logging
@@ -381,14 +385,21 @@ class ConsultationStats(BaseModel):
 @router.post("/consultations/", response_model=QuestionResponse)
 async def create_consultation(
     consultation: ConsultationCreate,
-    current_user: User = Depends(get_current_user_jwt),
+    current_user: User = Depends(get_current_user_jwt_or_tma),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Создать новую консультацию (требует JWT авторизации)
+    Создать новую консультацию (JWT или TMA авторизация)
 
-    Пользователь может создать вопрос/консультацию через веб-приложение.
+    Пользователь может создать вопрос/консультацию через веб-приложение
+    или Telegram Web App.
     """
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Требуется авторизация. Используйте /api/public/questions/ для анонимного доступа.",
+        )
+
     try:
         new_question = Question(
             uuid=uuid.uuid4(),

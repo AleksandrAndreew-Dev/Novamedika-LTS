@@ -235,9 +235,33 @@ async def get_current_user_jwt_or_tma(
         logger.info(f"TMA auth attempt with init data length: {len(tma_init_data)}")
 
         try:
-            # TMA validation typically happens via bot's webhook validation
-            # For now, log and let anonymous fallback handle it
-            logger.info("TMA validation stub — falls through to anonymous")
+            from aiogram.utils.web_app import safe_parse_webapp_init_data
+            import os
+
+            bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+            if not bot_token:
+                logger.warning("TELEGRAM_BOT_TOKEN not set, skipping TMA validation")
+            else:
+                init_data = safe_parse_webapp_init_data(
+                    token=bot_token, init_data=tma_init_data
+                )
+                if init_data and init_data.user:
+                    telegram_id = init_data.user.id
+                    logger.info(f"TMA initData valid for telegram_id={telegram_id}")
+
+                    from services.user_service import get_or_create_user
+
+                    user = await get_or_create_user(
+                        db,
+                        telegram_id=telegram_id,
+                        first_name=init_data.user.first_name,
+                        last_name=init_data.user.last_name,
+                        telegram_username=init_data.user.username,
+                        user_type="customer",
+                    )
+                    if user:
+                        logger.info(f"TMA auth successful for user {user.uuid}")
+                        return user
         except Exception as e:
             logger.warning(f"TMA auth failed: {e}")
 
