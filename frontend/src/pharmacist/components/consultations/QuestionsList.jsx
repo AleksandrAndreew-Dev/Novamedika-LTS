@@ -2,6 +2,7 @@ import React, {
   useState,
   useEffect,
   useCallback,
+  useRef,
 } from 'react';
 import { questionsService } from '../../services/questionsService';
 import websocketService from '../../services/websocketService';
@@ -26,6 +27,18 @@ export default function QuestionsList({
     loading,
     setLoading,
   ] = useState(true);
+  const mountedRef =
+    useRef(true);
+  const lastLoadRef =
+    useRef(0);
+  const loadThrottleMs = 2000;
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     console.log(
@@ -36,6 +49,21 @@ export default function QuestionsList({
 
   const loadQuestions =
     useCallback(async () => {
+      // Throttle: skip if called within 2s
+      const now = Date.now();
+      if (
+        now -
+          lastLoadRef.current <
+        loadThrottleMs
+      ) {
+        console.log(
+          '[QuestionsList] Throttled loadQuestions',
+        );
+        return;
+      }
+      lastLoadRef.current =
+        now;
+
       try {
         setLoading(true);
         const params =
@@ -49,6 +77,11 @@ export default function QuestionsList({
           await questionsService.getQuestions(
             params,
           );
+
+        if (
+          !mountedRef.current
+        )
+          return;
 
         // Backend returns { questions: [...], total, page, limit, pages }
         if (
@@ -73,13 +106,20 @@ export default function QuestionsList({
           setQuestions([]);
         }
       } catch (error) {
+        if (
+          !mountedRef.current
+        )
+          return;
         console.error(
           '[QuestionsList] Failed to load questions:',
           error,
         );
         setQuestions([]);
       } finally {
-        setLoading(false);
+        if (
+          mountedRef.current
+        )
+          setLoading(false);
       }
     }, [filter]);
 
@@ -103,9 +143,18 @@ export default function QuestionsList({
         },
       );
 
+    const unsubscribeAssigned =
+      websocketService.on(
+        'question_assigned',
+        () => {
+          loadQuestions();
+        },
+      );
+
     return () => {
       unsubscribeNew();
       unsubscribeUpdate();
+      unsubscribeAssigned();
     };
   }, [loadQuestions]);
 
