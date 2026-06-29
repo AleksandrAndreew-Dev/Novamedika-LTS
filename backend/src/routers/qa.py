@@ -419,14 +419,9 @@ async def create_consultation(
             f"New consultation created by user {current_user.uuid}: {new_question.uuid}"
         )
 
-        # Return dict to avoid MissingGreenlet on lazy-loaded relations
-        return {
-            "uuid": str(new_question.uuid),
-            "text": new_question.text,
-            "status": new_question.status,
-            "category": new_question.category,
-            "created_at": new_question.created_at.isoformat(),
-        }
+        # Загружаем user relation для QuestionResponse
+        await db.refresh(new_question, attribute_names=["user"])
+        return QuestionResponse.model_validate(new_question)
 
     except Exception as e:
         await db.rollback()
@@ -946,6 +941,7 @@ async def get_public_question_messages(
     """
     Получить сообщения анонимного пользователя (без JWT).
     """
+    logger.info(f"Fetching public question messages for {question_id}")
     try:
         # Верифицируем, что вопрос существует
         result = await db.execute(

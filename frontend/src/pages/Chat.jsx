@@ -276,30 +276,97 @@ export default function Chat() {
 
         // Анонимные пользователи — используем /api/public/ endpoints
         if (anon) {
-          const [
-            consultationRes,
-            messagesRes,
-          ] =
-            await Promise.all(
-              [
-                api.get(
-                  `/api/public/questions/${id}`,
-                ),
-                api.get(
-                  `/api/public/questions/${id}/messages`,
-                ),
-              ],
-            );
+          try {
+            const [
+              consultationRes,
+              messagesRes,
+            ] =
+              await Promise.all(
+                [
+                  api.get(
+                    `/api/public/questions/${id}`,
+                  ),
+                  api.get(
+                    `/api/public/questions/${id}/messages`,
+                  ),
+                ],
+              );
 
-          if (consultationRes)
-            setConsultation(
-              consultationRes.data,
-            );
-          if (messagesRes)
-            setMessages(
-              messagesRes.data,
-            );
-          return;
+            if (
+              consultationRes
+            )
+              setConsultation(
+                consultationRes.data,
+              );
+            if (messagesRes)
+              setMessages(
+                messagesRes.data,
+              );
+            return;
+          } catch (pubErr) {
+            // Fallback: 404 на public → пробуем JWT endpoint (вопрос мог быть создан через JWT)
+            if (
+              pubErr.response
+                ?.status ===
+              404
+            ) {
+              console.log(
+                '[Chat] Public endpoint 404, trying JWT fallback',
+              );
+              const headers =
+                getAuthHeaders(
+                  inTelegram,
+                );
+              try {
+                const [
+                  consultationRes,
+                  messagesRes,
+                ] =
+                  await Promise.all(
+                    [
+                      api
+                        .get(
+                          `/api/consultations/${id}`,
+                          {
+                            headers,
+                          },
+                        )
+                        .catch(
+                          () =>
+                            null,
+                        ),
+                      api
+                        .get(
+                          `/api/consultations/${id}/messages`,
+                          {
+                            headers,
+                          },
+                        )
+                        .catch(
+                          () =>
+                            null,
+                        ),
+                    ],
+                  );
+                if (
+                  consultationRes
+                )
+                  setConsultation(
+                    consultationRes.data,
+                  );
+                if (
+                  messagesRes
+                )
+                  setMessages(
+                    messagesRes.data,
+                  );
+                return;
+              } catch (jwtErr) {
+                throw pubErr; // original 404 more relevant
+              }
+            }
+            throw pubErr;
+          }
         }
 
         const headers =

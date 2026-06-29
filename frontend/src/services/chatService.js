@@ -131,16 +131,45 @@ export const chatService = {
     isAnonymous = false,
     inTelegram = false,
   ) => {
-    if (isAnonymous) {
+    // Сначала пробуем с текущим режимом
+    try {
+      if (isAnonymous) {
+        const [
+          consultationRes,
+          messagesRes,
+        ] = await Promise.all([
+          api.get(
+            `/api/public/questions/${id}`,
+          ),
+          api.get(
+            `/api/public/questions/${id}/messages`,
+          ),
+        ]);
+        return {
+          consultation:
+            consultationRes.data,
+          messages:
+            messagesRes.data,
+        };
+      }
+      // JWT добавляется interceptor-ом; явные headers нужны только для TMA
+      const config = inTelegram
+        ? {
+            headers:
+              getTmaHeaders(),
+          }
+        : {};
       const [
         consultationRes,
         messagesRes,
       ] = await Promise.all([
         api.get(
-          `/api/public/questions/${id}`,
+          `/api/consultations/${id}`,
+          config,
         ),
         api.get(
-          `/api/public/questions/${id}/messages`,
+          `/api/consultations/${id}/messages`,
+          config,
         ),
       ]);
       return {
@@ -149,33 +178,57 @@ export const chatService = {
         messages:
           messagesRes.data,
       };
+    } catch (err) {
+      // Fallback: если 404 на public endpoint, попробовать JWT endpoint
+      if (isAnonymous && err.response?.status === 404) {
+        const config = inTelegram
+          ? {
+              headers:
+                getTmaHeaders(),
+            }
+          : {};
+        const [
+          consultationRes,
+          messagesRes,
+        ] = await Promise.all([
+          api.get(
+            `/api/consultations/${id}`,
+            config,
+          ),
+          api.get(
+            `/api/consultations/${id}/messages`,
+            config,
+          ),
+        ]);
+        return {
+          consultation:
+            consultationRes.data,
+          messages:
+            messagesRes.data,
+        };
+      }
+      // Fallback: если 401/403 на JWT endpoint, попробовать public endpoint
+      if (!isAnonymous && (err.response?.status === 401 || err.response?.status === 403)) {
+        const [
+          consultationRes,
+          messagesRes,
+        ] = await Promise.all([
+          api.get(
+            `/api/public/questions/${id}`,
+          ),
+          api.get(
+            `/api/public/questions/${id}/messages`,
+          ),
+        ]);
+        return {
+          consultation:
+            consultationRes.data,
+          messages:
+            messagesRes.data,
+        };
+      }
+      throw err;
     }
-    // JWT добавляется interceptor-ом; явные headers нужны только для TMA
-    const config = inTelegram
-      ? {
-          headers:
-            getTmaHeaders(),
-        }
-      : {};
-    const [
-      consultationRes,
-      messagesRes,
-    ] = await Promise.all([
-      api.get(
-        `/api/consultations/${id}`,
-        config,
-      ),
-      api.get(
-        `/api/consultations/${id}/messages`,
-        config,
-      ),
-    ]);
-    return {
-      consultation:
-        consultationRes.data,
-      messages:
-        messagesRes.data,
-    };
   },
 
   /** Send a message to existing consultation */
@@ -185,29 +238,61 @@ export const chatService = {
     isAnonymous = false,
     inTelegram = false,
   ) => {
-    if (isAnonymous) {
+    // Сначала пробуем с текущим режимом
+    try {
+      if (isAnonymous) {
+        const response =
+          await api.post(
+            `/api/public/questions/${id}/messages`,
+            {
+              text: text.trim(),
+            },
+          );
+        return response.data;
+      }
+      const config = inTelegram
+        ? {
+            headers:
+              getTmaHeaders(),
+          }
+        : {};
       const response =
         await api.post(
-          `/api/public/questions/${id}/messages`,
-          {
-            text: text.trim(),
-          },
+          `/api/consultations/${id}/messages`,
+          { text: text.trim() },
+          config,
         );
       return response.data;
+    } catch (err) {
+      // Fallback: если 404 на public endpoint, попробовать JWT endpoint
+      if (isAnonymous && err.response?.status === 404) {
+        const config = inTelegram
+          ? {
+              headers:
+                getTmaHeaders(),
+            }
+          : {};
+        const response =
+          await api.post(
+            `/api/consultations/${id}/messages`,
+            { text: text.trim() },
+            config,
+          );
+        return response.data;
+      }
+      // Fallback: если 401/403 на JWT endpoint, попробовать public endpoint
+      if (!isAnonymous && (err.response?.status === 401 || err.response?.status === 403)) {
+        const response =
+          await api.post(
+            `/api/public/questions/${id}/messages`,
+            {
+              text: text.trim(),
+            },
+          );
+        return response.data;
+      }
+      throw err;
     }
-    const config = inTelegram
-      ? {
-          headers:
-            getTmaHeaders(),
-        }
-      : {};
-    const response =
-      await api.post(
-        `/api/consultations/${id}/messages`,
-        { text: text.trim() },
-        config,
-      );
-    return response.data;
   },
 
   /** Fetch messages only (for polling) */
@@ -216,24 +301,51 @@ export const chatService = {
     isAnonymous = false,
     inTelegram = false,
   ) => {
-    if (isAnonymous) {
-      const res =
-        await api.get(
-          `/api/public/questions/${id}/messages`,
-        );
+    // Сначала пробуем с текущим режимом
+    try {
+      if (isAnonymous) {
+        const res =
+          await api.get(
+            `/api/public/questions/${id}/messages`,
+          );
+        return res.data;
+      }
+      const config = inTelegram
+        ? {
+            headers:
+              getTmaHeaders(),
+          }
+        : {};
+      const res = await api.get(
+        `/api/consultations/${id}/messages`,
+        config,
+      );
       return res.data;
+    } catch (err) {
+      // Fallback: если 404 на public endpoint, попробовать JWT endpoint
+      if (isAnonymous && err.response?.status === 404) {
+        const config = inTelegram
+          ? {
+              headers:
+                getTmaHeaders(),
+            }
+          : {};
+        const res = await api.get(
+          `/api/consultations/${id}/messages`,
+          config,
+        );
+        return res.data;
+      }
+      // Fallback: если 401/403 на JWT endpoint, попробовать public endpoint
+      if (!isAnonymous && (err.response?.status === 401 || err.response?.status === 403)) {
+        const res =
+          await api.get(
+            `/api/public/questions/${id}/messages`,
+          );
+        return res.data;
+      }
+      throw err;
     }
-    const config = inTelegram
-      ? {
-          headers:
-            getTmaHeaders(),
-        }
-      : {};
-    const res = await api.get(
-      `/api/consultations/${id}/messages`,
-      config,
-    );
-    return res.data;
   },
 
   /** Check if user is anonymous */
