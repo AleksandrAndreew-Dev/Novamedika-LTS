@@ -646,6 +646,9 @@ async def send_consultation_message(
     Отправить сообщение в консультацию (требует JWT авторизации)
 
     Пользователь может отправить сообщение фармацевту в рамках консультации.
+    После сохранения уведомление отправляется:
+    - Через WebSocket в pharmacist dashboard
+    - Через Telegram бот (если фармацевт найден)
     """
     try:
         # Verify consultation belongs to user
@@ -678,6 +681,61 @@ async def send_consultation_message(
 
         await db.commit()
         await db.refresh(new_message)
+
+        # 1. WebSocket broadcast to pharmacist dashboard
+        try:
+            from routers.pharmacist_dashboard import ws_manager
+
+            await ws_manager.broadcast_message_update(
+                question_id=consultation_id,
+                message_data={
+                    "uuid": str(new_message.uuid),
+                    "question_id": consultation_id,
+                    "sender_type": "user",
+                    "text": new_message.text,
+                    "created_at": new_message.created_at.isoformat(),
+                },
+            )
+            logger.info(
+                f"WebSocket broadcast sent for user message in {consultation_id}"
+            )
+        except Exception as ws_err:
+            logger.warning(f"WebSocket broadcast failed (non-critical): {ws_err}")
+
+        # 2. Telegram notification to pharmacist (if assigned)
+        try:
+            pharmacist_id = question.taken_by or question.assigned_to
+            if pharmacist_id:
+                ph_result = await db.execute(
+                    select(Pharmacist)
+                    .options(selectinload(Pharmacist.user))
+                    .where(Pharmacist.uuid == pharmacist_id)
+                )
+                pharmacist = ph_result.scalar_one_or_none()
+
+                if pharmacist and pharmacist.user and pharmacist.user.telegram_id:
+                    from bot.core import bot_manager
+
+                    bot, _ = await bot_manager.initialize()
+                    if bot:
+                        user_name = f"{current_user.first_name or 'Пользователь'}"
+                        if current_user.last_name:
+                            user_name += f" {current_user.last_name}"
+
+                        await bot.send_message(
+                            chat_id=pharmacist.user.telegram_id,
+                            text=(
+                                f"💬 <b>Новое сообщение от {user_name}</b>\n\n"
+                                f"{message.text}\n\n"
+                                f"➡️ <i>Ответьте через /questions</i>"
+                            ),
+                            parse_mode="HTML",
+                        )
+                        logger.info(
+                            f"Telegram notification sent to pharmacist {pharmacist.user.telegram_id}"
+                        )
+        except Exception as tg_err:
+            logger.warning(f"Telegram notification failed (non-critical): {tg_err}")
 
         logger.info(
             f"New message sent in consultation {consultation_id} by user {current_user.uuid}"
@@ -963,6 +1021,23 @@ async def send_public_question_message(
 
         await db.commit()
         await db.refresh(new_message)
+
+        # Broadcast via WebSocket to pharmacist dashboard
+        try:
+            from routers.pharmacist_dashboard import ws_manager
+
+            await ws_manager.broadcast_message_update(
+                question_id=question_id,
+                message_data={
+                    "uuid": str(new_message.uuid),
+                    "question_id": question_id,
+                    "sender_type": "user",
+                    "text": new_message.text,
+                    "created_at": new_message.created_at.isoformat(),
+                },
+            )
+        except Exception as ws_err:
+            logger.warning(f"WebSocket broadcast failed (non-critical): {ws_err}")
 
         logger.info(f"New message in public question {question_id}")
 

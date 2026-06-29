@@ -12,7 +12,7 @@ from fastapi import (
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 from sqlalchemy.orm import selectinload
-from typing import List, Optional, Set
+from typing import List, Optional, Set, Dict
 import uuid
 from datetime import datetime, timedelta
 import logging
@@ -21,6 +21,7 @@ from db.database import get_db
 from db.qa_models import Question, User, Pharmacist, DialogMessage
 from auth.session_auth import get_current_pharmacist_session as get_current_pharmacist
 from pydantic import BaseModel, Field
+from utils.time_utils import get_utc_now_naive
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,9 @@ class WebSocketConnectionManager:
 
     def __init__(self):
         self.active_connections: Set[WebSocket] = set()
+        self.user_connections: Dict[str, Set[WebSocket]] = (
+            {}
+        )  # question_id -> set of WebSockets
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
@@ -41,27 +45,87 @@ class WebSocketConnectionManager:
 
     def disconnect(self, websocket: WebSocket):
         self.active_connections.discard(websocket)
+        # Also remove from user_connections
+        for qid in list(self.user_connections.keys()):
+            self.user_connections[qid].discard(websocket)
+            if not self.user_connections[qid]:
+                del self.user_connections[qid]
+
+    async def connect_user(self, websocket: WebSocket, question_id: str):
+        """Connect a user WebSocket for a specific consultation"""
+        await websocket.accept()
+        self.active_connections.add(websocket)
+        if question_id not in self.user_connections:
+            self.user_connections[question_id] = set()
+        self.user_connections[question_id].add(websocket)
+
+    def disconnect_user(self, websocket: WebSocket, question_id: str = None):
+        self.active_connections.discard(websocket)
+        if question_id and question_id in self.user_connections:
+            self.user_connections[question_id].discard(websocket)
+            if not self.user_connections[question_id]:
+                del self.user_connections[question_id]
+        else:
+            # Try to find in all user_connections
+            for qid in list(self.user_connections.keys()):
+                self.user_connections[qid].discard(websocket)
+                if not self.user_connections[qid]:
+                    del self.user_connections[qid]
 
     async def broadcast(self, message: dict):
-        """Send message to all connected pharmacists"""
+        """Send message to all connected pharmacists (not users)"""
         disconnected = set()
         for connection in self.active_connections:
+            if connection in self._all_user_websockets():
+                continue
             try:
                 await connection.send_json(message)
             except Exception:
                 disconnected.add(connection)
-        # Cleanup disconnected
         for conn in disconnected:
             self.active_connections.discard(conn)
+
+    def _all_user_websockets(self) -> Set[WebSocket]:
+        """Get all user WebSockets across all consultations"""
+        result = set()
+        for sockets in self.user_connections.values():
+            result.update(sockets)
+        return result
+
+    async def broadcast_to_consultation(self, question_id: str, message: dict):
+        """Send message to all WebSockets subscribed to a specific consultation"""
+        disconnected = set()
+        # Send to user connections for this question
+        if question_id in self.user_connections:
+            for conn in self.user_connections[question_id]:
+                try:
+                    await conn.send_json(message)
+                except Exception:
+                    disconnected.add(conn)
+            for conn in disconnected:
+                self.user_connections[question_id].discard(conn)
+                self.active_connections.discard(conn)
+                if not self.user_connections[question_id]:
+                    del self.user_connections[question_id]
 
     async def broadcast_new_question(self, question_data: dict):
         """Broadcast new question notification to all connected pharmacists"""
         await self.broadcast({"type": "new_question", "data": question_data})
 
     async def broadcast_message_update(self, question_id: str, message_data: dict):
-        """Broadcast new message in consultation"""
+        """Broadcast new message in consultation to pharmacists AND subscribed users"""
+        # Send to pharmacists
         await self.broadcast(
             {"type": "message_update", "question_id": question_id, "data": message_data}
+        )
+        # Send to user subscribed to this consultation
+        await self.broadcast_to_consultation(
+            question_id,
+            {
+                "type": "message_update",
+                "question_id": question_id,
+                "data": message_data,
+            },
         )
 
 
@@ -253,6 +317,7 @@ async def answer_question(
 
     # Create message in dialog history
     new_message = DialogMessage(
+        uuid=uuid.uuid4(),
         question_id=question.uuid,
         sender_type="pharmacist",
         sender_id=pharmacist.uuid,
@@ -264,16 +329,94 @@ async def answer_question(
 
     # Update question status
     question.status = "answered"
-    question.updated_at = datetime.utcnow()
+    question.updated_at = get_utc_now_naive()
 
     await db.commit()
+    await db.refresh(new_message)
 
-    # TODO: Send notification to user via Telegram Bot
-    # This will be handled by background task or WebSocket
+    # 1. WebSocket broadcast (pharmacists + subscribed user)
+    try:
+        await ws_manager.broadcast_message_update(
+            question_id=str(question.uuid),
+            message_data={
+                "uuid": str(new_message.uuid),
+                "question_id": str(new_message.question_id),
+                "sender_type": "pharmacist",
+                "text": new_message.text,
+                "created_at": new_message.created_at.isoformat(),
+            },
+        )
+        logger.info(f"WebSocket broadcast sent for answer to {question_id}")
+    except Exception as e:
+        logger.warning(f"WebSocket broadcast failed (non-critical): {e}")
+
+    # 2. Telegram notification to user (if user has telegram_id)
+    try:
+        from bot.core import bot_manager
+
+        user_result = await db.execute(
+            select(User).where(User.uuid == question.user_id)
+        )
+        user = user_result.scalar_one_or_none()
+
+        if user and user.telegram_id:
+            bot, _ = await bot_manager.initialize()
+            if bot:
+                pharmacy_info = pharmacist.pharmacy_info or {}
+                chain = pharmacy_info.get("chain", "")
+                number = pharmacy_info.get("number", "")
+                first_name = pharmacy_info.get("first_name", "")
+                last_name = pharmacy_info.get("last_name", "")
+
+                pharmacist_name_parts = []
+                if last_name:
+                    pharmacist_name_parts.append(last_name)
+                if first_name:
+                    pharmacist_name_parts.append(first_name)
+                pharmacist_name = (
+                    " ".join(pharmacist_name_parts)
+                    if pharmacist_name_parts
+                    else "Фармацевт"
+                )
+
+                location = ""
+                if chain and number:
+                    location = f", {chain}, аптека №{number}"
+
+                from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+                user_keyboard = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="✍️ Ответить",
+                                callback_data=f"continue_user_dialog_{question.uuid}",
+                            ),
+                            InlineKeyboardButton(
+                                text="✅ Завершить",
+                                callback_data=f"end_dialog_{question.uuid}",
+                            ),
+                        ]
+                    ]
+                )
+
+                await bot.send_message(
+                    chat_id=user.telegram_id,
+                    text=(
+                        f"💬 <b>Ответ фармацевта</b>\n\n"
+                        f"{answer_data.text}\n\n"
+                        f"👨‍⚕️ <i>{pharmacist_name}{location}</i>"
+                    ),
+                    parse_mode="HTML",
+                    reply_markup=user_keyboard,
+                )
+                logger.info(f"Telegram notification sent to user {user.telegram_id}")
+    except Exception as e:
+        logger.warning(f"Telegram notification failed (non-critical): {e}")
 
     logger.info(f"Pharmacist {pharmacist.uuid} answered question {question_id}")
 
-    return {"message": "Answer sent successfully"}
+    return {"message": "Answer sent successfully", "uuid": str(new_message.uuid)}
 
 
 @router.put("/questions/{question_id}/complete")
@@ -296,7 +439,7 @@ async def complete_question(
         raise HTTPException(status_code=404, detail="Question not found")
 
     question.status = "completed"
-    question.updated_at = datetime.utcnow()
+    question.updated_at = get_utc_now_naive()
 
     await db.commit()
 
@@ -326,7 +469,7 @@ async def assign_question(
 
     question.taken_by = pharmacist.uuid
     question.status = "in_progress"
-    question.updated_at = datetime.utcnow()
+    question.updated_at = get_utc_now_naive()
 
     await db.commit()
 
@@ -355,19 +498,16 @@ async def get_consultation_stats(
 ):
     """Get consultation statistics"""
 
-    # Pending count
     pending_result = await db.execute(
         select(func.count()).where(Question.status == "pending")
     )
     pending_count = pending_result.scalar() or 0
 
-    # In progress count
     in_progress_result = await db.execute(
         select(func.count()).where(Question.status == "in_progress")
     )
     in_progress_count = in_progress_result.scalar() or 0
 
-    # Completed today
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     completed_result = await db.execute(
         select(func.count()).where(
@@ -376,7 +516,6 @@ async def get_consultation_stats(
     )
     completed_today = completed_result.scalar() or 0
 
-    # Average response time (simplified - last 7 days)
     week_ago = datetime.utcnow() - timedelta(days=7)
     avg_time_result = await db.execute(
         select(func.avg(Question.answered_at - Question.created_at)).where(
@@ -397,7 +536,6 @@ async def get_consultation_stats(
     )
 
 
-# Update online status endpoint
 @router.put("/online")
 async def update_online_status(
     online: bool = Body(..., embed=True),
@@ -411,7 +549,6 @@ async def update_online_status(
     return {"status": "ok", "is_online": online}
 
 
-# Dialog endpoints for chat functionality
 class SendMessageRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=2000)
 
@@ -419,7 +556,7 @@ class SendMessageRequest(BaseModel):
 class DialogMessageResponse(BaseModel):
     uuid: str
     question_id: str
-    sender_type: str  # "pharmacist" or "user"
+    sender_type: str
     sender_id: str
     message_type: str
     text: Optional[str] = None
@@ -438,7 +575,6 @@ async def get_dialog(
     db: AsyncSession = Depends(get_db),
 ):
     """Get dialog messages for a specific question"""
-    # Verify pharmacist is assigned to this question
     question_result = await db.execute(
         select(Question).where(Question.uuid == question_id)
     )
@@ -447,7 +583,6 @@ async def get_dialog(
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    # Auto-assign if pharmacist is not yet assigned and question is still pending
     is_assigned = (
         question.assigned_to == pharmacist.uuid or question.taken_by == pharmacist.uuid
     )
@@ -465,7 +600,6 @@ async def get_dialog(
         else:
             raise HTTPException(status_code=403, detail="Not assigned to this question")
 
-    # Get dialog messages
     messages_result = await db.execute(
         select(DialogMessage)
         .where(DialogMessage.question_id == question_id)
@@ -486,7 +620,6 @@ async def send_message(
     """Send message in consultation dialog (from Web App)"""
     from main import app
 
-    # Verify pharmacist is assigned to this question
     question_result = await db.execute(
         select(Question).where(Question.uuid == question_id)
     )
@@ -495,7 +628,6 @@ async def send_message(
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    # Auto-assign if not yet assigned (soft check - allows first message)
     is_assigned = (
         question.assigned_to == pharmacist.uuid or question.taken_by == pharmacist.uuid
     )
@@ -512,7 +644,6 @@ async def send_message(
         else:
             raise HTTPException(status_code=403, detail="Not assigned to this question")
 
-    # Save message to database
     msg = DialogMessage(
         uuid=uuid.uuid4(),
         question_id=question_id,
@@ -525,7 +656,7 @@ async def send_message(
     db.add(msg)
     await db.flush()
 
-    # Broadcast via WebSocket to connected pharmacies (and user via ws_manager)
+    # Broadcast via WebSocket
     try:
         await ws_manager.broadcast_message_update(
             question_id=str(question_id),
@@ -544,7 +675,7 @@ async def send_message(
     await db.commit()
     await db.refresh(msg)
 
-    # Send message to user via Telegram bot (with retry)
+    # Send to user via Telegram bot
     try:
         bot = app.state.bot
         user_result = await db.execute(
@@ -577,30 +708,23 @@ async def send_message(
                         )
     except Exception as e:
         logger.error(f"Failed to send message to user via bot (setup): {e}")
-        # Don't fail the request if bot message fails
 
     return msg
 
 
-# WebSocket endpoint for real-time updates
+# WebSocket for pharmacist dashboard
 @router.websocket("/ws/pharmacist")
 async def websocket_endpoint(
     websocket: WebSocket,
 ):
     """WebSocket connection for real-time consultation updates"""
-
     await ws_manager.connect(websocket)
     logger.info(
         f"Pharmacist WebSocket connected. Total: {len(ws_manager.active_connections)}"
     )
-
     try:
-        # Keep connection alive and handle messages
         while True:
             data = await websocket.receive_text()
-            # Handle incoming messages if needed
-            # For now, just keep connection alive
-
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket)
         logger.info(
@@ -609,3 +733,33 @@ async def websocket_endpoint(
     except Exception as e:
         ws_manager.disconnect(websocket)
         logger.error(f"Pharmacist WebSocket error: {e}")
+
+
+# WebSocket for user chat widget
+@router.websocket("/ws/chat/{consultation_id}")
+async def user_chat_websocket(
+    websocket: WebSocket,
+    consultation_id: str,
+):
+    """
+    WebSocket connection for user chat widget.
+    Subscribes to real-time updates for a specific consultation.
+    """
+    await ws_manager.connect_user(websocket, consultation_id)
+    logger.info(
+        f"User WebSocket connected for consultation {consultation_id}. Total: {len(ws_manager.active_connections)}"
+    )
+    try:
+        while True:
+            data = await websocket.receive_text()
+            # Ping/pong keepalive — just echo back
+            if data == "ping":
+                await websocket.send_text("pong")
+    except WebSocketDisconnect:
+        ws_manager.disconnect_user(websocket, consultation_id)
+        logger.info(
+            f"User WebSocket disconnected for {consultation_id}. Total: {len(ws_manager.active_connections)}"
+        )
+    except Exception as e:
+        ws_manager.disconnect_user(websocket, consultation_id)
+        logger.error(f"User WebSocket error for {consultation_id}: {e}")
