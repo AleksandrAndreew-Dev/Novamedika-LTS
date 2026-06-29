@@ -18,7 +18,7 @@ class WebSocketService {
         : 'ws:';
     const host =
       window.location.host;
-    this.url =
+    const baseUrl =
       window.APP_CONFIG
         ?.WS_URL_PHARMACIST ||
       window.APP_CONFIG
@@ -28,6 +28,14 @@ class WebSocketService {
       import.meta.env
         ?.VITE_WS_URL ||
       `${protocol}//${host}/api/pharmacist/ws/pharmacist`;
+    // Append session token as query parameter for authentication
+    const token =
+      localStorage.getItem(
+        'pharmacist_session_token',
+      );
+    this.url = token
+      ? `${baseUrl}?token=${encodeURIComponent(token)}`
+      : baseUrl;
   }
 
   /**

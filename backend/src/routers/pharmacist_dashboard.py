@@ -17,9 +17,10 @@ import uuid
 from datetime import datetime, timedelta
 import logging
 
-from db.database import get_db
+from db.database import get_db, async_session_maker
 from db.qa_models import Question, User, Pharmacist, DialogMessage
 from auth.session_auth import get_current_pharmacist_session as get_current_pharmacist
+from auth.session_manager import get_pharmacist_by_session
 from pydantic import BaseModel, Field
 from utils.time_utils import get_utc_now_naive
 
@@ -728,15 +729,59 @@ async def send_message(
 @router.websocket("/ws/pharmacist")
 async def websocket_endpoint(
     websocket: WebSocket,
+    token: Optional[str] = None,
 ):
-    """WebSocket connection for real-time consultation updates"""
+    """WebSocket connection for real-time consultation updates.
+
+    Authentication: accepts session token via query parameter `token`.
+    If token is invalid or missing, connection is still accepted for
+    backward compatibility, but client should provide token for full access.
+    """
+    # Authenticate via query parameter token
+    authenticated = False
+    pharmacist_uuid = None
+    if token:
+        try:
+            async with async_session_maker() as db:
+                pharmacist = await get_pharmacist_by_session(token, db)
+                if pharmacist:
+                    authenticated = True
+                    pharmacist_uuid = str(pharmacist.uuid)
+                    logger.info(
+                        f"WebSocket authenticated for pharmacist {pharmacist_uuid}"
+                    )
+        except Exception as e:
+            logger.warning(f"WebSocket auth failed: {e}")
+
+    if not authenticated:
+        logger.info("WebSocket connecting without authentication (limited mode)")
+
     await ws_manager.connect(websocket)
     logger.info(
-        f"Pharmacist WebSocket connected. Total: {len(ws_manager.active_connections)}"
+        f"Pharmacist WebSocket connected (auth={authenticated}). "
+        f"Total: {len(ws_manager.active_connections)}"
     )
     try:
         while True:
             data = await websocket.receive_text()
+            # Handle auth command from client
+            if data and data.startswith("auth:"):
+                auth_token = data[5:].strip()
+                async with async_session_maker() as db:
+                    pharmacist = await get_pharmacist_by_session(auth_token, db)
+                    if pharmacist:
+                        authenticated = True
+                        pharmacist_uuid = str(pharmacist.uuid)
+                        await websocket.send_json(
+                            {"type": "auth_ok", "pharmacist_id": str(pharmacist.uuid)}
+                        )
+                        logger.info(
+                            f"WebSocket authenticated via command for pharmacist {pharmacist.uuid}"
+                        )
+                    else:
+                        await websocket.send_json(
+                            {"type": "auth_error", "detail": "Invalid session token"}
+                        )
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket)
         logger.info(

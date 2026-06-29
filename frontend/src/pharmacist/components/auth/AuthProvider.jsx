@@ -354,10 +354,9 @@ function AuthProvider({
         console.log(
           '[AuthProvider] Session expired event received, re-authenticating...',
         );
-        // Safety net: remove stale token if API interceptor didn't
-        localStorage.removeItem(
-          'pharmacist_session_token',
-        );
+        // NOTE: Token is NOT removed here. performAutoLogin will check the token
+        // at Step 1 (line 93). If it fails with 401, it will proceed to initData login.
+        // This avoids race condition where token is deleted before performAutoLogin runs.
         // Reset error so user sees loading spinner instead of stuck error page
         setError(null);
         setPharmacist(null);
