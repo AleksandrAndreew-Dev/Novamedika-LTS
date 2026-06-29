@@ -98,12 +98,12 @@ export function ChatProvider({
   }, [isWidgetOpen]);
 
   // WebSocket connection for real-time message updates
+  // Анонимные пользователи используют polling (см. pollingFallback ниже)
   useEffect(() => {
     if (
-      !currentConsultationId ||
-      isAnonymous
+      !currentConsultationId
     ) {
-      // Close WebSocket if anonymous or no consultation
+      // Close WebSocket if no consultation
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
