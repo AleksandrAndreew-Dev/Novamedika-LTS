@@ -133,14 +133,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    build:
-      context: ./frontend
-      args:
-        - VITE_API_URL
-        - VITE_WS_URL
-        - VITE_WS_URL_PHARMACIST
-        - VITE_API_KEY
-    image: frontend-prod-local
+    image: ghcr.io/aleksandrandreew-dev/novamedika-lts/frontend:latest
     user: '100:102'
     container_name: frontend-prod
     logging:
