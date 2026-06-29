@@ -30,7 +30,8 @@ def get_redis_client():
 async def create_session_token(
     telegram_id: int, pharmacist_uuid: str, user_id: str
 ) -> str:
-    """Create a simple session token and store in Redis"""
+    """Create a simple session token and store in Redis.
+    Automatically invalidates any previous sessions for the same telegram_id."""
     token = str(uuid.uuid4())
     session_data = {
         "telegram_id": telegram_id,
@@ -40,11 +41,37 @@ async def create_session_token(
         "expires_at": time.time() + 86400,  # 24 hours
     }
 
-    # Store in Redis with expiration
     redis_client = get_redis_client()
-    await redis_client.setex(
-        f"session:{token}", 86400, json.dumps(session_data)  # TTL 24 hours
-    )
+
+    # 1. Scan and remove ALL previous sessions for the same telegram_id.
+    #    This prevents stale tokens from being used after a new login.
+    cursor = 0
+    deleted_count = 0
+    while True:
+        cursor, keys = await redis_client.scan(
+            cursor=cursor, match="session:*", count=500
+        )
+        if keys:
+            for key in keys:
+                raw = await redis_client.get(key)
+                if raw:
+                    try:
+                        existing = json.loads(raw)
+                        if existing.get("telegram_id") == telegram_id:
+                            await redis_client.delete(key)
+                            deleted_count += 1
+                    except json.JSONDecodeError:
+                        continue
+        if cursor == 0:
+            break
+
+    if deleted_count > 0:
+        logger.info(
+            f"Deleted {deleted_count} stale session(s) for telegram_id={telegram_id}"
+        )
+
+    # 2. Store the new session with 24h TTL
+    await redis_client.setex(f"session:{token}", 86400, json.dumps(session_data))
 
     return token
 

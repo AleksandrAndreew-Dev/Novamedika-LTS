@@ -354,6 +354,16 @@ function AuthProvider({
         console.log(
           '[AuthProvider] Session expired event received, re-authenticating...',
         );
+        // Safety net: remove stale token if API interceptor didn't
+        localStorage.removeItem(
+          'pharmacist_session_token',
+        );
+        // Reset error so user sees loading spinner instead of stuck error page
+        setError(null);
+        setPharmacist(null);
+        setIsAuthenticated(
+          false,
+        );
         performAutoLogin();
       };
     window.addEventListener(

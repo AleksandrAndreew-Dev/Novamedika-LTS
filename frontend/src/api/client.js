@@ -236,12 +236,17 @@ api.interceptors.response.use(
         );
       } else {
         logger.info(
-          '[API] 401 on pharmacist endpoint — triggering re-auth',
+          '[API] 401 on pharmacist endpoint — removing stale token & triggering re-auth',
         );
         window.__pharmacistSessionExpiredAt =
           now;
+        // CRITICAL: Remove stale token before dispatching re-auth event.
+        // Otherwise AuthProvider.performAutoLogin() will pick it up again
+        // and retry the same expired token, creating an infinite 401 loop.
+        localStorage.removeItem(
+          'pharmacist_session_token',
+        );
         // Dispatch event so AuthProvider re-initiates TMA login
-        // Token is managed by AuthProvider, not removed here
         window.dispatchEvent(
           new CustomEvent(
             'pharmacist:session_expired',
