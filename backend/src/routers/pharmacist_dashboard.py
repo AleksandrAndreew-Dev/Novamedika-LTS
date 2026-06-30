@@ -208,7 +208,6 @@ class QuestionResponse(BaseModel):
     text: str
     status: str
     created_at: datetime
-    updated_at: Optional[datetime] = None
     user_name: str
     message_count: int
 
@@ -297,7 +296,6 @@ async def get_questions(
                 text=str(q.text),
                 status=str(q.status),
                 created_at=q.created_at,
-                updated_at=q.updated_at,
                 user_name=user_name,
                 message_count=len(q.dialog_messages),
             )
@@ -360,7 +358,6 @@ async def get_question_by_id(
         "text": question.text,
         "status": question.status,
         "created_at": question.created_at,
-        "updated_at": question.updated_at,
         "user": {
             "name": f"{question.user.first_name or ''} {question.user.last_name or ''}".strip(),
             "telegram_id": question.user.telegram_id,
@@ -408,7 +405,6 @@ async def answer_question(
 
     # Update question status
     question.status = "answered"
-    question.updated_at = get_utc_now_naive()
 
     await db.commit()
     await db.refresh(new_message)
@@ -521,7 +517,6 @@ async def complete_question(
         raise HTTPException(status_code=404, detail="Question not found")
 
     question.status = "completed"
-    question.updated_at = get_utc_now_naive()
 
     await db.commit()
 
@@ -551,7 +546,6 @@ async def assign_question(
 
     question.taken_by = pharmacist.uuid
     question.status = "in_progress"
-    question.updated_at = get_utc_now_naive()
 
     await db.commit()
 
@@ -688,7 +682,7 @@ async def get_dialog(
             question.assigned_to = pharmacist.uuid
             question.status = "in_progress"
             question.taken_at = datetime.utcnow()
-            question.updated_at = datetime.utcnow()
+
             await db.commit()
             logger.info(
                 f"Pharmacist {pharmacist.uuid} auto-assigned question {question_id}"
@@ -733,7 +727,7 @@ async def send_message(
             question.assigned_to = pharmacist.uuid
             question.status = "in_progress"
             question.taken_at = datetime.utcnow()
-            question.updated_at = datetime.utcnow()
+
             logger.info(
                 f"Pharmacist {pharmacist.uuid} auto-assigned question {question_id} via send_message"
             )
