@@ -83,7 +83,7 @@ export default function ChatDashboard() {
               )
             }
           }
-        } catch (e) {
+        } catch (_e) {
           // Silently fail — user can select manually
         }
       }

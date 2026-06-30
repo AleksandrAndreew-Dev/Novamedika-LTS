@@ -20,18 +20,16 @@ export default function QuestionsList({
   onSelectQuestion,
   compact = false,
 }) {
-  const [
-    unreadQuestions,
-    setUnreadQuestions,
-  ] = useState(
-    new Set(
-      JSON.parse(
-        localStorage.getItem(
-          'unread_questions',
-        ) || '[]',
+  const [unreadQuestions] =
+    useState(
+      new Set(
+        JSON.parse(
+          localStorage.getItem(
+            'unread_questions',
+          ) || '[]',
+        ),
       ),
-    ),
-  )
+    )
   const [
     questions,
     setQuestions,
