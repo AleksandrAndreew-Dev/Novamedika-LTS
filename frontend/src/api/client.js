@@ -1,7 +1,7 @@
 // src/api/client.js
-import axios from 'axios';
-import { NORMALIZED_API_BASE } from './config';
-import { logger } from '../utils/logger';
+import axios from 'axios'
+import { NORMALIZED_API_BASE } from './config'
+import { logger } from '../utils/logger'
 
 export const api =
   axios.create({
@@ -12,7 +12,7 @@ export const api =
       'Content-Type':
         'application/json',
     },
-  });
+  })
 
 // Request interceptor — добавляем API key и Authorization token если есть
 api.interceptors.request.use(
@@ -22,7 +22,7 @@ api.interceptors.request.use(
       window.APP_CONFIG
         ?.API_KEY ||
       import.meta.env
-        ?.VITE_API_KEY;
+        ?.VITE_API_KEY
     if (
       apiKey &&
       !config.headers[
@@ -31,7 +31,7 @@ api.interceptors.request.use(
     ) {
       config.headers[
         'X-API-KEY'
-      ] = apiKey;
+      ] = apiKey
     }
 
     // Не перезаписываем Authorization если он уже явно установлен (например tma <initData>)
@@ -41,11 +41,11 @@ api.interceptors.request.use(
       ]
     ) {
       const url =
-        config.url || '';
+        config.url || ''
       const isPharmacistEndpoint =
         url.startsWith(
           '/api/pharmacist/',
-        );
+        )
 
       if (
         isPharmacistEndpoint
@@ -54,42 +54,42 @@ api.interceptors.request.use(
         const pharmacistToken =
           localStorage.getItem(
             'pharmacist_session_token',
-          );
+          )
         if (pharmacistToken) {
           config.headers[
             'Authorization'
           ] =
-            `Bearer ${pharmacistToken}`;
+            `session ${pharmacistToken}`
         } else {
           // No token yet — mark request to allow retry after auth resolves
-          config._pendingAuth = true;
+          config._pendingAuth = true
           logger.warn(
             `[API] No pharmacist session token for ${config.url}, will retry after auth`,
-          );
+          )
         }
       } else {
         // Обычные эндпоинты — user_access_token, fallback на pharmacist_token
         const userToken =
           localStorage.getItem(
             'user_access_token',
-          );
+          )
         if (userToken) {
           config.headers[
             'Authorization'
           ] =
-            `Bearer ${userToken}`;
+            `Bearer ${userToken}`
         } else {
           const pharmacistToken =
             localStorage.getItem(
               'pharmacist_session_token',
-            );
+            )
           if (
             pharmacistToken
           ) {
             config.headers[
               'Authorization'
             ] =
-              `Bearer ${pharmacistToken}`;
+              `session ${pharmacistToken}`
           }
         }
       }
@@ -112,33 +112,33 @@ api.interceptors.request.use(
               'authorization'
             ) {
               acc[key] =
-                '[REDACTED]';
+                '[REDACTED]'
             } else {
               acc[key] =
                 config.headers[
                   key
-                ];
+                ]
             }
-            return acc;
+            return acc
           },
           {},
         ),
         data: config.data,
       },
-    );
+    )
 
-    return config;
+    return config
   },
   (error) => {
     logger.error(
       'API Request Error:',
       error,
-    );
+    )
     return Promise.reject(
       error,
-    );
+    )
   },
-);
+)
 
 // Response interceptor — форматируем ошибки
 const ERROR_MESSAGES = {
@@ -151,35 +151,35 @@ const ERROR_MESSAGES = {
   500: 'Ошибка сервера. Попробуйте позже.',
   502: 'Сервер временно недоступен.',
   503: 'Сервер временно недоступен. Попробуйте позже.',
-};
+}
 
 function getErrorMessage(
   error,
 ) {
   if (error.response) {
     const status =
-      error.response.status;
+      error.response.status
     const data =
-      error.response.data;
+      error.response.data
     // Берём сообщение от сервера если есть
     const serverMsg =
       data?.detail ||
-      data?.message;
+      data?.message
     return (
       serverMsg ||
       ERROR_MESSAGES[
         status
       ] ||
       `Ошибка ${status}`
-    );
+    )
   }
   if (error.request) {
-    return 'Нет соединения с сервером. Проверьте интернет.';
+    return 'Нет соединения с сервером. Проверьте интернет.'
   }
   return (
     error.message ||
     'Неизвестная ошибка'
-  );
+  )
 }
 
 api.interceptors.response.use(
@@ -192,12 +192,12 @@ api.interceptors.response.use(
           response.status,
         data: response.data,
       },
-    );
-    return response;
+    )
+    return response
   },
   (error) => {
     const message =
-      getErrorMessage(error);
+      getErrorMessage(error)
     logger.error(
       `API Error [${error.response?.status || 'network'}]: ${message}`,
       {
@@ -218,7 +218,7 @@ api.interceptors.response.use(
         errorMessage:
           error.message,
       },
-    );
+    )
 
     // If request was marked as _pendingAuth (no token at send time), retry once after delay
     if (
@@ -230,19 +230,19 @@ api.interceptors.response.use(
       const token =
         localStorage.getItem(
           'pharmacist_session_token',
-        );
+        )
       if (token) {
         logger.info(
           '[API] Retrying request — token now available',
-        );
+        )
         delete error.config
-          ._pendingAuth;
+          ._pendingAuth
         error.config.headers[
           'Authorization'
-        ] = `Bearer ${token}`;
+        ] = `session ${token}`
         return api(
           error.config,
-        );
+        )
       }
     }
 
@@ -255,23 +255,23 @@ api.interceptors.response.use(
       )
     ) {
       // Prevent re-auth loop: throttle to once per 5 seconds
-      const now = Date.now();
+      const now = Date.now()
       const lastDispatch =
         window.__pharmacistSessionExpiredAt ||
-        0;
+        0
       if (
         now - lastDispatch <
         5000
       ) {
         logger.debug(
           '[API] 401 throttled — skipping re-auth dispatch (cooldown)',
-        );
+        )
       } else {
         logger.info(
           '[API] 401 on pharmacist endpoint — dispatching re-auth event (token removal handled by AuthProvider)',
-        );
+        )
         window.__pharmacistSessionExpiredAt =
-          now;
+          now
         // NOTE: Do NOT remove token here. Only AuthProvider.performAutoLogin
         // should remove the token, to avoid race conditions where the interceptor
         // deletes the token before AuthProvider can check it.
@@ -280,21 +280,21 @@ api.interceptors.response.use(
           new CustomEvent(
             'pharmacist:session_expired',
           ),
-        );
+        )
       }
     }
 
     // Добавляем human-readable сообщение к объекту ошибки
     error.userMessage =
-      message;
+      message
     error.isApiError =
-      !!error.response;
+      !!error.response
 
     return Promise.reject(
       error,
-    );
+    )
   },
-);
+)
 
 // Методы для работы с бронированиями
 export const bookingApi = {
@@ -305,16 +305,16 @@ export const bookingApi = {
       await api.post(
         '/orders',
         orderData,
-      );
-    return response.data;
+      )
+    return response.data
   },
-};
+}
 
 // Экспортируем хелпер для получения сообщений ошибок
 export {
   getErrorMessage,
   ERROR_MESSAGES,
-};
+}
 
 // Экспортируем по умолчанию основной API клиент
-export default api;
+export default api
