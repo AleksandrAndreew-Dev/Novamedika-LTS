@@ -3,54 +3,67 @@ import React, {
   useEffect,
   useCallback,
   useRef,
-} from 'react';
-import { questionsService } from '../../services/questionsService';
-import websocketService from '../../services/websocketService';
+} from 'react'
+import { questionsService } from '../../services/questionsService'
+import websocketService from '../../services/websocketService'
 
 const filterLabels = {
   all: 'Все',
   new: 'Новые',
   in_progress: 'В работе',
   completed: 'Завершенные',
-};
+}
 
 export default function QuestionsList({
   filter = 'all',
   selectedQuestionId,
   onSelectQuestion,
+  compact = false,
 }) {
+  const [
+    unreadQuestions,
+    setUnreadQuestions,
+  ] = useState(
+    new Set(
+      JSON.parse(
+        localStorage.getItem(
+          'unread_questions',
+        ) || '[]',
+      ),
+    ),
+  )
   const [
     questions,
     setQuestions,
-  ] = useState([]);
+  ] = useState([])
   const [
     loading,
     setLoading,
-  ] = useState(true);
+  ] = useState(true)
   const mountedRef =
-    useRef(true);
+    useRef(true)
   const lastLoadRef =
-    useRef(0);
-  const loadThrottleMs = 2000;
+    useRef(0)
+  const loadThrottleMs = 2000
 
   useEffect(() => {
-    mountedRef.current = true;
+    mountedRef.current = true
     return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+      mountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     console.log(
       '[QuestionsList] Component mounted with filter:',
       filter,
-    );
-  }, [filter]);
+    )
+  }, [filter])
 
   const loadQuestions =
     useCallback(async () => {
       // Throttle: skip if called within 2s
-      const now = Date.now();
+      const now = Date.now()
       if (
         now -
           lastLoadRef.current <
@@ -58,36 +71,36 @@ export default function QuestionsList({
       ) {
         console.log(
           '[QuestionsList] Throttled loadQuestions',
-        );
-        return;
+        )
+        return
       }
       lastLoadRef.current =
-        now;
+        now
 
       try {
-        setLoading(true);
+        setLoading(true)
         const params =
           filter === 'all'
             ? {}
             : {
                 status:
                   filter,
-              };
+              }
         const data =
           await questionsService.getQuestions(
             params,
-          );
+          )
 
         if (
           !mountedRef.current
         )
-          return;
+          return
 
         // Backend returns { questions: [...], total, page, limit, pages }
         if (
           Array.isArray(data)
         ) {
-          setQuestions(data);
+          setQuestions(data)
         } else if (
           data &&
           Array.isArray(
@@ -96,71 +109,71 @@ export default function QuestionsList({
         ) {
           setQuestions(
             data.questions,
-          );
+          )
         } else {
           console.error(
             '[QuestionsList] Unexpected response format:',
             typeof data,
             data,
-          );
-          setQuestions([]);
+          )
+          setQuestions([])
         }
       } catch (error) {
         if (
           !mountedRef.current
         )
-          return;
+          return
         console.error(
           '[QuestionsList] Failed to load questions:',
           error,
-        );
-        setQuestions([]);
+        )
+        setQuestions([])
       } finally {
         if (
           mountedRef.current
         )
-          setLoading(false);
+          setLoading(false)
       }
-    }, [filter]);
+    }, [filter])
 
   // Subscribe to WebSocket for real-time new question notifications
   useEffect(() => {
-    websocketService.connect();
+    websocketService.connect()
 
     const unsubscribeNew =
       websocketService.on(
         'new_question',
         () => {
-          loadQuestions();
+          loadQuestions()
         },
-      );
+      )
 
     const unsubscribeUpdate =
       websocketService.on(
         'message_update',
         () => {
-          loadQuestions();
+          loadQuestions()
         },
-      );
+      )
 
     const unsubscribeAssigned =
       websocketService.on(
         'question_assigned',
         () => {
-          loadQuestions();
+          loadQuestions()
         },
-      );
+      )
 
     return () => {
-      unsubscribeNew();
-      unsubscribeUpdate();
-      unsubscribeAssigned();
-    };
-  }, [loadQuestions]);
+      unsubscribeNew()
+      unsubscribeUpdate()
+      unsubscribeAssigned()
+    }
+  }, [loadQuestions])
 
   useEffect(() => {
-    loadQuestions();
-  }, [loadQuestions]);
+    loadQuestions()
+  }, [loadQuestions])
 
   const getStatusBadge = (
     status,
@@ -181,27 +194,131 @@ export default function QuestionsList({
         color:
           'bg-green-100 text-green-800',
       },
-    };
+    }
     const badge =
       badges[status] ||
-      badges.new;
+      badges.new
     return (
       <span
         className={`px-2 py-1 rounded-full text-xs font-medium ${badge.color}`}
       >
         {badge.text}
       </span>
-    );
-  };
+    )
+  }
 
   const handleQuestionClick =
     (questionId) => {
       if (onSelectQuestion) {
         onSelectQuestion(
           questionId,
-        );
+        )
       }
-    };
+    }
+
+  // Compact mode: simpler card layout for sidebar
+  if (compact) {
+    if (loading) {
+      return (
+        <div className="space-y-2 p-4">
+          {[...Array(5)].map(
+            (_, i) => (
+              <div
+                key={i}
+                className="h-16 bg-gray-100 rounded-xl animate-pulse"
+              ></div>
+            ),
+          )}
+        </div>
+      )
+    }
+
+    return (
+      <div className="divide-y divide-gray-100">
+        {questions.length ===
+        0 ? (
+          <div className="p-8 text-center text-gray-400 text-sm">
+            Нет консультаций
+          </div>
+        ) : (
+          questions.map(
+            (question) => {
+              const questionId =
+                question.uuid ||
+                question.id
+              const isSelected =
+                questionId ===
+                selectedQuestionId
+              const isUnread =
+                question.status ===
+                  'pending' ||
+                unreadQuestions.has(
+                  questionId,
+                )
+
+              return (
+                <button
+                  key={
+                    questionId
+                  }
+                  type="button"
+                  onClick={() =>
+                    handleQuestionClick(
+                      questionId,
+                    )
+                  }
+                  className={`w-full text-left px-4 py-3 transition-colors hover:bg-gray-50 ${
+                    isSelected
+                      ? 'bg-blue-50 border-l-4 border-blue-500'
+                      : 'border-l-4 border-transparent'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        {isUnread && (
+                          <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0"></span>
+                        )}
+                        <p
+                          className={`text-sm truncate ${
+                            isUnread
+                              ? 'font-semibold text-gray-900'
+                              : 'text-gray-700'
+                          }`}
+                        >
+                          {question.text ||
+                            'Без названия'}
+                        </p>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {question.created_at
+                          ? new Date(
+                              question.created_at,
+                            ).toLocaleDateString(
+                              'ru-RU',
+                              {
+                                hour: '2-digit',
+                                minute:
+                                  '2-digit',
+                              },
+                            )
+                          : ''}
+                      </p>
+                    </div>
+                    <div className="flex-shrink-0">
+                      {getStatusBadge(
+                        question.status,
+                      )}
+                    </div>
+                  </div>
+                </button>
+              )
+            },
+          )
+        )}
+      </div>
+    )
+  }
 
   if (loading) {
     return (
@@ -218,7 +335,7 @@ export default function QuestionsList({
           ),
         )}
       </div>
-    );
+    )
   }
 
   return (
@@ -252,10 +369,10 @@ export default function QuestionsList({
             (question) => {
               const questionId =
                 question.uuid ||
-                question.id;
+                question.id
               const isSelected =
                 questionId ===
-                selectedQuestionId;
+                selectedQuestionId
 
               return (
                 <button
@@ -328,11 +445,11 @@ export default function QuestionsList({
                     </div>
                   )}
                 </button>
-              );
+              )
             },
           )
         )}
       </div>
     </div>
-  );
+  )
 }
