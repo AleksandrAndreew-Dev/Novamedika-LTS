@@ -30,7 +30,7 @@ def _build_redis_url() -> str:
     password = os.getenv("REDIS_PASSWORD", "")
     host = os.getenv("REDIS_HOST", "redis")
     port = os.getenv("REDIS_PORT", "6379")
-    db = os.getenv("REDIS_DB", "1")
+    db = os.getenv("REDIS_DB", "0")
     if password:
         from urllib.parse import quote
 
@@ -38,14 +38,31 @@ def _build_redis_url() -> str:
     return f"redis://{host}:{port}/{db}"
 
 
-def get_redis_client():
-    """Get or create Redis client"""
+async def get_redis_client():
+    """Get or create Redis client with connection check and auto-reconnect"""
     global _redis_client
     if _redis_client is None:
         redis_url = _build_redis_url()
         logger.info(f"Connecting to Redis at: {redis_url.rsplit('@', 1)[-1]}")
         _redis_client = redis.from_url(redis_url, decode_responses=True)
-    return _redis_client
+        if hasattr(_redis_client, "__await__"):
+            _redis_client = await _redis_client
+
+    # Check connection, reconnect if needed
+    try:
+        await _redis_client.ping()
+        return _redis_client
+    except Exception as e:
+        logger.error(f"Redis ping failed, reconnecting: {e}")
+        _redis_client = None
+        redis_url = _build_redis_url()
+        logger.info(f"Reconnecting to Redis at: {redis_url.rsplit('@', 1)[-1]}")
+        _redis_client = redis.from_url(redis_url, decode_responses=True)
+        if hasattr(_redis_client, "__await__"):
+            _redis_client = await _redis_client
+        await _redis_client.ping()
+        logger.info("Redis reconnection successful")
+        return _redis_client
 
 
 async def create_session_token(
@@ -62,7 +79,7 @@ async def create_session_token(
         "expires_at": time.time() + SESSION_TTL,
     }
 
-    redis_client = get_redis_client()
+    redis_client = await get_redis_client()
 
     # 1. Atomically invalidate previous session for this telegram_id
     map_key = f"{SESSION_MAP_PREFIX}{telegram_id}"
@@ -79,15 +96,25 @@ async def create_session_token(
     pipe.setex(map_key, SESSION_TTL, token)
     await pipe.execute()
 
-    logger.info(f"Created session {token[:10]}... for telegram_id={telegram_id}")
+    logger.info(
+        f"Session saved to Redis: key={SESSION_PREFIX}{token[:10]}..., "
+        f"db={getattr(redis_client, 'db', 'unknown')}, "
+        f"telegram_id={telegram_id}"
+    )
 
     return token
 
 
 async def get_session(token: str) -> Optional[dict]:
     """Get session data by token from Redis"""
-    redis_client = get_redis_client()
+    redis_client = await get_redis_client()
     session_json = await redis_client.get(f"{SESSION_PREFIX}{token}")
+
+    logger.info(
+        f"Redis get attempt: key={SESSION_PREFIX}{token[:10]}..., "
+        f"found={session_json is not None}, "
+        f"db={getattr(redis_client, 'db', 'unknown')}"
+    )
 
     if not session_json:
         logger.warning(f"Session {token[:10]}... not found in Redis")
@@ -103,7 +130,7 @@ async def get_session(token: str) -> Optional[dict]:
 
 async def delete_session(token: str) -> bool:
     """Delete a session and its mapping from Redis"""
-    redis_client = get_redis_client()
+    redis_client = await get_redis_client()
     session_json = await redis_client.get(f"{SESSION_PREFIX}{token}")
     if session_json:
         try:
@@ -121,7 +148,7 @@ async def clear_all_pharmacist_sessions() -> int:
     """Clear ALL pharmacist sessions from Redis.
     Used after /qa/drop to prevent stale sessions pointing to deleted DB records.
     Returns count of deleted sessions."""
-    redis_client = get_redis_client()
+    redis_client = await get_redis_client()
     count = 0
     cursor = 0
     pattern = f"{SESSION_PREFIX}*"
@@ -181,7 +208,7 @@ async def get_pharmacist_by_session(token: str, db: AsyncSession):
             f"Pharmacist not found in DB for uuid={pharmacist_uuid}, session_telegram_id={session_telegram_id}. Auto-cleaning stale session."
         )
         # Auto-clean stale session — DB record was deleted (e.g. via /qa/drop)
-        redis_client = get_redis_client()
+        redis_client = await get_redis_client()
         map_key = f"{SESSION_MAP_PREFIX}{session_telegram_id}"
         await redis_client.delete(f"{SESSION_PREFIX}{token}", map_key)
         return None

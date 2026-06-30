@@ -141,7 +141,7 @@ REDIS_WS_CHANNEL = "ws:pharmacist:events"
 async def publish_to_redis(message: dict):
     """Publish event to Redis Pub/Sub channel for cross-worker sync"""
     try:
-        r = get_redis_client()
+        r = await get_redis_client()
         await r.publish(REDIS_WS_CHANNEL, json.dumps(message, default=str))
     except Exception as e:
         logger.warning(f"Redis publish failed (non-critical): {e}")
@@ -151,7 +151,7 @@ async def redis_ws_listener():
     """Background task: listen to Redis Pub/Sub and broadcast locally"""
     while True:
         try:
-            r = get_redis_client()
+            r = await get_redis_client()
             pubsub = r.pubsub()
             await pubsub.subscribe(REDIS_WS_CHANNEL)
             logger.info("Redis WS listener started")

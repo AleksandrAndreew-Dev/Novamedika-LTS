@@ -82,8 +82,8 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - REDIS_DB=1
-      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/1
+      - REDIS_DB=0
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - FRONTEND_URL=https://spravka.novamedika.com
       # Ключ шифрования для персональных данных (ОАЦ compliance)
