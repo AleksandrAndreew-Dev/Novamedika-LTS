@@ -1,10 +1,12 @@
 import React from 'react'
 import { useAuth } from './hooks/useAuth'
 import ChatDashboard from './components/consultations/ChatDashboard'
-import DashboardStats from './components/dashboard/DashboardStats'
 import MainLayout from './components/layout/MainLayout'
 
-export default function PharmacistContent() {
+export default function PharmacistContent({
+  isPanelVisible,
+  togglePanel,
+}) {
   const {
     isAuthenticated,
     user,
@@ -82,42 +84,14 @@ export default function PharmacistContent() {
 
   return (
     <MainLayout>
-      <div className="space-y-6">
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">
-                Добро
-                пожаловать,
-              </p>
-              <h1 className="text-3xl font-bold text-gray-900">
-                {user?.user
-                  ?.first_name ||
-                  user?.name ||
-                  'Фармацевт'}
-              </h1>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <p className="text-xs text-gray-500">
-                  {user?.is_online
-                    ? '🟢 Онлайн'
-                    : '⚫ Офлайн'}
-                </p>
-                <p className="text-sm font-medium text-gray-700">
-                  {user
-                    ?.pharmacy_info
-                    ?.name ||
-                    'Аптека'}
-                </p>
-              </div>
-              <DashboardStats />
-            </div>
-          </div>
-        </div>
-
-        <ChatDashboard />
-      </div>
+      <ChatDashboard
+        isPanelVisible={
+          isPanelVisible
+        }
+        togglePanel={
+          togglePanel
+        }
+      />
     </MainLayout>
   )
 }

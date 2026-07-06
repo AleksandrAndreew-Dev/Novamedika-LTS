@@ -8,7 +8,7 @@ letsencrypt/acme.json
 agent
 .vscode/
 .qwen/
-
+chat-ui
 pharmacy-sim
 
 QWEN.md

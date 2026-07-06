@@ -6,6 +6,7 @@ import React, {
 } from 'react'
 import QuestionsList from './QuestionsList'
 import ConsultationChat from './ConsultationChat'
+import DashboardStats from '../dashboard/DashboardStats'
 import { questionsService } from '../../services/questionsService'
 
 const filterOptions = [
@@ -31,7 +32,10 @@ const filterOptions = [
   },
 ]
 
-export default function ChatDashboard() {
+export default function ChatDashboard({
+  isPanelVisible = true,
+  togglePanel,
+}) {
   const [filter, setFilter] =
     useState('new')
   const [
@@ -44,6 +48,10 @@ export default function ChatDashboard() {
   ] = useState(
     window.innerWidth < 768,
   )
+  const [activeTab, setActiveTab] = useState('questions') // 'questions' | 'stats'
+  const [panelWidth, setPanelWidth] = useState(320)
+  const [isResizing, setIsResizing] = useState(false)
+  const panelRef = useRef(null)
   const autoSelectDoneRef =
     useRef(false)
 
@@ -130,69 +138,207 @@ export default function ChatDashboard() {
       )
     }, [])
 
+  // Resize handlers
+  const startResize = (e) => {
+    e.preventDefault()
+    setIsResizing(true)
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }
+
+  const onResize = useCallback(
+    (e) => {
+      if (!isResizing) return
+      const panelRect =
+        panelRef.current?.getBoundingClientRect()
+      if (!panelRect) return
+      const newWidth =
+        e.clientX - panelRect.left
+      const clamped = Math.max(
+        200,
+        Math.min(600, newWidth),
+      )
+      setPanelWidth(clamped)
+    },
+    [isResizing],
+  )
+
+  const stopResize = () => {
+    setIsResizing(false)
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+  }
+
+  useEffect(() => {
+    if (isResizing) {
+      window.addEventListener(
+        'mousemove',
+        onResize,
+      )
+      window.addEventListener(
+        'mouseup',
+        stopResize,
+      )
+    }
+    return () => {
+      window.removeEventListener(
+        'mousemove',
+        onResize,
+      )
+      window.removeEventListener(
+        'mouseup',
+        stopResize,
+      )
+    }
+  }, [isResizing, onResize])
+
   // Desktop layout: side-by-side
   if (!isMobile) {
     return (
       <div className="flex h-[calc(100vh-4rem)] bg-gray-50 rounded-3xl overflow-hidden shadow-sm border border-gray-200">
         {/* Left panel */}
-        <div className="w-[380px] min-w-[320px] border-r border-gray-200 bg-white flex flex-col">
-          {/* Header */}
-          <div className="p-4 border-b border-gray-200">
-            <h2 className="text-lg font-bold text-gray-900">
-              Консультации
-            </h2>
-            <div className="flex gap-1 mt-3 overflow-x-auto">
-              {filterOptions.map(
-                (item) => (
-                  <button
-                    key={
-                      item.key
-                    }
-                    onClick={() =>
-                      setFilter(
-                        item.key,
-                      )
-                    }
-                    className={`flex items-center gap-1 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                      filter ===
-                      item.key
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    <span>
-                      {
-                        item.icon
-                      }
-                    </span>
-                    <span>
-                      {
-                        item.label
-                      }
-                    </span>
-                  </button>
-                ),
-              )}
-            </div>
-          </div>
+        <div
+          ref={panelRef}
+          className="bg-white flex flex-col transition-all duration-200"
+          style={{
+            width: isPanelVisible
+              ? panelWidth
+              : '0px',
+            minWidth: isPanelVisible
+              ? '200px'
+              : '0px',
+            maxWidth: isPanelVisible
+              ? '600px'
+              : '0px',
+            overflow: isPanelVisible
+              ? 'visible'
+              : 'hidden',
+            borderRight: isPanelVisible
+              ? '1px solid #e5e7eb'
+              : 'none',
+          }}
+        >
+          {isPanelVisible && (
+            <>
+              {/* Tabs */}
+              <div className="flex border-b border-gray-200">
+                <button
+                  className={`flex-1 py-2.5 text-sm font-medium text-center border-b-2 transition-colors ${
+                    activeTab ===
+                    'questions'
+                      ? 'text-blue-600 border-blue-600'
+                      : 'text-gray-500 border-transparent hover:text-gray-700'
+                  }`}
+                  onClick={() =>
+                    setActiveTab(
+                      'questions',
+                    )
+                  }
+                >
+                  📋 Вопросы
+                </button>
+                <button
+                  className={`flex-1 py-2.5 text-sm font-medium text-center border-b-2 transition-colors ${
+                    activeTab ===
+                    'stats'
+                      ? 'text-blue-600 border-blue-600'
+                      : 'text-gray-500 border-transparent hover:text-gray-700'
+                  }`}
+                  onClick={() =>
+                    setActiveTab(
+                      'stats',
+                    )
+                  }
+                >
+                  📊 Статистика
+                </button>
+              </div>
 
-          {/* Scrollable list */}
-          <div className="flex-1 overflow-y-auto">
-            <QuestionsList
-              filter={filter}
-              selectedQuestionId={
-                activeQuestionId
-              }
-              onSelectQuestion={
-                handleSelectQuestion
-              }
-              compact={true}
-            />
-          </div>
+              {/* Questions tab */}
+              {activeTab ===
+                'questions' && (
+                <>
+                  <div className="p-3 border-b border-gray-200">
+                    <div className="flex gap-1 overflow-x-auto">
+                      {filterOptions.map(
+                        (
+                          item,
+                        ) => (
+                          <button
+                            key={
+                              item.key
+                            }
+                            onClick={() =>
+                              setFilter(
+                                item.key,
+                              )
+                            }
+                            className={`flex items-center gap-1 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                              filter ===
+                              item.key
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            }`}
+                          >
+                            <span>
+                              {
+                                item.icon
+                              }
+                            </span>
+                            <span>
+                              {
+                                item.label
+                              }
+                            </span>
+                          </button>
+                        ),
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex-1 overflow-y-auto">
+                    <QuestionsList
+                      filter={
+                        filter
+                      }
+                      selectedQuestionId={
+                        activeQuestionId
+                      }
+                      onSelectQuestion={
+                        handleSelectQuestion
+                      }
+                      compact={
+                        true
+                      }
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Stats tab */}
+              {activeTab ===
+                'stats' && (
+                <div className="flex-1 overflow-y-auto p-4">
+                  <DashboardStats
+                    compact
+                  />
+                </div>
+              )}
+            </>
+          )}
         </div>
 
+        {/* Resize handle */}
+        {isPanelVisible && (
+          <div
+            className="w-1 hover:bg-blue-500 cursor-col-resize transition-colors flex-shrink-0"
+            onMouseDown={
+              startResize
+            }
+          />
+        )}
+
         {/* Right panel */}
-        <div className="flex-1 flex flex-col bg-white">
+        <div className="flex-1 flex flex-col bg-white min-w-0">
           {activeQuestionId ? (
             <ConsultationChat
               questionId={

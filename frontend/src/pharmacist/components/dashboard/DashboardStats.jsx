@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { questionsService } from '../../services/questionsService';
 import { useAuth } from '../../hooks/useAuth';
 
-export default function DashboardStats() {
+export default function DashboardStats({ compact = false }) {
   const { user } = useAuth();
   const [stats, setStats] = useState({
     newQuestions: 0,
@@ -74,11 +74,11 @@ export default function DashboardStats() {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className={`grid ${compact ? 'grid-cols-2 gap-3' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6'}`}>
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="bg-white rounded-lg shadow p-6 animate-pulse">
-            <div className="h-8 bg-gray-200 rounded mb-2"></div>
-            <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+          <div key={i} className={`bg-white rounded-lg shadow ${compact ? 'p-3' : 'p-6'} animate-pulse`}>
+            <div className={`h-${compact ? '6' : '8'} bg-gray-200 rounded mb-2`}></div>
+            <div className={`h-${compact ? '3' : '4'} bg-gray-200 rounded w-3/4`}></div>
           </div>
         ))}
       </div>
@@ -113,9 +113,14 @@ export default function DashboardStats() {
     }
   ];
 
+  const cardClass = compact ? 'p-3 text-center' : 'p-6';
+  const valueClass = compact ? 'text-xl font-bold' : 'text-2xl font-bold';
+  const titleClass = compact ? 'text-xs text-gray-500 mt-1' : 'text-sm font-medium text-gray-600';
+  const iconClass = compact ? 'w-8 h-8 text-lg' : 'w-12 h-12 text-xl';
+
   return (
-    <div className="space-y-6">
-      {error && (
+    <div className={compact ? 'space-y-3' : 'space-y-6'}>
+      {error && !compact && (
         <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
           <div className="flex">
             <div className="flex-shrink-0">
@@ -130,60 +135,66 @@ export default function DashboardStats() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className={`grid ${compact ? 'grid-cols-2 gap-3' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6'}`}>
         {statCards.map((card, index) => (
-          <div key={index} className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center justify-between">
+          <div key={index} className={`bg-white rounded-lg shadow ${cardClass}`}>
+            <div className={`flex ${compact ? 'flex-col items-center justify-center' : 'items-center justify-between'}`}>
               <div>
-                <p className="text-sm font-medium text-gray-600">{card.title}</p>
-                <p className="text-2xl font-bold mt-1">{card.value}</p>
+                <p className={titleClass}>{card.title}</p>
+                <p className={`${valueClass} ${compact ? 'mt-1' : 'mt-1'}`}>{card.value}</p>
               </div>
-              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${card.color} text-white text-xl`}>
-                {card.icon}
-              </div>
+              {!compact && (
+                <div className={`rounded-full flex items-center justify-center ${card.color} text-white ${iconClass}`}>
+                  {card.icon}
+                </div>
+              )}
             </div>
           </div>
         ))}
       </div>
 
-      {/* Basic pharmacist info as fallback */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Информация о фармацевте</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <p className="text-sm text-gray-600">Имя</p>
-            <p className="font-medium">{user?.user?.first_name || user?.name || 'Не указано'}</p>
+      {!compact && (
+        <>
+          {/* Basic pharmacist info as fallback */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Информация о фармацевте</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-gray-600">Имя</p>
+                <p className="font-medium">{user?.user?.first_name || user?.name || 'Не указано'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Telegram ID</p>
+                <p className="font-medium">{user?.user?.telegram_id || user?.telegram_id || 'Не указано'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Статус</p>
+                <p className="font-medium">
+                  {user?.is_active ? 'Активен' : 'Не активен'}
+                  {user?.is_online && ' • Онлайн'}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Аптека</p>
+                <p className="font-medium">{user?.pharmacy_info?.name || 'Не указана'}</p>
+              </div>
+            </div>
           </div>
-          <div>
-            <p className="text-sm text-gray-600">Telegram ID</p>
-            <p className="font-medium">{user?.user?.telegram_id || user?.telegram_id || 'Не указано'}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-600">Статус</p>
-            <p className="font-medium">
-              {user?.is_active ? 'Активен' : 'Не активен'}
-              {user?.is_online && ' • Онлайн'}
-            </p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-600">Аптека</p>
-            <p className="font-medium">{user?.pharmacy_info?.name || 'Не указана'}</p>
-          </div>
-        </div>
-      </div>
 
-      {/* Retry button */}
-      <div className="flex justify-center">
-        <button
-          onClick={loadStats}
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        >
-          <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          Обновить данные
-        </button>
-      </div>
+          {/* Retry button */}
+          <div className="flex justify-center">
+            <button
+              onClick={loadStats}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Обновить данные
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
