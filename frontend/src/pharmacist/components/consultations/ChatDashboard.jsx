@@ -34,7 +34,6 @@ const filterOptions = [
 
 export default function ChatDashboard({
   isPanelVisible = true,
-  togglePanel,
 }) {
   const [filter, setFilter] =
     useState('new')
@@ -48,10 +47,20 @@ export default function ChatDashboard({
   ] = useState(
     window.innerWidth < 768,
   )
-  const [activeTab, setActiveTab] = useState('questions') // 'questions' | 'stats'
-  const [panelWidth, setPanelWidth] = useState(320)
-  const [isResizing, setIsResizing] = useState(false)
-  const panelRef = useRef(null)
+  const [
+    activeTab,
+    setActiveTab,
+  ] = useState('questions') // 'questions' | 'stats'
+  const [
+    panelWidth,
+    setPanelWidth,
+  ] = useState(320)
+  const [
+    isResizing,
+    setIsResizing,
+  ] = useState(false)
+  const panelRef =
+    useRef(null)
   const autoSelectDoneRef =
     useRef(false)
 
@@ -142,31 +151,42 @@ export default function ChatDashboard({
   const startResize = (e) => {
     e.preventDefault()
     setIsResizing(true)
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
+    document.body.style.cursor =
+      'col-resize'
+    document.body.style.userSelect =
+      'none'
   }
 
-  const onResize = useCallback(
-    (e) => {
-      if (!isResizing) return
-      const panelRect =
-        panelRef.current?.getBoundingClientRect()
-      if (!panelRect) return
-      const newWidth =
-        e.clientX - panelRect.left
-      const clamped = Math.max(
-        200,
-        Math.min(600, newWidth),
-      )
-      setPanelWidth(clamped)
-    },
-    [isResizing],
-  )
+  const onResize =
+    useCallback(
+      (e) => {
+        if (!isResizing)
+          return
+        const panelRect =
+          panelRef.current?.getBoundingClientRect()
+        if (!panelRect) return
+        const newWidth =
+          e.clientX -
+          panelRect.left
+        const clamped =
+          Math.max(
+            200,
+            Math.min(
+              600,
+              newWidth,
+            ),
+          )
+        setPanelWidth(clamped)
+      },
+      [isResizing],
+    )
 
   const stopResize = () => {
     setIsResizing(false)
-    document.body.style.cursor = ''
-    document.body.style.userSelect = ''
+    document.body.style.cursor =
+      ''
+    document.body.style.userSelect =
+      ''
   }
 
   useEffect(() => {
@@ -201,21 +221,26 @@ export default function ChatDashboard({
           ref={panelRef}
           className="bg-white flex flex-col transition-all duration-200"
           style={{
-            width: isPanelVisible
-              ? panelWidth
-              : '0px',
-            minWidth: isPanelVisible
-              ? '200px'
-              : '0px',
-            maxWidth: isPanelVisible
-              ? '600px'
-              : '0px',
-            overflow: isPanelVisible
-              ? 'visible'
-              : 'hidden',
-            borderRight: isPanelVisible
-              ? '1px solid #e5e7eb'
-              : 'none',
+            width:
+              isPanelVisible
+                ? panelWidth
+                : '0px',
+            minWidth:
+              isPanelVisible
+                ? '200px'
+                : '0px',
+            maxWidth:
+              isPanelVisible
+                ? '600px'
+                : '0px',
+            overflow:
+              isPanelVisible
+                ? 'visible'
+                : 'hidden',
+            borderRight:
+              isPanelVisible
+                ? '1px solid #e5e7eb'
+                : 'none',
           }}
         >
           {isPanelVisible && (
@@ -250,7 +275,8 @@ export default function ChatDashboard({
                     )
                   }
                 >
-                  📊 Статистика
+                  📊
+                  Статистика
                 </button>
               </div>
 
