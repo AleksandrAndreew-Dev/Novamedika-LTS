@@ -6,11 +6,11 @@ import {
   useCallback,
   useRef,
   useEffect,
-} from 'react';
-import chatService from '../services/chatService';
+} from 'react'
+import chatService from '../services/chatService'
 
 const ChatContext =
-  createContext(null);
+  createContext(null)
 
 /**
  * ChatContext — глобальное состояние для управления чат-виджетом
@@ -29,58 +29,58 @@ export function ChatProvider({
       localStorage.getItem(
         'current_chat_id',
       ) || null,
-  );
+  )
   const [
     messages,
     setMessages,
-  ] = useState([]);
+  ] = useState([])
   const [
     isWidgetOpen,
     setIsWidgetOpen,
-  ] = useState(false);
+  ] = useState(false)
   const [
     loading,
     setLoading,
-  ] = useState(false);
+  ] = useState(false)
   const [error, setError] =
-    useState(null);
+    useState(null)
   const [
     unreadCount,
     setUnreadCount,
-  ] = useState(0);
+  ] = useState(0)
   const [
     isAnonymous,
     setIsAnonymous,
   ] = useState(() =>
     chatService.isAnonymous(),
-  );
+  )
   const pollingRef =
-    useRef(null);
-  const wsRef = useRef(null);
+    useRef(null)
+  const wsRef = useRef(null)
   const wsReconnectRef =
-    useRef(null);
+    useRef(null)
 
   // WebSocket protocol — user chat widget (not pharmacist dashboard)
   const isSecure =
     window.location
-      .protocol === 'https:';
-  const wsBaseUrl = `${isSecure ? 'wss' : 'ws'}://${window.location.host}/api/ws/chat`;
+      .protocol === 'https:'
+  const wsBaseUrl = `${isSecure ? 'wss' : 'ws'}://${window.location.host}/api/ws/chat`
   // Store baseUrl in ref to avoid stale closure in reconnect callback
   const wsBaseUrlRef = useRef(
     wsBaseUrl,
-  );
+  )
   useEffect(() => {
     wsBaseUrlRef.current =
-      wsBaseUrl;
-  }, [wsBaseUrl]);
-  const reconnectDelay = 3000;
+      wsBaseUrl
+  }, [wsBaseUrl])
+  const reconnectDelay = 3000
 
   // Sync anonymous status on auth change
   useEffect(() => {
     setIsAnonymous(
       chatService.isAnonymous(),
-    );
-  }, []);
+    )
+  }, [])
 
   // Save current chat ID to localStorage
   useEffect(() => {
@@ -90,20 +90,20 @@ export function ChatProvider({
       localStorage.setItem(
         'current_chat_id',
         currentConsultationId,
-      );
+      )
     } else {
       localStorage.removeItem(
         'current_chat_id',
-      );
+      )
     }
-  }, [currentConsultationId]);
+  }, [currentConsultationId])
 
   // Reset unread when widget opens
   useEffect(() => {
     if (isWidgetOpen) {
-      setUnreadCount(0);
+      setUnreadCount(0)
     }
-  }, [isWidgetOpen]);
+  }, [isWidgetOpen])
 
   // WebSocket connection for real-time message updates
   // Анонимные пользователи используют polling (см. pollingFallback ниже)
@@ -113,13 +113,13 @@ export function ChatProvider({
     ) {
       // Close WebSocket if no consultation
       if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
+        wsRef.current.close()
+        wsRef.current = null
       }
-      return;
+      return
     }
 
-    let mounted = true;
+    let mounted = true
 
     const connectWs = () => {
       if (
@@ -128,7 +128,7 @@ export function ChatProvider({
           ?.readyState ===
           WebSocket.OPEN
       )
-        return;
+        return
 
       // Anonymous users can also use WebSocket — user_chat_websocket requires no auth
       // The server endpoint /api/ws/chat/{consultation_id} accepts connections without token
@@ -136,16 +136,16 @@ export function ChatProvider({
         const ws =
           new WebSocket(
             `${wsBaseUrl}/${currentConsultationId}`,
-          );
-        wsRef.current = ws;
+          )
+        wsRef.current = ws
 
         ws.onopen = () => {
           console.log(
             `[ChatContext] WebSocket connected for ${currentConsultationId}`,
-          );
+          )
           // Send initial ping
-          ws.send('ping');
-        };
+          ws.send('ping')
+        }
 
         ws.onmessage = (
           event,
@@ -154,15 +154,14 @@ export function ChatProvider({
             const data =
               JSON.parse(
                 event.data,
-              );
+              )
             if (
               data.type ===
               'message_update'
             ) {
               const msg =
-                data.data;
-              if (!msg)
-                return;
+                data.data
+              if (!msg) return
 
               setMessages(
                 (prev) => {
@@ -173,18 +172,18 @@ export function ChatProvider({
                           m.uuid ||
                           m.id,
                       ),
-                    );
+                    )
                   if (
                     prevIds.has(
                       msg.uuid,
                     )
                   )
-                    return prev;
+                    return prev
                   const updated =
                     [
                       ...prev,
                       msg,
-                    ];
+                    ]
                   updated.sort(
                     (a, b) =>
                       new Date(
@@ -193,10 +192,10 @@ export function ChatProvider({
                       new Date(
                         b.created_at,
                       ),
-                  );
-                  return updated;
+                  )
+                  return updated
                 },
-              );
+              )
 
               // Increment unread if widget is closed
               if (
@@ -205,30 +204,28 @@ export function ChatProvider({
                 setUnreadCount(
                   (prev) =>
                     prev + 1,
-                );
+                )
               }
             }
           } catch {
             // Not JSON — might be "pong" or other text
           }
-        };
+        }
 
         ws.onclose = () => {
-          wsRef.current =
-            null;
-          if (!mounted)
-            return;
+          wsRef.current = null
+          if (!mounted) return
           // Reconnect after delay
           wsReconnectRef.current =
             setTimeout(
               connectWs,
               reconnectDelay,
-            );
-        };
+            )
+        }
 
         ws.onerror = () => {
           // onclose will fire after onerror, so reconnect is handled there
-        };
+        }
 
         // Ping every 30s to keep connection alive
         const pingInterval =
@@ -237,62 +234,62 @@ export function ChatProvider({
               ws.readyState ===
               WebSocket.OPEN
             ) {
-              ws.send('ping');
+              ws.send('ping')
             }
-          }, 30000);
+          }, 30000)
 
         // Store interval on ws object for cleanup
         ws._pingInterval =
-          pingInterval;
+          pingInterval
       } catch (err) {
         console.error(
           `[ChatContext] WebSocket connection error: ${err}`,
-        );
+        )
         // Fallback to polling will handle it
       }
-    };
+    }
 
-    connectWs();
+    connectWs()
 
     return () => {
-      mounted = false;
+      mounted = false
       if (
         wsReconnectRef.current
       ) {
         clearTimeout(
           wsReconnectRef.current,
-        );
+        )
         wsReconnectRef.current =
-          null;
+          null
       }
       if (wsRef.current) {
         clearInterval(
           wsRef.current
             ._pingInterval,
-        );
-        wsRef.current.close();
-        wsRef.current = null;
+        )
+        wsRef.current.close()
+        wsRef.current = null
       }
-    };
+    }
   }, [
     currentConsultationId,
     isAnonymous,
     isWidgetOpen,
     wsBaseUrl,
-  ]);
+  ])
 
   // Flag to ensure we only do initial load once per consultation
   const initialLoadDoneRef =
-    useRef(false);
+    useRef(false)
 
   // Polling fallback (used when WebSocket is not available or for anonymous users)
   useEffect(() => {
     if (
       !currentConsultationId
     )
-      return;
+      return
 
-    initialLoadDoneRef.current = false;
+    initialLoadDoneRef.current = false
 
     const poll = async () => {
       try {
@@ -301,7 +298,7 @@ export function ChatProvider({
             currentConsultationId,
             isAnonymous,
             false,
-          );
+          )
         setMessages(
           (prev) => {
             const prevIds =
@@ -311,7 +308,7 @@ export function ChatProvider({
                     m.uuid ||
                     m.id,
                 ),
-              );
+              )
             const added =
               newMessages.filter(
                 (m) =>
@@ -319,16 +316,16 @@ export function ChatProvider({
                     m.uuid ||
                       m.id,
                   ),
-              );
+              )
             if (
               added.length ===
               0
             )
-              return prev;
+              return prev
             const updated = [
               ...prev,
               ...added,
-            ];
+            ]
             updated.sort(
               (a, b) =>
                 new Date(
@@ -337,34 +334,48 @@ export function ChatProvider({
                 new Date(
                   b.created_at,
                 ),
-            );
-            return updated;
+            )
+            return updated
           },
-        );
+        )
       } catch {
         // Silent fail
       }
-    };
-
-    // Only set up polling if WebSocket is not available or for anonymous
-    // For anonymous users — always poll
-    if (isAnonymous) {
-      poll();
-      pollingRef.current =
-        setInterval(
-          poll,
-          5000,
-        );
-    } else {
-      // For non-anonymous: still poll as fallback, but less frequently
-      poll();
-      // Poll every 30s as safety fallback (WebSocket is primary)
-      pollingRef.current =
-        setInterval(
-          poll,
-          30000,
-        );
     }
+
+    // Only use polling as fallback when WebSocket fails
+    // Don't poll if WebSocket is active
+    let pollInterval =
+      isAnonymous
+        ? 5000
+        : 30000
+
+    // Initial poll to load messages
+    poll()
+
+    // Set up polling only if WebSocket is not connected
+    const checkAndStartPolling =
+      () => {
+        if (
+          wsRef.current
+            ?.readyState ===
+          WebSocket.OPEN
+        ) {
+          // WebSocket is active, don't poll
+          return
+        }
+        pollingRef.current =
+          setInterval(
+            poll,
+            pollInterval,
+          )
+      }
+
+    // Delay start to give WebSocket a chance to connect
+    setTimeout(
+      checkAndStartPolling,
+      2000,
+    )
 
     return () => {
       if (
@@ -372,71 +383,71 @@ export function ChatProvider({
       ) {
         clearInterval(
           pollingRef.current,
-        );
+        )
         pollingRef.current =
-          null;
+          null
       }
-    };
+    }
   }, [
     currentConsultationId,
     isAnonymous,
-  ]);
+  ])
 
   const loadMessages =
     useCallback(async () => {
       if (
         !currentConsultationId
       )
-        return;
-      setLoading(true);
-      setError(null);
+        return
+      setLoading(true)
+      setError(null)
       try {
         const data =
           await chatService.fetchMessages(
             currentConsultationId,
             isAnonymous,
             false,
-          );
-        setMessages(data);
+          )
+        setMessages(data)
       } catch {
         setError(
           'Не удалось загрузить сообщения',
-        );
+        )
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
     }, [
       currentConsultationId,
       isAnonymous,
-    ]);
+    ])
 
   const createConsultation =
     useCallback(
       async (text) => {
-        setLoading(true);
-        setError(null);
+        setLoading(true)
+        setError(null)
         try {
           const data =
             await chatService.createConsultation(
               text,
               chatService.isAnonymous(),
-            );
+            )
           setCurrentConsultationId(
             data.uuid,
-          );
-          setMessages([]);
-          return data;
+          )
+          setMessages([])
+          return data
         } catch (e) {
           setError(
             'Не удалось создать консультацию',
-          );
-          throw e;
+          )
+          throw e
         } finally {
-          setLoading(false);
+          setLoading(false)
         }
       },
       [],
-    );
+    )
 
   const sendMessage =
     useCallback(
@@ -445,36 +456,36 @@ export function ChatProvider({
           !currentConsultationId ||
           !text.trim()
         )
-          return;
+          return
         const data =
           await chatService.sendMessage(
             currentConsultationId,
             text,
             isAnonymous,
             false,
-          );
+          )
         setMessages(
           (prev) => [
             ...prev,
             data,
           ],
-        );
+        )
       },
       [
         currentConsultationId,
         isAnonymous,
       ],
-    );
+    )
 
   const openWidget =
     useCallback(() => {
-      setIsWidgetOpen(true);
-    }, []);
+      setIsWidgetOpen(true)
+    }, [])
 
   const closeWidget =
     useCallback(() => {
-      setIsWidgetOpen(false);
-    }, []);
+      setIsWidgetOpen(false)
+    }, [])
 
   const value = {
     currentConsultationId,
@@ -491,7 +502,7 @@ export function ChatProvider({
     loadMessages,
     createConsultation,
     sendMessage,
-  };
+  }
 
   return (
     <ChatContext.Provider
@@ -499,17 +510,17 @@ export function ChatProvider({
     >
       {children}
     </ChatContext.Provider>
-  );
+  )
 }
 
 export function useChat() {
   const ctx = useContext(
     ChatContext,
-  );
+  )
   if (!ctx) {
     throw new Error(
       'useChat must be used within ChatProvider',
-    );
+    )
   }
-  return ctx;
+  return ctx
 }

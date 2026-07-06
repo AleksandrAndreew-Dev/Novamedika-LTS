@@ -697,7 +697,19 @@ async def get_dialog(
     )
     messages = messages_result.scalars().all()
 
-    return messages
+    # Convert UUIDs to strings for Pydantic validation
+    return [
+        DialogMessageResponse(
+            uuid=str(msg.uuid),
+            question_id=str(msg.question_id),
+            sender_type=msg.sender_type,
+            sender_id=str(msg.sender_id),
+            message_type=msg.message_type,
+            text=msg.text,
+            created_at=msg.created_at,
+        )
+        for msg in messages
+    ]
 
 
 @router.post("/questions/{question_id}/dialog", response_model=DialogMessageResponse)
