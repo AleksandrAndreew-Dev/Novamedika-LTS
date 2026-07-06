@@ -812,7 +812,15 @@ async def send_message(
     except Exception as e:
         logger.error(f"Failed to send message to user via bot (setup): {e}")
 
-    return msg
+    return DialogMessageResponse(
+        uuid=str(msg.uuid),
+        question_id=str(msg.question_id),
+        sender_type=msg.sender_type,
+        sender_id=str(msg.sender_id),
+        message_type=msg.message_type,
+        text=msg.text,
+        created_at=msg.created_at,
+    )
 
 
 # WebSocket for pharmacist dashboard

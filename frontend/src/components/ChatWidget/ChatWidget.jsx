@@ -1,8 +1,13 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
-import { useChat } from "../../context/ChatContext";
-import ChatTrigger from "./ChatTrigger";
-import "./ChatWidget.css";
+import {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+} from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useChat } from '../../context/ChatContext'
+import ChatTrigger from './ChatTrigger'
+import './ChatWidget.css'
 
 export default function ChatWidget() {
   const {
@@ -16,79 +21,164 @@ export default function ChatWidget() {
     loadMessages,
     createConsultation,
     sendMessage,
-  } = useChat();
-  const navigate = useNavigate();
-  const messagesEndRef = useRef(null);
-  const [newMessage, setNewMessage] = useState("");
-  const [sending, setSending] = useState(false);
-  const [inputMode, setInputMode] = useState(
-    currentConsultationId ? "message" : "question",
-  );
-  const [questionText, setQuestionText] = useState("");
+  } = useChat()
+  const navigate =
+    useNavigate()
+  const messagesEndRef =
+    useRef(null)
+  const [
+    newMessage,
+    setNewMessage,
+  ] = useState('')
+  const [
+    sending,
+    setSending,
+  ] = useState(false)
+  const [
+    inputMode,
+    setInputMode,
+  ] = useState(
+    currentConsultationId
+      ? 'message'
+      : 'question',
+  )
+  const [
+    questionText,
+    setQuestionText,
+  ] = useState('')
 
   // Scroll to bottom on new messages
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    messagesEndRef.current?.scrollIntoView(
+      { behavior: 'smooth' },
+    )
+  }, [messages])
 
   // Load messages when consultation changes
   useEffect(() => {
-    if (currentConsultationId && isWidgetOpen && messages.length === 0) {
-      loadMessages();
+    if (
+      currentConsultationId &&
+      isWidgetOpen &&
+      messages.length === 0
+    ) {
+      loadMessages()
     }
-  }, [currentConsultationId, isWidgetOpen, loadMessages, messages.length]);
+  }, [
+    currentConsultationId,
+    isWidgetOpen,
+    loadMessages,
+    messages.length,
+  ])
 
-  const handleToggle = useCallback(() => {
-    if (isWidgetOpen) {
-      closeWidget();
-    } else {
-      openWidget();
+  const handleToggle =
+    useCallback(() => {
+      if (isWidgetOpen) {
+        closeWidget()
+      } else {
+        openWidget()
+      }
+    }, [
+      isWidgetOpen,
+      openWidget,
+      closeWidget,
+    ])
+
+  const handleCreateQuestion =
+    async (e) => {
+      e.preventDefault()
+      if (
+        !questionText.trim() ||
+        loading
+      )
+        return
+      try {
+        await createConsultation(
+          questionText.trim(),
+        )
+        setQuestionText('')
+        setInputMode(
+          'message',
+        )
+      } catch {
+        // Error handled in context
+      }
     }
-  }, [isWidgetOpen, openWidget, closeWidget]);
 
-  const handleCreateQuestion = async (e) => {
-    e.preventDefault();
-    if (!questionText.trim() || loading) return;
-    try {
-      await createConsultation(questionText.trim());
-      setQuestionText("");
-      setInputMode("message");
-    } catch {
-      // Error handled in context
+  const handleKeyDown = (
+    e,
+  ) => {
+    if (
+      e.key === 'Enter' &&
+      !e.shiftKey
+    ) {
+      e.preventDefault()
+      if (
+        inputMode ===
+        'question'
+      ) {
+        handleCreateQuestion(
+          e,
+        )
+      } else {
+        handleSendMessage(e)
+      }
     }
-  };
+  }
 
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (!newMessage.trim() || sending) return;
-    setSending(true);
-    try {
-      await sendMessage(newMessage.trim());
-      setNewMessage("");
-    } catch {
-      // Error handled by caller
-    } finally {
-      setSending(false);
+  const handleSendMessage =
+    async (e) => {
+      e.preventDefault()
+      if (
+        !newMessage.trim() ||
+        sending
+      )
+        return
+      setSending(true)
+      try {
+        await sendMessage(
+          newMessage.trim(),
+        )
+        setNewMessage('')
+      } catch {
+        // Error handled by caller
+      } finally {
+        setSending(false)
+      }
     }
-  };
 
-  const formatTime = (dateString) => {
-    if (!dateString) return "";
-    return new Date(dateString).toLocaleTimeString("ru-RU", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
+  const formatTime = (
+    dateString,
+  ) => {
+    if (!dateString) return ''
+    return new Date(
+      dateString,
+    ).toLocaleTimeString(
+      'ru-RU',
+      {
+        hour: '2-digit',
+        minute: '2-digit',
+      },
+    )
+  }
 
-  const countUnread = messages.filter(
-    (m) => m.sender_type !== "user" && !m.read,
-  ).length;
+  const countUnread =
+    messages.filter(
+      (m) =>
+        m.sender_type !==
+          'user' && !m.read,
+    ).length
 
   return (
-    <div className="chat-widget" data-testid="chat-widget">
+    <div
+      className="chat-widget"
+      data-testid="chat-widget"
+    >
       {/* Trigger button */}
       <ChatTrigger
-        unreadCount={countUnread || unreadCount}
+        unreadCount={
+          countUnread ||
+          unreadCount
+        }
         onClick={handleToggle}
         isOpen={isWidgetOpen}
       />
@@ -99,20 +189,32 @@ export default function ChatWidget() {
           {/* Header */}
           <div className="chat-widget__header">
             <div className="chat-widget__header-info">
-              <div className="chat-widget__header-icon">Ф</div>
+              <div className="chat-widget__header-icon">
+                Ф
+              </div>
               <div>
-                <div className="chat-widget__header-title">Фармацевт</div>
+                <div className="chat-widget__header-title">
+                  Фармацевт
+                </div>
                 <div className="chat-widget__header-status">
-                  {currentConsultationId ? "В работе" : "Задайте вопрос"}
+                  {currentConsultationId
+                    ? 'В работе'
+                    : 'Задайте вопрос'}
                 </div>
               </div>
             </div>
             <button
               onClick={() => {
-                if (currentConsultationId) {
-                  navigate(`/chat/${currentConsultationId}`);
+                if (
+                  currentConsultationId
+                ) {
+                  navigate(
+                    `/chat/${currentConsultationId}`,
+                  )
                 } else {
-                  navigate("/chat/new");
+                  navigate(
+                    '/chat/new',
+                  )
                 }
               }}
               className="chat-widget__expand-btn"
@@ -135,7 +237,9 @@ export default function ChatWidget() {
 
           {/* Chat body */}
           <div className="chat-widget__body">
-            {!currentConsultationId && inputMode === "question" ? (
+            {!currentConsultationId &&
+            inputMode ===
+              'question' ? (
               /* New question form */
               <div className="chat-widget__new-form">
                 <div className="chat-widget__new-icon">
@@ -153,28 +257,51 @@ export default function ChatWidget() {
                   </svg>
                 </div>
                 <p className="chat-widget__new-text">
-                  Задайте вопрос фармацевту — мы ответим в ближайшее время
+                  Задайте
+                  вопрос
+                  фармацевту —
+                  мы ответим в
+                  ближайшее
+                  время
                 </p>
                 <form
-                  onSubmit={handleCreateQuestion}
+                  onSubmit={
+                    handleCreateQuestion
+                  }
                   className="chat-widget__new-form-input"
                 >
                   <textarea
-                    value={questionText}
-                    onChange={(e) => setQuestionText(e.target.value)}
+                    value={
+                      questionText
+                    }
+                    onChange={(
+                      e,
+                    ) =>
+                      setQuestionText(
+                        e
+                          .target
+                          .value,
+                      )
+                    }
+                    onKeyDown={
+                      handleKeyDown
+                    }
                     placeholder="Опишите ваш вопрос..."
                     rows={3}
                     className="chat-widget__textarea"
                   />
                   <button
                     type="submit"
-                    disabled={loading || !questionText.trim()}
+                    disabled={
+                      loading ||
+                      !questionText.trim()
+                    }
                     className="chat-widget__send-btn chat-widget__send-btn--primary"
                   >
                     {loading ? (
                       <span className="chat-widget__spinner" />
                     ) : (
-                      "Отправить"
+                      'Отправить'
                     )}
                   </button>
                 </form>
@@ -183,70 +310,132 @@ export default function ChatWidget() {
               /* Messages list */
               <>
                 <div className="chat-widget__messages">
-                  {messages.length === 0 && !loading && (
-                    <div className="chat-widget__empty">
-                      <p>Пока нет сообщений</p>
-                      <p className="chat-widget__empty-hint">
-                        Напишите свой вопрос фармацевту
-                      </p>
-                    </div>
-                  )}
-                  {loading && messages.length === 0 && (
-                    <div className="chat-widget__loading">
-                      <span className="chat-widget__spinner" />
-                    </div>
-                  )}
-                  {messages.map((message, idx) => {
-                    const isUser = message.sender_type === "user";
-                    const prevMsg = idx > 0 ? messages[idx - 1] : null;
-                    const showAvatar =
-                      !isUser && (!prevMsg || prevMsg.sender_type === "user");
-                    return (
-                      <div
-                        key={message.uuid || idx}
-                        className={`chat-widget__msg ${isUser ? "chat-widget__msg--user" : "chat-widget__msg--pharmacist"}`}
-                      >
-                        {!isUser && (
-                          <div
-                            className={`chat-widget__avatar ${showAvatar ? "" : "chat-widget__avatar--hidden"}`}
-                          >
-                            Ф
-                          </div>
-                        )}
-                        <div className="chat-widget__bubble">
-                          {!isUser && showAvatar && (
-                            <div className="chat-widget__name">Фармацевт</div>
+                  {messages.length ===
+                    0 &&
+                    !loading && (
+                      <div className="chat-widget__empty">
+                        <p>
+                          Пока
+                          нет
+                          сообщений
+                        </p>
+                        <p className="chat-widget__empty-hint">
+                          Напишите
+                          свой
+                          вопрос
+                          фармацевту
+                        </p>
+                      </div>
+                    )}
+                  {loading &&
+                    messages.length ===
+                      0 && (
+                      <div className="chat-widget__loading">
+                        <span className="chat-widget__spinner" />
+                      </div>
+                    )}
+                  {messages.map(
+                    (
+                      message,
+                      idx,
+                    ) => {
+                      const isUser =
+                        message.sender_type ===
+                        'user'
+                      const prevMsg =
+                        idx >
+                        0
+                          ? messages[
+                              idx -
+                                1
+                            ]
+                          : null
+                      const showAvatar =
+                        !isUser &&
+                        (!prevMsg ||
+                          prevMsg.sender_type ===
+                            'user')
+                      return (
+                        <div
+                          key={
+                            message.uuid ||
+                            idx
+                          }
+                          className={`chat-widget__msg ${isUser ? 'chat-widget__msg--user' : 'chat-widget__msg--pharmacist'}`}
+                        >
+                          {!isUser && (
+                            <div
+                              className={`chat-widget__avatar ${showAvatar ? '' : 'chat-widget__avatar--hidden'}`}
+                            >
+                              Ф
+                            </div>
                           )}
-                          <div className="chat-widget__text">
-                            {message.text}
-                          </div>
-                          <div className="chat-widget__time">
-                            {formatTime(message.created_at)}
+                          <div className="chat-widget__bubble">
+                            {!isUser &&
+                              showAvatar && (
+                                <div className="chat-widget__name">
+                                  Фармацевт
+                                </div>
+                              )}
+                            <div className="chat-widget__text">
+                              {
+                                message.text
+                              }
+                            </div>
+                            <div className="chat-widget__time">
+                              {formatTime(
+                                message.created_at,
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                  <div ref={messagesEndRef} />
+                      )
+                    },
+                  )}
+                  <div
+                    ref={
+                      messagesEndRef
+                    }
+                  />
                 </div>
 
                 {/* Input */}
                 <div className="chat-widget__input-area">
                   <form
-                    onSubmit={handleSendMessage}
+                    onSubmit={
+                      handleSendMessage
+                    }
                     className="chat-widget__input-form"
                   >
                     <textarea
-                      value={newMessage}
-                      onChange={(e) => setNewMessage(e.target.value)}
+                      value={
+                        newMessage
+                      }
+                      onChange={(
+                        e,
+                      ) =>
+                        setNewMessage(
+                          e
+                            .target
+                            .value,
+                        )
+                      }
+                      onKeyDown={
+                        handleKeyDown
+                      }
                       placeholder="Напишите сообщение..."
                       rows={1}
                       className="chat-widget__textarea chat-widget__textarea--inline"
-                      disabled={sending}
+                      disabled={
+                        sending
+                      }
                     />
                     <button
                       type="submit"
-                      disabled={sending || !newMessage.trim()}
+                      disabled={
+                        sending ||
+                        !newMessage.trim()
+                      }
                       className="chat-widget__send-btn"
                       aria-label="Отправить"
                     >
@@ -263,7 +452,12 @@ export default function ChatWidget() {
                           strokeLinecap="round"
                           strokeLinejoin="round"
                         >
-                          <line x1="22" y1="2" x2="11" y2="13" />
+                          <line
+                            x1="22"
+                            y1="2"
+                            x2="11"
+                            y2="13"
+                          />
                           <polygon points="22 2 15 22 11 13 2 9 22 2" />
                         </svg>
                       )}
@@ -275,28 +469,48 @@ export default function ChatWidget() {
               /* Default — show new question form */
               <div className="chat-widget__new-form">
                 <p className="chat-widget__new-text">
-                  Задайте вопрос фармацевту
+                  Задайте
+                  вопрос
+                  фармацевту
                 </p>
                 <form
-                  onSubmit={handleCreateQuestion}
+                  onSubmit={
+                    handleCreateQuestion
+                  }
                   className="chat-widget__new-form-input"
                 >
                   <textarea
-                    value={questionText}
-                    onChange={(e) => setQuestionText(e.target.value)}
+                    value={
+                      questionText
+                    }
+                    onChange={(
+                      e,
+                    ) =>
+                      setQuestionText(
+                        e
+                          .target
+                          .value,
+                      )
+                    }
+                    onKeyDown={
+                      handleKeyDown
+                    }
                     placeholder="Опишите ваш вопрос..."
                     rows={3}
                     className="chat-widget__textarea"
                   />
                   <button
                     type="submit"
-                    disabled={loading || !questionText.trim()}
+                    disabled={
+                      loading ||
+                      !questionText.trim()
+                    }
                     className="chat-widget__send-btn chat-widget__send-btn--primary"
                   >
                     {loading ? (
                       <span className="chat-widget__spinner" />
                     ) : (
-                      "Отправить"
+                      'Отправить'
                     )}
                   </button>
                 </form>
@@ -306,5 +520,5 @@ export default function ChatWidget() {
         </div>
       )}
     </div>
-  );
+  )
 }

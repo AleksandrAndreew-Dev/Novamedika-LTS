@@ -360,11 +360,11 @@ class MessageCreate(BaseModel):
 class MessageResponse(BaseModel):
     """Модель ответа сообщения"""
 
-    uuid: uuid.UUID
-    question_id: uuid.UUID
+    uuid: str
+    question_id: str
     message_type: str
     sender_type: str
-    sender_id: uuid.UUID
+    sender_id: str
     text: Optional[str] = None
     file_id: Optional[str] = None
     caption: Optional[str] = None

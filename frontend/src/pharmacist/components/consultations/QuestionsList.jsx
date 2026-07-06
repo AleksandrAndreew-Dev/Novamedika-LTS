@@ -42,7 +42,7 @@ export default function QuestionsList({
     useRef(true)
   const lastLoadRef =
     useRef(0)
-  const loadThrottleMs = 2000
+  const loadThrottleMs = 500
 
   useEffect(() => {
     mountedRef.current = true
@@ -169,8 +169,15 @@ export default function QuestionsList({
     }
   }, [loadQuestions])
 
+  // Periodic polling fallback every 30s
   useEffect(() => {
     loadQuestions()
+    const interval =
+      setInterval(() => {
+        loadQuestions()
+      }, 30000)
+    return () =>
+      clearInterval(interval)
   }, [loadQuestions])
 
   const getStatusBadge = (

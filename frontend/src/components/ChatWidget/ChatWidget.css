@@ -15,21 +15,27 @@
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #2563eb 0%, #6366f1 100%);
+  background: linear-gradient(
+    135deg,
+    #2563eb 0%,
+    #6366f1 100%
+  );
   border: none;
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.35);
+  box-shadow: 0 4px 16px
+    rgba(37, 99, 235, 0.35);
   transition: all 0.2s ease;
   position: relative;
 }
 
 .chat-trigger:hover {
   transform: scale(1.08);
-  box-shadow: 0 6px 24px rgba(37, 99, 235, 0.5);
+  box-shadow: 0 6px 24px
+    rgba(37, 99, 235, 0.5);
 }
 
 .chat-trigger:active {
@@ -38,12 +44,14 @@
 
 .chat-trigger--active {
   background: #ef4444;
-  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.35);
+  box-shadow: 0 4px 16px
+    rgba(239, 68, 68, 0.35);
 }
 
 .chat-trigger--active:hover {
   background: #dc2626;
-  box-shadow: 0 6px 24px rgba(239, 68, 68, 0.5);
+  box-shadow: 0 6px 24px
+    rgba(239, 68, 68, 0.5);
 }
 
 .chat-trigger__badge {
@@ -75,22 +83,29 @@
   background: #fff;
   border-radius: 16px;
   box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.15),
-    0 2px 8px rgba(0, 0, 0, 0.08);
+    0 8px 32px
+      rgba(0, 0, 0, 0.15),
+    0 2px 8px
+      rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: chatWidgetSlideUp 0.25s ease-out;
+  animation: chatWidgetSlideUp
+    0.25s ease-out;
 }
 
 @keyframes chatWidgetSlideUp {
   from {
     opacity: 0;
-    transform: translateY(16px) scale(0.96);
+    transform: translateY(
+        16px
+      )
+      scale(0.96);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(0)
+      scale(1);
   }
 }
 
@@ -100,7 +115,11 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  background: linear-gradient(135deg, #2563eb 0%, #6366f1 100%);
+  background: linear-gradient(
+    135deg,
+    #2563eb 0%,
+    #6366f1 100%
+  );
   color: white;
   flex-shrink: 0;
 }
@@ -115,7 +134,12 @@
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(
+    255,
+    255,
+    255,
+    0.2
+  );
   display: flex;
   align-items: center;
   justify-content: center;
@@ -135,7 +159,12 @@
 }
 
 .chat-widget__expand-btn {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(
+    255,
+    255,
+    255,
+    0.15
+  );
   border: none;
   color: white;
   width: 32px;
@@ -149,7 +178,12 @@
 }
 
 .chat-widget__expand-btn:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(
+    255,
+    255,
+    255,
+    0.25
+  );
 }
 
 /* Body */
@@ -250,7 +284,11 @@
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #2563eb 0%, #6366f1 100%);
+  background: linear-gradient(
+    135deg,
+    #2563eb 0%,
+    #6366f1 100%
+  );
   display: flex;
   align-items: center;
   justify-content: center;
@@ -273,18 +311,21 @@
   line-height: 1.4;
 }
 
-.chat-widget__msg--user .chat-widget__bubble {
+.chat-widget__msg--user
+  .chat-widget__bubble {
   background: #2563eb;
   color: white;
   border-bottom-right-radius: 4px;
 }
 
-.chat-widget__msg--pharmacist .chat-widget__bubble {
+.chat-widget__msg--pharmacist
+  .chat-widget__bubble {
   background: white;
   color: #111827;
   border: 1px solid #e5e7eb;
   border-bottom-left-radius: 4px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 3px
+    rgba(0, 0, 0, 0.05);
 }
 
 .chat-widget__name {
@@ -310,7 +351,8 @@
 .chat-widget__input-area {
   padding: 10px 12px;
   background: white;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid
+    #e5e7eb;
   flex-shrink: 0;
 }
 
@@ -339,7 +381,8 @@
 
 .chat-widget__textarea:focus {
   border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  box-shadow: 0 0 0 3px
+    rgba(37, 99, 235, 0.1);
 }
 
 .chat-widget__textarea::placeholder {
@@ -398,10 +441,12 @@
   display: inline-block;
   width: 16px;
   height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid
+    rgba(255, 255, 255, 0.3);
   border-top: 2px solid white;
   border-radius: 50%;
-  animation: chatSpin 0.6s linear infinite;
+  animation: chatSpin 0.6s
+    linear infinite;
 }
 
 @keyframes chatSpin {
@@ -426,6 +471,10 @@
     z-index: 10000;
   }
 
+  .chat-trigger.chat-trigger--active {
+    display: none;
+  }
+
   .chat-widget__window {
     position: fixed;
     bottom: 0;
@@ -436,5 +485,6 @@
     height: 100%;
     border-radius: 0;
     max-height: 100vh;
+    z-index: 9998;
   }
 }
