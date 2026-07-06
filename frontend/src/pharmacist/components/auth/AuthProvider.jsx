@@ -348,6 +348,79 @@ function AuthProvider({
     performAutoLogin()
   }, [performAutoLogin])
 
+  // Proactive session refresh: check expiry every 60s, refresh 5 min before expiry
+  useEffect(() => {
+    const checkSessionExpiry =
+      () => {
+        const token =
+          localStorage.getItem(
+            'pharmacist_session_token',
+          )
+        if (!token) return
+
+        // Parse JWT payload to get expiry (assuming standard JWT format)
+        try {
+          const payloadBase64 =
+            token.split(
+              '.',
+            )[1]
+          if (!payloadBase64)
+            return
+          const payload =
+            JSON.parse(
+              atob(
+                payloadBase64,
+              ),
+            )
+          const exp =
+            payload.exp
+          if (!exp) return
+
+          const now =
+            Math.floor(
+              Date.now() /
+                1000,
+            )
+          const timeUntilExpiry =
+            exp - now
+
+          // Refresh 5 minutes before expiry
+          if (
+            timeUntilExpiry <
+              5 * 60 &&
+            timeUntilExpiry >
+              0
+          ) {
+            console.log(
+              '[AuthProvider] Token expiring soon, refreshing session...',
+            )
+            performAutoLogin()
+          } else if (
+            timeUntilExpiry <=
+            0
+          ) {
+            console.log(
+              '[AuthProvider] Token expired, re-authenticating...',
+            )
+            performAutoLogin()
+          }
+        } catch (e) {
+          // Ignore parsing errors for non-JWT tokens
+          console.debug(
+            '[AuthProvider] Could not parse token expiry (non-JWT or malformed)',
+          )
+        }
+      }
+
+    const interval =
+      setInterval(
+        checkSessionExpiry,
+        60000,
+      )
+    return () =>
+      clearInterval(interval)
+  }, [performAutoLogin])
+
   // Listen for session expired event from API interceptor
   useEffect(() => {
     const handleSessionExpired =

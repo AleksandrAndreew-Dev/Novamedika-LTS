@@ -120,6 +120,11 @@ async def lifespan(app: FastAPI):
     if bot and dp:
         logger.info(f"Worker PID {worker_pid}: Bot initialized successfully")
 
+        # ДОБАВЛЕНО: Сохраняем bot и dp в app.state для доступа из router'ов
+        app.state.bot = bot
+        app.state.dp = dp
+        logger.info(f"Worker PID {worker_pid}: Bot instance saved to app.state")
+
         # DIAGNOSTIC: Verify callback handlers are registered
         try:
             from bot.handlers.common_handlers.callbacks import pharmacist_help_callback
