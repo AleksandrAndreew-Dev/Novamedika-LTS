@@ -3,89 +3,89 @@ import {
   useEffect,
   useRef,
   useCallback,
-} from 'react';
+} from 'react'
 import {
   useParams,
   useNavigate,
-} from 'react-router-dom';
-import api from '../api/client';
-import userAuthService from '../services/userAuthService';
-import telegramAuthService from '../services/telegramAuthService';
-import Toast from '../components/Toast';
+} from 'react-router-dom'
+import api from '../api/client'
+import userAuthService from '../services/userAuthService'
+import telegramAuthService from '../services/telegramAuthService'
+import Toast from '../components/Toast'
 
 export default function Chat() {
-  const { id } = useParams();
+  const { id } = useParams()
   const navigate =
-    useNavigate();
+    useNavigate()
   const messagesEndRef =
-    useRef(null);
+    useRef(null)
   const urlParams =
     new URLSearchParams(
       window.location.search,
-    );
+    )
   const urlForceAnon =
     urlParams.get('anon') ===
-    '1';
+    '1'
 
   const [
     consultation,
     setConsultation,
-  ] = useState(null);
+  ] = useState(null)
   const [
     messages,
     setMessages,
-  ] = useState([]);
+  ] = useState([])
   const [
     newMessage,
     setNewMessage,
-  ] = useState('');
+  ] = useState('')
   const [
     loading,
     setLoading,
-  ] = useState(true);
+  ] = useState(true)
   const [
     sending,
     setSending,
-  ] = useState(false);
+  ] = useState(false)
   const [error, setError] =
-    useState(null);
+    useState(null)
   const [toast, setToast] =
-    useState(null);
+    useState(null)
   const [
     isAtBottom,
     setIsAtBottom,
-  ] = useState(true);
+  ] = useState(true)
   const [
     isTelegramUser,
     setIsTelegramUser,
-  ] = useState(false);
+  ] = useState(false)
   // URL param ?anon=1 is authoritative — consultation was created via /api/public/questions/
   const [
     isAnonymous,
     setIsAnonymous,
-  ] = useState(urlForceAnon);
+  ] = useState(urlForceAnon)
   const pollingRef =
-    useRef(null);
+    useRef(null)
 
   // Определяем анонимный режим: URL param ?anon=1 имеет приоритет,
   // так как консультация могла быть создана через public endpoint без JWT.
   const getEffectiveAnonymous =
     useCallback(() => {
       if (urlForceAnon)
-        return true;
-      return !userAuthService.isAuthenticated();
-    }, [urlForceAnon]);
+        return true
+      return !userAuthService.isAuthenticated()
+    }, [urlForceAnon])
 
   // Auth headers теперь берутся из interceptor в client.js
   const getAuthHeaders =
     useCallback(
       (inTelegram) => {
         const token =
-          userAuthService.getAccessToken();
+          userAuthService.getAccessToken()
         if (token) {
           return {
             Authorization: `Bearer ${token}`,
-          };
+          }
         }
         if (
           inTelegram &&
@@ -93,102 +93,102 @@ export default function Chat() {
         ) {
           return {
             Authorization: `tma ${telegramAuthService.initData}`,
-          };
+          }
         }
-        return {};
+        return {}
       },
       [],
-    );
+    )
 
   useEffect(() => {
     const initChat =
       async () => {
         try {
           // 1. Попытка Telegram WebApp auto-login (если в Telegram)
-          let telegramUser = false;
+          let telegramUser = false
           if (
             telegramAuthService.canAuthViaWebApp()
           ) {
-            telegramUser = true;
+            telegramUser = true
             const success =
-              await telegramAuthService.autoLogin();
+              await telegramAuthService.autoLogin()
             if (success) {
               console.log(
                 '[Chat] ✅ Telegram auto-login successful',
-              );
+              )
             } else {
               console.log(
                 '[Chat] ⚠️ Telegram auto-login failed — continuing as anonymous',
-              );
+              )
             }
           }
 
           // 2. Определяем анонимность: ?anon=1 (из NewConsultation) ИЛИ нет JWT
           //    Важно: не перезаписываем isAnonymous если urlForceAnon=true
           const anon =
-            getEffectiveAnonymous();
+            getEffectiveAnonymous()
           setIsTelegramUser(
             telegramUser,
-          );
+          )
           // Не перезаписываем если уже true от urlForceAnon — public endpoint
           if (anon)
             setIsAnonymous(
               true,
-            );
+            )
 
           // 3. Загружаем данные консультации
           await loadConsultationData(
             telegramUser,
             anon,
-          );
+          )
         } catch (err) {
           console.error(
             '[Chat] Init error:',
             err,
-          );
+          )
           setError(
             'Не удалось загрузить консультацию',
-          );
+          )
         } finally {
-          setLoading(false);
+          setLoading(false)
         }
-      };
+      }
 
-    initChat();
+    initChat()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id])
 
   // Polling for new messages (every 5 seconds)
   useEffect(() => {
-    if (!id) return;
+    if (!id) return
     if (
       !isAnonymous &&
       !isTelegramUser &&
       !userAuthService.isAuthenticated()
     )
-      return;
+      return
 
     const poll = async () => {
       try {
         const anon =
           urlForceAnon ||
           isAnonymous ||
-          !userAuthService.isAuthenticated();
+          !userAuthService.isAuthenticated()
         const endpoint = anon
           ? `/api/public/questions/${id}/messages`
-          : `/api/consultations/${id}/messages`;
+          : `/api/consultations/${id}/messages`
         const headers = anon
           ? {}
           : getAuthHeaders(
               isTelegramUser,
-            );
+            )
         const res =
           await api.get(
             endpoint,
             { headers },
-          );
+          )
         const newMessages =
-          res.data;
+          res.data
 
         setMessages(
           (prev) => {
@@ -199,7 +199,7 @@ export default function Chat() {
                     m.uuid ||
                     m.id,
                 ),
-              );
+              )
             const added =
               newMessages.filter(
                 (m) =>
@@ -207,16 +207,16 @@ export default function Chat() {
                     m.uuid ||
                       m.id,
                   ),
-              );
+              )
             if (
               added.length ===
               0
             )
-              return prev;
+              return prev
             const updated = [
               ...prev,
               ...added,
-            ];
+            ]
             updated.sort(
               (a, b) =>
                 new Date(
@@ -225,46 +225,46 @@ export default function Chat() {
                 new Date(
                   b.created_at,
                 ),
-            );
-            return updated;
+            )
+            return updated
           },
-        );
+        )
       } catch {
         // Silent fail
       }
-    };
+    }
 
     // Initial load after short delay
     const initialLoad =
-      setTimeout(poll, 500);
+      setTimeout(poll, 500)
     pollingRef.current =
-      setInterval(poll, 5000);
+      setInterval(poll, 5000)
 
     return () => {
       clearTimeout(
         initialLoad,
-      );
+      )
       if (
         pollingRef.current
       ) {
         clearInterval(
           pollingRef.current,
-        );
+        )
         pollingRef.current =
-          null;
+          null
       }
-    };
+    }
   }, [
     id,
     isTelegramUser,
     isAnonymous,
     getAuthHeaders,
     urlForceAnon,
-  ]);
+  ])
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    scrollToBottom()
+  }, [messages])
 
   const loadConsultationData =
     async (
@@ -272,7 +272,7 @@ export default function Chat() {
       anon = false,
     ) => {
       try {
-        setLoading(true);
+        setLoading(true)
 
         // Анонимные пользователи — используем /api/public/ endpoints
         if (anon) {
@@ -290,19 +290,19 @@ export default function Chat() {
                     `/api/public/questions/${id}/messages`,
                   ),
                 ],
-              );
+              )
 
             if (
               consultationRes
             )
               setConsultation(
                 consultationRes.data,
-              );
+              )
             if (messagesRes)
               setMessages(
                 messagesRes.data,
-              );
-            return;
+              )
+            return
           } catch (pubErr) {
             // Fallback: 404 на public → пробуем JWT endpoint (вопрос мог быть создан через JWT)
             if (
@@ -312,11 +312,11 @@ export default function Chat() {
             ) {
               console.log(
                 '[Chat] Public endpoint 404, trying JWT fallback',
-              );
+              )
               const headers =
                 getAuthHeaders(
                   inTelegram,
-                );
+                )
               try {
                 const [
                   consultationRes,
@@ -347,32 +347,32 @@ export default function Chat() {
                             null,
                         ),
                     ],
-                  );
+                  )
                 if (
                   consultationRes
                 )
                   setConsultation(
                     consultationRes.data,
-                  );
+                  )
                 if (
                   messagesRes
                 )
                   setMessages(
                     messagesRes.data,
-                  );
-                return;
+                  )
+                return
               } catch (_jwtErr) {
-                throw pubErr; // original 404 more relevant
+                throw pubErr // original 404 more relevant
               }
             }
-            throw pubErr;
+            throw pubErr
           }
         }
 
         const headers =
           getAuthHeaders(
             inTelegram,
-          );
+          )
 
         const [
           consultationRes,
@@ -396,16 +396,16 @@ export default function Chat() {
                 () => null,
               ),
           ],
-        );
+        )
 
         if (consultationRes)
           setConsultation(
             consultationRes.data,
-          );
+          )
         if (messagesRes)
           setMessages(
             messagesRes.data,
-          );
+          )
 
         // Если не удалось загрузить — пробуем создать новую консультацию
         if (
@@ -421,62 +421,60 @@ export default function Chat() {
                   'general',
               },
               { headers },
-            );
+            )
           navigate(
             `/chat/${createRes.data.uuid}`,
             { replace: true },
-          );
+          )
         }
       } catch (err) {
         console.error(
           'Failed to load consultation:',
           err,
-        );
+        )
         if (
           !anon &&
           err.response
             ?.status === 401
         ) {
           if (!inTelegram) {
-            navigate(
-              '/login',
-            );
+            navigate('/login')
           }
           setError(
             'Не удалось загрузить консультацию. Попробуйте позже.',
-          );
+          )
         } else if (
           err.response
             ?.status === 404
         ) {
           setError(
             'Консультация не найдена',
-          );
+          )
         } else {
           setError(
             'Не удалось загрузить консультацию',
-          );
+          )
         }
       }
-    };
+    }
 
   const sendMessage = async (
     e,
   ) => {
-    e.preventDefault();
+    e.preventDefault()
     if (!newMessage.trim())
-      return;
+      return
 
     const inTelegram =
-      isTelegramUser;
+      isTelegramUser
     const anon =
       urlForceAnon ||
-      isAnonymous;
+      isAnonymous
 
     try {
-      setSending(true);
+      setSending(true)
 
-      let response;
+      let response
       if (anon) {
         // Аноним — через /api/public/questions/{id}/messages
         response =
@@ -485,13 +483,13 @@ export default function Chat() {
             {
               text: newMessage.trim(),
             },
-          );
+          )
       } else {
         // JWT или TMA — через /api/consultations/{id}/messages
         const headers =
           getAuthHeaders(
             inTelegram,
-          );
+          )
         response =
           await api.post(
             `/api/consultations/${id}/messages`,
@@ -499,25 +497,25 @@ export default function Chat() {
               text: newMessage.trim(),
             },
             { headers },
-          );
+          )
       }
 
       setMessages((prev) => [
         ...prev,
         response.data,
-      ]);
-      setNewMessage('');
+      ])
+      setNewMessage('')
     } catch (err) {
       setToast({
         message:
           err.userMessage ||
           'Ошибка отправки сообщения',
         type: 'error',
-      });
+      })
     } finally {
-      setSending(false);
+      setSending(false)
     }
-  };
+  }
 
   const scrollToBottom =
     () => {
@@ -525,30 +523,29 @@ export default function Chat() {
         {
           behavior: 'smooth',
         },
-      );
-      setIsAtBottom(true);
-    };
+      )
+      setIsAtBottom(true)
+    }
 
   const handleScroll = () => {
     const el =
       document.querySelector(
         '.messages-scroll',
-      );
-    if (!el) return;
-    const threshold = 100;
+      )
+    if (!el) return
+    const threshold = 100
     const atBottom =
       el.scrollHeight -
         el.scrollTop -
         el.clientHeight <
-      threshold;
-    setIsAtBottom(atBottom);
-  };
+      threshold
+    setIsAtBottom(atBottom)
+  }
 
   const formatTime = (
     dateString,
   ) => {
-    if (!dateString)
-      return '';
+    if (!dateString) return ''
     return new Date(
       dateString,
     ).toLocaleTimeString(
@@ -557,28 +554,28 @@ export default function Chat() {
         hour: '2-digit',
         minute: '2-digit',
       },
-    );
-  };
+    )
+  }
 
   const getStatusText = (
     status,
   ) => {
     switch (status) {
       case 'pending':
-        return 'В ожидании ответа';
+        return 'В ожидании ответа'
       case 'answered':
-        return 'Получен ответ';
+        return 'Получен ответ'
       case 'completed':
-        return 'Завершено';
+        return 'Завершено'
       case 'in_progress':
-        return 'В работе';
+        return 'В работе'
       default:
         return (
           status ||
           'В ожидании'
-        );
+        )
     }
-  };
+  }
 
   // Loading state
   if (loading) {
@@ -592,7 +589,7 @@ export default function Chat() {
           </p>
         </div>
       </div>
-    );
+    )
   }
 
   // Error state
@@ -639,7 +636,7 @@ export default function Chat() {
           </button>
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -809,18 +806,18 @@ export default function Chat() {
             ) => {
               const isUser =
                 message.sender_type ===
-                'user';
+                'user'
               const prevMsg =
                 idx > 0
                   ? messages[
                       idx - 1
                     ]
-                  : null;
+                  : null
               const showAvatar =
                 !isUser &&
                 (!prevMsg ||
                   prevMsg.sender_type ===
-                    'user');
+                    'user')
 
               return (
                 <div
@@ -870,7 +867,7 @@ export default function Chat() {
                     </div>
                   </div>
                 </div>
-              );
+              )
             },
           )
         )}
@@ -924,6 +921,22 @@ export default function Chat() {
                     .value,
                 )
               }
+              onKeyDown={(
+                e,
+              ) => {
+                if (
+                  e.key ===
+                    'Enter' &&
+                  !e.shiftKey
+                ) {
+                  e.preventDefault()
+                  e.target
+                    .closest(
+                      'form',
+                    )
+                    .requestSubmit()
+                }
+              }}
               placeholder="Напишите сообщение..."
               rows={1}
               className="flex-1 bg-transparent border-none outline-none resize-none text-[15px] py-2 max-h-24 leading-relaxed text-gray-900 placeholder:text-gray-400"
@@ -1015,5 +1028,5 @@ export default function Chat() {
         @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
     </div>
-  );
+  )
 }

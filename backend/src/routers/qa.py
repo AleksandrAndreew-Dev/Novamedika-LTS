@@ -715,7 +715,7 @@ async def send_consultation_message(
         except Exception as ws_err:
             logger.warning(f"WebSocket broadcast failed (non-critical): {ws_err}")
 
-        # 2. Telegram notification to pharmacist (if assigned)
+        # 2. Telegram notification to pharmacist (if assigned) with answer button
         try:
             pharmacist_id = question.taken_by or question.assigned_to
             if pharmacist_id:
@@ -728,6 +728,7 @@ async def send_consultation_message(
 
                 if pharmacist and pharmacist.user and pharmacist.user.telegram_id:
                     from bot.core import bot_manager
+                    from bot.keyboards.qa_keyboard import make_question_keyboard
 
                     bot, _ = await bot_manager.initialize()
                     if bot:
@@ -740,9 +741,9 @@ async def send_consultation_message(
                             text=(
                                 f"💬 <b>Новое сообщение от {user_name}</b>\n\n"
                                 f"{message.text}\n\n"
-                                f"➡️ <i>Ответьте через /questions</i>"
                             ),
                             parse_mode="HTML",
+                            reply_markup=make_question_keyboard(consultation_id),
                         )
                         logger.info(
                             f"Telegram notification sent to pharmacist {pharmacist.user.telegram_id}"
@@ -1053,9 +1054,8 @@ async def send_public_question_message(
         except Exception as ws_err:
             logger.warning(f"WebSocket broadcast failed (non-critical): {ws_err}")
 
-        # Telegram notification to available pharmacists
+        # Telegram notification to available pharmacists with "Взять и ответить" button
         try:
-            # Get all active pharmacists
             ph_result = await db.execute(
                 select(Pharmacist)
                 .options(selectinload(Pharmacist.user))
@@ -1065,6 +1065,7 @@ async def send_public_question_message(
 
             if pharmacists:
                 from bot.core import bot_manager
+                from bot.keyboards.qa_keyboard import make_question_keyboard
 
                 bot, _ = await bot_manager.initialize()
                 if bot:
@@ -1076,9 +1077,9 @@ async def send_public_question_message(
                                     text=(
                                         f"💬 <b>Новое сообщение от пользователя</b>\n\n"
                                         f"{message.text}\n\n"
-                                        f"➡️ <i>Ответьте через панель фармацевта</i>"
                                     ),
                                     parse_mode="HTML",
+                                    reply_markup=make_question_keyboard(question_id),
                                 )
                             except Exception as tg_err:
                                 logger.warning(
