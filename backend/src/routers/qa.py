@@ -1093,6 +1093,25 @@ async def send_public_question_message(
                 f"Telegram notification to pharmacists failed (non-critical): {tg_err}"
             )
 
+        # Send message back to user's Telegram chat if available
+        try:
+            if question.user and question.user.telegram_id:
+                from bot.core import bot_manager
+
+                bot, _ = await bot_manager.initialize()
+                if bot:
+                    await bot.send_message(
+                        chat_id=question.user.telegram_id,
+                        text=message.text,
+                    )
+                    logger.info(
+                        f"Message forwarded to user's Telegram chat {question.user.telegram_id}"
+                    )
+        except Exception as tg_err:
+            logger.warning(
+                f"Failed to send message to user's Telegram chat (non-critical): {tg_err}"
+            )
+
         logger.info(f"New message in public question {question_id}")
 
         return {

@@ -34,6 +34,8 @@ export default function ChatWidget() {
     sending,
     setSending,
   ] = useState(false)
+  const isSubmittingRef =
+    useRef(false)
   const [
     inputMode,
     setInputMode,
@@ -113,6 +115,10 @@ export default function ChatWidget() {
     ) {
       e.preventDefault()
       if (
+        isSubmittingRef.current
+      )
+        return
+      if (
         inputMode ===
         'question'
       ) {
@@ -120,7 +126,11 @@ export default function ChatWidget() {
           e,
         )
       } else {
-        handleSendMessage(e)
+        // Блокируем синхронно до вызова handleSendMessage через submit
+        isSubmittingRef.current = true
+        e.target
+          .closest('form')
+          ?.requestSubmit()
       }
     }
   }
@@ -130,9 +140,11 @@ export default function ChatWidget() {
       e.preventDefault()
       if (
         !newMessage.trim() ||
-        sending
+        sending ||
+        isSubmittingRef.current
       )
         return
+      isSubmittingRef.current = true
       setSending(true)
       try {
         await sendMessage(
@@ -142,6 +154,7 @@ export default function ChatWidget() {
       } catch {
         // Error handled by caller
       } finally {
+        isSubmittingRef.current = false
         setSending(false)
       }
     }
