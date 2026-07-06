@@ -38,6 +38,12 @@ export default function QuestionsList({
     loading,
     setLoading,
   ] = useState(true)
+  const [
+    hasNewQuestions,
+    setHasNewQuestions,
+  ] = useState(false)
+  const newQuestionsTimerRef =
+    useRef(null)
   const mountedRef =
     useRef(true)
   const lastLoadRef =
@@ -60,12 +66,14 @@ export default function QuestionsList({
 
   const loadQuestions =
     useCallback(async () => {
-      // Throttle: skip if called within 2s
+      // Throttle: skip if called within throttle interval
       const now = Date.now()
       if (
         now -
           lastLoadRef.current <
-        loadThrottleMs
+          loadThrottleMs &&
+        lastLoadRef.current >
+          0
       ) {
         console.log(
           '[QuestionsList] Throttled loadQuestions',
@@ -141,7 +149,30 @@ export default function QuestionsList({
     const unsubscribeNew =
       websocketService.on(
         'new_question',
-        () => {
+        (data) => {
+          console.log(
+            '[QuestionsList] New question received via WebSocket:',
+            data,
+          )
+          // Show visual indicator
+          setHasNewQuestions(
+            true,
+          )
+          if (
+            newQuestionsTimerRef.current
+          ) {
+            clearTimeout(
+              newQuestionsTimerRef.current,
+            )
+          }
+          newQuestionsTimerRef.current =
+            setTimeout(() => {
+              setHasNewQuestions(
+                false,
+              )
+            }, 5000)
+          // Force load without throttle
+          lastLoadRef.current = 0
           loadQuestions()
         },
       )
@@ -149,7 +180,13 @@ export default function QuestionsList({
     const unsubscribeUpdate =
       websocketService.on(
         'message_update',
-        () => {
+        (data) => {
+          console.log(
+            '[QuestionsList] Message update received via WebSocket:',
+            data,
+          )
+          // Force load without throttle
+          lastLoadRef.current = 0
           loadQuestions()
         },
       )
@@ -157,7 +194,13 @@ export default function QuestionsList({
     const unsubscribeAssigned =
       websocketService.on(
         'question_assigned',
-        () => {
+        (data) => {
+          console.log(
+            '[QuestionsList] Question assigned received via WebSocket:',
+            data,
+          )
+          // Force load without throttle
+          lastLoadRef.current = 0
           loadQuestions()
         },
       )
@@ -166,16 +209,25 @@ export default function QuestionsList({
       unsubscribeNew()
       unsubscribeUpdate()
       unsubscribeAssigned()
+      if (
+        newQuestionsTimerRef.current
+      ) {
+        clearTimeout(
+          newQuestionsTimerRef.current,
+        )
+      }
     }
   }, [loadQuestions])
 
-  // Periodic polling fallback every 30s
+  // Periodic polling fallback every 10s
   useEffect(() => {
     loadQuestions()
     const interval =
       setInterval(() => {
+        // Don't throttle for polling
+        lastLoadRef.current = 0
         loadQuestions()
-      }, 30000)
+      }, 10000)
     return () =>
       clearInterval(interval)
   }, [loadQuestions])
@@ -347,9 +399,17 @@ export default function QuestionsList({
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-semibold text-gray-900">
-            Список вопросов
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-semibold text-gray-900">
+              Список вопросов
+            </h2>
+            {hasNewQuestions && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-medium animate-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                Новые
+              </span>
+            )}
+          </div>
           <p className="mt-1 text-gray-600">
             Фильтр:{' '}
             {filterLabels[

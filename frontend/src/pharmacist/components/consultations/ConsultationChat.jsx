@@ -3,56 +3,56 @@ import {
   useState,
   useCallback,
   useRef,
-} from 'react';
+} from 'react'
 import {
   useParams,
   useNavigate,
-} from 'react-router-dom';
-import questionsService from '../../services/questionsService';
-import websocketService from '../../services/websocketService';
-import { logger } from '../../../utils/logger';
+} from 'react-router-dom'
+import questionsService from '../../services/questionsService'
+import websocketService from '../../services/websocketService'
+import { logger } from '../../../utils/logger'
 
 export default function ConsultationChat({
   questionId: propQuestionId,
   onClose,
 }) {
-  const params = useParams();
+  const params = useParams()
   const navigate =
-    useNavigate();
+    useNavigate()
   const questionId =
     propQuestionId ||
-    params?.questionId;
+    params?.questionId
   const [
     messages,
     setMessages,
-  ] = useState([]);
+  ] = useState([])
   const [newMsg, setNewMsg] =
-    useState('');
+    useState('')
   const [
     loading,
     setLoading,
-  ] = useState(false);
+  ] = useState(false)
   const [
     sending,
     setSending,
-  ] = useState(false);
+  ] = useState(false)
   const [
     question,
     setQuestion,
-  ] = useState(null);
+  ] = useState(null)
   const [error, setError] =
-    useState(null);
+    useState(null)
   const messagesEndRef =
-    useRef(null);
+    useRef(null)
   const [
     isAtBottom,
     setIsAtBottom,
-  ] = useState(true);
+  ] = useState(true)
 
   // Subscribe to WebSocket for real-time message updates
   useEffect(() => {
     // Connect WebSocket on mount
-    websocketService.connect();
+    websocketService.connect()
 
     // Listen for new messages in this consultation
     const unsubscribe =
@@ -71,26 +71,35 @@ export default function ConsultationChat({
                     prev.map(
                       (m) =>
                         m.uuid ||
-                        m.id,
+                        m.id ||
+                        m.data
+                          ?.uuid ||
+                        m.data
+                          ?.id,
                     ),
-                  );
+                  )
+                const msgId =
+                  payload.uuid ||
+                  payload.id ||
+                  payload.data
+                    ?.uuid ||
+                  payload.data
+                    ?.id
                 if (
+                  msgId &&
                   prevIds.has(
-                    payload.uuid ||
-                      payload
-                        .data
-                        ?.uuid,
+                    msgId,
                   )
                 )
-                  return prev;
+                  return prev
                 const newMsg =
                   payload.data ||
-                  payload;
+                  payload
                 const updated =
                   [
                     ...prev,
                     newMsg,
-                  ];
+                  ]
                 updated.sort(
                   (a, b) =>
                     new Date(
@@ -99,65 +108,65 @@ export default function ConsultationChat({
                     new Date(
                       b.created_at,
                     ),
-                );
-                return updated;
+                )
+                return updated
               },
-            );
+            )
           }
         },
-      );
+      )
 
     return () => {
-      unsubscribe();
-    };
-  }, [questionId]);
+      unsubscribe()
+    }
+  }, [questionId])
 
   useEffect(() => {
     const loadData =
       async () => {
         if (!questionId) {
-          setQuestion(null);
-          setMessages([]);
-          setLoading(false);
-          return;
+          setQuestion(null)
+          setMessages([])
+          setLoading(false)
+          return
         }
 
         try {
-          setLoading(true);
-          setError(null);
+          setLoading(true)
+          setError(null)
           const questionData =
             await questionsService.getQuestionById(
               questionId,
-            );
+            )
           setQuestion(
             questionData,
-          );
+          )
           const dialogData =
             await questionsService.getDialog(
               questionId,
-            );
+            )
           setMessages(
             dialogData || [],
-          );
+          )
         } catch (error) {
           logger.error(
             'Failed to load consultation data:',
             error,
-          );
+          )
           setError(
             'Не удалось загрузить данные консультации',
-          );
+          )
         } finally {
-          setLoading(false);
+          setLoading(false)
         }
-      };
+      }
 
-    loadData();
-  }, [questionId]);
+    loadData()
+  }, [questionId])
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    scrollToBottom()
+  }, [messages])
 
   const handleSend =
     useCallback(async () => {
@@ -165,22 +174,22 @@ export default function ConsultationChat({
         !newMsg.trim() ||
         !questionId
       )
-        return;
+        return
 
       try {
-        setSending(true);
+        setSending(true)
         const sentMsg =
           await questionsService.sendMessage(
             questionId,
             newMsg,
-          );
+          )
         setMessages(
           (prev) => [
             ...prev,
             sentMsg,
           ],
-        );
-        setNewMsg('');
+        )
+        setNewMsg('')
 
         if (
           window.Telegram
@@ -189,20 +198,20 @@ export default function ConsultationChat({
         ) {
           window.Telegram.WebApp.HapticFeedback.notificationOccurred(
             'success',
-          );
+          )
         }
       } catch (error) {
         logger.error(
           'Failed to send message:',
           error,
-        );
+        )
         setError(
           'Не удалось отправить сообщение',
-        );
+        )
       } finally {
-        setSending(false);
+        setSending(false)
       }
-    }, [newMsg, questionId]);
+    }, [newMsg, questionId])
 
   const handleKeyPress = (
     e,
@@ -211,16 +220,15 @@ export default function ConsultationChat({
       e.key === 'Enter' &&
       !e.shiftKey
     ) {
-      e.preventDefault();
-      handleSend();
+      e.preventDefault()
+      handleSend()
     }
-  };
+  }
 
   const formatTime = (
     dateString,
   ) => {
-    if (!dateString)
-      return '';
+    if (!dateString) return ''
     return new Date(
       dateString,
     ).toLocaleTimeString(
@@ -229,8 +237,8 @@ export default function ConsultationChat({
         hour: '2-digit',
         minute: '2-digit',
       },
-    );
-  };
+    )
+  }
 
   const scrollToBottom =
     () => {
@@ -238,47 +246,45 @@ export default function ConsultationChat({
         {
           behavior: 'smooth',
         },
-      );
-      setIsAtBottom(true);
-    };
+      )
+      setIsAtBottom(true)
+    }
 
   const handleScroll = (
     e,
   ) => {
-    const el =
-      e.currentTarget;
-    const threshold = 80;
+    const el = e.currentTarget
+    const threshold = 80
     const atBottom =
       el.scrollHeight -
         el.scrollTop -
         el.clientHeight <
-      threshold;
-    setIsAtBottom(atBottom);
-  };
+      threshold
+    setIsAtBottom(atBottom)
+  }
 
   const handleBack = () => {
-    if (onClose) onClose();
-    else navigate(-1);
-  };
+    if (onClose) onClose()
+    else navigate(-1)
+  }
 
   const getUserName = () => {
     if (!question)
-      return 'Пользователь';
-    const user =
-      question.user;
+      return 'Пользователь'
+    const user = question.user
     return (
       user?.first_name ||
       user?.telegram_username ||
       `Пользователь #${user?.telegram_id?.toString().slice(-4) || ''}`
-    );
-  };
+    )
+  }
 
   const getUserAvatar =
     () => {
       return getUserName()
         .charAt(0)
-        .toUpperCase();
-    };
+        .toUpperCase()
+    }
 
   const getUserColor = () => {
     const colors = [
@@ -289,13 +295,13 @@ export default function ConsultationChat({
       '#2563eb',
       '#0891b2',
       '#65a30d',
-    ];
+    ]
     const user =
-      question?.user;
+      question?.user
     const seed =
       user?.telegram_id ||
       user?.uuid ||
-      0;
+      0
     // Convert to number for color selection
     const num =
       typeof seed === 'string'
@@ -309,16 +315,16 @@ export default function ConsultationChat({
                 ),
               0,
             )
-        : Number(seed);
+        : Number(seed)
     return colors[
       num % colors.length
-    ];
-  };
+    ]
+  }
 
   const getStatusBadge =
     () => {
       if (!question)
-        return null;
+        return null
       const badges = {
         pending: {
           text: 'В ожидании',
@@ -340,19 +346,19 @@ export default function ConsultationChat({
           class:
             'bg-blue-100 text-blue-700',
         },
-      };
+      }
       const badge =
         badges[
           question.status
-        ] || badges.pending;
+        ] || badges.pending
       return (
         <span
           className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium ${badge.class}`}
         >
           {badge.text}
         </span>
-      );
-    };
+      )
+    }
 
   // Empty state
   if (!questionId) {
@@ -418,7 +424,7 @@ export default function ConsultationChat({
           панели
         </p>
       </div>
-    );
+    )
   }
 
   // Loading state
@@ -433,7 +439,7 @@ export default function ConsultationChat({
           </span>
         </div>
       </div>
-    );
+    )
   }
 
   // Error state
@@ -465,7 +471,7 @@ export default function ConsultationChat({
           Вернуться
         </button>
       </div>
-    );
+    )
   }
 
   return (
@@ -529,14 +535,14 @@ export default function ConsultationChat({
               try {
                 await questionsService.completeQuestion(
                   questionId,
-                );
+                )
                 if (onClose)
-                  onClose();
+                  onClose()
               } catch (e) {
                 logger.error(
                   'Failed to complete:',
                   e,
-                );
+                )
               }
             }
           }}
@@ -610,18 +616,18 @@ export default function ConsultationChat({
             (msg, idx) => {
               const isPharmacist =
                 msg.sender_type ===
-                'pharmacist';
+                'pharmacist'
               const prevMsg =
                 idx > 0
                   ? messages[
                       idx - 1
                     ]
-                  : null;
+                  : null
               const showAvatar =
                 !isPharmacist &&
                 (!prevMsg ||
                   prevMsg.sender_type ===
-                    'pharmacist');
+                    'pharmacist')
 
               return (
                 <div
@@ -674,7 +680,7 @@ export default function ConsultationChat({
                     </div>
                   </div>
                 </div>
-              );
+              )
             },
           )
         )}
@@ -811,5 +817,5 @@ export default function ConsultationChat({
         @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
     </div>
-  );
+  )
 }

@@ -119,10 +119,25 @@ class WebSocketConnectionManager:
 
     async def broadcast_message_update(self, question_id: str, message_data: dict):
         """Broadcast new message in consultation to pharmacists AND subscribed users"""
-        # Send to pharmacists
-        await self.broadcast(
-            {"type": "message_update", "question_id": question_id, "data": message_data}
-        )
+        # Send to pharmacists ONLY (exclude user websockets)
+        disconnected = set()
+        for connection in self.active_connections:
+            # Skip user websockets - they get separate broadcast
+            if connection in self._all_user_websockets():
+                continue
+            try:
+                await connection.send_json(
+                    {
+                        "type": "message_update",
+                        "question_id": question_id,
+                        "data": message_data,
+                    }
+                )
+            except Exception:
+                disconnected.add(connection)
+        for conn in disconnected:
+            self.active_connections.discard(conn)
+
         # Send to user subscribed to this consultation
         await self.broadcast_to_consultation(
             question_id,
@@ -143,8 +158,10 @@ async def publish_to_redis(message: dict):
     try:
         r = await get_redis_client()
         await r.publish(REDIS_WS_CHANNEL, json.dumps(message, default=str))
+        logger.info(f"✅ Redis published: {message.get('type', 'unknown')}")
     except Exception as e:
-        logger.warning(f"Redis publish failed (non-critical): {e}")
+        logger.error(f"❌ Redis publish failed: {e}")
+        # Don't silently fail - this is critical for cross-worker sync
 
 
 async def redis_ws_listener():
@@ -154,12 +171,13 @@ async def redis_ws_listener():
             r = await get_redis_client()
             pubsub = r.pubsub()
             await pubsub.subscribe(REDIS_WS_CHANNEL)
-            logger.info("Redis WS listener started")
+            logger.info("✅ Redis WS listener subscribed to channel")
             async for msg in pubsub.listen():
                 if msg["type"] == "message":
                     try:
                         data = json.loads(msg["data"])
                         event_type = data.get("type", "")
+                        logger.info(f"📨 Redis received event: {event_type}")
                         if event_type == "message_update":
                             await ws_manager.broadcast_message_update(
                                 data.get("question_id", ""),
@@ -174,7 +192,8 @@ async def redis_ws_listener():
                         else:
                             await ws_manager.broadcast(data)
                     except Exception as e:
-                        logger.warning(f"Redis WS message parse error: {e}")
+                        logger.error(f"❌ Redis WS message parse error: {e}")
+                        await asyncio.sleep(0.1)
         except Exception as e:
             logger.error(f"Redis WS listener error: {e}, restarting in 5s")
             await asyncio.sleep(5)
@@ -426,7 +445,7 @@ async def answer_question(
     except Exception as e:
         logger.warning(f"WebSocket broadcast failed (non-critical): {e}")
     # Publish to Redis for cross-worker sync
-    asyncio.ensure_future(publish_to_redis({"type": "message_update", **ws_msg_data}))
+    await publish_to_redis({"type": "message_update", **ws_msg_data})
 
     # 2. Telegram notification to user (if user has telegram_id)
     try:
@@ -563,7 +582,7 @@ async def assign_question(
     except Exception as e:
         logger.warning(f"Assignment broadcast failed (non-critical): {e}")
     # Publish to Redis for cross-worker sync
-    asyncio.ensure_future(publish_to_redis(assign_data))
+    await publish_to_redis(assign_data)
 
     return {"message": "Question assigned successfully"}
 
@@ -775,7 +794,7 @@ async def send_message(
     except Exception as ws_err:
         logger.warning(f"WebSocket broadcast failed (non-critical): {ws_err}")
     # Publish to Redis for cross-worker sync
-    asyncio.ensure_future(publish_to_redis({"type": "message_update", **ws_msg_data}))
+    await publish_to_redis({"type": "message_update", **ws_msg_data})
 
     await db.commit()
     await db.refresh(msg)
