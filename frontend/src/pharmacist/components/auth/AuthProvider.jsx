@@ -404,7 +404,7 @@ function AuthProvider({
             )
             performAutoLogin()
           }
-        } catch (e) {
+        } catch (_) {
           // Ignore parsing errors for non-JWT tokens
           console.debug(
             '[AuthProvider] Could not parse token expiry (non-JWT or malformed)',
