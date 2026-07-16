@@ -1,4 +1,4 @@
-import React from "react";
+import React from 'react';
 
 const BookingModal = React.memo(function BookingModal({
   bookingState,
@@ -7,30 +7,35 @@ const BookingModal = React.memo(function BookingModal({
   onClose,
   onSubmit,
 }) {
-  if (!bookingState.modal.isOpen || !bookingState.modal.product) return null;
+  if (
+    !bookingState.modal.isOpen ||
+    !bookingState.modal.product
+  )
+    return null;
 
   const product = bookingState.modal.product;
 
   const mapQuery = encodeURIComponent(
-    `${product.pharmacy_name} №${product.pharmacy_number}, ${product.pharmacy_city || ""}${product.pharmacy_district ? `, ${product.pharmacy_district}` : ""}, ${product.pharmacy_address}`,
+    `${product.pharmacy_name} №${product.pharmacy_number}, ${product.pharmacy_city || ''}${product.pharmacy_district ? `, ${product.pharmacy_district}` : ''}, ${product.pharmacy_address}`,
   );
   const mapUrl = `https://www.google.com/maps/search/?api=1&query=${mapQuery}`;
 
   const formatQuantity = (quantity) => {
     const num = parseFloat(quantity);
-    if (isNaN(num)) return "0";
+    if (isNaN(num)) return '0';
     if (num % 1 === 0) return num.toString();
-    return num.toFixed(3).replace(/\.?0+$/, "");
+    return num.toFixed(3).replace(/\.?0+$/, '');
   };
 
   const calculateTotalPrice = () => {
-    const total = product.price * bookingState.modal.quantity;
+    const total =
+      product.price * bookingState.modal.quantity;
     return total.toFixed(2);
   };
 
   return (
     <div className="fixed inset-0 bg-gradient-to-br from-gray-900/80 via-blue-900/40 to-purple-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-scaleIn">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-scaleIn overscroll-behavior-contain touch-manipulation">
         <div className="p-6">
           {bookingState.success ? (
             <div className="text-center">
@@ -53,9 +58,13 @@ const BookingModal = React.memo(function BookingModal({
                 Бронирование успешно!
               </h3>
               <p className="text-gray-600 mb-2">
-                Номер заказа:{" "}
+                Номер заказа:{' '}
                 <strong className="text-gray-900">
-                  {bookingState.orderInfo?.uuid?.substring(0, 8)}...
+                  {bookingState.orderInfo?.uuid?.substring(
+                    0,
+                    8,
+                  )}
+                  ...
                 </strong>
               </p>
               <p className="text-gray-600 mb-6 text-sm">
@@ -99,12 +108,17 @@ const BookingModal = React.memo(function BookingModal({
                 <h3 className="font-bold text-gray-900 text-lg mb-2">
                   {product.name}
                 </h3>
-                <p className="text-sm text-gray-600 mb-1">{product.form}</p>
+                <p className="text-sm text-gray-600 mb-1">
+                  {product.form}
+                </p>
 
                 <div className="mt-4 pt-3 border-t border-gray-200">
-                  <h4 className="font-semibold text-gray-900 mb-2">Аптека:</h4>
+                  <h4 className="font-semibold text-gray-900 mb-2">
+                    Аптека:
+                  </h4>
                   <p className="text-sm text-gray-600 mb-1">
-                    {product.pharmacy_name} №{product.pharmacy_number}
+                    {product.pharmacy_name} №
+                    {product.pharmacy_number}
                   </p>
                   <p className="text-sm text-gray-600 mb-1">
                     {product.pharmacy_city}
@@ -146,14 +160,16 @@ const BookingModal = React.memo(function BookingModal({
                     Телефон: {product.pharmacy_phone}
                   </p>
                   <p className="text-sm text-gray-600">
-                    Время работы:{" "}
-                    {product.working_hours || "Уточняйте в аптеке"}
+                    Время работы:{' '}
+                    {product.working_hours ||
+                      'Уточняйте в аптеке'}
                   </p>
                 </div>
 
                 <div className="flex justify-between items-center mt-3">
                   <p className="text-sm font-semibold text-gray-700">
-                    Доступно: {formatQuantity(product.quantity)} уп.
+                    Доступно:{' '}
+                    {formatQuantity(product.quantity)} уп.
                   </p>
                   <p className="text-lg font-bold text-blue-600">
                     {product.price} Br
@@ -182,7 +198,10 @@ const BookingModal = React.memo(function BookingModal({
                 </div>
               )}
 
-              <form onSubmit={onSubmit} className="space-y-4">
+              <form
+                onSubmit={onSubmit}
+                className="space-y-4"
+              >
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Ваше имя *
@@ -191,7 +210,10 @@ const BookingModal = React.memo(function BookingModal({
                     type="text"
                     value={bookingState.form.customer_name}
                     onChange={(e) =>
-                      onFormChange("customer_name", e.target.value)
+                      onFormChange(
+                        'customer_name',
+                        e.target.value,
+                      )
                     }
                     required
                     disabled={bookingState.loading}
@@ -208,7 +230,10 @@ const BookingModal = React.memo(function BookingModal({
                     type="tel"
                     value={bookingState.form.customer_phone}
                     onChange={(e) =>
-                      onFormChange("customer_phone", e.target.value)
+                      onFormChange(
+                        'customer_phone',
+                        e.target.value,
+                      )
                     }
                     required
                     disabled={bookingState.loading}
@@ -226,15 +251,31 @@ const BookingModal = React.memo(function BookingModal({
                     <button
                       type="button"
                       onClick={() => {
-                        const newQty = Math.max(1, bookingState.modal.quantity - 1);
+                        const newQty = Math.max(
+                          1,
+                          bookingState.modal.quantity - 1,
+                        );
                         onQuantityChange(newQty.toString());
                       }}
-                      disabled={bookingState.loading || bookingState.modal.quantity <= 1}
+                      disabled={
+                        bookingState.loading ||
+                        bookingState.modal.quantity <= 1
+                      }
                       className="min-w-[48px] min-h-[48px] sm:w-12 sm:h-12 flex-shrink-0 flex items-center justify-center bg-gray-100 hover:bg-gray-200 active:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all duration-200 border border-gray-300 touch-manipulation"
                       aria-label="Уменьшить количество"
                     >
-                      <svg className="w-6 h-6 sm:w-5 sm:h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M20 12H4" />
+                      <svg
+                        className="w-6 h-6 sm:w-5 sm:h-5 text-gray-700"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2.5}
+                          d="M20 12H4"
+                        />
                       </svg>
                     </button>
 
@@ -255,7 +296,10 @@ const BookingModal = React.memo(function BookingModal({
                         }
                       }}
                       onBlur={(e) => {
-                        if (e.target.value === '' || parseInt(e.target.value) < 1) {
+                        if (
+                          e.target.value === '' ||
+                          parseInt(e.target.value) < 1
+                        ) {
                           onQuantityChange('1');
                         }
                       }}
@@ -270,15 +314,26 @@ const BookingModal = React.memo(function BookingModal({
                     <button
                       type="button"
                       onClick={() => {
-                        const newQty = bookingState.modal.quantity + 1;
+                        const newQty =
+                          bookingState.modal.quantity + 1;
                         onQuantityChange(newQty.toString());
                       }}
                       disabled={bookingState.loading}
                       className="min-w-[48px] min-h-[48px] sm:w-12 sm:h-12 flex-shrink-0 flex items-center justify-center bg-blue-500 hover:bg-blue-600 active:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all duration-200 shadow-md touch-manipulation"
                       aria-label="Увеличить количество"
                     >
-                      <svg className="w-6 h-6 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                      <svg
+                        className="w-6 h-6 sm:w-5 sm:h-5 text-white"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2.5}
+                          d="M12 4v16m8-8H4"
+                        />
                       </svg>
                     </button>
                   </div>
@@ -296,19 +351,25 @@ const BookingModal = React.memo(function BookingModal({
                 {/* Согласия на обработку персональных данных */}
                 <div className="pt-4 border-t border-gray-200 space-y-3">
                   <p className="text-sm font-semibold text-gray-700 mb-2">
-                    Согласие на обработку персональных данных *
+                    Согласие на обработку персональных
+                    данных *
                   </p>
 
-                  <label className="flex items-start gap-3 cursor-pointer group">
+                  <label
+                    className="flex items-start gap-3 cursor-pointer group relative z-10 min-h-[44px] touch-action-manipulation"
+                    htmlFor="consent-personal-data"
+                  >
                     <input
+                      id="consent-personal-data"
                       type="checkbox"
                       required
                       disabled={bookingState.loading}
-                      className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="mt-1 w-[22px] h-[22px] text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                     <span className="text-sm text-gray-700 leading-relaxed">
-                      Я согласен на обработку моих персональных данных (имя, телефон)
-                      в соответствии с{" "}
+                      Я согласен на обработку моих
+                      персональных данных (имя, телефон) в
+                      соответствии с{' '}
                       <a
                         href="/privacy-policy"
                         target="_blank"
@@ -317,33 +378,45 @@ const BookingModal = React.memo(function BookingModal({
                       >
                         Политикой конфиденциальности
                       </a>
-                      . Срок хранения: 3 года с даты оформления заказа.
+                      . Срок хранения: 3 года с даты
+                      оформления заказа.
                     </span>
                   </label>
 
-                  <label className="flex items-start gap-3 cursor-pointer group">
+                  <label
+                    className="flex items-start gap-3 cursor-pointer group relative z-10 min-h-[44px] touch-action-manipulation"
+                    htmlFor="consent-pharmacy-transfer"
+                  >
                     <input
+                      id="consent-pharmacy-transfer"
                       type="checkbox"
                       required
                       disabled={bookingState.loading}
-                      className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="mt-1 w-[22px] h-[22px] text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                     <span className="text-sm text-gray-700 leading-relaxed">
-                      Я согласен на передачу моих персональных данных в аптеку
-                      для подтверждения и выполнения заказа.
+                      Я согласен на передачу моих
+                      персональных данных в аптеку для
+                      подтверждения и выполнения заказа.
                     </span>
                   </label>
 
-                  <label className="flex items-start gap-3 cursor-pointer group">
+                  <label
+                    className="flex items-start gap-3 cursor-pointer group relative z-10 min-h-[44px] touch-action-manipulation"
+                    htmlFor="consent-encryption-confirmation"
+                  >
                     <input
+                      id="consent-encryption-confirmation"
                       type="checkbox"
                       required
                       disabled={bookingState.loading}
-                      className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="mt-1 w-[22px] h-[22px] text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                     <span className="text-sm text-gray-700 leading-relaxed">
-                      Я подтверждаю, что ознакомлен с тем, что мои данные будут
-                      зашифрованы и защищены в соответствии с требованиями ОАЦ РБ.
+                      Я подтверждаю, что ознакомлен с тем,
+                      что мои данные будут зашифрованы и
+                      защищены в соответствии с требованиями
+                      ОАЦ РБ.
                     </span>
                   </label>
                 </div>
