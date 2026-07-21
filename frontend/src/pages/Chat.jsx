@@ -4,7 +4,11 @@ import {
   useRef,
   useCallback,
 } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import {
+  useParams,
+  useNavigate,
+  useLocation,
+} from 'react-router-dom';
 import { useChat } from '../context/ChatContext';
 import chatService from '../services/chatService';
 import userAuthService from '../services/userAuthService';
@@ -14,6 +18,7 @@ import Toast from '../components/Toast';
 export default function Chat() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const messagesEndRef = useRef(null);
   const urlParams = new URLSearchParams(
     window.location.search,
@@ -232,14 +237,21 @@ export default function Chat() {
           </h2>
           <p className="text-gray-500 mb-6">{error}</p>
           <button
-            onClick={() =>
-              navigate(isTelegramUser ? '/' : '/dashboard')
-            }
+            onClick={() => {
+              const from = location.state?.from;
+              if (isTelegramUser) {
+                navigate('/');
+              } else if (from && from !== '/dashboard') {
+                navigate(from);
+              } else {
+                navigate('/');
+              }
+            }}
             className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-6 rounded-full transition-colors"
           >
             {isTelegramUser
               ? 'На главную'
-              : 'Вернуться в кабинет'}
+              : 'Вернуться на главную'}
           </button>
         </div>
       </div>
@@ -251,9 +263,16 @@ export default function Chat() {
       {/* ===== HEADER ===== */}
       <header className="bg-white px-4 py-3 flex items-center gap-3 border-b border-gray-200 flex-shrink-0 z-10">
         <button
-          onClick={() =>
-            navigate(isTelegramUser ? '/' : '/dashboard')
-          }
+          onClick={() => {
+            const from = location.state?.from;
+            if (isTelegramUser) {
+              navigate('/');
+            } else if (from && from !== '/dashboard') {
+              navigate(from);
+            } else {
+              navigate('/');
+            }
+          }}
           className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
           aria-label="Назад"
         >
@@ -279,7 +298,9 @@ export default function Chat() {
         </div>
         <div className="flex-1 min-w-0">
           <div className="font-semibold text-gray-900 text-[15px] tracking-wide">
-            Фармацевт
+            {consultation?.text?.substring(0, 30) ||
+              'Фармацевт'}
+            {consultation?.text?.length > 30 ? '...' : ''}
           </div>
           <div className="text-xs flex items-center gap-1.5">
             <span

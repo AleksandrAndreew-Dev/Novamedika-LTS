@@ -33,6 +33,7 @@ export function ChatProvider({ children }) {
   const pollingRef = useRef(null);
   const wsRef = useRef(null);
   const wsReconnectRef = useRef(null);
+  const wsConnectedRef = useRef(false);
 
   // WebSocket protocol — user chat widget (not pharmacist dashboard)
   const isSecure = window.location.protocol === 'https:';
@@ -88,6 +89,9 @@ export function ChatProvider({ children }) {
         wsRef.current?.readyState === WebSocket.OPEN
       )
         return;
+      // Prevent duplicate connections for the same consultation
+      if (wsConnectedRef.current && wsRef.current) return;
+      wsConnectedRef.current = true;
 
       // Anonymous users can also use WebSocket — user_chat_websocket requires no auth
       // The server endpoint /api/ws/chat/{consultation_id} accepts connections without token
@@ -171,6 +175,7 @@ export function ChatProvider({ children }) {
 
     return () => {
       mounted = false;
+      wsConnectedRef.current = false;
       if (wsReconnectRef.current) {
         clearTimeout(wsReconnectRef.current);
         wsReconnectRef.current = null;
@@ -181,12 +186,7 @@ export function ChatProvider({ children }) {
         wsRef.current = null;
       }
     };
-  }, [
-    currentConsultationId,
-    isAnonymous,
-    isWidgetOpen,
-    wsBaseUrl,
-  ]);
+  }, [currentConsultationId, isAnonymous, wsBaseUrl]);
 
   // Flag to ensure we only do initial load once per consultation
   const initialLoadDoneRef = useRef(false);
