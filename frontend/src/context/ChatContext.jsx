@@ -27,9 +27,6 @@ export function ChatProvider({ children }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [consultationCompleted, setConsultationCompleted] =
-    useState(false);
-  const [toast, setToast] = useState(null);
   const [isAnonymous, setIsAnonymous] = useState(() =>
     chatService.isAnonymous(),
   );
@@ -140,11 +137,14 @@ export function ChatProvider({ children }) {
             }
 
             if (data.type === 'question_completed') {
-              setConsultationCompleted(true);
-              setToast({
-                message: 'Консультация завершена',
-                type: 'success',
-              });
+              const systemMsg = {
+                id: Date.now(),
+                text: 'Консультация завершена. Спасибо! Если у вас есть вопрос - напишите сообщение.',
+                sender_type: 'system',
+                created_at: new Date().toISOString(),
+                is_system: true,
+              };
+              setMessages((prev) => [...prev, systemMsg]);
             }
           } catch {
             // Not JSON — might be "pong" or other text
@@ -334,10 +334,6 @@ export function ChatProvider({ children }) {
     loading,
     error,
     unreadCount,
-    consultationCompleted,
-    setConsultationCompleted,
-    toast,
-    setToast,
     isAnonymous,
     setIsAnonymous,
     loadMessages,
