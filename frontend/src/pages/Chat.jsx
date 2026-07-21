@@ -24,9 +24,7 @@ export default function Chat() {
   const {
     messages,
     setMessages,
-    currentConsultationId,
     setCurrentConsultationId,
-    loading: contextLoading,
     isAnonymous,
     setIsAnonymous,
     sendMessage: contextSendMessage,
