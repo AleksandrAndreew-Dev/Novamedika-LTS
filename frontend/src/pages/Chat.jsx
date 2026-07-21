@@ -155,6 +155,27 @@ export default function Chat() {
     }
   };
 
+  // Создание новой консультации из завершённой
+  const handleCreateNewConsultation = async () => {
+    try {
+      setSending(true);
+      const data = await chatService.createConsultation(
+        'Новый вопрос фармацевту',
+        isAnonymous,
+      );
+      setCurrentConsultationId(data.uuid);
+      setMessages([]);
+      navigate(`/chat/${data.uuid}`, { replace: true });
+    } catch (err) {
+      setToast({
+        message: 'Не удалось создать новую консультацию',
+        type: 'error',
+      });
+    } finally {
+      setSending(false);
+    }
+  };
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({
       behavior: 'smooth',
@@ -491,19 +512,12 @@ export default function Chat() {
               rows={1}
               className="flex-1 bg-transparent border-none outline-none resize-none text-[15px] py-2 max-h-24 leading-relaxed text-gray-900 placeholder:text-gray-400"
               style={{ fontFamily: 'inherit' }}
-              disabled={
-                sending ||
-                consultation?.status === 'completed'
-              }
+              disabled={sending}
             />
           </div>
           <button
             type="submit"
-            disabled={
-              sending ||
-              !newMessage.trim() ||
-              consultation?.status === 'completed'
-            }
+            disabled={sending || !newMessage.trim()}
             className="w-10 h-10 rounded-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0 transition-colors active:scale-90"
             aria-label="Отправить"
           >
@@ -538,10 +552,38 @@ export default function Chat() {
           </button>
         </form>
         {consultation?.status === 'completed' && (
-          <p className="text-xs text-gray-400 text-center mt-2">
-            Консультация завершена. Создайте новую для
-            других вопросов.
-          </p>
+          <div className="text-center mt-2">
+            <button
+              type="button"
+              onClick={handleCreateNewConsultation}
+              disabled={sending}
+              className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-2 rounded-full transition-colors"
+            >
+              {sending ? (
+                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 4v16m8-8H4"
+                  />
+                </svg>
+              )}
+              {sending
+                ? 'Создание...'
+                : 'Создать новую консультацию'}
+            </button>
+            <p className="text-xs text-gray-400 text-center mt-1.5">
+              Предыдущая консультация завершена
+            </p>
+          </div>
         )}
       </div>
 
