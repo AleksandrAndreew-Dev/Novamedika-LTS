@@ -7,6 +7,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useChat } from '../../context/ChatContext';
 import ChatTrigger from './ChatTrigger';
+import { canSubmitMessage } from './chatSubmission';
 import './ChatWidget.css';
 
 export default function ChatWidget() {
@@ -27,6 +28,7 @@ export default function ChatWidget() {
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
   const isSubmittingRef = useRef(false);
+  const lastSubmittedAtRef = useRef(0);
   const [inputMode, setInputMode] = useState(
     currentConsultationId ? 'message' : 'question',
   );
@@ -78,41 +80,46 @@ export default function ChatWidget() {
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (isSubmittingRef.current || sending) return;
       if (inputMode === 'question') {
-        handleCreateQuestion(e);
+        void handleCreateQuestion(e);
       } else {
-        // Прямой вызов вместо requestSubmit — надёжнее для маленького окна
-        isSubmittingRef.current = true;
-        handleSendMessage(e);
+        void handleSendMessage(e);
       }
     }
   };
 
   const handleSendMessage = async (e) => {
     if (e) e.preventDefault();
-    if (
-      !newMessage.trim() ||
-      sending ||
-      isSubmittingRef.current
-    )
-      return;
-    // Защита от дублирования: если последнее сообщение совпадает по тексту — пропускаем
+
+    const now = Date.now();
+    const canSend = canSubmitMessage({
+      text: newMessage,
+      sending,
+      isSubmitting: isSubmittingRef.current,
+      lastSubmittedAt: lastSubmittedAtRef.current,
+      now,
+      cooldownMs: 400,
+    });
+
+    if (!canSend) return;
+
+    const trimmed = newMessage.trim();
     const lastMsg = messages[messages.length - 1];
     if (
       lastMsg?.sender_type === 'user' &&
-      lastMsg.text === newMessage.trim()
+      lastMsg.text === trimmed
     ) {
       console.warn(
         '[ChatWidget] Duplicate message detected, skipping',
       );
-      isSubmittingRef.current = false;
       return;
     }
+
     isSubmittingRef.current = true;
+    lastSubmittedAtRef.current = now;
     setSending(true);
     try {
-      await sendMessage(newMessage.trim());
+      await sendMessage(trimmed);
       setNewMessage('');
     } catch {
       // Error handled by caller
