@@ -285,7 +285,7 @@ function App() {
         }
         throw fetchError;
       }
-    } catch (error) {
+    } catch {
       setShowCookieBanner(true);
     }
   };
