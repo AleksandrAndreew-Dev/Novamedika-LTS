@@ -166,7 +166,7 @@ export default function Chat() {
       setCurrentConsultationId(data.uuid);
       setMessages([]);
       navigate(`/chat/${data.uuid}`, { replace: true });
-    } catch (err) {
+    } catch (_err) {
       setToast({
         message: 'Не удалось создать новую консультацию',
         type: 'error',
