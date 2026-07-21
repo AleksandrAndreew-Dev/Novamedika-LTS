@@ -1,5 +1,32 @@
 // WebSocket service for real-time consultation updates
-import { logger } from '../../utils/logger';
+import { logger } from '../../utils/logger.js';
+
+export function normalizeWebSocketMessage(rawMessage) {
+  if (!rawMessage || typeof rawMessage !== 'object') {
+    return null;
+  }
+
+  const normalizedType = rawMessage.type || null;
+  const questionId =
+    rawMessage.question_id ||
+    rawMessage.questionId ||
+    rawMessage.data?.question_id ||
+    rawMessage.data?.questionId ||
+    null;
+
+  const payload =
+    rawMessage.payload ??
+    rawMessage.data ??
+    rawMessage ??
+    null;
+
+  return {
+    type: normalizedType,
+    questionId,
+    payload,
+    raw: rawMessage,
+  };
+}
 
 class WebSocketService {
   constructor() {
@@ -67,26 +94,18 @@ class WebSocketService {
           const data = JSON.parse(event.data);
           logger.debug('WebSocket message received:', data);
 
-          // Trigger event handlers
-          // Server sends payload in `data.data` or `data.payload` field
-          if (
-            data.type &&
-            this.eventHandlers.has(data.type)
-          ) {
-            const handlers = this.eventHandlers.get(
-              data.type,
-            );
-            const payload =
-              data.payload ??
-              (Object.prototype.hasOwnProperty.call(
-                data,
-                'data',
-              )
-                ? data.data
-                : data) ??
-              null;
-            handlers.forEach((handler) => handler(payload));
-          }
+          const normalized =
+            normalizeWebSocketMessage(data);
+          if (!normalized?.type) return;
+
+          const handlers = this.eventHandlers.get(
+            normalized.type,
+          );
+          if (!handlers?.length) return;
+
+          handlers.forEach((handler) =>
+            handler(normalized.payload),
+          );
         } catch (error) {
           logger.error(
             'Failed to parse WebSocket message:',

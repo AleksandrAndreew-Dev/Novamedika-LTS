@@ -38,45 +38,59 @@ export default function ConsultationChat({
     const unsubscribe = websocketService.on(
       'message_update',
       (payload) => {
-        if (payload && payload.question_id === questionId) {
-          setMessages((prev) => {
-            const prevIds = new Set(
-              prev.map(
-                (m) =>
-                  m.uuid ||
-                  m.id ||
-                  m.data?.uuid ||
-                  m.data?.id,
-              ),
-            );
-            const msgId =
-              payload.uuid ||
-              payload.id ||
-              payload.data?.uuid ||
-              payload.data?.id;
-            // Проверка по UUID
-            if (msgId && prevIds.has(msgId)) return prev;
-            const newMsg = payload.data || payload;
-            // Дополнительная проверка по комбинации полей (защита от дублей при тайминге)
-            const isDuplicate = prev.some(
-              (m) =>
-                m.text === newMsg.text &&
-                m.sender_type === newMsg.sender_type &&
-                Math.abs(
-                  new Date(m.created_at) -
-                    new Date(newMsg.created_at),
-                ) < 1000,
-            );
-            if (isDuplicate) return prev;
-            const updated = [...prev, newMsg];
-            updated.sort(
-              (a, b) =>
-                new Date(a.created_at) -
-                new Date(b.created_at),
-            );
-            return updated;
-          });
+        const messagePayload = payload?.data || payload;
+        const eventQuestionId =
+          payload?.question_id ||
+          payload?.questionId ||
+          messagePayload?.question_id ||
+          messagePayload?.questionId ||
+          null;
+
+        if (
+          !eventQuestionId ||
+          eventQuestionId !== questionId
+        ) {
+          return;
         }
+
+        setMessages((prev) => {
+          const prevIds = new Set(
+            prev.map(
+              (m) =>
+                m.uuid ||
+                m.id ||
+                m.data?.uuid ||
+                m.data?.id,
+            ),
+          );
+          const msgId =
+            messagePayload?.uuid ||
+            messagePayload?.id ||
+            messagePayload?.data?.uuid ||
+            messagePayload?.data?.id;
+          if (msgId && prevIds.has(msgId)) return prev;
+
+          const newMsg =
+            messagePayload?.data || messagePayload;
+          const isDuplicate = prev.some(
+            (m) =>
+              m.text === newMsg.text &&
+              m.sender_type === newMsg.sender_type &&
+              Math.abs(
+                new Date(m.created_at) -
+                  new Date(newMsg.created_at),
+              ) < 1000,
+          );
+          if (isDuplicate) return prev;
+
+          const updated = [...prev, newMsg];
+          updated.sort(
+            (a, b) =>
+              new Date(a.created_at) -
+              new Date(b.created_at),
+          );
+          return updated;
+        });
       },
     );
 
