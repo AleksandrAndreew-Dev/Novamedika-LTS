@@ -1,4 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  lazy,
+  Suspense,
+} from 'react';
 import {
   BrowserRouter,
   Routes,
@@ -13,14 +20,36 @@ import useSessionTimeout from './hooks/useSessionTimeout';
 import { TelegramProvider } from './telegram/TelegramContext';
 import TelegramWrapper from './telegram/TelegramWrapper';
 import { api } from './api/client';
-import PharmacistDashboard from './pharmacist/PharmacistDashboard';
-import UploadPrescription from './pages/UploadPrescription';
-import Login from './pages/Login';
-import UserDashboard from './pages/UserDashboard';
-import Chat from './pages/Chat';
-import NewConsultation from './pages/NewConsultation';
 import { ChatProvider } from './context/ChatContext';
 import ChatWidget from './components/ChatWidget/ChatWidget';
+
+// Lazy-loaded page components for code splitting
+const PharmacistDashboard = lazy(
+  () => import('./pharmacist/PharmacistDashboard'),
+);
+const UploadPrescription = lazy(
+  () => import('./pages/UploadPrescription'),
+);
+const Login = lazy(() => import('./pages/Login'));
+const UserDashboard = lazy(
+  () => import('./pages/UserDashboard'),
+);
+const Chat = lazy(() => import('./pages/Chat'));
+const NewConsultation = lazy(
+  () => import('./pages/NewConsultation'),
+);
+
+// Loading fallback shown during lazy component load
+function PageLoader() {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500 mx-auto mb-3"></div>
+        <p className="text-gray-500 text-sm">Загрузка...</p>
+      </div>
+    </div>
+  );
+}
 
 function App() {
   const [toast, setToast] = useState(null); // { message, type }
@@ -31,6 +60,19 @@ function App() {
     dataProcessing: false,
     securityProtection: false,
   });
+
+  // Кешируем проверку Telegram в sessionStorage для ускорения
+  const isInTelegramCached = useMemo(() => {
+    const cached = sessionStorage.getItem('isInTelegram');
+    if (cached !== null) return cached === 'true';
+
+    const result = !!(
+      window.Telegram?.WebApp?.initData &&
+      window.Telegram.WebApp.initData.length > 0
+    );
+    sessionStorage.setItem('isInTelegram', String(result));
+    return result;
+  }, []);
 
   // Проверяем, это pharmacist dashboard или обычный поиск
   // Определяем по поддомену ИЛИ по пути ИЛИ по наличию токена в URL (для WebApp)
@@ -52,15 +94,20 @@ function App() {
     'pharmacist_session_token',
   );
 
-  // Упрощенная проверка: если мы внутри Telegram WebApp, считаем что это может быть фармацевт
-  // Финальная проверка регистрации произойдет на бэкенде при логине
-  const isInTelegram = !!window.Telegram?.WebApp;
-
-  const isPharmacistMode =
-    isPharmacistSubdomain ||
-    isPharmacistPath ||
-    (hasAuthToken && isInTelegram) ||
-    hasPharmacistSession;
+  // Кешируем isPharmacistMode
+  const isPharmacistMode = useMemo(
+    () =>
+      isPharmacistSubdomain ||
+      isPharmacistPath ||
+      (hasAuthToken && isInTelegramCached) ||
+      hasPharmacistSession,
+    [
+      isPharmacistSubdomain,
+      isPharmacistPath,
+      hasAuthToken,
+      hasPharmacistSession,
+    ],
+  );
 
   // Сохраняем режим в localStorage при первом определении
   useEffect(() => {
@@ -100,20 +147,13 @@ function App() {
   }, [handleError]);
 
   useEffect(() => {
-    // Проверяем, действительно ли мы внутри Telegram WebApp
-    // window.Telegram.WebApp существует всегда после загрузки SDK,
-    // но initData заполняется только когда приложение открыто внутри Telegram
-    const isInTelegram = !!(
-      window.Telegram?.WebApp?.initData &&
-      window.Telegram.WebApp.initData.length > 0
-    );
     const cookiesAccepted = localStorage.getItem(
       'cookiesAccepted',
     );
 
     // Debug logging для production диагностики
     console.log('[Consent Modal Check]', {
-      isInTelegram,
+      isInTelegramCached,
       hasTelegramSDK: !!window.Telegram?.WebApp,
       hasInitData: !!window.Telegram?.WebApp?.initData,
       initDataLength:
@@ -126,10 +166,10 @@ function App() {
     });
 
     // Если мы в Telegram WebApp - проверяем согласие через API
-    if (isInTelegram && !isPharmacistMode) {
+    if (isInTelegramCached && !isPharmacistMode) {
       checkTelegramConsent();
     } else if (
-      !isInTelegram &&
+      !isInTelegramCached &&
       !cookiesAccepted &&
       !isPharmacistMode
     ) {
@@ -138,16 +178,16 @@ function App() {
       setShowCookieBanner(true);
     } else {
       console.log('[Consent Modal] ❌ NOT showing', {
-        reason: isInTelegram
+        reason: isInTelegramCached
           ? 'in Telegram (checking via API)'
           : cookiesAccepted
             ? 'already accepted'
             : 'pharmacist mode',
       });
     }
-  }, [isPharmacistMode]);
+  }, [isInTelegramCached, isPharmacistMode]);
 
-  // Функция проверки согласия через API для Telegram WebApp
+  // Функция проверки согласия через API для Telegram WebApp с timeout
   const checkTelegramConsent = async () => {
     try {
       const tgUser =
@@ -165,44 +205,64 @@ function App() {
         tgUser.id,
       );
 
-      // Вызываем endpoint на правильном хосте (api subdomain)
-      const response = await fetch(
-        'https://api.spravka.novamedika.com/webapp/check-consent',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            telegram_id: tgUser.id,
-            first_name: tgUser.first_name,
-            last_name: tgUser.last_name,
-            username: tgUser.username,
-          }),
-        },
+      // Добавляем timeout 5s для предотвращения бесконечного ожидания
+      const controller = new AbortController();
+      const timeoutId = setTimeout(
+        () => controller.abort(),
+        5000,
       );
 
-      if (!response.ok) {
-        throw new Error(
-          `HTTP error! status: ${response.status}`,
+      try {
+        const response = await fetch(
+          'https://api.spravka.novamedika.com/webapp/check-consent',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              telegram_id: tgUser.id,
+              first_name: tgUser.first_name,
+              last_name: tgUser.last_name,
+              username: tgUser.username,
+            }),
+            signal: controller.signal,
+          },
         );
-      }
+        clearTimeout(timeoutId);
 
-      const data = await response.json();
-      console.log('[Telegram Consent] Response:', data);
+        if (!response.ok) {
+          throw new Error(
+            `HTTP error! status: ${response.status}`,
+          );
+        }
 
-      // Если нужно дополнительное согласие для WebApp - показываем модальное окно
-      if (data.needs_webapp_consent) {
-        console.log(
-          '[Telegram Consent] ✅ Additional consent needed - showing modal',
-        );
-        setShowCookieBanner(true);
-      } else {
-        console.log(
-          '[Telegram Consent] ❌ Consent already given - no modal needed',
-        );
-        // Сохраняем флаг что согласие уже есть
-        localStorage.setItem('cookiesAccepted', 'true');
+        const data = await response.json();
+        console.log('[Telegram Consent] Response:', data);
+
+        // Если нужно дополнительное согласие для WebApp - показываем модальное окно
+        if (data.needs_webapp_consent) {
+          console.log(
+            '[Telegram Consent] ✅ Additional consent needed - showing modal',
+          );
+          setShowCookieBanner(true);
+        } else {
+          console.log(
+            '[Telegram Consent] ❌ Consent already given - no modal needed',
+          );
+          // Сохраняем флаг что согласие уже есть
+          localStorage.setItem('cookiesAccepted', 'true');
+        }
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          console.warn(
+            '[Telegram Consent] Timeout - showing modal for safety',
+          );
+          setShowCookieBanner(true);
+          return;
+        }
+        throw fetchError;
       }
     } catch (error) {
       console.error(
@@ -221,10 +281,17 @@ function App() {
     }));
   };
 
-  const allConsentsGiven =
-    consents.privacyPolicy &&
-    consents.dataProcessing &&
-    consents.securityProtection;
+  const allConsentsGiven = useMemo(
+    () =>
+      consents.privacyPolicy &&
+      consents.dataProcessing &&
+      consents.securityProtection,
+    [
+      consents.privacyPolicy,
+      consents.dataProcessing,
+      consents.securityProtection,
+    ],
+  );
 
   const handleAcceptCookies = () => {
     // Проверяем все согласия
@@ -249,9 +316,13 @@ function App() {
     });
   };
 
-  // Если режим фармацевта - показываем dashboard
+  // Если режим фармацевта - показываем dashboard (с Suspense для lazy)
   if (isPharmacistMode) {
-    return <PharmacistDashboard />;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <PharmacistDashboard />
+      </Suspense>
+    );
   }
 
   return (
@@ -267,10 +338,10 @@ function App() {
                 onExtend={extendSession}
               />
 
-              {/* Баннер cookies и согласий */}
+              {/* Баннер cookies и согласий - НЕ блокирует контент */}
               {showCookieBanner && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-                  <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto overscroll-behavior-contain touch-manipulation">
+                <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-40 pointer-events-none">
+                  <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto overscroll-behavior-contain touch-manipulation pointer-events-auto">
                     <div className="p-6">
                       <div className="text-center mb-6">
                         <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">

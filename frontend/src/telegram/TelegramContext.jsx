@@ -6,8 +6,8 @@ import React, {
   useState,
   useCallback,
   useMemo,
-} from "react";
-import { logger } from "../utils/logger";
+} from 'react';
+import { logger } from '../utils/logger';
 
 const TelegramContext = createContext(null);
 
@@ -17,6 +17,25 @@ export function TelegramProvider({ children }) {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
+    // Debounced viewport handler with limited logging
+    let viewportLogCount = 0;
+    const MAX_VIEWPORT_LOGS = 10;
+    let viewportTimer = null;
+
+    const handleViewportChange = () => {
+      if (viewportTimer) return; // debounce: skip if timer already active
+      viewportTimer = setTimeout(() => {
+        viewportTimer = null;
+      }, 300);
+
+      if (viewportLogCount < MAX_VIEWPORT_LOGS) {
+        viewportLogCount++;
+        logger.debug(
+          '[Telegram] Viewport changed (debounced)',
+        );
+      }
+    };
+
     const initTelegram = () => {
       if (window.Telegram?.WebApp) {
         const telegram = window.Telegram.WebApp;
@@ -24,22 +43,28 @@ export function TelegramProvider({ children }) {
         telegram.ready();
         telegram.expand();
 
-        telegram.setHeaderColor("#2b6cb0");
-        telegram.setBackgroundColor("#f7fafc");
+        telegram.setHeaderColor('#2b6cb0');
+        telegram.setBackgroundColor('#f7fafc');
         telegram.enableClosingConfirmation();
+
+        // Subscribe to viewport changes with debounce
+        telegram.onEvent(
+          'viewportChanged',
+          handleViewportChange,
+        );
 
         setTg(telegram);
         setIsTelegram(true);
         setIsReady(true);
 
-        logger.log("Telegram Web App initialized:", {
+        logger.log('Telegram Web App initialized:', {
           platform: telegram.platform,
           version: telegram.version,
           user: telegram.initDataUnsafe?.user,
         });
       } else {
         setIsReady(true);
-        logger.log("Not in Telegram environment");
+        logger.log('Not in Telegram environment');
       }
     };
 
@@ -54,11 +79,26 @@ export function TelegramProvider({ children }) {
         setTimeout(checkTelegram, 100);
       } else {
         setIsReady(true);
-        logger.log("Telegram Web App not detected after timeout");
+        logger.log(
+          'Telegram Web App not detected after timeout',
+        );
       }
     };
 
     checkTelegram();
+
+    return () => {
+      // Cleanup: unsubscribe from viewport events
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.offEvent(
+          'viewportChanged',
+          handleViewportChange,
+        );
+      }
+      if (viewportTimer) {
+        clearTimeout(viewportTimer);
+      }
+    };
   }, []);
 
   const telegramUser = useMemo(() => {
@@ -159,7 +199,9 @@ export function TelegramProvider({ children }) {
 export function useTelegramContext() {
   const ctx = useContext(TelegramContext);
   if (!ctx) {
-    throw new Error("useTelegramContext must be used within TelegramProvider");
+    throw new Error(
+      'useTelegramContext must be used within TelegramProvider',
+    );
   }
   return ctx;
 }

@@ -149,6 +149,26 @@ class WebSocketConnectionManager:
         )
 
 
+# Retry helper for WebSocket broadcasts with exponential backoff
+async def broadcast_with_retry(ws_manager, method_name, *args, max_retries=3, **kwargs):
+    """Call a WebSocket broadcast method with exponential backoff retry"""
+    for attempt in range(max_retries):
+        try:
+            method = getattr(ws_manager, method_name)
+            return await method(*args, **kwargs)
+        except Exception as e:
+            if attempt == max_retries - 1:
+                logger.error(
+                    f"WebSocket {method_name} failed after {max_retries} attempts: {e}"
+                )
+                raise
+            wait_time = 2**attempt
+            logger.warning(
+                f"WebSocket {method_name} failed (attempt {attempt + 1}), retrying in {wait_time}s: {e}"
+            )
+            await asyncio.sleep(wait_time)
+
+
 # Redis Pub/Sub channel for cross-worker WebSocket sync
 REDIS_WS_CHANNEL = "ws:pharmacist:events"
 

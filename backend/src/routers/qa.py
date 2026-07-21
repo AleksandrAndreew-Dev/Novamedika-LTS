@@ -10,7 +10,13 @@ from pydantic import BaseModel
 
 from db.database import get_db
 from db.qa_models import User, Question, Answer, Pharmacist, DialogMessage
-from db.qa_schemas import QuestionCreate, QuestionResponse, AnswerBase, AnswerResponse
+from db.qa_schemas import (
+    QuestionCreate,
+    QuestionResponse,
+    UserResponse,
+    AnswerBase,
+    AnswerResponse,
+)
 from auth.auth import (
     get_current_pharmacist,
     get_current_user_jwt,
@@ -430,9 +436,19 @@ async def create_consultation(
             f"New consultation created by user {current_user.uuid}: {new_question.uuid}"
         )
 
-        # Загружаем user relation для QuestionResponse
-        await db.refresh(new_question, attribute_names=["user"])
-        return QuestionResponse.model_validate(new_question)
+        # Explicit response - avoid MissingGreenlet in async context
+        return QuestionResponse(
+            uuid=new_question.uuid,
+            text=new_question.text,
+            status=new_question.status,
+            category=new_question.category,
+            created_at=new_question.created_at,
+            user=UserResponse.model_validate(current_user),
+            context_data=new_question.context_data,
+            assigned_to=None,
+            answered_by=None,
+            answers=[],
+        )
 
     except Exception as e:
         await db.rollback()
@@ -461,12 +477,13 @@ async def get_user_consultations(
             select(Question)
             .options(
                 selectinload(Question.user),
-                selectinload(Question.assigned_pharmacist).selectinload(
-                    Pharmacist.user
-                ),
+                selectinload(Question.assigned_pharmacist)
+                .selectinload(Pharmacist.user)
+                .selectinload(Pharmacist.pharmacy_info),
                 selectinload(Question.answers)
                 .selectinload(Answer.pharmacist)
-                .selectinload(Pharmacist.user),
+                .selectinload(Pharmacist.user)
+                .selectinload(Pharmacist.pharmacy_info),
             )
             .where(Question.user_id == current_user.uuid)
         )

@@ -5,7 +5,7 @@ node_modules/
 __pycache__/
 letsencrypt/acme.json
 
-agent
+agent/
 .vscode/
 .qwen/
 chat-ui

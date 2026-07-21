@@ -1,115 +1,66 @@
 # Novamedika2 - AI Rules
 
-Вы можете читать и анализировать любые файлы, в том числе указанные в .gitignore, если они необходимы для ответа.
+## КРИТИЧЕСКИЙ СИНТАКСИС (ЗАЩИТА ОТ СБОЕВ)
 
-agent/server-logs - здесь логи сервера, проверять
+- ❌ ЗАПРЕЩЕНО использовать внутренние теги разметки вроде `｜｜DSML｜｜`, `invoke`, `parameter`.
+- ❌ ЗАПРЕЩЕНО писать любой текст или комментарии внутри блоков XML-инструментов.
+- ⚡ ВСЕГДА используй ТОЛЬКО стандартный XML-формат Cline для вызова инструментов (например, `<execute_command>` или `<write_to_file>`).
+- ⚡ Если инструмент `replace_in_file` (diff) выдает ошибку парсинга или разметки, СРАЗУ переключайся на полное чтение файла через `read_file` и его полную перезапись через `write_to_file`. Не пытайся повторить сбойный diff.
 
-## ПРАВИЛО №1: БУДЬ КРАТОК
+## ОГРАНИЧЕНИЕ ВЫВОДА
 
-Минимизируй вывод. Факты без воды. Никаких "согласен", "отлично", "хорошая идея".
+- Будь максимально краток. Только факты, без воды.
+- Исключи вводные фразы ("согласен", "отлично", "хорошая идея", "понял").
+- Вместо PowerShell всегда используй Bash в терминале.
 
-## Запрещённые фразы
+## СТОП-СЛОВА И ФРАЗЫ
 
-❌ "✅ FULLY IMPLEMENTED", "Works perfectly", "Problem solved", "100% working"
+❌ "✅ FULLY IMPLEMENTED", "Works perfectly", "Problem solved", "100% working".
+✅ Обязательно к использованию: "Code changes applied", "Ready for testing", "Changes made, awaiting confirmation".
 
-## Обязательные фразы
-
-✅ "Code changes applied", "Ready for testing", "Changes made, awaiting confirmation"
-
-## Структура ответа
+## СТРУКТУРА ОТВЕТА (СТРОГО)
 
 ```markdown
-**Что сделано:** [changes]
-**Что НЕ проверено:** [needs testing]
-**Следующие шаги:** 1. [step] 2. [step]
+**Что сделано:** [список изменений]
+**Что НЕ проверено:** [что требует тестов]
+**Следующие шаги:** 1. [шаг] 2. [шаг]
 ```
 
-## Дерево проекта
+## АРХИТЕКТУРА И ДЕРЕВО СИСТЕМЫ
 
-```
-backend/src/
-├── main.py              # FastAPI entry
-├── auth/                # JWT, auth logic
-├── bot/                 # aiogram 3.x Telegram bot
-├── routers/              # API endpoints
-├── tasks/                # Celery tasks
-├── db/                   # SQLAlchemy models
-└── middleware/           # Security middleware
+- `backend/src/`: main.py (FastAPI), auth/ (JWT), bot/ (aiogram 3.x), routers/ (Endpoints), tasks/ (Celery), db/ (SQLAlchemy), middleware/.
+- `frontend/src/`: App.jsx, pages/, components/, api/, pharmacist/ (Панель), telegram/ (WebApp).
+- `oac/`: docs/ (15 compliance документов), guides/, audits/, architecture/ (ADR).
+- Инфраструктура: Traefik (прокси), Celery + Redis (очереди), Alembic (миграции), JWT + RBAC (Роли: user, pharmacist, admin), Prometheus + Grafana + Loki.
 
-frontend/src/
-├── App.jsx              # Main component
-├── pages/               # Route pages
-├── components/          # Reusable UI
-├── api/                 # API clients
-├── pharmacist/          # Pharmacist interface
-└── telegram/            # WebApp integration
+## ИНСТРУМЕНТЫ И ПОИСК
 
-oac/
-├── docs/                # 15 compliance docs
-├── guides/              # Implementation guides
-├── audits/              # Audit reports
-└── architecture/        # ADR decisions
+- Поиск символов/функций -> `search_symbol`. Концепции -> `search_codebase`. Текст -> `grep_code`.
+- Чтение файлов -> `read_file` с аргументом `view_dependencies=true`.
+- Логи сервера находятся в `agent/server-logs` — всегда проверяй их при сбоях.
 
-config/                  # Monitoring configs (Prometheus, Grafana)
-scripts/                 # Automation scripts
-```
+## ТАБЛИЦА ДИАГНОСТИКИ И РЕШЕНИЙ
 
-## Поиск кода
+| Модуль       | Где искать / Инструмент                             | Частая проблема / Решение                       |
+| :----------- | :-------------------------------------------------- | :---------------------------------------------- |
+| **Auth**     | `backend/src/auth/` + `frontend/src/hooks/useAuth*` | Auth race condition -> `AuthProvider.jsx`       |
+| **Bot**      | `backend/src/bot/` + `agent/diagnostics.sh bot`     | Не стартует -> Проверь Gunicorn workers         |
+| **API**      | `backend/src/routers/` + Traefik routes             | Сбои маршрутизации Traefik                      |
+| **DB**       | `backend/src/db/models*.py` + `alembic/versions/`   | НЕ менять модели без генерации миграции Alembic |
+| **Celery**   | `backend/src/tasks/` + Redis                        | Фоновые задачи (CSV, уведомления)               |
+| **Frontend** | `frontend/src/` + `agent/diagnostics.sh frontend`   | Ошибки интеграции Telegram WebApp               |
+| **OAC**      | `oac/docs/`                                         | См. комплаенс ниже                              |
 
-- **Символы** (классы, функции) → `search_symbol`
-- **Концепции** → `search_codebase`
-- **Текст** → `grep_code`
-- **Файлы** → `read_file` с `view_dependencies=true`
+## OAC COMPLIANCE (КРИТИЧНО)
 
-## Быстрый поиск проблем
+1. **Шифрование ПД:** строго по `oac/docs/10-encryption-policy.md` и `oac/guides/ENCRYPTION-IMPLEMENTATION-GUIDE.md`.
+2. **Трансграничная передача:** Telegram = трансграничная среда. Соблюдай `oac/requirements/transboundary-transfer-telegram-analysis-2026-05-20.md`.
+3. **Логирование:** Полное логирование всех действий пользователей.
+4. **Права пользователей:** Обязательное согласие на обработку ПД, функции удаления и экспорта данных.
 
-| Проблема | Где искать                                          |
-| -------- | --------------------------------------------------- |
-| Auth     | `backend/src/auth/` + `frontend/src/hooks/useAuth*` |
-| Bot      | `backend/src/bot/` + `agent/diagnostics.sh bot`     |
-| API      | `backend/src/routers/` + Traefik routes             |
-| DB       | `backend/src/db/models*.py` + `alembic/versions/`   |
-| Celery   | `backend/src/tasks/` + Redis                        |
-| Frontend | `frontend/src/` + `agent/diagnostics.sh frontend`   |
-| OAC      | `oac/docs/`                                         |
+## WORKFLOW И ЧЕК-ЛИСТ ПЕРЕД ОТВЕТОМ
 
-## OAC Compliance (КРИТИЧНО)
-
-- Шифрование ПД (`oac/docs/10-encryption-policy.md`)
-- Трансграничная передача (Telegram = cross-border!)
-- Логирование всех действий
-- Согласие на обработку ПД
-- Права на удаление/экспорт данных
-
-## Архитектура
-
-- Traefik — весь трафик
-- Celery + Redis — фоновые задачи (CSV, уведомления)
-- Alembic — миграции БД (НЕ менять модели без миграции)
-- JWT + RBAC — роли: user, pharmacist, admin
-- Telegram WebApp — отдельный auth flow
-- Monitoring — Prometheus + Grafana + Loki + Promtail
-
-## Частые проблемы
-
-| Проблема                | Решение                                                                   |
-| ----------------------- | ------------------------------------------------------------------------- |
-| Bot не стартует         | Проверь Gunicorn workers                                                  |
-| Auth race condition     | `AuthProvider.jsx`                                                        |
-| Шифрование              | `oac/guides/ENCRYPTION-IMPLEMENTATION-GUIDE.md`                           |
-| Трансграничная передача | `oac/requirements/transboundary-transfer-telegram-analysis-2026-05-20.md` |
-
-## Workflow
-
-1. Определи scope (backend/frontend/bot/db/compliance)
-2. Используй правильный инструмент (code → search_symbol, problems → diagnostics.sh)
-3. Вноси изменения → `edit_file` (минимальные правки)
-4. Отчёт → используй обязательную структуру
-
-## Чек-лист перед ответом
-
-- Без абсолютных утверждений?
-- Структура ответа соблюдена?
-- Указано что НЕ проверено?
-- OAC compliance учтён?
-- Оптимальные инструменты использованы?
+1. Определи scope изменений.
+2. Используй `edit_file` только для минимальных правок.
+3. Убедись, что нет абсолютных утверждений о 100% готовности.
+4. Строго соблюдай структуру финального ответа.
