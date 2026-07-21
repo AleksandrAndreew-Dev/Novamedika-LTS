@@ -18,7 +18,11 @@ from utils.time_utils import get_utc_now_naive
 
 from db.qa_models import Question, User, Pharmacist
 from bot.handlers.qa_states import QAStates, UserQAStates
-from bot.keyboards.qa_keyboard import make_completed_dialog_keyboard, get_post_consultation_keyboard
+from bot.keyboards.qa_keyboard import (
+    make_completed_dialog_keyboard,
+    get_post_consultation_keyboard,
+)
+from routers.pharmacist_dashboard import ws_manager, publish_to_redis
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -87,6 +91,32 @@ async def complete_dialog_service(
 
         await db.commit()
 
+        # Notify web chat via WebSocket and Redis cross-worker
+        try:
+            await ws_manager.broadcast_to_consultation(
+                str(question.uuid),
+                {
+                    "type": "question_completed",
+                    "question_id": str(question.uuid),
+                    "completed_by": str(initiator.uuid),
+                    "status": "completed",
+                },
+            )
+        except Exception:
+            pass
+
+        try:
+            await publish_to_redis(
+                {
+                    "type": "user_completion",
+                    "question_id": str(question.uuid),
+                    "completed_by": str(initiator.uuid),
+                    "status": "completed",
+                }
+            )
+        except Exception:
+            pass
+
         # Минимальное исправление для уведомления пользователя
         if (
             initiator_type == "pharmacist"
@@ -109,7 +139,7 @@ async def complete_dialog_service(
                             "Задайте новый вопрос, если нужно."
                         ),
                         parse_mode="HTML",
-                        reply_markup=get_post_consultation_keyboard()
+                        reply_markup=get_post_consultation_keyboard(),
                     )
             except Exception as e:
                 logger.error(f"Ошибка уведомления пользователя: {e}")
