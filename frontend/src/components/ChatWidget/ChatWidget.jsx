@@ -78,25 +78,37 @@ export default function ChatWidget() {
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (isSubmittingRef.current) return;
+      if (isSubmittingRef.current || sending) return;
       if (inputMode === 'question') {
         handleCreateQuestion(e);
       } else {
-        // Блокируем синхронно до вызова handleSendMessage через submit
+        // Прямой вызов вместо requestSubmit — надёжнее для маленького окна
         isSubmittingRef.current = true;
-        e.target.closest('form')?.requestSubmit();
+        handleSendMessage(e);
       }
     }
   };
 
   const handleSendMessage = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (
       !newMessage.trim() ||
       sending ||
       isSubmittingRef.current
     )
       return;
+    // Защита от дублирования: если последнее сообщение совпадает по тексту — пропускаем
+    const lastMsg = messages[messages.length - 1];
+    if (
+      lastMsg?.sender_type === 'user' &&
+      lastMsg.text === newMessage.trim()
+    ) {
+      console.warn(
+        '[ChatWidget] Duplicate message detected, skipping',
+      );
+      isSubmittingRef.current = false;
+      return;
+    }
     isSubmittingRef.current = true;
     setSending(true);
     try {
