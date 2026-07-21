@@ -559,6 +559,20 @@ async def complete_question(
 
     await db.commit()
 
+    complete_data = {
+        "type": "question_completed",
+        "question_id": str(question.uuid),
+        "completed_by": str(pharmacist.uuid),
+        "status": "completed",
+    }
+    try:
+        await ws_manager.broadcast(complete_data)
+        logger.info(f"Completion broadcast sent for {question_id}")
+    except Exception as e:
+        logger.warning(f"Completion broadcast failed (non-critical): {e}")
+
+    await publish_to_redis(complete_data)
+
     logger.info(f"Pharmacist {pharmacist.uuid} completed question {question_id}")
 
     return {"message": "Question completed"}

@@ -4,6 +4,7 @@ from sqlalchemy import select
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import uuid
+import asyncio
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from pydantic import BaseModel
@@ -33,18 +34,36 @@ router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 
 
-async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncSession):
-    """Отправка ответа пользователю в Telegram"""
+async def send_telegram_notification_async(
+    chat_id: int | str,
+    text: str,
+    reply_markup=None,
+    parse_mode: str = "HTML",
+):
+    """Send Telegram notification in background without blocking the request."""
     try:
         from bot.core import bot_manager
 
-        # Используем уже инициализированный бот, не вызываем initialize() повторно
         if not bot_manager.bot:
-            logger.error("Bot not initialized for sending answer to user")
-            return
+            bot, _ = await bot_manager.initialize()
+            if not bot:
+                logger.warning("Bot not initialized for Telegram notification")
+                return
 
-        bot = bot_manager.bot
+        await bot_manager.bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            parse_mode=parse_mode,
+            reply_markup=reply_markup,
+        )
+        logger.info(f"Telegram notification sent to {chat_id}")
+    except Exception as e:
+        logger.warning(f"Failed to send Telegram notification: {e}")
 
+
+async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncSession):
+    """Отправка ответа пользователю в Telegram"""
+    try:
         if question.user.telegram_id:
             message_text = (
                 "💊 Получен ответ на ваш вопрос!\n\n"
@@ -53,8 +72,14 @@ async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncS
                 "Спасибо, что пользуйтесь нашим сервисом! ❤️"
             )
 
-            await bot.send_message(chat_id=question.user.telegram_id, text=message_text)
-            logger.info(f"Answer sent to user {question.user.telegram_id}")
+            asyncio.create_task(
+                send_telegram_notification_async(
+                    question.user.telegram_id, message_text
+                )
+            )
+            logger.info(
+                f"Telegram notification scheduled for user {question.user.telegram_id}"
+            )
 
     except Exception as e:
         logger.error(f"Failed to send answer to user: {e}")
@@ -745,27 +770,25 @@ async def send_consultation_message(
                 pharmacist = ph_result.scalar_one_or_none()
 
                 if pharmacist and pharmacist.user and pharmacist.user.telegram_id:
-                    from bot.core import bot_manager
                     from bot.keyboards.qa_keyboard import make_question_keyboard
 
-                    if bot_manager.bot:
-                        bot = bot_manager.bot
-                        user_name = f"{current_user.first_name or 'Пользователь'}"
-                        if current_user.last_name:
-                            user_name += f" {current_user.last_name}"
+                    user_name = f"{current_user.first_name or 'Пользователь'}"
+                    if current_user.last_name:
+                        user_name += f" {current_user.last_name}"
 
-                        await bot.send_message(
+                    asyncio.create_task(
+                        send_telegram_notification_async(
                             chat_id=pharmacist.user.telegram_id,
                             text=(
                                 f"💬 <b>Новое сообщение от {user_name}</b>\n\n"
                                 f"{message.text}\n\n"
                             ),
-                            parse_mode="HTML",
                             reply_markup=make_question_keyboard(consultation_id),
                         )
-                        logger.info(
-                            f"Telegram notification sent to pharmacist {pharmacist.user.telegram_id}"
-                        )
+                    )
+                    logger.info(
+                        f"Telegram notification scheduled for pharmacist {pharmacist.user.telegram_id}"
+                    )
         except Exception as tg_err:
             logger.warning(f"Telegram notification failed (non-critical): {tg_err}")
 

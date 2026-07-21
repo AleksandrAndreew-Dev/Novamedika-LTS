@@ -7,8 +7,7 @@ class WebSocketService {
     this.reconnectInterval = 3000;
     this.maxReconnectAttempts = 10;
     this.reconnectAttempts = 0;
-    this.eventHandlers =
-      new Map();
+    this.eventHandlers = new Map();
     this.isConnected = false;
   }
 
@@ -17,27 +16,20 @@ class WebSocketService {
    */
   _buildUrl() {
     const protocol =
-      window.location
-        .protocol === 'https:'
+      window.location.protocol === 'https:'
         ? 'wss:'
         : 'ws:';
-    const host =
-      window.location.host;
+    const host = window.location.host;
     const baseUrl =
-      window.APP_CONFIG
-        ?.WS_URL_PHARMACIST ||
-      window.APP_CONFIG
-        ?.WS_URL ||
-      import.meta.env
-        ?.VITE_WS_URL_PHARMACIST ||
-      import.meta.env
-        ?.VITE_WS_URL ||
+      window.APP_CONFIG?.WS_URL_PHARMACIST ||
+      window.APP_CONFIG?.WS_URL ||
+      import.meta.env?.VITE_WS_URL_PHARMACIST ||
+      import.meta.env?.VITE_WS_URL ||
       `${protocol}//${host}/api/pharmacist/ws/pharmacist`;
     // Read token fresh from localStorage every time
-    const token =
-      localStorage.getItem(
-        'pharmacist_session_token',
-      );
+    const token = localStorage.getItem(
+      'pharmacist_session_token',
+    );
     return token
       ? `${baseUrl}?token=${encodeURIComponent(token)}`
       : baseUrl;
@@ -47,78 +39,53 @@ class WebSocketService {
    * Connect to WebSocket server
    */
   connect() {
-    if (
-      this.ws &&
-      this.ws.readyState ===
-        WebSocket.OPEN
-    ) {
-      logger.info(
-        'WebSocket already connected',
-      );
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      logger.info('WebSocket already connected');
       return;
     }
 
     try {
       // Build URL with latest token each connect attempt
-      const url =
-        this._buildUrl();
-      logger.info(
-        `Connecting to WebSocket: ${url}`,
-      );
-      this.ws = new WebSocket(
-        url,
-      );
+      const url = this._buildUrl();
+      logger.info(`Connecting to WebSocket: ${url}`);
+      this.ws = new WebSocket(url);
 
       this.ws.onopen = () => {
-        logger.info(
-          'WebSocket connected successfully',
-        );
+        logger.info('WebSocket connected successfully');
         this.isConnected = true;
         this.reconnectAttempts = 0;
 
         // Subscribe to pharmacist events
         this.send({
           type: 'subscribe',
-          channel:
-            'pharmacist',
+          channel: 'pharmacist',
         });
       };
 
-      this.ws.onmessage = (
-        event,
-      ) => {
+      this.ws.onmessage = (event) => {
         try {
-          const data =
-            JSON.parse(
-              event.data,
-            );
-          logger.debug(
-            'WebSocket message received:',
-            data,
-          );
+          const data = JSON.parse(event.data);
+          logger.debug('WebSocket message received:', data);
 
           // Trigger event handlers
           // Server sends payload in `data.data` or `data.payload` field
           if (
             data.type &&
-            this.eventHandlers.has(
-              data.type,
-            )
+            this.eventHandlers.has(data.type)
           ) {
-            const handlers =
-              this.eventHandlers.get(
-                data.type,
-              );
+            const handlers = this.eventHandlers.get(
+              data.type,
+            );
             const payload =
               data.payload ??
-              data.data ??
+              (Object.prototype.hasOwnProperty.call(
+                data,
+                'data',
+              )
+                ? data.data
+                : data) ??
               null;
-            handlers.forEach(
-              (handler) =>
-                handler(
-                  payload,
-                ),
-            );
+            handlers.forEach((handler) => handler(payload));
           }
         } catch (error) {
           logger.error(
@@ -128,18 +95,11 @@ class WebSocketService {
         }
       };
 
-      this.ws.onerror = (
-        error,
-      ) => {
-        logger.error(
-          'WebSocket error:',
-          error,
-        );
+      this.ws.onerror = (error) => {
+        logger.error('WebSocket error:', error);
       };
 
-      this.ws.onclose = (
-        event,
-      ) => {
+      this.ws.onclose = (event) => {
         logger.info(
           `WebSocket closed: ${event.code} ${event.reason}`,
         );
@@ -148,10 +108,7 @@ class WebSocketService {
         // Attempt to reconnect
         if (
           !event.wasClean &&
-          this
-            .reconnectAttempts <
-            this
-              .maxReconnectAttempts
+          this.reconnectAttempts < this.maxReconnectAttempts
         ) {
           this.reconnect();
         }
@@ -172,12 +129,7 @@ class WebSocketService {
     this.reconnectAttempts++;
     const delay =
       this.reconnectInterval *
-      Math.pow(
-        2,
-        this
-          .reconnectAttempts -
-          1,
-      );
+      Math.pow(2, this.reconnectAttempts - 1);
 
     logger.info(
       `Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${delay}ms`,
@@ -193,14 +145,8 @@ class WebSocketService {
    * @param {Object} data - Message data
    */
   send(data) {
-    if (
-      this.ws &&
-      this.ws.readyState ===
-        WebSocket.OPEN
-    ) {
-      this.ws.send(
-        JSON.stringify(data),
-      );
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(data));
     } else {
       logger.warn(
         'WebSocket not connected, message not sent:',
@@ -216,39 +162,19 @@ class WebSocketService {
    * @returns {Function} Unsubscribe function
    */
   on(eventType, handler) {
-    if (
-      !this.eventHandlers.has(
-        eventType,
-      )
-    ) {
-      this.eventHandlers.set(
-        eventType,
-        [],
-      );
+    if (!this.eventHandlers.has(eventType)) {
+      this.eventHandlers.set(eventType, []);
     }
 
-    this.eventHandlers
-      .get(eventType)
-      .push(handler);
-    logger.info(
-      `Subscribed to event: ${eventType}`,
-    );
+    this.eventHandlers.get(eventType).push(handler);
+    logger.info(`Subscribed to event: ${eventType}`);
 
     // Return unsubscribe function
     return () => {
-      const handlers =
-        this.eventHandlers.get(
-          eventType,
-        );
-      const index =
-        handlers.indexOf(
-          handler,
-        );
+      const handlers = this.eventHandlers.get(eventType);
+      const index = handlers.indexOf(handler);
       if (index > -1) {
-        handlers.splice(
-          index,
-          1,
-        );
+        handlers.splice(index, 1);
         logger.info(
           `Unsubscribed from event: ${eventType}`,
         );
@@ -265,9 +191,7 @@ class WebSocketService {
       this.ws = null;
       this.isConnected = false;
       this.eventHandlers.clear();
-      logger.info(
-        'WebSocket disconnected',
-      );
+      logger.info('WebSocket disconnected');
     }
   }
 
@@ -278,8 +202,7 @@ class WebSocketService {
   isConnected() {
     return (
       this.isConnected &&
-      this.ws?.readyState ===
-        WebSocket.OPEN
+      this.ws?.readyState === WebSocket.OPEN
     );
   }
 
@@ -288,13 +211,9 @@ class WebSocketService {
    * @returns {number}
    */
   getReadyState() {
-    return (
-      this.ws?.readyState ||
-      WebSocket.CLOSED
-    );
+    return this.ws?.readyState || WebSocket.CLOSED;
   }
 }
 
-export const websocketService =
-  new WebSocketService();
+export const websocketService = new WebSocketService();
 export default websocketService;

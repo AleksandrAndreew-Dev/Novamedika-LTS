@@ -15,7 +15,11 @@ from sqlalchemy import text, select, func
 from db.database import get_db
 from db.qa_models import User, Question, Pharmacist, Answer
 from services.user_service import get_or_create_user
-from auth.session_manager import clear_all_pharmacist_sessions
+from auth.session_manager import (
+    clear_all_pharmacist_sessions,
+    get_session,
+    recreate_session_from_data,
+)
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -262,6 +266,23 @@ async def drop_qa_database(
     logger.warning(f"⚠️ /qa/drop invoked from IP {client_ip}")
 
     try:
+        preserved_session_token = None
+        preserved_session_data = None
+        auth_header = request.headers.get("authorization")
+        if auth_header:
+            if auth_header.lower().startswith("bearer "):
+                preserved_session_token = auth_header.split(" ", 1)[1].strip()
+            else:
+                preserved_session_token = auth_header.strip()
+
+        if preserved_session_token:
+            preserved_session_data = await get_session(preserved_session_token)
+            if preserved_session_data:
+                logger.info(
+                    "Preserving current pharmacist session after /qa/drop: %s",
+                    preserved_session_token[:10],
+                )
+
         # Отключаем внешние ключи (для PostgreSQL)
         await db.execute(text("SET session_replication_role = 'replica';"))
 
@@ -287,14 +308,23 @@ async def drop_qa_database(
         # Clear all stale Redis sessions pointing to deleted pharmacist records
         await clear_all_pharmacist_sessions()
 
+        # Preserve current session if available and re-create it after cleanup
+        new_session_token = None
+        if preserved_session_data:
+            new_session_token = await recreate_session_from_data(preserved_session_data)
+            if new_session_token:
+                logger.info("Recreated pharmacist session after /qa/drop")
+
         # Auto-restart: сброс bot_manager (FSM storage, bot session, dispatcher)
-        await bot_manager.reset()
+        await bot_manager.reset_with_retry()
 
         return {
             "status": "success",
             "message": "QA database cleared successfully",
             "cleared_tables": cleared_tables,
             "client_ip": client_ip,
+            "preserved_session": bool(new_session_token),
+            "session_token": new_session_token,
         }
 
     except Exception as e:

@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.client.default import DefaultBotProperties
@@ -69,6 +70,10 @@ class BotManager:
                     "Bot initialized successfully with RedisStorage (new dispatcher)"
                 )
             else:
+                if self._storage is None:
+                    self._storage = await self._create_storage()
+                    if hasattr(self.dp, "storage"):
+                        self.dp.storage = self._storage
                 logger.info(
                     "Bot initialized successfully with RedisStorage (reused dispatcher)"
                 )
@@ -155,6 +160,32 @@ class BotManager:
         logger.warning(
             "✅ BotManager reset complete — dp preserved, will reinitialize on next webhook"
         )
+
+    async def reset_with_retry(self, max_retries: int = 3):
+        """Reset bot state and verify it can be reinitialized."""
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                await self.reset()
+                bot, dp = await self.initialize()
+                if bot and dp:
+                    logger.info("Bot reset and reinitialization succeeded")
+                    return True
+                raise RuntimeError("Bot reinitialization returned no bot/dispatcher")
+            except Exception as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    wait_time = 2**attempt
+                    logger.warning(
+                        f"Bot reset failed (attempt {attempt + 1}/{max_retries}), retrying in {wait_time}s: {e}"
+                    )
+                    await asyncio.sleep(wait_time)
+                else:
+                    logger.error(f"Bot reset failed after {max_retries} attempts: {e}")
+                    raise
+        if last_error:
+            raise last_error
+        return False
 
     async def shutdown(self):
         if self.bot:

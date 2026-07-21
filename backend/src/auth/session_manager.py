@@ -105,6 +105,24 @@ async def create_session_token(
     return token
 
 
+async def recreate_session_from_data(session_data: Optional[dict]) -> Optional[str]:
+    """Recreate a pharmacist session from existing session data after a reset."""
+    if not session_data:
+        return None
+
+    telegram_id = session_data.get("telegram_id")
+    pharmacist_uuid = session_data.get("pharmacist_uuid")
+    user_id = session_data.get("user_id")
+
+    if not telegram_id or not pharmacist_uuid or not user_id:
+        logger.warning("Cannot recreate session: missing required session data")
+        return None
+
+    return await create_session_token(
+        int(telegram_id), str(pharmacist_uuid), str(user_id)
+    )
+
+
 async def get_session(token: str) -> Optional[dict]:
     """Get session data by token from Redis"""
     redis_client = await get_redis_client()

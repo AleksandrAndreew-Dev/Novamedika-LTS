@@ -22,6 +22,10 @@ export default function ConsultationChat({
   const [sending, setSending] = useState(false);
   const [question, setQuestion] = useState(null);
   const [error, setError] = useState(null);
+  const [
+    completionOptionsVisible,
+    setCompletionOptionsVisible,
+  ] = useState(false);
   const messagesEndRef = useRef(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
 
@@ -79,6 +83,10 @@ export default function ConsultationChat({
     return () => {
       unsubscribe();
     };
+  }, [questionId]);
+
+  useEffect(() => {
+    setCompletionOptionsVisible(false);
   }, [questionId]);
 
   useEffect(() => {
@@ -184,6 +192,26 @@ export default function ConsultationChat({
     if (onClose) onClose();
     else navigate('/pharmacist'); // Явный переход на главную страницу вместо navigate(-1)
   };
+
+  const handleComplete = useCallback(async () => {
+    if (!questionId) return;
+    if (!window.confirm('Завершить консультацию?')) return;
+
+    try {
+      await questionsService.completeQuestion(questionId);
+      setQuestion((prev) =>
+        prev ? { ...prev, status: 'completed' } : prev,
+      );
+      setCompletionOptionsVisible(true);
+    } catch (e) {
+      logger.error('Failed to complete:', e);
+      setError('Не удалось завершить консультацию');
+    }
+  }, [questionId]);
+
+  const handleContinueToNext = useCallback(() => {
+    if (onClose) onClose();
+  }, [onClose]);
 
   const getUserName = () => {
     if (!question) return 'Пользователь';
@@ -411,18 +439,7 @@ export default function ConsultationChat({
           </div>
         </div>
         <button
-          onClick={async () => {
-            if (confirm('Завершить консультацию?')) {
-              try {
-                await questionsService.completeQuestion(
-                  questionId,
-                );
-                if (onClose) onClose();
-              } catch (e) {
-                logger.error('Failed to complete:', e);
-              }
-            }
-          }}
+          onClick={handleComplete}
           className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full transition-colors"
           aria-label="Завершить"
         >
@@ -441,6 +458,30 @@ export default function ConsultationChat({
           </svg>
         </button>
       </div>
+
+      {completionOptionsVisible && (
+        <div className="border-b border-emerald-200 bg-emerald-50 px-4 py-3">
+          <p className="text-sm font-medium text-emerald-700">
+            Консультация завершена. Что делать дальше?
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleContinueToNext}
+              className="rounded-full bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-emerald-700"
+            >
+              Следующая консультация
+            </button>
+            <button
+              type="button"
+              onClick={handleBack}
+              className="rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
+            >
+              Вернуться к списку
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ===== MESSAGES ===== */}
       <div
