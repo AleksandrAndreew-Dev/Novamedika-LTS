@@ -2,14 +2,26 @@ import { useEffect } from 'react';
 
 const TelegramInit = () => {
   useEffect(() => {
-    // Добавляем скрипт Telegram Web App
+    if (
+      document.querySelector(
+        'script[src*="telegram-web-app"]',
+      )
+    ) {
+      return;
+    }
+
     const script = document.createElement('script');
-    script.src = 'https://telegram.org/js/telegram-web-app.js';
+    script.src =
+      'https://telegram.org/js/telegram-web-app.js';
     script.async = true;
+    script.defer = true;
+    script.setAttribute('data-initialized', 'true');
     document.head.appendChild(script);
 
     return () => {
-      document.head.removeChild(script);
+      if (script.parentNode) {
+        script.parentNode.removeChild(script);
+      }
     };
   }, []);
 

@@ -21,6 +21,14 @@ export function TelegramProvider({ children }) {
     let viewportLogCount = 0;
     const MAX_VIEWPORT_LOGS = 10;
     let viewportTimer = null;
+    let didSetReady = false;
+
+    const markReady = () => {
+      if (!didSetReady) {
+        didSetReady = true;
+        setIsReady(true);
+      }
+    };
 
     const handleViewportChange = () => {
       if (viewportTimer) return; // debounce: skip if timer already active
@@ -55,7 +63,7 @@ export function TelegramProvider({ children }) {
 
         setTg(telegram);
         setIsTelegram(true);
-        setIsReady(true);
+        markReady();
 
         logger.log('Telegram Web App initialized:', {
           platform: telegram.platform,
@@ -63,24 +71,18 @@ export function TelegramProvider({ children }) {
           user: telegram.initDataUnsafe?.user,
         });
       } else {
-        setIsReady(true);
+        markReady();
         logger.log('Not in Telegram environment');
       }
     };
 
-    let attempts = 0;
-    const maxAttempts = 50;
-
     const checkTelegram = () => {
       if (window.Telegram?.WebApp) {
         initTelegram();
-      } else if (attempts < maxAttempts) {
-        attempts++;
-        setTimeout(checkTelegram, 100);
       } else {
-        setIsReady(true);
+        markReady();
         logger.log(
-          'Telegram Web App not detected after timeout',
+          'Telegram Web App not detected; continuing without blocking UI',
         );
       }
     };

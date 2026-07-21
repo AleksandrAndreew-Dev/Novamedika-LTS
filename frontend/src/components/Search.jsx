@@ -5,36 +5,48 @@ import React, {
   useRef,
   lazy,
   Suspense,
-} from "react";
-import { useNavigate } from "react-router-dom";
-import SearchBar from "./SearchBar";
-import ErrorBoundary from "./ErrorBoundary";
-const FormSelection = lazy(() => import("./FormSelection"));
-const SearchResults = lazy(() => import("./SearchResults"));
-import { useTelegramWebApp } from "../telegram/TelegramContext";
-import { api } from "../api/client";
-import { logger } from "../utils/logger";
-import { useChat } from "../context/ChatContext";
+} from 'react';
+import { useNavigate } from 'react-router-dom';
+import SearchBar from './SearchBar';
+import ErrorBoundary from './ErrorBoundary';
+const FormSelection = lazy(() => import('./FormSelection'));
+const SearchResults = lazy(() => import('./SearchResults'));
+import { useTelegramWebApp } from '../telegram/TelegramContext';
+import { api } from '../api/client';
+import { logger } from '../utils/logger';
+import { useChat } from '../context/ChatContext';
+
+const DEFAULT_CITIES = [
+  'Минск',
+  'Гомель',
+  'Брест',
+  'Гродно',
+  'Витебск',
+  'Могилев',
+];
 
 export default function Search() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [showMyQuestions, setShowMyQuestions] = useState(false);
-  const [cities, setCities] = useState([]);
+  const [showMyQuestions, setShowMyQuestions] =
+    useState(false);
+  const [cities, setCities] = useState(DEFAULT_CITIES);
 
   // Чтение истории анонимных вопросов из localStorage
   const [anonQuestions] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem("anon_questions") || "[]");
+      return JSON.parse(
+        localStorage.getItem('anon_questions') || '[]',
+      );
     } catch {
       return [];
     }
   });
 
   const [searchData, setSearchData] = useState({
-    name: "",
-    city: "",
-    form: "",
+    name: '',
+    city: '',
+    form: '',
   });
   const [searchContext, setSearchContext] = useState(null);
   const [results, setResults] = useState([]);
@@ -81,36 +93,68 @@ export default function Search() {
     };
   }, [step, isTelegram, tg, onTgBack]);
 
-  // Fetch cities on component mount
+  // Отложенно подгружаем список городов после первого рендера,
+  // чтобы не блокировать показ стартового экрана.
   useEffect(() => {
+    let cancelled = false;
+
     const fetchCities = async () => {
       try {
-        const response = await api.get("/cities/");
+        const response = await api.get('/cities/');
         const data = response.data;
 
         const citiesList = Array.isArray(data)
           ? data
           : (data?.results ?? data?.items ?? []);
 
-        if (!Array.isArray(citiesList)) {
-          setCities([
-            "Минск",
-            "Гомель",
-            "Брест",
-            "Гродно",
-            "Витебск",
-            "Могилев",
-          ]);
-        } else {
-          setCities(citiesList);
+        if (!cancelled) {
+          if (
+            Array.isArray(citiesList) &&
+            citiesList.length > 0
+          ) {
+            setCities(citiesList);
+          } else {
+            setCities(DEFAULT_CITIES);
+          }
         }
       } catch (error) {
-        logger.error("Error fetching cities:", error);
-        setCities(["Минск", "Гомель", "Брест", "Гродно", "Витебск", "Могилев"]);
+        logger.error('Error fetching cities:', error);
+        if (!cancelled) {
+          setCities(DEFAULT_CITIES);
+        }
       }
     };
 
-    fetchCities();
+    const scheduleFetch = () => {
+      if (
+        typeof window !== 'undefined' &&
+        'requestIdleCallback' in window
+      ) {
+        return window.requestIdleCallback(() => {
+          void fetchCities();
+        });
+      }
+
+      return window.setTimeout(() => {
+        void fetchCities();
+      }, 0);
+    };
+
+    const timerId = scheduleFetch();
+
+    return () => {
+      cancelled = true;
+      if (typeof window !== 'undefined') {
+        if (
+          'cancelIdleCallback' in window &&
+          typeof timerId === 'number'
+        ) {
+          window.cancelIdleCallback(timerId);
+        } else {
+          window.clearTimeout(timerId);
+        }
+      }
+    };
   }, []);
 
   const handleInitialSearch = async (name, city) => {
@@ -121,10 +165,10 @@ export default function Search() {
     setLoading(true);
     setError(null);
     try {
-      const response = await api.get("/search-fts/", {
+      const response = await api.get('/search-fts/', {
         params: {
           q: name,
-          city: city || "",
+          city: city || '',
           page: 1,
           size: 20,
         },
@@ -133,29 +177,35 @@ export default function Search() {
 
       const responseData = response.data || {};
 
-      setSearchData({ name, city: city || "" });
+      setSearchData({ name, city: city || '' });
       setSearchContext({
-        availableCombinations: responseData.available_combinations || [],
+        availableCombinations:
+          responseData.available_combinations || [],
         totalFound: responseData.total_found || 0,
       });
       setStep(2);
     } catch (error) {
       // Improved cancel detection for axios + AbortController
       const isCanceled =
-        error?.name === "CanceledError" ||
-        error?.name === "AbortError" ||
-        error?.code === "ERR_CANCELED";
+        error?.name === 'CanceledError' ||
+        error?.name === 'AbortError' ||
+        error?.code === 'ERR_CANCELED';
 
       if (isCanceled) return;
 
-      logger.error("Search error:", error);
-      setError("Ошибка при поиске. Попробуйте еще раз.");
+      logger.error('Search error:', error);
+      setError('Ошибка при поиске. Попробуйте еще раз.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleFormSelect = async (name, form, manufacturer, country) => {
+  const handleFormSelect = async (
+    name,
+    form,
+    manufacturer,
+    country,
+  ) => {
     if (abortRef.current) abortRef.current.abort();
     abortRef.current = new AbortController();
     const { signal } = abortRef.current;
@@ -174,7 +224,10 @@ export default function Search() {
       if (country) params.country = country;
       if (searchData.city) params.city = searchData.city;
 
-      const response = await api.get("/search-fts/", { params, signal });
+      const response = await api.get('/search-fts/', {
+        params,
+        signal,
+      });
 
       setSearchData((prev) => ({
         ...prev,
@@ -195,14 +248,14 @@ export default function Search() {
     } catch (error) {
       // Improved cancel detection for axios + AbortController
       const isCanceled =
-        error?.name === "CanceledError" ||
-        error?.name === "AbortError" ||
-        error?.code === "ERR_CANCELED";
+        error?.name === 'CanceledError' ||
+        error?.name === 'AbortError' ||
+        error?.code === 'ERR_CANCELED';
 
       if (isCanceled) return;
 
-      logger.error("Form selection error:", error);
-      setError("Ошибка при загрузке результатов.");
+      logger.error('Form selection error:', error);
+      setError('Ошибка при загрузке результатов.');
     } finally {
       setLoading(false);
     }
@@ -224,10 +277,14 @@ export default function Search() {
       if (searchData.form) params.form = searchData.form;
       if (searchData.manufacturer)
         params.manufacturer = searchData.manufacturer;
-      if (searchData.country) params.country = searchData.country;
+      if (searchData.country)
+        params.country = searchData.country;
       if (searchData.city) params.city = searchData.city;
 
-      const response = await api.get("/search-fts/", { params, signal });
+      const response = await api.get('/search-fts/', {
+        params,
+        signal,
+      });
 
       setResults(response.data.items);
       setPagination((prev) => ({
@@ -239,14 +296,14 @@ export default function Search() {
     } catch (error) {
       // Improved cancel detection for axios + AbortController
       const isCanceled =
-        error?.name === "CanceledError" ||
-        error?.name === "AbortError" ||
-        error?.code === "ERR_CANCELED";
+        error?.name === 'CanceledError' ||
+        error?.name === 'AbortError' ||
+        error?.code === 'ERR_CANCELED';
 
       if (isCanceled) return;
 
-      logger.error("Pagination error:", error);
-      setError("Ошибка при загрузке страницы.");
+      logger.error('Pagination error:', error);
+      setError('Ошибка при загрузке страницы.');
     } finally {
       setLoading(false);
     }
@@ -255,7 +312,7 @@ export default function Search() {
   return (
     <div
       className={`min-h-screen ${
-        isTelegram ? "bg-transparent" : "bg-telegram-bg"
+        isTelegram ? 'bg-transparent' : 'bg-telegram-bg'
       }`}
     >
       {/* Показываем кастомный header только вне Telegram */}
@@ -264,7 +321,9 @@ export default function Search() {
           <div className="text-center py-4 px-4 relative">
             {step > 1 && (
               <button
-                onClick={() => handleStepNavigation(step - 1)}
+                onClick={() =>
+                  handleStepNavigation(step - 1)
+                }
                 disabled={loading}
                 className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center text-sm"
               >
@@ -284,18 +343,27 @@ export default function Search() {
                 Назад
               </button>
             )}
-            <div className="text-gray-700 text-sm mb-1">Сеть Аптек</div>
+            <div className="text-gray-700 text-sm mb-1">
+              Сеть Аптек
+            </div>
             <h1 className="text-2xl font-bold text-telegram-primary m-0">
               <span className="text-orange-500">Н</span>ова
-              <span className="text-orange-500">М</span>едика
+              <span className="text-orange-500">М</span>
+              едика
             </h1>
-            <div className="text-gray-700 text-sm mt-1">Справочная служба</div>
+            <div className="text-gray-700 text-sm mt-1">
+              Справочная служба
+            </div>
           </div>
         </div>
       )}
 
-      <div className={isTelegram ? "p-2" : "p-4"}>
-        <div className={isTelegram ? "max-w-full" : "max-w-4xl mx-auto"}>
+      <div className={isTelegram ? 'p-2' : 'p-4'}>
+        <div
+          className={
+            isTelegram ? 'max-w-full' : 'max-w-4xl mx-auto'
+          }
+        >
           <div className="mb-6 bg-white rounded-xl p-4 border border-gray-200">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center space-x-2">
@@ -303,22 +371,23 @@ export default function Search() {
                   <React.Fragment key={stepNum}>
                     <button
                       onClick={() =>
-                        stepNum < step && handleStepNavigation(stepNum)
+                        stepNum < step &&
+                        handleStepNavigation(stepNum)
                       }
                       disabled={stepNum > step}
                       className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium transition-all ${
                         stepNum === step
-                          ? "bg-telegram-primary text-white shadow-md"
+                          ? 'bg-telegram-primary text-white shadow-md'
                           : stepNum < step
-                            ? "bg-telegram-primary/20 text-telegram-primary cursor-pointer hover:bg-telegram-primary/30"
-                            : "bg-gray-100 text-gray-400"
+                            ? 'bg-telegram-primary/20 text-telegram-primary cursor-pointer hover:bg-telegram-primary/30'
+                            : 'bg-gray-100 text-gray-400'
                       }`}
                       aria-label={`Перейти к шагу ${stepNum}: ${
                         stepNum === 1
-                          ? "Поиск"
+                          ? 'Поиск'
                           : stepNum === 2
-                            ? "Выбор формы"
-                            : "Результаты"
+                            ? 'Выбор формы'
+                            : 'Результаты'
                       }`}
                     >
                       {stepNum}
@@ -326,7 +395,9 @@ export default function Search() {
                     {stepNum < 3 && (
                       <div
                         className={`w-8 h-0.5 ${
-                          stepNum < step ? "bg-telegram-primary" : "bg-gray-200"
+                          stepNum < step
+                            ? 'bg-telegram-primary'
+                            : 'bg-gray-200'
                         }`}
                       />
                     )}
@@ -337,36 +408,50 @@ export default function Search() {
 
             <div className="flex justify-between text-sm">
               <button
-                onClick={() => step > 1 && handleStepNavigation(1)}
+                onClick={() =>
+                  step > 1 && handleStepNavigation(1)
+                }
                 className={`flex flex-col items-center ${
                   step >= 1
-                    ? "text-telegram-primary cursor-pointer hover:text-blue-700"
-                    : "text-gray-400"
+                    ? 'text-telegram-primary cursor-pointer hover:text-blue-700'
+                    : 'text-gray-400'
                 }`}
               >
                 <span className="font-medium">Поиск</span>
-                <span className="text-xs mt-1">Название и город</span>
+                <span className="text-xs mt-1">
+                  Название и город
+                </span>
               </button>
 
               <button
-                onClick={() => step > 2 && handleStepNavigation(2)}
+                onClick={() =>
+                  step > 2 && handleStepNavigation(2)
+                }
                 className={`flex flex-col items-center ${
                   step >= 2
-                    ? "text-telegram-primary cursor-pointer hover:text-blue-700"
-                    : "text-gray-400"
+                    ? 'text-telegram-primary cursor-pointer hover:text-blue-700'
+                    : 'text-gray-400'
                 }`}
               >
                 <span className="font-medium">Форма</span>
-                <span className="text-xs mt-1">Выбор препарата</span>
+                <span className="text-xs mt-1">
+                  Выбор препарата
+                </span>
               </button>
 
               <div
                 className={`flex flex-col items-center ${
-                  step === 3 ? "text-telegram-primary" : "text-gray-400"
+                  step === 3
+                    ? 'text-telegram-primary'
+                    : 'text-gray-400'
                 }`}
               >
-                <span className="font-medium">Результаты</span>
-                <span className="text-xs mt-1">Наличие в аптеках</span>
+                <span className="font-medium">
+                  Результаты
+                </span>
+                <span className="text-xs mt-1">
+                  Наличие в аптеках
+                </span>
               </div>
             </div>
           </div>
@@ -385,7 +470,9 @@ export default function Search() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <span className="text-red-800 text-sm">{error}</span>
+                <span className="text-red-800 text-sm">
+                  {error}
+                </span>
               </div>
             </div>
           )}
@@ -445,7 +532,8 @@ export default function Search() {
                     Ошибка загрузки вариантов
                   </h3>
                   <p className="text-gray-600 text-sm mb-4">
-                    Не удалось отобразить результаты. Попробуйте ещё раз.
+                    Не удалось отобразить результаты.
+                    Попробуйте ещё раз.
                   </p>
                   <button
                     onClick={() => setStep(1)}
@@ -460,13 +548,16 @@ export default function Search() {
                 fallback={
                   <div className="flex justify-center items-center py-12">
                     <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-telegram-primary"></div>
-                    <span className="text-gray-600 ml-3">Загрузка...</span>
+                    <span className="text-gray-600 ml-3">
+                      Загрузка...
+                    </span>
                   </div>
                 }
               >
                 <FormSelection
                   availableCombinations={
-                    searchContext.availableCombinations || []
+                    searchContext.availableCombinations ||
+                    []
                   }
                   searchData={searchData}
                   onFormSelect={handleFormSelect}
@@ -501,7 +592,8 @@ export default function Search() {
                     Ошибка загрузки результатов
                   </h3>
                   <p className="text-gray-600 text-sm mb-4">
-                    Не удалось отобразить результаты поиска. Попробуйте ещё раз.
+                    Не удалось отобразить результаты поиска.
+                    Попробуйте ещё раз.
                   </p>
                   <button
                     onClick={() => setStep(2)}
@@ -516,7 +608,9 @@ export default function Search() {
                 fallback={
                   <div className="flex justify-center items-center py-12">
                     <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-telegram-primary"></div>
-                    <span className="text-gray-600 ml-3">Загрузка...</span>
+                    <span className="text-gray-600 ml-3">
+                      Загрузка...
+                    </span>
                   </div>
                 }
               >
@@ -527,7 +621,11 @@ export default function Search() {
                   onPageChange={handlePageChange}
                   onNewSearch={() => {
                     setStep(1);
-                    setSearchData({ name: "", city: "", form: "" });
+                    setSearchData({
+                      name: '',
+                      city: '',
+                      form: '',
+                    });
                     setResults([]);
                     setSearchContext(null);
                   }}
@@ -570,7 +668,9 @@ export default function Search() {
       {!isTelegram && anonQuestions.length > 0 && (
         <div className="fixed bottom-40 left-4 z-40">
           <button
-            onClick={() => setShowMyQuestions(!showMyQuestions)}
+            onClick={() =>
+              setShowMyQuestions(!showMyQuestions)
+            }
             className="bg-white text-blue-600 border border-blue-200 rounded-full px-4 py-2.5 shadow-lg hover:shadow-xl transition-all text-sm font-medium flex items-center gap-2 hover:scale-105 active:scale-95"
           >
             <svg
@@ -605,7 +705,9 @@ export default function Search() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="font-semibold text-gray-900">Мои консультации</h3>
+              <h3 className="font-semibold text-gray-900">
+                Мои консультации
+              </h3>
               <button
                 onClick={() => setShowMyQuestions(false)}
                 className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
@@ -621,53 +723,69 @@ export default function Search() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 >
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                  <line
+                    x1="18"
+                    y1="6"
+                    x2="6"
+                    y2="18"
+                  ></line>
+                  <line
+                    x1="6"
+                    y1="6"
+                    x2="18"
+                    y2="18"
+                  ></line>
                 </svg>
               </button>
             </div>
             <div className="overflow-y-auto max-h-[50vh]">
-              {[...anonQuestions].reverse().map((q, idx) => (
-                <button
-                  key={q.uuid || idx}
-                  onClick={() => {
-                    setShowMyQuestions(false);
-                    navigate(`/chat/${q.uuid}`);
-                  }}
-                  className="w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors flex items-start gap-3"
-                >
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-semibold flex-shrink-0 mt-0.5">
-                    💬
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900 truncate">{q.text}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {q.created_at
-                        ? new Date(q.created_at).toLocaleDateString("ru-RU")
-                        : ""}
-                    </p>
-                  </div>
-                  <svg
-                    className="w-4 h-4 text-gray-300 flex-shrink-0 mt-1"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+              {[...anonQuestions]
+                .reverse()
+                .map((q, idx) => (
+                  <button
+                    key={q.uuid || idx}
+                    onClick={() => {
+                      setShowMyQuestions(false);
+                      navigate(`/chat/${q.uuid}`);
+                    }}
+                    className="w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors flex items-start gap-3"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 5l7 7-7 7"
-                    />
-                  </svg>
-                </button>
-              ))}
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-semibold flex-shrink-0 mt-0.5">
+                      💬
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-900 truncate">
+                        {q.text}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {q.created_at
+                          ? new Date(
+                              q.created_at,
+                            ).toLocaleDateString('ru-RU')
+                          : ''}
+                      </p>
+                    </div>
+                    <svg
+                      className="w-4 h-4 text-gray-300 flex-shrink-0 mt-1"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                      />
+                    </svg>
+                  </button>
+                ))}
             </div>
             <div className="p-3 border-t border-gray-100">
               <button
                 onClick={() => {
                   setShowMyQuestions(false);
-                  navigate("/chat/new");
+                  navigate('/chat/new');
                 }}
                 className="w-full py-2.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white text-sm font-medium rounded-xl hover:from-blue-600 hover:to-purple-700 transition-all"
               >

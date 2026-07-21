@@ -201,39 +201,24 @@ function App() {
       'cookiesAccepted',
     );
 
-    // Debug logging для production диагностики
-    console.log('[Consent Modal Check]', {
-      isInTelegramCached,
-      hasTelegramSDK: !!window.Telegram?.WebApp,
-      hasInitData: !!window.Telegram?.WebApp?.initData,
-      initDataLength:
-        window.Telegram?.WebApp?.initData?.length || 0,
-      cookiesAccepted,
-      protocol: window.location.protocol,
-      hostname: window.location.hostname,
-      pathname: window.location.pathname,
-      isPharmacistMode,
-    });
+    const showConsentBanner = () => {
+      if (!isPharmacistMode) {
+        setShowCookieBanner(true);
+      }
+    };
 
-    // Если мы в Telegram WebApp - проверяем согласие через API
+    // Не блокируем рендер приложения на долгой проверке consent.
+    // Сначала показываем интерфейс сразу, а проверку выполняем асинхронно.
+    if (!isPharmacistMode) {
+      if (cookiesAccepted) {
+        setShowCookieBanner(false);
+      } else {
+        showConsentBanner();
+      }
+    }
+
     if (isInTelegramCached && !isPharmacistMode) {
-      checkTelegramConsent();
-    } else if (
-      !isInTelegramCached &&
-      !cookiesAccepted &&
-      !isPharmacistMode
-    ) {
-      // Для обычного браузера показываем модальное окно если нет согласия
-      console.log('[Consent Modal] ✅ Showing modal');
-      setShowCookieBanner(true);
-    } else {
-      console.log('[Consent Modal] ❌ NOT showing', {
-        reason: isInTelegramCached
-          ? 'in Telegram (checking via API)'
-          : cookiesAccepted
-            ? 'already accepted'
-            : 'pharmacist mode',
-      });
+      void checkTelegramConsent();
     }
   }, [isInTelegramCached, isPharmacistMode]);
 
@@ -244,9 +229,6 @@ function App() {
         window.Telegram?.WebApp?.initDataUnsafe?.user;
 
       if (!tgUser) {
-        console.log(
-          '[Telegram Consent] No user data in initData',
-        );
         return;
       }
 
@@ -255,11 +237,11 @@ function App() {
         tgUser.id,
       );
 
-      // Добавляем timeout 5s для предотвращения бесконечного ожидания
+      // Ограничиваем время ожидания, чтобы не тормозить первый вход.
       const controller = new AbortController();
       const timeoutId = setTimeout(
         () => controller.abort(),
-        5000,
+        1500,
       );
 
       try {
@@ -288,38 +270,22 @@ function App() {
         }
 
         const data = await response.json();
-        console.log('[Telegram Consent] Response:', data);
 
-        // Если нужно дополнительное согласие для WebApp - показываем модальное окно
         if (data.needs_webapp_consent) {
-          console.log(
-            '[Telegram Consent] ✅ Additional consent needed - showing modal',
-          );
           setShowCookieBanner(true);
         } else {
-          console.log(
-            '[Telegram Consent] ❌ Consent already given - no modal needed',
-          );
-          // Сохраняем флаг что согласие уже есть
           localStorage.setItem('cookiesAccepted', 'true');
+          setShowCookieBanner(false);
         }
       } catch (fetchError) {
         clearTimeout(timeoutId);
         if (fetchError.name === 'AbortError') {
-          console.warn(
-            '[Telegram Consent] Timeout - showing modal for safety',
-          );
           setShowCookieBanner(true);
           return;
         }
         throw fetchError;
       }
     } catch (error) {
-      console.error(
-        '[Telegram Consent] Error checking consent:',
-        error,
-      );
-      // В случае ошибки показываем модальное окно для безопасности
       setShowCookieBanner(true);
     }
   };
