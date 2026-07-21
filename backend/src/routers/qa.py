@@ -38,11 +38,12 @@ async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncS
     try:
         from bot.core import bot_manager
 
-        bot, _ = await bot_manager.initialize()
-
-        if not bot:
+        # Используем уже инициализированный бот, не вызываем initialize() повторно
+        if not bot_manager.bot:
             logger.error("Bot not initialized for sending answer to user")
             return
+
+        bot = bot_manager.bot
 
         if question.user.telegram_id:
             message_text = (
@@ -747,8 +748,8 @@ async def send_consultation_message(
                     from bot.core import bot_manager
                     from bot.keyboards.qa_keyboard import make_question_keyboard
 
-                    bot, _ = await bot_manager.initialize()
-                    if bot:
+                    if bot_manager.bot:
+                        bot = bot_manager.bot
                         user_name = f"{current_user.first_name or 'Пользователь'}"
                         if current_user.last_name:
                             user_name += f" {current_user.last_name}"
@@ -1084,8 +1085,8 @@ async def send_public_question_message(
                 from bot.core import bot_manager
                 from bot.keyboards.qa_keyboard import make_question_keyboard
 
-                bot, _ = await bot_manager.initialize()
-                if bot:
+                if bot_manager.bot:
+                    bot = bot_manager.bot
                     for pharmacist in pharmacists:
                         if pharmacist.user and pharmacist.user.telegram_id:
                             try:
@@ -1115,8 +1116,8 @@ async def send_public_question_message(
             if question.user and question.user.telegram_id:
                 from bot.core import bot_manager
 
-                bot, _ = await bot_manager.initialize()
-                if bot:
+                if bot_manager.bot:
+                    bot = bot_manager.bot
                     await bot.send_message(
                         chat_id=question.user.telegram_id,
                         text=message.text,

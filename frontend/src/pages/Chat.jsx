@@ -3,593 +3,210 @@ import {
   useEffect,
   useRef,
   useCallback,
-} from 'react'
-import {
-  useParams,
-  useNavigate,
-} from 'react-router-dom'
-import api from '../api/client'
-import userAuthService from '../services/userAuthService'
-import telegramAuthService from '../services/telegramAuthService'
-import Toast from '../components/Toast'
+} from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useChat } from '../context/ChatContext';
+import chatService from '../services/chatService';
+import userAuthService from '../services/userAuthService';
+import telegramAuthService from '../services/telegramAuthService';
+import Toast from '../components/Toast';
 
 export default function Chat() {
-  const { id } = useParams()
-  const navigate =
-    useNavigate()
-  const messagesEndRef =
-    useRef(null)
-  const urlParams =
-    new URLSearchParams(
-      window.location.search,
-    )
-  const urlForceAnon =
-    urlParams.get('anon') ===
-    '1'
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const messagesEndRef = useRef(null);
+  const urlParams = new URLSearchParams(
+    window.location.search,
+  );
+  const urlForceAnon = urlParams.get('anon') === '1';
 
-  const [
-    consultation,
-    setConsultation,
-  ] = useState(null)
-  const [
+  // Данные из ChatContext (единый источник для сообщений)
+  const {
     messages,
     setMessages,
-  ] = useState([])
-  const [
-    newMessage,
-    setNewMessage,
-  ] = useState('')
-  const [
-    loading,
-    setLoading,
-  ] = useState(true)
-  const [
-    sending,
-    setSending,
-  ] = useState(false)
-  const [error, setError] =
-    useState(null)
-  const [toast, setToast] =
-    useState(null)
-  const [
-    isAtBottom,
-    setIsAtBottom,
-  ] = useState(true)
-  const [
-    isTelegramUser,
-    setIsTelegramUser,
-  ] = useState(false)
-  // URL param ?anon=1 is authoritative — consultation was created via /api/public/questions/
-  const [
+    currentConsultationId,
+    setCurrentConsultationId,
+    loading: contextLoading,
     isAnonymous,
     setIsAnonymous,
-  ] = useState(urlForceAnon)
-  const pollingRef =
-    useRef(null)
+    sendMessage: contextSendMessage,
+  } = useChat();
 
-  // Определяем анонимный режим: URL param ?anon=1 имеет приоритет,
-  // так как консультация могла быть создана через public endpoint без JWT.
-  const getEffectiveAnonymous =
-    useCallback(() => {
-      if (urlForceAnon)
-        return true
-      return !userAuthService.isAuthenticated()
-    }, [urlForceAnon])
+  const [consultation, setConsultation] = useState(null);
+  const [newMessage, setNewMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [isTelegramUser, setIsTelegramUser] =
+    useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
 
-  // Auth headers теперь берутся из interceptor в client.js
-  const getAuthHeaders =
-    useCallback(
-      (inTelegram) => {
-        const token =
-          userAuthService.getAccessToken()
-        if (token) {
-          return {
-            Authorization: `Bearer ${token}`,
-          }
-        }
-        if (
-          inTelegram &&
-          telegramAuthService.initData
-        ) {
-          return {
-            Authorization: `tma ${telegramAuthService.initData}`,
-          }
-        }
-        return {}
-      },
-      [],
-    )
+  // Определяем анонимный режим: URL param ?anon=1 имеет приоритет
+  const getEffectiveAnonymous = useCallback(() => {
+    if (urlForceAnon) return true;
+    return !userAuthService.isAuthenticated();
+  }, [urlForceAnon]);
 
+  // Инициализация чата при загрузке страницы
   useEffect(() => {
-    const initChat =
-      async () => {
-        try {
-          // 1. Попытка Telegram WebApp auto-login (если в Telegram)
-          let telegramUser = false
-          if (
-            telegramAuthService.canAuthViaWebApp()
-          ) {
-            telegramUser = true
-            const success =
-              await telegramAuthService.autoLogin()
-            if (success) {
-              console.log(
-                '[Chat] ✅ Telegram auto-login successful',
-              )
-            } else {
-              console.log(
-                '[Chat] ⚠️ Telegram auto-login failed — continuing as anonymous',
-              )
-            }
-          }
-
-          // 2. Определяем анонимность: ?anon=1 (из NewConsultation) ИЛИ нет JWT
-          //    Важно: не перезаписываем isAnonymous если urlForceAnon=true
-          const anon =
-            getEffectiveAnonymous()
-          setIsTelegramUser(
-            telegramUser,
-          )
-          // Не перезаписываем если уже true от urlForceAnon — public endpoint
-          if (anon)
-            setIsAnonymous(
-              true,
-            )
-
-          // 3. Загружаем данные консультации
-          await loadConsultationData(
-            telegramUser,
-            anon,
-          )
-        } catch (err) {
-          console.error(
-            '[Chat] Init error:',
-            err,
-          )
-          setError(
-            'Не удалось загрузить консультацию',
-          )
-        } finally {
-          setLoading(false)
-        }
-      }
-
-    initChat()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id])
-
-  // Polling for new messages (every 5 seconds)
-  useEffect(() => {
-    if (!id) return
-    if (
-      !isAnonymous &&
-      !isTelegramUser &&
-      !userAuthService.isAuthenticated()
-    )
-      return
-
-    const poll = async () => {
+    const initChat = async () => {
       try {
-        const anon =
-          urlForceAnon ||
-          isAnonymous ||
-          !userAuthService.isAuthenticated()
-        const endpoint = anon
-          ? `/api/public/questions/${id}/messages`
-          : `/api/consultations/${id}/messages`
-        const headers = anon
-          ? {}
-          : getAuthHeaders(
-              isTelegramUser,
-            )
-        const res =
-          await api.get(
-            endpoint,
-            { headers },
-          )
-        const newMessages =
-          res.data
-
-        setMessages(
-          (prev) => {
-            const prevIds =
-              new Set(
-                prev.map(
-                  (m) =>
-                    m.uuid ||
-                    m.id,
-                ),
-              )
-            const added =
-              newMessages.filter(
-                (m) =>
-                  !prevIds.has(
-                    m.uuid ||
-                      m.id,
-                  ),
-              )
-            if (
-              added.length ===
-              0
-            )
-              return prev
-            const updated = [
-              ...prev,
-              ...added,
-            ]
-            updated.sort(
-              (a, b) =>
-                new Date(
-                  a.created_at,
-                ) -
-                new Date(
-                  b.created_at,
-                ),
-            )
-            return updated
-          },
-        )
-      } catch {
-        // Silent fail
-      }
-    }
-
-    // Initial load after short delay
-    const initialLoad =
-      setTimeout(poll, 500)
-    pollingRef.current =
-      setInterval(poll, 5000)
-
-    return () => {
-      clearTimeout(
-        initialLoad,
-      )
-      if (
-        pollingRef.current
-      ) {
-        clearInterval(
-          pollingRef.current,
-        )
-        pollingRef.current =
-          null
-      }
-    }
-  }, [
-    id,
-    isTelegramUser,
-    isAnonymous,
-    getAuthHeaders,
-    urlForceAnon,
-  ])
-
-  useEffect(() => {
-    scrollToBottom()
-  }, [messages])
-
-  const loadConsultationData =
-    async (
-      inTelegram = false,
-      anon = false,
-    ) => {
-      try {
-        setLoading(true)
-
-        // Анонимные пользователи — используем /api/public/ endpoints
-        if (anon) {
-          try {
-            const [
-              consultationRes,
-              messagesRes,
-            ] =
-              await Promise.all(
-                [
-                  api.get(
-                    `/api/public/questions/${id}`,
-                  ),
-                  api.get(
-                    `/api/public/questions/${id}/messages`,
-                  ),
-                ],
-              )
-
-            if (
-              consultationRes
-            )
-              setConsultation(
-                consultationRes.data,
-              )
-            if (messagesRes)
-              setMessages(
-                messagesRes.data,
-              )
-            return
-          } catch (pubErr) {
-            // Fallback: 404 на public → пробуем JWT endpoint (вопрос мог быть создан через JWT)
-            if (
-              pubErr.response
-                ?.status ===
-              404
-            ) {
-              console.log(
-                '[Chat] Public endpoint 404, trying JWT fallback',
-              )
-              const headers =
-                getAuthHeaders(
-                  inTelegram,
-                )
-              try {
-                const [
-                  consultationRes,
-                  messagesRes,
-                ] =
-                  await Promise.all(
-                    [
-                      api
-                        .get(
-                          `/api/consultations/${id}`,
-                          {
-                            headers,
-                          },
-                        )
-                        .catch(
-                          () =>
-                            null,
-                        ),
-                      api
-                        .get(
-                          `/api/consultations/${id}/messages`,
-                          {
-                            headers,
-                          },
-                        )
-                        .catch(
-                          () =>
-                            null,
-                        ),
-                    ],
-                  )
-                if (
-                  consultationRes
-                )
-                  setConsultation(
-                    consultationRes.data,
-                  )
-                if (
-                  messagesRes
-                )
-                  setMessages(
-                    messagesRes.data,
-                  )
-                return
-              } catch (_jwtErr) {
-                throw pubErr // original 404 more relevant
-              }
-            }
-            throw pubErr
+        // 1. Попытка Telegram WebApp auto-login (если в Telegram)
+        let telegramUser = false;
+        if (telegramAuthService.canAuthViaWebApp()) {
+          telegramUser = true;
+          const success =
+            await telegramAuthService.autoLogin();
+          if (success) {
+            console.log(
+              '[Chat] ✅ Telegram auto-login successful',
+            );
+          } else {
+            console.log(
+              '[Chat] ⚠️ Telegram auto-login failed — continuing as anonymous',
+            );
           }
         }
 
-        const headers =
-          getAuthHeaders(
-            inTelegram,
-          )
+        // 2. Определяем анонимность
+        const anon = getEffectiveAnonymous();
+        setIsTelegramUser(telegramUser);
+        if (anon) setIsAnonymous(true);
 
-        const [
-          consultationRes,
-          messagesRes,
-        ] = await Promise.all(
-          [
-            api
-              .get(
-                `/api/consultations/${id}`,
-                { headers },
-              )
-              .catch(
-                () => null,
-              ),
-            api
-              .get(
-                `/api/consultations/${id}/messages`,
-                { headers },
-              )
-              .catch(
-                () => null,
-              ),
-          ],
-        )
+        // 3. Синхронизируем currentConsultationId с ChatContext
+        setCurrentConsultationId(id);
 
-        if (consultationRes)
-          setConsultation(
-            consultationRes.data,
-          )
-        if (messagesRes)
-          setMessages(
-            messagesRes.data,
-          )
-
-        // Если не удалось загрузить — пробуем создать новую консультацию
-        if (
-          !consultationRes &&
-          inTelegram
-        ) {
-          const createRes =
-            await api.post(
-              '/api/consultations/',
-              {
-                text: 'Новый вопрос фармацевту',
-                category:
-                  'general',
-              },
-              { headers },
-            )
-          navigate(
-            `/chat/${createRes.data.uuid}`,
-            { replace: true },
-          )
-        }
+        // 4. Загружаем данные консультации через chatService
+        await loadConsultationData(telegramUser, anon);
       } catch (err) {
-        console.error(
-          'Failed to load consultation:',
-          err,
-        )
-        if (
-          !anon &&
-          err.response
-            ?.status === 401
-        ) {
-          if (!inTelegram) {
-            navigate('/login')
-          }
-          setError(
-            'Не удалось загрузить консультацию. Попробуйте позже.',
-          )
-        } else if (
-          err.response
-            ?.status === 404
-        ) {
-          setError(
-            'Консультация не найдена',
-          )
-        } else {
-          setError(
-            'Не удалось загрузить консультацию',
-          )
-        }
+        console.error('[Chat] Init error:', err);
+        setError('Не удалось загрузить консультацию');
+      } finally {
+        setPageLoading(false);
+      }
+    };
+
+    initChat();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  const loadConsultationData = async (
+    inTelegram = false,
+    anon = false,
+  ) => {
+    try {
+      const data = await chatService.loadConsultation(
+        id,
+        anon,
+        inTelegram,
+      );
+
+      if (data.consultation)
+        setConsultation(data.consultation);
+      if (data.messages) setMessages(data.messages);
+
+      // Если не удалось загрузить и мы в Telegram — пробуем создать новую
+      if (!data.consultation && inTelegram) {
+        const createRes =
+          await chatService.createConsultation(
+            'Новый вопрос фармацевту',
+            false,
+          );
+        navigate(`/chat/${createRes.uuid}`, {
+          replace: true,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load consultation:', err);
+      if (!anon && err.response?.status === 401) {
+        if (!inTelegram) navigate('/login');
+        setError(
+          'Не удалось загрузить консультацию. Попробуйте позже.',
+        );
+      } else if (err.response?.status === 404) {
+        setError('Консультация не найдена');
+      } else {
+        setError('Не удалось загрузить консультацию');
       }
     }
+  };
 
-  const sendMessage = async (
-    e,
-  ) => {
-    e.preventDefault()
-    if (!newMessage.trim())
-      return
-
-    const inTelegram =
-      isTelegramUser
-    const anon =
-      urlForceAnon ||
-      isAnonymous
+  // Отправка сообщения через ChatContext
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!newMessage.trim()) return;
 
     try {
-      setSending(true)
-
-      let response
-      if (anon) {
-        // Аноним — через /api/public/questions/{id}/messages
-        response =
-          await api.post(
-            `/api/public/questions/${id}/messages`,
-            {
-              text: newMessage.trim(),
-            },
-          )
-      } else {
-        // JWT или TMA — через /api/consultations/{id}/messages
-        const headers =
-          getAuthHeaders(
-            inTelegram,
-          )
-        response =
-          await api.post(
-            `/api/consultations/${id}/messages`,
-            {
-              text: newMessage.trim(),
-            },
-            { headers },
-          )
-      }
-
-      setMessages((prev) => [
-        ...prev,
-        response.data,
-      ])
-      setNewMessage('')
+      setSending(true);
+      await contextSendMessage(newMessage.trim());
+      setNewMessage('');
     } catch (err) {
       setToast({
         message:
-          err.userMessage ||
-          'Ошибка отправки сообщения',
+          err.userMessage || 'Ошибка отправки сообщения',
         type: 'error',
-      })
+      });
     } finally {
-      setSending(false)
+      setSending(false);
     }
-  }
+  };
 
-  const scrollToBottom =
-    () => {
-      messagesEndRef.current?.scrollIntoView(
-        {
-          behavior: 'smooth',
-        },
-      )
-      setIsAtBottom(true)
-    }
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: 'smooth',
+    });
+    setIsAtBottom(true);
+  };
 
   const handleScroll = () => {
-    const el =
-      document.querySelector(
-        '.messages-scroll',
-      )
-    if (!el) return
-    const threshold = 100
+    const el = document.querySelector('.messages-scroll');
+    if (!el) return;
+    const threshold = 100;
     const atBottom =
-      el.scrollHeight -
-        el.scrollTop -
-        el.clientHeight <
-      threshold
-    setIsAtBottom(atBottom)
-  }
+      el.scrollHeight - el.scrollTop - el.clientHeight <
+      threshold;
+    setIsAtBottom(atBottom);
+  };
 
-  const formatTime = (
-    dateString,
-  ) => {
-    if (!dateString) return ''
-    return new Date(
-      dateString,
-    ).toLocaleTimeString(
+  const formatTime = (dateString) => {
+    if (!dateString) return '';
+    return new Date(dateString).toLocaleTimeString(
       'ru-RU',
       {
         hour: '2-digit',
         minute: '2-digit',
       },
-    )
-  }
+    );
+  };
 
-  const getStatusText = (
-    status,
-  ) => {
+  const getStatusText = (status) => {
     switch (status) {
       case 'pending':
-        return 'В ожидании ответа'
+        return 'В ожидании ответа';
       case 'answered':
-        return 'Получен ответ'
+        return 'Получен ответ';
       case 'completed':
-        return 'Завершено'
+        return 'Завершено';
       case 'in_progress':
-        return 'В работе'
+        return 'В работе';
       default:
-        return (
-          status ||
-          'В ожидании'
-        )
+        return status || 'В ожидании';
     }
-  }
+  };
 
   // Loading state
-  if (loading) {
+  if (pageLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-500 text-sm">
-            Загрузка
-            консультации...
+            Загрузка консультации...
           </p>
         </div>
       </div>
-    )
+    );
   }
 
   // Error state
@@ -607,9 +224,7 @@ export default function Chat() {
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeWidth={
-                  2
-                }
+                strokeWidth={2}
                 d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
               />
             </svg>
@@ -617,16 +232,10 @@ export default function Chat() {
           <h2 className="text-xl font-bold text-gray-900 mb-2">
             Ошибка
           </h2>
-          <p className="text-gray-500 mb-6">
-            {error}
-          </p>
+          <p className="text-gray-500 mb-6">{error}</p>
           <button
             onClick={() =>
-              navigate(
-                isTelegramUser
-                  ? '/'
-                  : '/dashboard',
-              )
+              navigate(isTelegramUser ? '/' : '/dashboard')
             }
             className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-6 rounded-full transition-colors"
           >
@@ -636,7 +245,7 @@ export default function Chat() {
           </button>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -645,11 +254,7 @@ export default function Chat() {
       <header className="bg-white px-4 py-3 flex items-center gap-3 border-b border-gray-200 flex-shrink-0 z-10">
         <button
           onClick={() =>
-            navigate(
-              isTelegramUser
-                ? '/'
-                : '/dashboard',
-            )
+            navigate(isTelegramUser ? '/' : '/dashboard')
           }
           className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
           aria-label="Назад"
@@ -669,10 +274,8 @@ export default function Chat() {
         </button>
         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-indigo-500 flex items-center justify-center text-white font-semibold text-lg flex-shrink-0 relative">
           Ф
-          {(consultation?.status ===
-            'pending' ||
-            consultation?.status ===
-              'in_progress') && (
+          {(consultation?.status === 'pending' ||
+            consultation?.status === 'in_progress') && (
             <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></span>
           )}
         </div>
@@ -683,25 +286,20 @@ export default function Chat() {
           <div className="text-xs flex items-center gap-1.5">
             <span
               className={`w-1.5 h-1.5 rounded-full inline-block ${
-                consultation?.status ===
-                  'pending' ||
-                consultation?.status ===
-                  'in_progress'
+                consultation?.status === 'pending' ||
+                consultation?.status === 'in_progress'
                   ? 'bg-green-500'
                   : 'bg-gray-400'
               }`}
             ></span>
             <span
               className={
-                consultation?.status ===
-                'completed'
+                consultation?.status === 'completed'
                   ? 'text-gray-500'
                   : 'text-green-600'
               }
             >
-              {getStatusText(
-                consultation?.status,
-              )}
+              {getStatusText(consultation?.status)}
             </span>
           </div>
         </div>
@@ -717,10 +315,9 @@ export default function Chat() {
           <button
             onClick={() =>
               setToast({
-                message:
-                  isAnonymous
-                    ? 'Вы в анонимном режиме. История чата хранится локально.'
-                    : 'Консультация',
+                message: isAnonymous
+                  ? 'Вы в анонимном режиме. История чата хранится локально.'
+                  : 'Консультация',
                 type: 'success',
               })
             }
@@ -737,23 +334,9 @@ export default function Chat() {
               strokeLinecap="round"
               strokeLinejoin="round"
             >
-              <circle
-                cx="12"
-                cy="12"
-                r="10"
-              ></circle>
-              <line
-                x1="12"
-                y1="16"
-                x2="12"
-                y2="12"
-              ></line>
-              <line
-                x1="12"
-                y1="8"
-                x2="12.01"
-                y2="8"
-              ></line>
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
             </svg>
           </button>
         </div>
@@ -762,12 +345,9 @@ export default function Chat() {
       {/* ===== MESSAGES ===== */}
       <div
         className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-1 scroll-smooth messages-scroll"
-        onScroll={
-          handleScroll
-        }
+        onScroll={handleScroll}
       >
-        {messages.length ===
-        0 ? (
+        {messages.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <div className="text-gray-300 mb-3">
@@ -780,174 +360,121 @@ export default function Chat() {
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    strokeWidth={
-                      1.5
-                    }
+                    strokeWidth={1.5}
                     d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
                   />
                 </svg>
               </div>
               <p className="text-gray-500 text-sm">
-                Пока нет
-                сообщений
+                Пока нет сообщений
               </p>
               <p className="text-gray-400 text-xs mt-1">
-                Напишите свой
-                вопрос
-                фармацевту
+                Напишите свой вопрос фармацевту
               </p>
             </div>
           </div>
         ) : (
-          messages.map(
-            (
-              message,
-              idx,
-            ) => {
-              const isUser =
-                message.sender_type ===
-                'user'
-              const prevMsg =
-                idx > 0
-                  ? messages[
-                      idx - 1
-                    ]
-                  : null
-              const showAvatar =
-                !isUser &&
-                (!prevMsg ||
-                  prevMsg.sender_type ===
-                    'user')
+          messages.map((message, idx) => {
+            const isUser = message.sender_type === 'user';
+            const prevMsg =
+              idx > 0 ? messages[idx - 1] : null;
+            const showAvatar =
+              !isUser &&
+              (!prevMsg || prevMsg.sender_type === 'user');
 
-              return (
+            return (
+              <div
+                key={message.uuid || idx}
+                className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-0.5 animate-fadeIn`}
+              >
+                {!isUser && (
+                  <div
+                    className={`w-7 h-7 rounded-full bg-gradient-to-br from-blue-600 to-indigo-500 flex items-center justify-center text-white text-[10px] font-semibold flex-shrink-0 mt-1 ${showAvatar ? 'mr-2' : 'mr-2 invisible'}`}
+                  >
+                    Ф
+                  </div>
+                )}
                 <div
-                  key={
-                    message.uuid ||
-                    idx
-                  }
-                  className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-0.5 animate-fadeIn`}
+                  className={`max-w-[82%] ${isUser ? 'order-1' : 'order-2'}`}
                 >
-                  {!isUser && (
-                    <div
-                      className={`w-7 h-7 rounded-full bg-gradient-to-br from-blue-600 to-indigo-500 flex items-center justify-center text-white text-[10px] font-semibold flex-shrink-0 mt-1 ${showAvatar ? 'mr-2' : 'mr-2 invisible'}`}
-                    >
-                      Ф
+                  {!isUser && showAvatar && (
+                    <div className="text-[11px] font-semibold text-blue-600 mb-0.5 tracking-wide">
+                      Фармацевт
                     </div>
                   )}
                   <div
-                    className={`max-w-[82%] ${isUser ? 'order-1' : 'order-2'}`}
+                    className={`px-3.5 py-2.5 rounded-2xl ${
+                      isUser
+                        ? 'bg-blue-600 text-white rounded-br-md'
+                        : 'bg-white text-gray-900 rounded-bl-md shadow-sm border border-gray-100'
+                    }`}
                   >
-                    {!isUser &&
-                      showAvatar && (
-                        <div className="text-[11px] font-semibold text-blue-600 mb-0.5 tracking-wide">
-                          Фармацевт
-                        </div>
-                      )}
+                    <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
+                      {message.text}
+                    </div>
                     <div
-                      className={`px-3.5 py-2.5 rounded-2xl ${
-                        isUser
-                          ? 'bg-blue-600 text-white rounded-br-md'
-                          : 'bg-white text-gray-900 rounded-bl-md shadow-sm border border-gray-100'
-                      }`}
+                      className={`flex items-center justify-end gap-1 mt-1 ${isUser ? 'text-blue-200' : 'text-gray-400'}`}
                     >
-                      <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
-                        {
-                          message.text
-                        }
-                      </div>
-                      <div
-                        className={`flex items-center justify-end gap-1 mt-1 ${isUser ? 'text-blue-200' : 'text-gray-400'}`}
-                      >
-                        <span className="text-[10px] opacity-70">
-                          {formatTime(
-                            message.created_at,
-                          )}
-                        </span>
-                      </div>
+                      <span className="text-[10px] opacity-70">
+                        {formatTime(message.created_at)}
+                      </span>
                     </div>
                   </div>
                 </div>
-              )
-            },
-          )
+              </div>
+            );
+          })
         )}
-        <div
-          ref={messagesEndRef}
-        />
+        <div ref={messagesEndRef} />
       </div>
 
       {/* Scroll to bottom */}
-      {!isAtBottom &&
-        messages.length >
-          0 && (
-          <button
-            onClick={
-              scrollToBottom
-            }
-            className="absolute bottom-24 right-5 w-9 h-9 bg-white border border-gray-200 rounded-full shadow-md flex items-center justify-center z-10 hover:shadow-lg transition-shadow"
-            aria-label="Вниз"
+      {!isAtBottom && messages.length > 0 && (
+        <button
+          onClick={scrollToBottom}
+          className="absolute bottom-24 right-5 w-9 h-9 bg-white border border-gray-200 rounded-full shadow-md flex items-center justify-center z-10 hover:shadow-lg transition-shadow"
+          aria-label="Вниз"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#2563eb"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#2563eb"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          </button>
-        )}
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+      )}
 
       {/* ===== INPUT ===== */}
       <div className="bg-white px-3 py-3 border-t border-gray-200 flex-shrink-0">
         <form
-          onSubmit={
-            sendMessage
-          }
+          onSubmit={handleSendMessage}
           className="flex items-end gap-2"
         >
           <div className="flex-1 flex items-end bg-gray-50 border border-gray-200 rounded-2xl px-4 py-1 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
             <textarea
-              value={
-                newMessage
-              }
+              value={newMessage}
               onChange={(e) =>
-                setNewMessage(
-                  e.target
-                    .value,
-                )
+                setNewMessage(e.target.value)
               }
-              onKeyDown={(
-                e,
-              ) => {
-                if (
-                  e.key ===
-                    'Enter' &&
-                  !e.shiftKey
-                ) {
-                  e.preventDefault()
-                  e.target
-                    .closest(
-                      'form',
-                    )
-                    .requestSubmit()
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  e.target.closest('form').requestSubmit();
                 }
               }}
               placeholder="Напишите сообщение..."
               rows={1}
               className="flex-1 bg-transparent border-none outline-none resize-none text-[15px] py-2 max-h-24 leading-relaxed text-gray-900 placeholder:text-gray-400"
-              style={{
-                fontFamily:
-                  'inherit',
-              }}
+              style={{ fontFamily: 'inherit' }}
               disabled={
                 sending ||
-                consultation?.status ===
-                  'completed'
+                consultation?.status === 'completed'
               }
             />
           </div>
@@ -956,8 +483,7 @@ export default function Chat() {
             disabled={
               sending ||
               !newMessage.trim() ||
-              consultation?.status ===
-                'completed'
+              consultation?.status === 'completed'
             }
             className="w-10 h-10 rounded-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0 transition-colors active:scale-90"
             aria-label="Отправить"
@@ -992,12 +518,9 @@ export default function Chat() {
             )}
           </button>
         </form>
-        {consultation?.status ===
-          'completed' && (
+        {consultation?.status === 'completed' && (
           <p className="text-xs text-gray-400 text-center mt-2">
-            Консультация
-            завершена.
-            Создайте новую для
+            Консультация завершена. Создайте новую для
             других вопросов.
           </p>
         )}
@@ -1006,19 +529,10 @@ export default function Chat() {
       {/* ===== TOAST ===== */}
       {toast && (
         <Toast
-          message={
-            toast.message
-          }
+          message={toast.message}
           type={toast.type}
-          onClose={() =>
-            setToast(null)
-          }
-          duration={
-            toast.type ===
-            'error'
-              ? 5000
-              : 2000
-          }
+          onClose={() => setToast(null)}
+          duration={toast.type === 'error' ? 5000 : 2000}
         />
       )}
 
@@ -1028,5 +542,5 @@ export default function Chat() {
         @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
     </div>
-  )
+  );
 }

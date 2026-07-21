@@ -10,6 +10,7 @@ import {
   BrowserRouter,
   Routes,
   Route,
+  useLocation,
 } from 'react-router-dom';
 import './App.css';
 import Search from './components/Search';
@@ -49,6 +50,54 @@ function PageLoader() {
       </div>
     </div>
   );
+}
+
+/**
+ * Отдельный компонент для ChatWidget / Telegram-ссылки.
+ * Вынесен из App, так как useLocation() требует контекста BrowserRouter.
+ * Скрывает виджет на страницах /chat/*, /pharmacist/*, /dashboard.
+ */
+function ChatWidgetOrLink() {
+  const location = useLocation();
+  const isChatPage = location.pathname.startsWith('/chat');
+  const isExcludedPage =
+    isChatPage ||
+    location.pathname.startsWith('/pharmacist') ||
+    location.pathname.startsWith('/dashboard');
+
+  // На страницах чата/дашборда не показываем ничего
+  if (isExcludedPage) return null;
+
+  // В Telegram WebApp — ссылка на создание чата
+  if (window.Telegram?.WebApp?.initData) {
+    return (
+      <a
+        href={
+          window.Telegram.WebApp.initDataUnsafe?.start_param
+            ? `/?start=${window.Telegram.WebApp.initDataUnsafe.start_param}`
+            : '/chat/new'
+        }
+        className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 shadow-lg flex items-center justify-center text-white hover:shadow-xl transition-shadow active:scale-90"
+        aria-label="Чат с фармацевтом"
+      >
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+      </a>
+    );
+  }
+
+  // Веб-версия — ChatWidget
+  return <ChatWidget />;
 }
 
 function App() {
@@ -571,34 +620,7 @@ function App() {
                 <Route path="/*" element={<Search />} />
               </Routes>
 
-              {/* ChatWidget — для веб-версии; в Telegram показываем fallback-ссылку */}
-              {window.Telegram?.WebApp?.initData ? (
-                <a
-                  href={
-                    window.Telegram.WebApp.initDataUnsafe
-                      ?.start_param
-                      ? `/?start=${window.Telegram.WebApp.initDataUnsafe.start_param}`
-                      : '/chat/new'
-                  }
-                  className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 shadow-lg flex items-center justify-center text-white hover:shadow-xl transition-shadow active:scale-90"
-                  aria-label="Чат с фармацевтом"
-                >
-                  <svg
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                  </svg>
-                </a>
-              ) : (
-                <ChatWidget />
-              )}
+              <ChatWidgetOrLink />
 
               {/* Toast уведомления */}
               {toast && (
