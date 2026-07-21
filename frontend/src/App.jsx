@@ -155,6 +155,7 @@ function App() {
       isPharmacistPath,
       hasAuthToken,
       hasPharmacistSession,
+      isInTelegramCached,
     ],
   );
 
