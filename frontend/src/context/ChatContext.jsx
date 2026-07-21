@@ -186,6 +186,7 @@ export function ChatProvider({ children }) {
         wsRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentConsultationId, isAnonymous, wsBaseUrl]);
 
   // Flag to ensure we only do initial load once per consultation
