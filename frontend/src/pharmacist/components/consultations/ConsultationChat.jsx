@@ -3,288 +3,201 @@ import {
   useState,
   useCallback,
   useRef,
-} from 'react'
-import {
-  useParams,
-  useNavigate,
-} from 'react-router-dom'
-import questionsService from '../../services/questionsService'
-import websocketService from '../../services/websocketService'
-import { logger } from '../../../utils/logger'
+} from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import questionsService from '../../services/questionsService';
+import websocketService from '../../services/websocketService';
+import { logger } from '../../../utils/logger';
 
 export default function ConsultationChat({
   questionId: propQuestionId,
   onClose,
 }) {
-  const params = useParams()
-  const navigate =
-    useNavigate()
-  const questionId =
-    propQuestionId ||
-    params?.questionId
-  const [
-    messages,
-    setMessages,
-  ] = useState([])
-  const [newMsg, setNewMsg] =
-    useState('')
-  const [
-    loading,
-    setLoading,
-  ] = useState(false)
-  const [
-    sending,
-    setSending,
-  ] = useState(false)
-  const [
-    question,
-    setQuestion,
-  ] = useState(null)
-  const [error, setError] =
-    useState(null)
-  const messagesEndRef =
-    useRef(null)
-  const [
-    isAtBottom,
-    setIsAtBottom,
-  ] = useState(true)
+  const params = useParams();
+  const navigate = useNavigate();
+  const questionId = propQuestionId || params?.questionId;
+  const [messages, setMessages] = useState([]);
+  const [newMsg, setNewMsg] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [question, setQuestion] = useState(null);
+  const [error, setError] = useState(null);
+  const messagesEndRef = useRef(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
 
   // Subscribe to WebSocket for real-time message updates
   useEffect(() => {
     // Connect WebSocket on mount
-    websocketService.connect()
+    websocketService.connect();
 
     // Listen for new messages in this consultation
-    const unsubscribe =
-      websocketService.on(
-        'message_update',
-        (payload) => {
-          if (
-            payload &&
-            payload.question_id ===
-              questionId
-          ) {
-            setMessages(
-              (prev) => {
-                const prevIds =
-                  new Set(
-                    prev.map(
-                      (m) =>
-                        m.uuid ||
-                        m.id ||
-                        m.data
-                          ?.uuid ||
-                        m.data
-                          ?.id,
-                    ),
-                  )
-                const msgId =
-                  payload.uuid ||
-                  payload.id ||
-                  payload.data
-                    ?.uuid ||
-                  payload.data
-                    ?.id
-                if (
-                  msgId &&
-                  prevIds.has(
-                    msgId,
-                  )
-                )
-                  return prev
-                const newMsg =
-                  payload.data ||
-                  payload
-                const updated =
-                  [
-                    ...prev,
-                    newMsg,
-                  ]
-                updated.sort(
-                  (a, b) =>
-                    new Date(
-                      a.created_at,
-                    ) -
-                    new Date(
-                      b.created_at,
-                    ),
-                )
-                return updated
-              },
-            )
-          }
-        },
-      )
+    const unsubscribe = websocketService.on(
+      'message_update',
+      (payload) => {
+        if (payload && payload.question_id === questionId) {
+          setMessages((prev) => {
+            const prevIds = new Set(
+              prev.map(
+                (m) =>
+                  m.uuid ||
+                  m.id ||
+                  m.data?.uuid ||
+                  m.data?.id,
+              ),
+            );
+            const msgId =
+              payload.uuid ||
+              payload.id ||
+              payload.data?.uuid ||
+              payload.data?.id;
+            // Проверка по UUID
+            if (msgId && prevIds.has(msgId)) return prev;
+            const newMsg = payload.data || payload;
+            // Дополнительная проверка по комбинации полей (защита от дублей при тайминге)
+            const isDuplicate = prev.some(
+              (m) =>
+                m.text === newMsg.text &&
+                m.sender_type === newMsg.sender_type &&
+                Math.abs(
+                  new Date(m.created_at) -
+                    new Date(newMsg.created_at),
+                ) < 1000,
+            );
+            if (isDuplicate) return prev;
+            const updated = [...prev, newMsg];
+            updated.sort(
+              (a, b) =>
+                new Date(a.created_at) -
+                new Date(b.created_at),
+            );
+            return updated;
+          });
+        }
+      },
+    );
 
     return () => {
-      unsubscribe()
-    }
-  }, [questionId])
+      unsubscribe();
+    };
+  }, [questionId]);
 
   useEffect(() => {
-    const loadData =
-      async () => {
-        if (!questionId) {
-          setQuestion(null)
-          setMessages([])
-          setLoading(false)
-          return
-        }
-
-        try {
-          setLoading(true)
-          setError(null)
-          const questionData =
-            await questionsService.getQuestionById(
-              questionId,
-            )
-          setQuestion(
-            questionData,
-          )
-          const dialogData =
-            await questionsService.getDialog(
-              questionId,
-            )
-          setMessages(
-            dialogData || [],
-          )
-        } catch (error) {
-          logger.error(
-            'Failed to load consultation data:',
-            error,
-          )
-          setError(
-            'Не удалось загрузить данные консультации',
-          )
-        } finally {
-          setLoading(false)
-        }
+    const loadData = async () => {
+      if (!questionId) {
+        setQuestion(null);
+        setMessages([]);
+        setLoading(false);
+        return;
       }
-
-    loadData()
-  }, [questionId])
-
-  useEffect(() => {
-    scrollToBottom()
-  }, [messages])
-
-  const handleSend =
-    useCallback(async () => {
-      if (
-        !newMsg.trim() ||
-        !questionId
-      )
-        return
 
       try {
-        setSending(true)
-        const sentMsg =
-          await questionsService.sendMessage(
+        setLoading(true);
+        setError(null);
+        const questionData =
+          await questionsService.getQuestionById(
             questionId,
-            newMsg,
-          )
-        setMessages(
-          (prev) => [
-            ...prev,
-            sentMsg,
-          ],
-        )
-        setNewMsg('')
-
-        if (
-          window.Telegram
-            ?.WebApp
-            ?.HapticFeedback
-        ) {
-          window.Telegram.WebApp.HapticFeedback.notificationOccurred(
-            'success',
-          )
-        }
+          );
+        setQuestion(questionData);
+        const dialogData =
+          await questionsService.getDialog(questionId);
+        setMessages(dialogData || []);
       } catch (error) {
         logger.error(
-          'Failed to send message:',
+          'Failed to load consultation data:',
           error,
-        )
+        );
         setError(
-          'Не удалось отправить сообщение',
-        )
+          'Не удалось загрузить данные консультации',
+        );
       } finally {
-        setSending(false)
+        setLoading(false);
       }
-    }, [newMsg, questionId])
+    };
 
-  const handleKeyPress = (
-    e,
-  ) => {
-    if (
-      e.key === 'Enter' &&
-      !e.shiftKey
-    ) {
-      e.preventDefault()
-      handleSend()
+    loadData();
+  }, [questionId]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const handleSend = useCallback(async () => {
+    if (!newMsg.trim() || !questionId) return;
+
+    try {
+      setSending(true);
+      const sentMsg = await questionsService.sendMessage(
+        questionId,
+        newMsg,
+      );
+      setMessages((prev) => [...prev, sentMsg]);
+      setNewMsg('');
+
+      if (window.Telegram?.WebApp?.HapticFeedback) {
+        window.Telegram.WebApp.HapticFeedback.notificationOccurred(
+          'success',
+        );
+      }
+    } catch (error) {
+      logger.error('Failed to send message:', error);
+      setError('Не удалось отправить сообщение');
+    } finally {
+      setSending(false);
     }
-  }
+  }, [newMsg, questionId]);
 
-  const formatTime = (
-    dateString,
-  ) => {
-    if (!dateString) return ''
-    return new Date(
-      dateString,
-    ).toLocaleTimeString(
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const formatTime = (dateString) => {
+    if (!dateString) return '';
+    return new Date(dateString).toLocaleTimeString(
       'ru-RU',
       {
         hour: '2-digit',
         minute: '2-digit',
       },
-    )
-  }
+    );
+  };
 
-  const scrollToBottom =
-    () => {
-      messagesEndRef.current?.scrollIntoView(
-        {
-          behavior: 'smooth',
-        },
-      )
-      setIsAtBottom(true)
-    }
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: 'smooth',
+    });
+    setIsAtBottom(true);
+  };
 
-  const handleScroll = (
-    e,
-  ) => {
-    const el = e.currentTarget
-    const threshold = 80
+  const handleScroll = (e) => {
+    const el = e.currentTarget;
+    const threshold = 80;
     const atBottom =
-      el.scrollHeight -
-        el.scrollTop -
-        el.clientHeight <
-      threshold
-    setIsAtBottom(atBottom)
-  }
+      el.scrollHeight - el.scrollTop - el.clientHeight <
+      threshold;
+    setIsAtBottom(atBottom);
+  };
 
   const handleBack = () => {
-    if (onClose) onClose()
-    else navigate(-1)
-  }
+    if (onClose) onClose();
+    else navigate('/pharmacist'); // Явный переход на главную страницу вместо navigate(-1)
+  };
 
   const getUserName = () => {
-    if (!question)
-      return 'Пользователь'
-    const user = question.user
+    if (!question) return 'Пользователь';
+    const user = question.user;
     return (
       user?.first_name ||
       user?.telegram_username ||
       `Пользователь #${user?.telegram_id?.toString().slice(-4) || ''}`
-    )
-  }
+    );
+  };
 
-  const getUserAvatar =
-    () => {
-      return getUserName()
-        .charAt(0)
-        .toUpperCase()
-    }
+  const getUserAvatar = () => {
+    return getUserName().charAt(0).toUpperCase();
+  };
 
   const getUserColor = () => {
     const colors = [
@@ -295,70 +208,48 @@ export default function ConsultationChat({
       '#2563eb',
       '#0891b2',
       '#65a30d',
-    ]
-    const user =
-      question?.user
-    const seed =
-      user?.telegram_id ||
-      user?.uuid ||
-      0
+    ];
+    const user = question?.user;
+    const seed = user?.telegram_id || user?.uuid || 0;
     // Convert to number for color selection
     const num =
       typeof seed === 'string'
         ? seed
             .split('')
-            .reduce(
-              (a, c) =>
-                a +
-                c.charCodeAt(
-                  0,
-                ),
-              0,
-            )
-        : Number(seed)
-    return colors[
-      num % colors.length
-    ]
-  }
+            .reduce((a, c) => a + c.charCodeAt(0), 0)
+        : Number(seed);
+    return colors[num % colors.length];
+  };
 
-  const getStatusBadge =
-    () => {
-      if (!question)
-        return null
-      const badges = {
-        pending: {
-          text: 'В ожидании',
-          class:
-            'bg-yellow-100 text-yellow-700',
-        },
-        answered: {
-          text: 'Отвечено',
-          class:
-            'bg-green-100 text-green-700',
-        },
-        completed: {
-          text: 'Завершено',
-          class:
-            'bg-gray-100 text-gray-500',
-        },
-        in_progress: {
-          text: 'В работе',
-          class:
-            'bg-blue-100 text-blue-700',
-        },
-      }
-      const badge =
-        badges[
-          question.status
-        ] || badges.pending
-      return (
-        <span
-          className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium ${badge.class}`}
-        >
-          {badge.text}
-        </span>
-      )
-    }
+  const getStatusBadge = () => {
+    if (!question) return null;
+    const badges = {
+      pending: {
+        text: 'В ожидании',
+        class: 'bg-yellow-100 text-yellow-700',
+      },
+      answered: {
+        text: 'Отвечено',
+        class: 'bg-green-100 text-green-700',
+      },
+      completed: {
+        text: 'Завершено',
+        class: 'bg-gray-100 text-gray-500',
+      },
+      in_progress: {
+        text: 'В работе',
+        class: 'bg-blue-100 text-blue-700',
+      },
+    };
+    const badge = badges[question.status] || badges.pending;
+    return (
+      <span
+        className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium ${badge.class}`}
+      >
+        {badge.text}
+      </span>
+    );
+  };
 
   // Empty state
   if (!questionId) {
@@ -416,15 +307,13 @@ export default function ConsultationChat({
           />
         </svg>
         <p className="text-base font-semibold text-gray-800">
-          Выберите
-          консультацию
+          Выберите консультацию
         </p>
         <p className="mt-1.5 text-sm text-gray-500">
-          Чат откроется в этой
-          панели
+          Чат откроется в этой панели
         </p>
       </div>
-    )
+    );
   }
 
   // Loading state
@@ -434,12 +323,11 @@ export default function ConsultationChat({
         <div className="flex items-center gap-3 text-gray-400">
           <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
           <span className="text-sm">
-            Загрузка
-            диалога...
+            Загрузка диалога...
           </span>
         </div>
       </div>
-    )
+    );
   }
 
   // Error state
@@ -471,7 +359,7 @@ export default function ConsultationChat({
           Вернуться
         </button>
       </div>
-    )
+    );
   }
 
   return (
@@ -503,8 +391,7 @@ export default function ConsultationChat({
           }}
         >
           {getUserAvatar()}
-          {question?.status ===
-            'pending' && (
+          {question?.status === 'pending' && (
             <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-white rounded-full"></span>
           )}
         </div>
@@ -514,11 +401,9 @@ export default function ConsultationChat({
           </div>
           <div className="flex items-center gap-2 mt-0.5">
             <span className="text-[11px] text-gray-400">
-              {question?.status ===
-              'pending'
+              {question?.status === 'pending'
                 ? 'ожидает ответа'
-                : question?.status ===
-                    'answered'
+                : question?.status === 'answered'
                   ? 'есть ответ'
                   : question?.status}
             </span>
@@ -527,22 +412,14 @@ export default function ConsultationChat({
         </div>
         <button
           onClick={async () => {
-            if (
-              confirm(
-                'Завершить консультацию?',
-              )
-            ) {
+            if (confirm('Завершить консультацию?')) {
               try {
                 await questionsService.completeQuestion(
                   questionId,
-                )
-                if (onClose)
-                  onClose()
+                );
+                if (onClose) onClose();
               } catch (e) {
-                logger.error(
-                  'Failed to complete:',
-                  e,
-                )
+                logger.error('Failed to complete:', e);
               }
             }
           }}
@@ -559,17 +436,8 @@ export default function ConsultationChat({
             strokeLinecap="round"
             strokeLinejoin="round"
           >
-            <circle
-              cx="12"
-              cy="12"
-              r="10"
-            ></circle>
-            <line
-              x1="8"
-              y1="12"
-              x2="16"
-              y2="12"
-            ></line>
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="8" y1="12" x2="16" y2="12"></line>
           </svg>
         </button>
       </div>
@@ -577,12 +445,9 @@ export default function ConsultationChat({
       {/* ===== MESSAGES ===== */}
       <div
         className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-0.5 scroll-smooth"
-        onScroll={
-          handleScroll
-        }
+        onScroll={handleScroll}
       >
-        {messages.length ===
-        0 ? (
+        {messages.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <svg
@@ -594,138 +459,107 @@ export default function ConsultationChat({
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  strokeWidth={
-                    1.5
-                  }
+                  strokeWidth={1.5}
                   d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
                 />
               </svg>
               <p className="text-gray-500 text-sm">
-                Диалог пока
-                пуст
+                Диалог пока пуст
               </p>
               <p className="text-gray-400 text-xs mt-1">
-                Напишите
-                первое
-                сообщение
+                Напишите первое сообщение
               </p>
             </div>
           </div>
         ) : (
-          messages.map(
-            (msg, idx) => {
-              const isPharmacist =
-                msg.sender_type ===
-                'pharmacist'
-              const prevMsg =
-                idx > 0
-                  ? messages[
-                      idx - 1
-                    ]
-                  : null
-              const showAvatar =
-                !isPharmacist &&
-                (!prevMsg ||
-                  prevMsg.sender_type ===
-                    'pharmacist')
+          messages.map((msg, idx) => {
+            const isPharmacist =
+              msg.sender_type === 'pharmacist';
+            const prevMsg =
+              idx > 0 ? messages[idx - 1] : null;
+            const showAvatar =
+              !isPharmacist &&
+              (!prevMsg ||
+                prevMsg.sender_type === 'pharmacist');
 
-              return (
+            return (
+              <div
+                key={msg.uuid || idx}
+                className={`flex ${isPharmacist ? 'justify-end' : 'justify-start'} mb-0.5 animate-fadeIn`}
+              >
+                {!isPharmacist && (
+                  <div
+                    className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-semibold flex-shrink-0 mt-1 ${showAvatar ? 'mr-2' : 'mr-2 invisible'}`}
+                    style={{
+                      background: `linear-gradient(135deg, ${getUserColor()}, ${getUserColor()}dd)`,
+                    }}
+                  >
+                    {getUserAvatar()}
+                  </div>
+                )}
                 <div
-                  key={
-                    msg.uuid ||
-                    idx
-                  }
-                  className={`flex ${isPharmacist ? 'justify-end' : 'justify-start'} mb-0.5 animate-fadeIn`}
+                  className={`max-w-[82%] ${isPharmacist ? 'order-1' : 'order-2'}`}
                 >
-                  {!isPharmacist && (
-                    <div
-                      className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-semibold flex-shrink-0 mt-1 ${showAvatar ? 'mr-2' : 'mr-2 invisible'}`}
-                      style={{
-                        background: `linear-gradient(135deg, ${getUserColor()}, ${getUserColor()}dd)`,
-                      }}
-                    >
-                      {getUserAvatar()}
+                  {!isPharmacist && showAvatar && (
+                    <div className="text-[11px] font-semibold text-blue-600 mb-0.5 tracking-wide">
+                      {getUserName()}
                     </div>
                   )}
                   <div
-                    className={`max-w-[82%] ${isPharmacist ? 'order-1' : 'order-2'}`}
+                    className={`px-3.5 py-2.5 rounded-2xl ${
+                      isPharmacist
+                        ? 'bg-green-100 text-gray-900 rounded-br-md'
+                        : 'bg-white text-gray-900 rounded-bl-md shadow-sm border border-gray-100'
+                    }`}
                   >
-                    {!isPharmacist &&
-                      showAvatar && (
-                        <div className="text-[11px] font-semibold text-blue-600 mb-0.5 tracking-wide">
-                          {getUserName()}
-                        </div>
-                      )}
+                    <div className="text-[14px] leading-relaxed whitespace-pre-wrap break-words">
+                      {msg.text}
+                    </div>
                     <div
-                      className={`px-3.5 py-2.5 rounded-2xl ${
-                        isPharmacist
-                          ? 'bg-green-100 text-gray-900 rounded-br-md'
-                          : 'bg-white text-gray-900 rounded-bl-md shadow-sm border border-gray-100'
-                      }`}
+                      className={`flex items-center justify-end gap-1 mt-1 ${isPharmacist ? 'text-gray-400' : 'text-gray-400'}`}
                     >
-                      <div className="text-[14px] leading-relaxed whitespace-pre-wrap break-words">
-                        {
-                          msg.text
-                        }
-                      </div>
-                      <div
-                        className={`flex items-center justify-end gap-1 mt-1 ${isPharmacist ? 'text-gray-400' : 'text-gray-400'}`}
-                      >
-                        <span className="text-[10px] opacity-70">
-                          {formatTime(
-                            msg.created_at,
-                          )}
-                        </span>
-                      </div>
+                      <span className="text-[10px] opacity-70">
+                        {formatTime(msg.created_at)}
+                      </span>
                     </div>
                   </div>
                 </div>
-              )
-            },
-          )
+              </div>
+            );
+          })
         )}
-        <div
-          ref={messagesEndRef}
-        />
+        <div ref={messagesEndRef} />
       </div>
 
       {/* Scroll to bottom */}
-      {!isAtBottom &&
-        messages.length >
-          0 && (
-          <button
-            onClick={
-              scrollToBottom
-            }
-            className="absolute bottom-24 right-6 w-8 h-8 bg-white border border-gray-200 rounded-full shadow-md flex items-center justify-center z-10 hover:shadow-lg"
-            aria-label="Вниз"
+      {!isAtBottom && messages.length > 0 && (
+        <button
+          onClick={scrollToBottom}
+          className="absolute bottom-24 right-6 w-8 h-8 bg-white border border-gray-200 rounded-full shadow-md flex items-center justify-center z-10 hover:shadow-lg"
+          aria-label="Вниз"
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#2563eb"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#2563eb"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          </button>
-        )}
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+      )}
 
       {/* ===== INPUT ===== */}
       <div className="bg-white px-3 py-2.5 border-t border-gray-200 flex-shrink-0">
         {error && (
           <div className="mb-2 px-3 py-1.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600 flex items-center justify-between">
-            <span>
-              {error}
-            </span>
+            <span>{error}</span>
             <button
-              onClick={() =>
-                setError(null)
-              }
+              onClick={() => setError(null)}
               className="ml-2 text-red-400 hover:text-red-600"
             >
               ✕
@@ -736,38 +570,25 @@ export default function ConsultationChat({
           <div className="flex-1 bg-gray-50 border border-gray-200 rounded-2xl px-4 py-1 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
             <textarea
               value={newMsg}
-              onChange={(e) =>
-                setNewMsg(
-                  e.target
-                    .value,
-                )
-              }
-              onKeyDown={
-                handleKeyPress
-              }
+              onChange={(e) => setNewMsg(e.target.value)}
+              onKeyDown={handleKeyPress}
               placeholder="Напишите ответ..."
               rows={1}
               className="w-full bg-transparent border-none outline-none resize-none text-[14px] py-2 max-h-24 leading-relaxed text-gray-900 placeholder:text-gray-400"
               style={{
-                fontFamily:
-                  'inherit',
+                fontFamily: 'inherit',
               }}
               disabled={
-                sending ||
-                question?.status ===
-                  'completed'
+                sending || question?.status === 'completed'
               }
             />
           </div>
           <button
-            onClick={
-              handleSend
-            }
+            onClick={handleSend}
             disabled={
               sending ||
               !newMsg.trim() ||
-              question?.status ===
-                'completed'
+              question?.status === 'completed'
             }
             className="w-9 h-9 rounded-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0 transition-colors active:scale-90"
             aria-label="Отправить"
@@ -802,11 +623,9 @@ export default function ConsultationChat({
             )}
           </button>
         </div>
-        {question?.status ===
-          'completed' && (
+        {question?.status === 'completed' && (
           <p className="text-xs text-gray-400 text-center mt-2">
-            Консультация
-            завершена
+            Консультация завершена
           </p>
         )}
       </div>
@@ -817,5 +636,5 @@ export default function ConsultationChat({
         @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
     </div>
-  )
+  );
 }

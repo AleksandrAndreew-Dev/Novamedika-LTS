@@ -77,20 +77,13 @@ async def handle_pharmacist_text_in_dialog(
             pharmacist.last_seen = get_utc_now_naive()
             await db.commit()
 
-        answer = Answer(
-            text=message.text,
-            question_id=question.uuid,
-            pharmacist_id=pharmacist.uuid,
-            created_at=get_utc_now_naive(),
-        )
-        db.add(answer)
-
+        # Обновляем статус вопроса (Answer не создаём - DialogMessage достаточно)
         if question.status != "completed":
             question.status = "answered"
         question.answered_at = get_utc_now_naive()
         question.answered_by = pharmacist.uuid
 
-        await DialogService.add_message(
+        new_message = await DialogService.add_message(
             db=db,
             question_id=question.uuid,
             sender_type="pharmacist",
@@ -99,6 +92,29 @@ async def handle_pharmacist_text_in_dialog(
             text=message.text,
         )
         await db.commit()
+
+        # WebSocket broadcast to pharmacist dashboard
+        try:
+            from routers.pharmacist_dashboard import ws_manager, publish_to_redis
+
+            ws_msg_data = {
+                "question_id": str(question.uuid),
+                "message_data": {
+                    "uuid": str(new_message.uuid),
+                    "question_id": str(question.uuid),
+                    "sender_type": "pharmacist",
+                    "sender_id": str(pharmacist.uuid),
+                    "text": message.text,
+                    "created_at": new_message.created_at.isoformat(),
+                },
+            }
+            await ws_manager.broadcast_message_update(**ws_msg_data)
+            await publish_to_redis({"type": "message_update", **ws_msg_data})
+            logger.info(
+                f"WebSocket broadcast sent for Telegram answer to {question.uuid}"
+            )
+        except Exception as ws_err:
+            logger.warning(f"WebSocket broadcast failed (non-critical): {ws_err}")
 
         user_result = await db.execute(
             select(User).where(User.uuid == question.user_id)
@@ -245,20 +261,13 @@ async def process_answer_text(
             pharmacist.last_seen = get_utc_now_naive()
             await db.commit()
 
-        answer = Answer(
-            text=message.text,
-            question_id=question.uuid,
-            pharmacist_id=pharmacist.uuid,
-            created_at=get_utc_now_naive(),
-        )
-        db.add(answer)
-
+        # Обновляем статус вопроса (Answer не создаём - DialogMessage достаточно)
         if question.status != "completed":
             question.status = "answered"
         question.answered_at = get_utc_now_naive()
         question.answered_by = pharmacist.uuid
 
-        await DialogService.add_message(
+        new_message = await DialogService.add_message(
             db=db,
             question_id=question.uuid,
             sender_type="pharmacist",
@@ -267,6 +276,29 @@ async def process_answer_text(
             text=message.text,
         )
         await db.commit()
+
+        # WebSocket broadcast to pharmacist dashboard
+        try:
+            from routers.pharmacist_dashboard import ws_manager, publish_to_redis
+
+            ws_msg_data = {
+                "question_id": str(question.uuid),
+                "message_data": {
+                    "uuid": str(new_message.uuid),
+                    "question_id": str(question.uuid),
+                    "sender_type": "pharmacist",
+                    "sender_id": str(pharmacist.uuid),
+                    "text": message.text,
+                    "created_at": new_message.created_at.isoformat(),
+                },
+            }
+            await ws_manager.broadcast_message_update(**ws_msg_data)
+            await publish_to_redis({"type": "message_update", **ws_msg_data})
+            logger.info(
+                f"WebSocket broadcast sent for Telegram answer to {question.uuid}"
+            )
+        except Exception as ws_err:
+            logger.warning(f"WebSocket broadcast failed (non-critical): {ws_err}")
 
         user_result = await db.execute(
             select(User).where(User.uuid == question.user_id)
