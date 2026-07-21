@@ -209,6 +209,16 @@ async def redis_ws_listener():
                             )
                         elif event_type == "question_assigned":
                             await ws_manager.broadcast(data)
+                        elif event_type == "user_completion":
+                            await ws_manager.broadcast_to_consultation(
+                                data.get("question_id", ""),
+                                {
+                                    "type": "question_completed",
+                                    "question_id": data.get("question_id", ""),
+                                    "completed_by": data.get("completed_by", ""),
+                                    "status": "completed",
+                                },
+                            )
                         else:
                             await ws_manager.broadcast(data)
                     except Exception as e:
@@ -567,11 +577,26 @@ async def complete_question(
     }
     try:
         await ws_manager.broadcast(complete_data)
-        logger.info(f"Completion broadcast sent for {question_id}")
+        logger.info(f"Completion broadcast sent to pharmacists for {question_id}")
     except Exception as e:
-        logger.warning(f"Completion broadcast failed (non-critical): {e}")
+        logger.warning(
+            f"Completion broadcast to pharmacists failed (non-critical): {e}"
+        )
+
+    # Send completion event to user's WebSocket
+    try:
+        await ws_manager.broadcast_to_consultation(
+            str(question.uuid),
+            complete_data,
+        )
+        logger.info(f"Completion event sent to user WebSocket for {question_id}")
+    except Exception as e:
+        logger.warning(f"Completion broadcast to user failed (non-critical): {e}")
 
     await publish_to_redis(complete_data)
+
+    # Publish user_completion event for cross-worker sync to user websockets
+    await publish_to_redis({"type": "user_completion", **complete_data})
 
     logger.info(f"Pharmacist {pharmacist.uuid} completed question {question_id}")
 

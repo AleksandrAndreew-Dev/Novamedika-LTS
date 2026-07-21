@@ -33,6 +33,8 @@ export default function Chat() {
     isAnonymous,
     setIsAnonymous,
     sendMessage: contextSendMessage,
+    consultationCompleted,
+    setConsultationCompleted,
   } = useChat();
 
   const [consultation, setConsultation] = useState(null);
@@ -93,6 +95,17 @@ export default function Chat() {
     initChat();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Show toast when consultation is completed via WebSocket
+  useEffect(() => {
+    if (consultationCompleted) {
+      setToast({
+        message: 'Консультация завершена',
+        type: 'success',
+      });
+      setConsultationCompleted(false);
+    }
+  }, [consultationCompleted, setConsultationCompleted]);
 
   const loadConsultationData = async (
     inTelegram = false,
