@@ -403,13 +403,7 @@ function App() {
       <TelegramWrapper>
         <BrowserRouter>
           <ChatProvider>
-            <div
-              className={`App ${
-                showCookieBanner
-                  ? 'pointer-events-none'
-                  : ''
-              }`}
-            >
+            <div className="App">
               {/* Компонент предупреждения о таймауте */}
               <SessionTimeoutWarning
                 showWarning={showWarning}
