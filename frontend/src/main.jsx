@@ -5,12 +5,20 @@ import TelegramInit from "./telegram/TelegramInit.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import "./index.css";
 
-// Remove loading spinner and show body when React mounts
+// Smooth loading: show body with fade-in, then hide spinner
+document.body.classList.add("loaded");
+
 const loadingElement = document.getElementById("loading");
 if (loadingElement) {
-  loadingElement.remove();
+  // Hide spinner after body fade-in
+  setTimeout(() => {
+    loadingElement.classList.add("hidden");
+    // Remove from DOM after transition completes
+    setTimeout(() => {
+      loadingElement.remove();
+    }, 300);
+  }, 100);
 }
-document.body.style.visibility = "visible";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
