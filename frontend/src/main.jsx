@@ -5,11 +5,12 @@ import TelegramInit from "./telegram/TelegramInit.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import "./index.css";
 
-// Remove loading spinner when React mounts
+// Remove loading spinner and show body when React mounts
 const loadingElement = document.getElementById("loading");
 if (loadingElement) {
   loadingElement.remove();
 }
+document.body.style.visibility = "visible";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
