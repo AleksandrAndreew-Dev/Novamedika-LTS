@@ -70,10 +70,6 @@ class BotManager:
                     "Bot initialized successfully with RedisStorage (new dispatcher)"
                 )
             else:
-                if self._storage is None:
-                    self._storage = await self._create_storage()
-                    if hasattr(self.dp, "storage"):
-                        self.dp.storage = self._storage
                 logger.info(
                     "Bot initialized successfully with RedisStorage (reused dispatcher)"
                 )
@@ -83,7 +79,8 @@ class BotManager:
             return None, None
 
     async def _setup_dispatcher(self):
-        """Настройка middleware и роутеров для dispatcher"""
+        """Настройка middleware и роутеров для dispatcher. Вызывается только когда self.dp не None."""
+        assert self.dp is not None
         from bot.middleware.role_middleware import RoleMiddleware
         from bot.middleware.db import DbMiddleware
         from aiogram.utils.callback_answer import CallbackAnswerMiddleware
@@ -140,11 +137,6 @@ class BotManager:
                     logger.info("Redis FSM storage flushed (DB 1 cleared)")
             except Exception as e:
                 logger.warning(f"Redis FSM flush error (non-critical): {e}")
-            try:
-                await self._storage.close()
-            except Exception as e:
-                logger.warning(f"FSM storage close error (non-critical): {e}")
-            self._storage = None
 
         # Закрываем bot session
         if self.bot:
