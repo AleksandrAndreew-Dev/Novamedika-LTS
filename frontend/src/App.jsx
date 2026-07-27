@@ -3,6 +3,7 @@ import {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
   lazy,
   Suspense,
 } from 'react';
@@ -104,11 +105,13 @@ function App() {
   const [toast, setToast] = useState(null); // { message, type }
   const [showCookieBanner, setShowCookieBanner] =
     useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [consents, setConsents] = useState({
     privacyPolicy: false,
     dataProcessing: false,
     securityProtection: false,
   });
+  const firstCheckboxRef = useRef(null);
 
   // Кешируем проверку Telegram в sessionStorage для ускорения
   const isInTelegramCached = useMemo(() => {
@@ -309,6 +312,13 @@ function App() {
     ],
   );
 
+  // Фокус на первый чекбокс при разворачивании
+  useEffect(() => {
+    if (isExpanded && firstCheckboxRef.current) {
+      firstCheckboxRef.current.focus();
+    }
+  }, [isExpanded]);
+
   const handleAcceptCookies = () => {
     // Проверяем все согласия
     if (!allConsentsGiven) {
@@ -320,6 +330,7 @@ function App() {
       return;
     }
 
+    setIsExpanded(false);
     setShowCookieBanner(false);
     localStorage.setItem('cookiesAccepted', 'true');
     document.cookie =
@@ -329,6 +340,20 @@ function App() {
     setToast({
       message: 'Настройки сохранены. Добро пожаловать!',
       type: 'success',
+    });
+  };
+
+  const handleDecline = () => {
+    setIsExpanded(false);
+    setShowCookieBanner(false);
+    localStorage.setItem('cookiesAccepted', 'false');
+    document.cookie =
+      'cookies_accepted=false; max-age=31536000; path=/; Secure; SameSite=Lax';
+
+    setToast({
+      message:
+        'Вы отказались от обработки данных. Часть функционала будет ограничена.',
+      type: 'warning',
     });
   };
 
@@ -346,7 +371,13 @@ function App() {
       <TelegramWrapper>
         <BrowserRouter>
           <ChatProvider>
-            <div className="App">
+            <div
+              className={`App ${
+                showCookieBanner
+                  ? 'pointer-events-none'
+                  : ''
+              }`}
+            >
               {/* Компонент предупреждения о таймауте */}
               <SessionTimeoutWarning
                 showWarning={showWarning}
@@ -354,202 +385,247 @@ function App() {
                 onExtend={extendSession}
               />
 
-              {/* Баннер cookies и согласий - НЕ блокирует контент */}
+              {/* Баннер cookies и согласий - нижний, не блокирует контент визуально */}
               {showCookieBanner && (
-                <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-40 pointer-events-none">
-                  <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto overscroll-behavior-contain touch-manipulation pointer-events-auto">
-                    <div className="p-6">
-                      <div className="text-center mb-6">
-                        <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <svg
-                            className="w-8 h-8 text-white"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
+                <div className="fixed bottom-0 left-0 right-0 z-40 pointer-events-none">
+                  <div className="bg-white shadow-2xl rounded-t-2xl pointer-events-auto max-h-[90vh] overflow-y-auto overscroll-behavior-contain touch-manipulation transition-all duration-300">
+                    {/* Свёрнутая часть — видна всегда */}
+                    <div className="p-4 sm:p-6 flex items-center justify-between gap-4 flex-wrap">
+                      <div className="flex-1 min-w-[200px]">
+                        <p className="text-sm text-gray-700">
+                          🔒 Для работы с сервисом
+                          необходимо согласие на обработку
+                          данных.
+                          <a
+                            href="/privacy-policy"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 underline ml-2"
+                            onClick={(e) =>
+                              e.stopPropagation()
+                            }
                           >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-                            />
-                          </svg>
-                        </div>
-                        <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                          Защита персональных данных
-                        </h2>
-                        <p className="text-gray-600 text-sm">
-                          Для использования сервиса
-                          необходимо дать согласие на
-                          обработку персональных данных
+                            Подробнее ↗
+                          </a>
                         </p>
                       </div>
+                      <button
+                        onClick={() =>
+                          setIsExpanded(!isExpanded)
+                        }
+                        className="text-blue-600 font-medium text-sm hover:underline whitespace-nowrap"
+                        aria-expanded={isExpanded}
+                      >
+                        {isExpanded
+                          ? 'Свернуть ↑'
+                          : 'Настроить согласия ↓'}
+                      </button>
+                    </div>
 
-                      <div className="space-y-4 mb-6">
-                        <div
-                          className="flex items-start gap-3 cursor-pointer group p-3 rounded-xl hover:bg-gray-50 transition-colors relative z-10 min-h-[44px] touch-action-manipulation"
-                          onClick={() =>
-                            handleConsentChange(
-                              'privacyPolicy',
-                            )
-                          }
-                          role="checkbox"
-                          aria-checked={
-                            consents.privacyPolicy
-                          }
-                          tabIndex={0}
-                          onKeyDown={(e) => {
-                            if (
-                              e.key === 'Enter' ||
-                              e.key === ' '
-                            ) {
-                              e.preventDefault();
+                    {/* Развёрнутая часть — показывается только если isExpanded === true */}
+                    {isExpanded && (
+                      <div className="px-4 sm:px-6 pb-6 pt-2 border-t border-gray-200">
+                        <div className="text-center mb-6">
+                          <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <svg
+                              className="w-8 h-8 text-white"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+                              />
+                            </svg>
+                          </div>
+                          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                            Защита персональных данных
+                          </h2>
+                          <p className="text-gray-600 text-sm">
+                            Для использования сервиса
+                            необходимо дать согласие на
+                            обработку персональных данных
+                          </p>
+                        </div>
+
+                        <div className="space-y-4 mb-6">
+                          <div
+                            className="flex items-start gap-3 cursor-pointer group p-3 rounded-xl hover:bg-gray-50 transition-colors relative z-10 min-h-[44px] touch-action-manipulation"
+                            onClick={() =>
                               handleConsentChange(
                                 'privacyPolicy',
-                              );
+                              )
                             }
-                          }}
-                        >
-                          <input
-                            id="consent-privacy"
-                            type="checkbox"
-                            checked={consents.privacyPolicy}
-                            onChange={() => {}}
-                            required
-                            className="mt-1 w-[22px] h-[22px] text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
-                            readOnly
-                          />
-                          <span className="text-sm text-gray-700 leading-relaxed">
-                            Я согласен на обработку моих
-                            персональных данных в
-                            соответствии с{' '}
-                            <a
-                              href="/privacy-policy"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) =>
-                                e.stopPropagation()
+                            role="checkbox"
+                            aria-checked={
+                              consents.privacyPolicy
+                            }
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (
+                                e.key === 'Enter' ||
+                                e.key === ' '
+                              ) {
+                                e.preventDefault();
+                                handleConsentChange(
+                                  'privacyPolicy',
+                                );
                               }
-                              className="text-blue-600 hover:text-blue-800 underline font-medium"
-                            >
-                              Политикой конфиденциальности
-                            </a>
-                            . Срок хранения: 1 год после
-                            последнего обращения.
-                          </span>
-                        </div>
+                            }}
+                          >
+                            <input
+                              id="consent-privacy"
+                              type="checkbox"
+                              checked={
+                                consents.privacyPolicy
+                              }
+                              onChange={() => {}}
+                              required
+                              ref={firstCheckboxRef}
+                              className="mt-1 w-[22px] h-[22px] text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
+                              readOnly
+                            />
+                            <span className="text-sm text-gray-700 leading-relaxed">
+                              Я согласен на обработку моих
+                              персональных данных в
+                              соответствии с{' '}
+                              <a
+                                href="/privacy-policy"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) =>
+                                  e.stopPropagation()
+                                }
+                                className="text-blue-600 hover:text-blue-800 underline font-medium"
+                              >
+                                Политикой конфиденциальности
+                              </a>
+                              . Срок хранения: 1 год после
+                              последнего обращения.
+                            </span>
+                          </div>
 
-                        <div
-                          className="flex items-start gap-3 cursor-pointer group p-3 rounded-xl hover:bg-gray-50 transition-colors relative z-10 min-h-[44px] touch-action-manipulation"
-                          onClick={() =>
-                            handleConsentChange(
-                              'dataProcessing',
-                            )
-                          }
-                          role="checkbox"
-                          aria-checked={
-                            consents.dataProcessing
-                          }
-                          tabIndex={0}
-                          onKeyDown={(e) => {
-                            if (
-                              e.key === 'Enter' ||
-                              e.key === ' '
-                            ) {
-                              e.preventDefault();
+                          <div
+                            className="flex items-start gap-3 cursor-pointer group p-3 rounded-xl hover:bg-gray-50 transition-colors relative z-10 min-h-[44px] touch-action-manipulation"
+                            onClick={() =>
                               handleConsentChange(
                                 'dataProcessing',
-                              );
+                              )
                             }
-                          }}
-                        >
-                          <input
-                            id="consent-processing"
-                            type="checkbox"
-                            checked={
+                            role="checkbox"
+                            aria-checked={
                               consents.dataProcessing
                             }
-                            onChange={() => {}}
-                            required
-                            className="mt-1 w-[22px] h-[22px] text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
-                            readOnly
-                          />
-                          <span className="text-sm text-gray-700 leading-relaxed">
-                            Я согласен на обработку данных
-                            для поиска лекарств и проведения
-                            онлайн-консультаций с
-                            фармацевтами.
-                          </span>
-                        </div>
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (
+                                e.key === 'Enter' ||
+                                e.key === ' '
+                              ) {
+                                e.preventDefault();
+                                handleConsentChange(
+                                  'dataProcessing',
+                                );
+                              }
+                            }}
+                          >
+                            <input
+                              id="consent-processing"
+                              type="checkbox"
+                              checked={
+                                consents.dataProcessing
+                              }
+                              onChange={() => {}}
+                              required
+                              className="mt-1 w-[22px] h-[22px] text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
+                              readOnly
+                            />
+                            <span className="text-sm text-gray-700 leading-relaxed">
+                              Я согласен на обработку данных
+                              для поиска лекарств и
+                              проведения онлайн-консультаций
+                              с фармацевтами.
+                            </span>
+                          </div>
 
-                        <div
-                          className="flex items-start gap-3 cursor-pointer group p-3 rounded-xl hover:bg-gray-50 transition-colors relative z-10 min-h-[44px] touch-action-manipulation"
-                          onClick={() =>
-                            handleConsentChange(
-                              'securityProtection',
-                            )
-                          }
-                          role="checkbox"
-                          aria-checked={
-                            consents.securityProtection
-                          }
-                          tabIndex={0}
-                          onKeyDown={(e) => {
-                            if (
-                              e.key === 'Enter' ||
-                              e.key === ' '
-                            ) {
-                              e.preventDefault();
+                          <div
+                            className="flex items-start gap-3 cursor-pointer group p-3 rounded-xl hover:bg-gray-50 transition-colors relative z-10 min-h-[44px] touch-action-manipulation"
+                            onClick={() =>
                               handleConsentChange(
                                 'securityProtection',
-                              );
+                              )
                             }
-                          }}
-                        >
-                          <input
-                            id="consent-security"
-                            type="checkbox"
-                            checked={
+                            role="checkbox"
+                            aria-checked={
                               consents.securityProtection
                             }
-                            onChange={() => {}}
-                            required
-                            className="mt-1 w-[22px] h-[22px] text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
-                            readOnly
-                          />
-                          <span className="text-sm text-gray-700 leading-relaxed">
-                            Я подтверждаю, что ознакомлен с
-                            тем, что мои данные будут
-                            зашифрованы и защищены в
-                            соответствии с требованиями ОАЦ
-                            РБ (класс ИС 3-ин).
-                          </span>
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (
+                                e.key === 'Enter' ||
+                                e.key === ' '
+                              ) {
+                                e.preventDefault();
+                                handleConsentChange(
+                                  'securityProtection',
+                                );
+                              }
+                            }}
+                          >
+                            <input
+                              id="consent-security"
+                              type="checkbox"
+                              checked={
+                                consents.securityProtection
+                              }
+                              onChange={() => {}}
+                              required
+                              className="mt-1 w-[22px] h-[22px] text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
+                              readOnly
+                            />
+                            <span className="text-sm text-gray-700 leading-relaxed">
+                              Я подтверждаю, что ознакомлен
+                              с тем, что мои данные будут
+                              зашифрованы и защищены в
+                              соответствии с требованиями
+                              ОАЦ РБ (класс ИС 3-ин).
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col space-y-3">
+                          <button
+                            onClick={handleAcceptCookies}
+                            disabled={!allConsentsGiven}
+                            className={`font-medium py-3 px-4 rounded-xl transition-all text-sm ${
+                              allConsentsGiven
+                                ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg'
+                                : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                            }`}
+                          >
+                            Принять и продолжить
+                          </button>
+                          <button
+                            onClick={handleDecline}
+                            className="text-gray-600 hover:text-gray-800 font-medium py-2 text-sm underline"
+                          >
+                            Отказаться
+                          </button>
+                          <a
+                            href="/privacy-policy"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800 font-medium py-2 text-sm text-center underline"
+                          >
+                            Подробнее о политике
+                            конфиденциальности
+                          </a>
                         </div>
                       </div>
-
-                      <div className="flex flex-col space-y-3">
-                        <button
-                          onClick={handleAcceptCookies}
-                          disabled={!allConsentsGiven}
-                          className={`font-medium py-3 px-4 rounded-xl transition-all text-sm ${
-                            allConsentsGiven
-                              ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg'
-                              : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                          }`}
-                        >
-                          Принять и продолжить
-                        </button>
-                        <a
-                          href="/privacy-policy"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-800 font-medium py-2 text-sm text-center underline"
-                        >
-                          Подробнее о политике
-                          конфиденциальности
-                        </a>
-                      </div>
-                    </div>
+                    )}
                   </div>
                 </div>
               )}

@@ -34,10 +34,10 @@ router = Router()
 
 @router.message(Command("start"))
 async def cmd_start(
-    message: Message, 
+    message: Message,
     state: FSMContext,
-    db: AsyncSession | None = None, 
-    user: User | None = None, 
+    db: AsyncSession | None = None,
+    user: User | None = None,
     is_pharmacist: bool | None = None,
     pharmacist: Pharmacist | None = None,
 ):
@@ -46,23 +46,35 @@ async def cmd_start(
         logger.error(f"Missing required dependencies for /start command")
         await message.answer("❌ Ошибка сервера. Попробуйте позже.")
         return
-        
-    logger.info(f"Command /start from user {message.from_user.id}, is_pharmacist: {is_pharmacist}")
-    
+
+    logger.info(
+        f"Command /start from user {message.from_user.id}, is_pharmacist: {is_pharmacist}"
+    )
+
     # Clear any existing FSM state (e.g., if user was in registration flow)
     current_state = await state.get_state()
     if current_state is not None:
-        logger.info(f"Clearing state {current_state} for user {message.from_user.id} on /start command")
+        logger.info(
+            f"Clearing state {current_state} for user {message.from_user.id} on /start command"
+        )
         await state.clear()
-    
+
     # Проверяем, дал ли пользователь согласие на обработку ПД
-    consent_given = user.consent_privacy_policy if hasattr(user, 'consent_privacy_policy') else False
-    consent_transboundary = user.consent_transboundary_transfer if hasattr(user, 'consent_transboundary_transfer') else False
-    
+    consent_given = (
+        user.consent_privacy_policy
+        if hasattr(user, "consent_privacy_policy")
+        else False
+    )
+    consent_transboundary = (
+        user.consent_transboundary_transfer
+        if hasattr(user, "consent_transboundary_transfer")
+        else False
+    )
+
     if not consent_given and not is_pharmacist:
         # Новый пользователь - запрашиваем согласие с информацией о трансграничной передаче
         privacy_text = (
-            "👋 <b>Добро пожаловать в NovoMedika!</b>\n\n"
+            "👋 <b>Добро пожаловать в NovaMedika!</b>\n\n"
             "💊 Я помогу вам найти лекарства и ответить на вопросы.\n\n"
             "⚠️ <b>Важная информация о защите данных:</b>\n\n"
             "🔒 <b>Обработка персональных данных:</b>\n"
@@ -101,33 +113,31 @@ async def cmd_start(
             "2. Даете согласие на обработку персональных данных\n"
             "3. Понимаете риски трансграничной передачи через Telegram"
         )
-        
+
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
-                        text="✅ Согласен",
-                        callback_data="consent_privacy_policy"
+                        text="✅ Согласен", callback_data="consent_privacy_policy"
                     )
                 ],
                 [
                     InlineKeyboardButton(
-                        text="❌ Не согласен",
-                        callback_data="decline_privacy_policy"
+                        text="❌ Не согласен", callback_data="decline_privacy_policy"
                     )
                 ],
                 [
                     InlineKeyboardButton(
                         text="🌐 Использовать web-сайт вместо бота",
-                        url="https://spravka.novamedika.com"
+                        url="https://spravka.novamedika.com",
                     )
-                ]
+                ],
             ]
         )
-        
+
         await message.answer(privacy_text, parse_mode="HTML", reply_markup=keyboard)
         return
-    
+
     # Если согласие на обработку ПД дано, но нет согласия на трансграничную передачу
     if consent_given and not consent_transboundary and not is_pharmacist:
         # Дополнительное согласие именно на трансграничную передачу
@@ -146,43 +156,44 @@ async def cmd_start(
             "исключительно на территории РБ.\n\n"
             "Нажмите «✅ Подтверждаю» для продолжения использования бота."
         )
-        
+
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
                         text="✅ Подтверждаю",
-                        callback_data="consent_transboundary_transfer"
+                        callback_data="consent_transboundary_transfer",
                     )
                 ],
                 [
                     InlineKeyboardButton(
                         text="❌ Отказаться",
-                        callback_data="decline_transboundary_transfer"
+                        callback_data="decline_transboundary_transfer",
                     )
                 ],
                 [
                     InlineKeyboardButton(
                         text="🌐 Перейти на web-сайт",
-                        url="https://spravka.novamedika.com"
+                        url="https://spravka.novamedika.com",
                     )
-                ]
+                ],
             ]
         )
-        
-        await message.answer(transboundary_text, parse_mode="HTML", reply_markup=keyboard)
+
+        await message.answer(
+            transboundary_text, parse_mode="HTML", reply_markup=keyboard
+        )
         return
-    
+
     if is_pharmacist and pharmacist:
         # Фармацевт - показываем панель с JWT токеном
         keyboard = get_pharmacist_inline_keyboard_with_token(
-            telegram_id=int(user.telegram_id),
-            pharmacist_uuid=str(pharmacist.uuid)
+            telegram_id=int(user.telegram_id), pharmacist_uuid=str(pharmacist.uuid)
         )
-        
+
         status_text = "🟢 Онлайн" if pharmacist.is_online else "🔴 Офлайн"
         pharmacy_name = pharmacist.pharmacy_info.get("name", "Не указана")
-        
+
         await message.answer(
             f"👨‍⚕️ <b>Добро пожаловать, {pharmacist.pharmacy_info.get('first_name', 'Фармацевт')}!</b>\n\n"
             f"🏥 {pharmacy_name}\n"
@@ -216,17 +227,17 @@ async def hide_keyboard(message: Message):
 
 @router.message(Command("history"))
 async def cmd_history(
-    message: Message, 
-    db: AsyncSession | None = None, 
-    user: User | None = None, 
-    is_pharmacist: bool | None = None
+    message: Message,
+    db: AsyncSession | None = None,
+    user: User | None = None,
+    is_pharmacist: bool | None = None,
 ):
     """Показать историю всех диалогов"""
     if not db or not user or is_pharmacist is None:
         logger.error("Missing required dependencies in cmd_history")
         await message.answer("❌ Ошибка сервера")
         return
-        
+
     try:
         if is_pharmacist:
             result = await db.execute(
@@ -302,13 +313,15 @@ async def cmd_history(
 
 
 @router.message(Command("search"))
-async def show_search_webapp_command(message: Message, is_pharmacist: bool | None = None):
+async def show_search_webapp_command(
+    message: Message, is_pharmacist: bool | None = None
+):
     """Обработка текстовой команды /search"""
     if is_pharmacist is None:
         logger.error("Missing required dependencies in show_search_webapp_command")
         await message.answer("❌ Ошибка сервера")
         return
-        
+
     if is_pharmacist:
         await message.answer("🔍 Используйте /questions для работы с вопросами")
         return
@@ -332,7 +345,7 @@ async def cmd_continue(
         logger.error("Missing required dependencies in cmd_continue")
         await message.answer("❌ Ошибка сервера")
         return
-        
+
     if is_pharmacist:
         await message.answer(
             "👨‍⚕️ Вы фармацевт. Используйте /questions для работы с вопросами."
@@ -343,7 +356,9 @@ async def cmd_continue(
         # Clear any existing FSM state before continuing dialog
         current_state = await state.get_state()
         if current_state is not None:
-            logger.info(f"Clearing state {current_state} for user {message.from_user.id} on /continue command")
+            logger.info(
+                f"Clearing state {current_state} for user {message.from_user.id} on /continue command"
+            )
             await state.clear()
 
         result = await db.execute(
@@ -405,7 +420,7 @@ async def cmd_continue(
 
 @router.message(Command("help"))
 async def cmd_help(
-    message: Message, 
+    message: Message,
     is_pharmacist: bool | None = None,
     user: User | None = None,
     pharmacist: Pharmacist | None = None,
@@ -415,14 +430,13 @@ async def cmd_help(
         logger.error("Missing required dependencies in cmd_help")
         await message.answer("❌ Ошибка сервера")
         return
-        
+
     if is_pharmacist and pharmacist:
         # Используем клавиатуру с JWT токеном
         keyboard = get_pharmacist_inline_keyboard_with_token(
-            telegram_id=int(user.telegram_id),
-            pharmacist_uuid=str(pharmacist.uuid)
+            telegram_id=int(user.telegram_id), pharmacist_uuid=str(pharmacist.uuid)
         )
-        
+
         await message.answer(
             "👨‍⚕️ <b>Как отвечать на вопросы?</b>\n\n"
             "1. Нажмите «🟢 Перейти в онлайн»\n"
@@ -457,7 +471,7 @@ async def cmd_complete(
         logger.error("Missing required dependencies in cmd_complete")
         await message.answer("❌ Ошибка сервера")
         return
-        
+
     if is_pharmacist:
         await message.answer(
             "👨‍⚕️ Вы фармацевт. Используйте /end_dialog для завершения диалогов."
@@ -531,7 +545,7 @@ async def cmd_privacy(message: Message, is_pharmacist: bool | None = None):
         logger.error("Missing required dependencies in cmd_privacy")
         await message.answer("❌ Ошибка сервера")
         return
-        
+
     privacy_text = (
         "🔒 <b>Политика конфиденциальности</b>\n\n"
         "Мы заботимся о защите ваших персональных данных.\n\n"
@@ -612,15 +626,15 @@ async def unmatched_message(message: Message):
         f"text='{message.text[:100] if message.text else 'NO TEXT'}', "
         f"content_type={message.content_type}"
     )
-    
+
     # Проверяем, есть ли уже активный диалог
     from aiogram.fsm.context import FSMContext
     from aiogram.fsm.state import State
-    
+
     # Если это не команда и не текст (например, фото, документ и т.д.)
-    if not message.text or message.text.startswith('/'):
+    if not message.text or message.text.startswith("/"):
         return  # Пропускаем команды - они обрабатываются другими handlers
-    
+
     await message.answer(
         "❓ <b>Сообщение не распознано</b>\n\n"
         "Пожалуйста, используйте одну из команд:\n"
@@ -645,24 +659,32 @@ async def test_dependencies(
     logger.info("TEST DEPENDENCIES HANDLER TRIGGERED")
     logger.info(f"  - db session: {'✅ PRESENT' if db else '❌ MISSING'}")
     logger.info(f"  - is_pharmacist: {is_pharmacist}")
-    logger.info(f"  - user: {'✅ PRESENT' if user else '❌ MISSING'} (uuid={user.uuid if user else None})")
-    logger.info(f"  - pharmacist: {'✅ PRESENT' if pharmacist else '❌ MISSING'} (uuid={pharmacist.uuid if pharmacist else None})")
+    logger.info(
+        f"  - user: {'✅ PRESENT' if user else '❌ MISSING'} (uuid={user.uuid if user else None})"
+    )
+    logger.info(
+        f"  - pharmacist: {'✅ PRESENT' if pharmacist else '❌ MISSING'} (uuid={pharmacist.uuid if pharmacist else None})"
+    )
     logger.info("=" * 80)
-    
+
     status_lines = [
         f"База данных: {'✅ OK' if db else '❌ ERROR'}",
         f"Фармацевт: {'✅ Да' if is_pharmacist else '❌ Нет'}",
         f"User UUID: {user.uuid if user else 'N/A'}",
         f"Pharmacist UUID: {pharmacist.uuid if pharmacist else 'N/A'}",
     ]
-    
+
     all_ok = db and user
     status_icon = "✅" if all_ok else "❌"
-    
+
     await message.answer(
         f"{status_icon} <b>Проверка зависимостей</b>\n\n"
         + "\n".join(status_lines)
         + "\n\n"
-        + ("Все зависимости инжектированы корректно!" if all_ok else "⚠️ Обнаружены проблемы с инъекцией зависимостей"),
+        + (
+            "Все зависимости инжектированы корректно!"
+            if all_ok
+            else "⚠️ Обнаружены проблемы с инъекцией зависимостей"
+        ),
         parse_mode="HTML",
     )
