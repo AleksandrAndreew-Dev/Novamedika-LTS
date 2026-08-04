@@ -485,6 +485,36 @@ async def create_consultation(
         )
 
 
+def build_consultations_query(
+    user_id: uuid.UUID,
+    status_filter: Optional[str] = None,
+    page: int = 1,
+    limit: int = 20,
+):
+    """Build the user consultations query with safe eager-loading paths."""
+    query = (
+        select(Question)
+        .options(
+            selectinload(Question.user),
+            selectinload(Question.assigned_pharmacist).selectinload(Pharmacist.user),
+            selectinload(Question.answers)
+            .selectinload(Answer.pharmacist)
+            .selectinload(Pharmacist.user),
+            selectinload(Question.dialog_messages),
+        )
+        .where(Question.user_id == user_id)
+    )
+
+    if status_filter:
+        query = query.where(Question.status == status_filter)
+
+    query = query.order_by(Question.created_at.desc())
+
+    offset = (page - 1) * limit
+    query = query.offset(offset).limit(limit)
+    return query
+
+
 @router.get("/consultations/", response_model=List[QuestionResponse])
 async def get_user_consultations(
     current_user: User = Depends(get_current_user_jwt),
@@ -499,31 +529,12 @@ async def get_user_consultations(
     Поддерживает пагинацию и фильтрацию по статусу.
     """
     try:
-        query = (
-            select(Question)
-            .options(
-                selectinload(Question.user),
-                selectinload(Question.assigned_pharmacist)
-                .selectinload(Pharmacist.user)
-                .selectinload(Pharmacist.pharmacy_info),
-                selectinload(Question.answers)
-                .selectinload(Answer.pharmacist)
-                .selectinload(Pharmacist.user)
-                .selectinload(Pharmacist.pharmacy_info),
-            )
-            .where(Question.user_id == current_user.uuid)
+        query = build_consultations_query(
+            user_id=current_user.uuid,
+            status_filter=status_filter,
+            page=page,
+            limit=limit,
         )
-
-        # Apply status filter if provided
-        if status_filter:
-            query = query.where(Question.status == status_filter)
-
-        # Order by creation date (newest first)
-        query = query.order_by(Question.created_at.desc())
-
-        # Apply pagination
-        offset = (page - 1) * limit
-        query = query.offset(offset).limit(limit)
 
         result = await db.execute(query)
         questions = result.scalars().all()
