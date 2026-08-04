@@ -27,27 +27,46 @@ export default function UserDashboard() {
       // Initialize auth
       userAuthService.initializeAuth();
 
-      // If Telegram WebApp environment, try TMA auth before falling back to login
-      if (
-        !userAuthService.isAuthenticated() &&
-        telegramAuthService.canAuthViaWebApp()
-      ) {
-        const tgLoginSuccess =
-          await telegramAuthService.autoLogin();
-        if (tgLoginSuccess) {
-          userAuthService.initializeAuth();
+      let userProfile;
+
+      // Try getProfile() directly — it handles token refresh internally
+      // and clears stale tokens on 401/404 (throws 'Session expired').
+      // This avoids the stale-token false-positive from isAuthenticated().
+      try {
+        userProfile = await userAuthService.getProfile();
+      } catch (profileError) {
+        // Stale token after /qa/drop or user deletion.
+        // getProfile() already cleared tokens on 401/404.
+        const status = profileError.response?.status;
+        const isAuthError =
+          status === 401 ||
+          status === 404 ||
+          profileError.message === 'Session expired' ||
+          profileError.message === 'No access token';
+
+        if (!isAuthError) {
+          throw profileError;
+        }
+
+        // Try Telegram auto-login recovery before redirecting to /login
+        if (telegramAuthService.canAuthViaWebApp()) {
+          const tgLoginSuccess =
+            await telegramAuthService.autoLogin();
+          if (tgLoginSuccess) {
+            userAuthService.initializeAuth();
+            // Retry getting profile with new auth
+            userProfile =
+              await userAuthService.getProfile();
+          }
+        }
+
+        // Still no valid session — redirect to login
+        if (!userProfile) {
+          navigate('/login');
+          return;
         }
       }
 
-      // Check if authenticated
-      if (!userAuthService.isAuthenticated()) {
-        navigate('/login');
-        return;
-      }
-
-      // Get user profile
-      const userProfile =
-        await userAuthService.getProfile();
       setUser(userProfile);
 
       // Get consultations

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import userAuthService from '../services/userAuthService';
@@ -12,25 +12,6 @@ export default function NewConsultation() {
   const [error, setError] = useState(null);
   const [toast, setToast] = useState(null);
   const createdRef = useRef(false);
-
-  useEffect(() => {
-    const tryRedirectToDashboard = async () => {
-      if (userAuthService.isAuthenticated()) {
-        navigate('/dashboard', { replace: true });
-        return;
-      }
-
-      if (telegramAuthService.canAuthViaWebApp()) {
-        const success =
-          await telegramAuthService.autoLogin();
-        if (success) {
-          navigate('/dashboard', { replace: true });
-        }
-      }
-    };
-
-    tryRedirectToDashboard();
-  }, [navigate]);
 
   const getAnonUserId = () => {
     let anonId = localStorage.getItem('anon_user_id');
