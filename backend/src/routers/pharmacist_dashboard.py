@@ -30,6 +30,24 @@ from auth.session_manager import get_redis_client
 
 logger = logging.getLogger(__name__)
 
+
+def create_message_data(message: DialogMessage) -> dict:
+    """
+    Создает унифицированную структуру данных для WebSocket сообщений.
+    Гарантирует согласованность формата across all endpoints.
+    """
+    return {
+        "uuid": str(message.uuid),
+        "question_id": str(message.question_id),
+        "sender_type": message.sender_type,
+        "sender_id": str(message.sender_id),
+        "message_type": message.message_type,
+        "text": message.text,
+        "file_id": message.file_id,
+        "created_at": message.created_at.isoformat(),
+    }
+
+
 router = APIRouter(
     tags=["Pharmacist Dashboard"],
 )
@@ -118,11 +136,14 @@ class WebSocketConnectionManager:
         await self.broadcast({"type": "new_question", "data": question_data})
 
     async def broadcast_message_update(self, question_id: str, message_data: dict):
-        """Broadcast new message in consultation to pharmacists AND subscribed users"""
-        # Send to pharmacists ONLY (exclude user websockets)
+        """
+        Broadcast a new message in consultation to pharmacists and subscribed users.
+        Attempts delivery to both channels and logs failures.
+        """
+        pharmacist_errors = 0
         disconnected = set()
+
         for connection in self.active_connections:
-            # Skip user websockets - they get separate broadcast
             if connection in self._all_user_websockets():
                 continue
             try:
@@ -133,20 +154,34 @@ class WebSocketConnectionManager:
                         "data": message_data,
                     }
                 )
-            except Exception:
+            except Exception as e:
+                pharmacist_errors += 1
                 disconnected.add(connection)
+                logger.warning(f"Failed to send to pharmacist WebSocket: {e}")
+
         for conn in disconnected:
             self.active_connections.discard(conn)
 
-        # Send to user subscribed to this consultation
-        await self.broadcast_to_consultation(
-            question_id,
-            {
-                "type": "message_update",
-                "question_id": question_id,
-                "data": message_data,
-            },
-        )
+        if pharmacist_errors > 0:
+            logger.warning(
+                f"Failed to deliver to {pharmacist_errors} pharmacist WebSocket(s)"
+            )
+
+        try:
+            await self.broadcast_to_consultation(
+                question_id,
+                {
+                    "type": "message_update",
+                    "question_id": question_id,
+                    "data": message_data,
+                },
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to broadcast to user WebSocket for question {question_id}: {e}",
+                exc_info=True,
+            )
+            raise
 
 
 # Retry helper for WebSocket broadcasts with exponential backoff
@@ -174,18 +209,25 @@ REDIS_WS_CHANNEL = "ws:pharmacist:events"
 
 
 async def publish_to_redis(message: dict):
-    """Publish event to Redis Pub/Sub channel for cross-worker sync"""
+    """
+    Publish event to Redis Pub/Sub channel for cross-worker sync.
+    Возвращает True при успехе, False при ошибке.
+    """
     try:
         r = await get_redis_client()
         await r.publish(REDIS_WS_CHANNEL, json.dumps(message, default=str))
         logger.info(f"✅ Redis published: {message.get('type', 'unknown')}")
+        return True
     except Exception as e:
-        logger.error(f"❌ Redis publish failed: {e}")
-        # Don't silently fail - this is critical for cross-worker sync
+        logger.error(f"❌ Redis publish failed: {e}", exc_info=True)
+        return False
 
 
 async def redis_ws_listener():
-    """Background task: listen to Redis Pub/Sub and broadcast locally"""
+    """
+    Background task: listen to Redis Pub/Sub and broadcast locally.
+    Улучшенная версия с retry логикой и детальным логированием.
+    """
     while True:
         try:
             r = await get_redis_client()
@@ -198,34 +240,52 @@ async def redis_ws_listener():
                         data = json.loads(msg["data"])
                         event_type = data.get("type", "")
                         logger.info(f"📨 Redis received event: {event_type}")
+
                         if event_type == "message_update":
+                            question_id = data.get("question_id", "")
+                            message_data = data.get("message_data", {})
+                            if not question_id or not message_data:
+                                logger.error(f"Invalid message_update data: {data}")
+                                continue
                             await ws_manager.broadcast_message_update(
-                                data.get("question_id", ""),
-                                data.get("message_data", {}),
+                                question_id,
+                                message_data,
                             )
                         elif event_type == "new_question":
-                            await ws_manager.broadcast_new_question(
-                                data.get("question_data", {})
-                            )
+                            question_data = data.get("question_data", {})
+                            if not question_data:
+                                logger.error(f"Invalid new_question data: {data}")
+                                continue
+                            await ws_manager.broadcast_new_question(question_data)
                         elif event_type == "question_assigned":
                             await ws_manager.broadcast(data)
                         elif event_type == "user_completion":
+                            question_id = data.get("question_id", "")
+                            if not question_id:
+                                logger.error(f"Invalid user_completion data: {data}")
+                                continue
                             await ws_manager.broadcast_to_consultation(
-                                data.get("question_id", ""),
+                                question_id,
                                 {
                                     "type": "question_completed",
-                                    "question_id": data.get("question_id", ""),
+                                    "question_id": question_id,
                                     "completed_by": data.get("completed_by", ""),
                                     "status": "completed",
                                 },
                             )
                         else:
                             await ws_manager.broadcast(data)
+                    except json.JSONDecodeError as e:
+                        logger.error(f"❌ Redis WS JSON decode error: {e}")
                     except Exception as e:
-                        logger.error(f"❌ Redis WS message parse error: {e}")
+                        logger.error(
+                            f"❌ Redis WS message processing error: {e}", exc_info=True
+                        )
                         await asyncio.sleep(0.1)
         except Exception as e:
-            logger.error(f"Redis WS listener error: {e}, restarting in 5s")
+            logger.error(
+                f"Redis WS listener error: {e}, restarting in 5s", exc_info=True
+            )
             await asyncio.sleep(5)
 
 
@@ -459,23 +519,35 @@ async def answer_question(
     await db.refresh(new_message)
 
     # 1. WebSocket broadcast (pharmacists + subscribed user)
+    message_data = create_message_data(new_message)
     ws_msg_data = {
         "question_id": str(question.uuid),
-        "message_data": {
-            "uuid": str(new_message.uuid),
-            "question_id": str(new_message.question_id),
-            "sender_type": "pharmacist",
-            "text": new_message.text,
-            "created_at": new_message.created_at.isoformat(),
-        },
+        "message_data": message_data,
     }
+
+    broadcast_success = False
+    redis_success = False
+
     try:
         await ws_manager.broadcast_message_update(**ws_msg_data)
+        broadcast_success = True
         logger.info(f"WebSocket broadcast sent for answer to {question_id}")
     except Exception as e:
-        logger.warning(f"WebSocket broadcast failed (non-critical): {e}")
+        logger.error(f"WebSocket broadcast failed for answer: {e}", exc_info=True)
+        # Критическая ошибка - пользователь может не получить сообщение
+
     # Publish to Redis for cross-worker sync
-    await publish_to_redis({"type": "message_update", **ws_msg_data})
+    try:
+        redis_success = await publish_to_redis(
+            {"type": "message_update", **ws_msg_data}
+        )
+    except Exception as e:
+        logger.error(f"Redis publish failed for answer: {e}", exc_info=True)
+
+    # Если оба канала failed - это критическая ситуация
+    if not broadcast_success and not redis_success:
+        logger.critical(f"Both WebSocket and Redis failed for answer to {question_id}")
+        # Можно добавить уведомление администратору
 
     # 2. Telegram notification to user (if user has telegram_id)
     try:

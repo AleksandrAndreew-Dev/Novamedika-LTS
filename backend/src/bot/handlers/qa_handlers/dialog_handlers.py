@@ -95,18 +95,16 @@ async def handle_pharmacist_text_in_dialog(
 
         # WebSocket broadcast to pharmacist dashboard
         try:
-            from routers.pharmacist_dashboard import ws_manager, publish_to_redis
+            from routers.pharmacist_dashboard import (
+                ws_manager,
+                publish_to_redis,
+                create_message_data,
+            )
 
+            message_data = create_message_data(new_message)
             ws_msg_data = {
                 "question_id": str(question.uuid),
-                "message_data": {
-                    "uuid": str(new_message.uuid),
-                    "question_id": str(question.uuid),
-                    "sender_type": "pharmacist",
-                    "sender_id": str(pharmacist.uuid),
-                    "text": message.text,
-                    "created_at": new_message.created_at.isoformat(),
-                },
+                "message_data": message_data,
             }
             await ws_manager.broadcast_message_update(**ws_msg_data)
             await publish_to_redis({"type": "message_update", **ws_msg_data})
@@ -114,7 +112,7 @@ async def handle_pharmacist_text_in_dialog(
                 f"WebSocket broadcast sent for Telegram answer to {question.uuid}"
             )
         except Exception as ws_err:
-            logger.warning(f"WebSocket broadcast failed (non-critical): {ws_err}")
+            logger.error(f"WebSocket broadcast failed for Telegram answer: {ws_err}", exc_info=True)
 
         user_result = await db.execute(
             select(User).where(User.uuid == question.user_id)
@@ -279,18 +277,16 @@ async def process_answer_text(
 
         # WebSocket broadcast to pharmacist dashboard
         try:
-            from routers.pharmacist_dashboard import ws_manager, publish_to_redis
+            from routers.pharmacist_dashboard import (
+                ws_manager,
+                publish_to_redis,
+                create_message_data,
+            )
 
+            message_data = create_message_data(new_message)
             ws_msg_data = {
                 "question_id": str(question.uuid),
-                "message_data": {
-                    "uuid": str(new_message.uuid),
-                    "question_id": str(question.uuid),
-                    "sender_type": "pharmacist",
-                    "sender_id": str(pharmacist.uuid),
-                    "text": message.text,
-                    "created_at": new_message.created_at.isoformat(),
-                },
+                "message_data": message_data,
             }
             await ws_manager.broadcast_message_update(**ws_msg_data)
             await publish_to_redis({"type": "message_update", **ws_msg_data})
@@ -298,7 +294,7 @@ async def process_answer_text(
                 f"WebSocket broadcast sent for Telegram answer to {question.uuid}"
             )
         except Exception as ws_err:
-            logger.warning(f"WebSocket broadcast failed (non-critical): {ws_err}")
+            logger.error(f"WebSocket broadcast failed for Telegram answer: {ws_err}", exc_info=True)
 
         user_result = await db.execute(
             select(User).where(User.uuid == question.user_id)

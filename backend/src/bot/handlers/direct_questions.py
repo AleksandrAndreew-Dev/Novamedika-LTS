@@ -11,7 +11,7 @@ import logging
 from db.qa_models import User, Question, Pharmacist
 from utils.time_utils import get_utc_now_naive
 from bot.services.notification_service import notify_pharmacists_about_new_question
-from routers.pharmacist_dashboard import ws_manager
+from routers.pharmacist_dashboard import ws_manager, create_message_data
 from bot.handlers.qa_states import UserQAStates, QAStates
 from bot.handlers.registration import RegistrationStates
 from bot.services.dialog_service import DialogService
@@ -45,8 +45,8 @@ async def send_user_message_to_pharmacist(
             file_id = None
             text_content = message.text
 
-        # Сохраняем сообщение в историю
-        await DialogService.add_message(
+        # Сохраняем сообщение в историю и получаем UUID
+        new_message = await DialogService.add_message(
             db=db,
             question_id=question.uuid,
             sender_type="user",
@@ -57,6 +57,7 @@ async def send_user_message_to_pharmacist(
             caption=message.caption,
         )
         await db.commit()
+        await db.refresh(new_message)
 
         # Находим фармацевта
         pharmacist_result = await db.execute(
@@ -140,19 +141,16 @@ async def send_user_message_to_pharmacist(
 
         # WebSocket broadcast to pharmacist WebView
         try:
+            message_data = create_message_data(new_message)
             await ws_manager.broadcast_message_update(
                 question_id=str(question.uuid),
-                message_data={
-                    "uuid": "",
-                    "question_id": str(question.uuid),
-                    "sender_type": "user",
-                    "text": text_content or "",
-                    "created_at": get_utc_now_naive().isoformat(),
-                },
+                message_data=message_data,
             )
             logger.info(f"WebSocket broadcast sent for user message to {question.uuid}")
         except Exception as e:
-            logger.warning(f"WebSocket broadcast failed (non-critical): {e}")
+            logger.error(
+                f"WebSocket broadcast failed for user message: {e}", exc_info=True
+            )
 
         return True
 

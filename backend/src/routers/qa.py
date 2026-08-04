@@ -740,23 +740,20 @@ async def send_consultation_message(
 
         # 1. WebSocket broadcast to pharmacist dashboard
         try:
-            from routers.pharmacist_dashboard import ws_manager
+            from routers.pharmacist_dashboard import ws_manager, create_message_data
 
+            message_data = create_message_data(new_message)
             await ws_manager.broadcast_message_update(
                 question_id=consultation_id,
-                message_data={
-                    "uuid": str(new_message.uuid),
-                    "question_id": consultation_id,
-                    "sender_type": "user",
-                    "text": new_message.text,
-                    "created_at": new_message.created_at.isoformat(),
-                },
+                message_data=message_data,
             )
             logger.info(
                 f"WebSocket broadcast sent for user message in {consultation_id}"
             )
         except Exception as ws_err:
-            logger.warning(f"WebSocket broadcast failed (non-critical): {ws_err}")
+            logger.error(
+                f"WebSocket broadcast failed for user message: {ws_err}", exc_info=True
+            )
 
         # 2. Telegram notification to pharmacist (if assigned) with answer button
         try:
