@@ -15,6 +15,24 @@ import userAuthService from '../services/userAuthService';
 import telegramAuthService from '../services/telegramAuthService';
 import Toast from '../components/Toast';
 
+function isNonActionableChatInitError(err) {
+  const status = err?.response?.status;
+  const message = String(
+    err?.response?.data?.detail ||
+      err?.userMessage ||
+      err?.message ||
+      '',
+  ).toLowerCase();
+
+  if (status === 401 || status === 403) {
+    return true;
+  }
+
+  return /network|failed to fetch|fetch failed|timeout|aborted|session not found|redis|auth fallback|auto-login failed|telegram web app not detected|not in telegram environment/i.test(
+    message,
+  );
+}
+
 export default function Chat() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -83,8 +101,12 @@ export default function Chat() {
         // 4. Загружаем данные консультации через chatService
         await loadConsultationData(telegramUser, anon);
       } catch (err) {
-        console.error('[Chat] Init error:', err);
-        setError('Не удалось загрузить консультацию');
+        if (isNonActionableChatInitError(err)) {
+          console.warn('[Chat] Init warning:', err);
+        } else {
+          console.error('[Chat] Init error:', err);
+          setError('Не удалось загрузить консультацию');
+        }
       } finally {
         setPageLoading(false);
       }
@@ -121,17 +143,25 @@ export default function Chat() {
         });
       }
     } catch (err) {
+      if (isNonActionableChatInitError(err)) {
+        console.warn(
+          'Non-actionable consultation load issue:',
+          err,
+        );
+        return;
+      }
+
       console.error('Failed to load consultation:', err);
+      if (err.response?.status === 404) {
+        return;
+      }
+
       if (!anon && err.response?.status === 401) {
         if (!inTelegram) navigate('/login');
-        setError(
-          'Не удалось загрузить консультацию. Попробуйте позже.',
-        );
-      } else if (err.response?.status === 404) {
-        setError('Консультация не найдена');
-      } else {
-        setError('Не удалось загрузить консультацию');
+        return;
       }
+
+      setError('Не удалось загрузить консультацию');
     }
   };
 

@@ -54,34 +54,31 @@ export default function ConsultationChat({
         }
 
         setMessages((prev) => {
-          const prevIds = new Set(
-            prev.map(
-              (m) =>
-                m.uuid ||
-                m.id ||
-                m.data?.uuid ||
-                m.data?.id,
-            ),
-          );
-          const msgId =
-            messagePayload?.uuid ||
-            messagePayload?.id ||
-            messagePayload?.data?.uuid ||
-            messagePayload?.data?.id;
-          if (msgId && prevIds.has(msgId)) return prev;
+          // Унифицированный подход к извлечению UUID
+          const newMsg = messagePayload?.data || messagePayload;
+          const msgId = newMsg?.uuid;
+          
+          if (!msgId) {
+            logger.warn('Received message without UUID:', newMsg);
+            return prev;
+          }
 
-          const newMsg =
-            messagePayload?.data || messagePayload;
+          const prevIds = new Set(prev.map((m) => m.uuid));
+          if (prevIds.has(msgId)) return prev;
+
+          // Дополнительная проверка на дубликаты по содержимому
           const isDuplicate = prev.some(
             (m) =>
               m.text === newMsg.text &&
               m.sender_type === newMsg.sender_type &&
               Math.abs(
-                new Date(m.created_at) -
-                  new Date(newMsg.created_at),
+                new Date(m.created_at) - new Date(newMsg.created_at),
               ) < 1000,
           );
-          if (isDuplicate) return prev;
+          if (isDuplicate) {
+            logger.warn('Duplicate message detected by content:', newMsg);
+            return prev;
+          }
 
           const updated = [...prev, newMsg];
           updated.sort(
