@@ -392,11 +392,11 @@ class MessageCreate(BaseModel):
 class MessageResponse(BaseModel):
     """Модель ответа сообщения"""
 
-    uuid: str
-    question_id: str
+    uuid: uuid.UUID
+    question_id: uuid.UUID
     message_type: str
     sender_type: str
-    sender_id: str
+    sender_id: uuid.UUID
     text: Optional[str] = None
     file_id: Optional[str] = None
     caption: Optional[str] = None
@@ -708,7 +708,8 @@ async def get_consultation_messages(
 
         return [MessageResponse.model_validate(msg) for msg in messages]
 
-    except ValueError:
+    except ValueError as ve:
+        logger.warning(f"Invalid ID format in get_consultation_messages: {ve}")
         raise HTTPException(status_code=400, detail="Неверный формат ID")
     except HTTPException:
         raise
@@ -831,7 +832,8 @@ async def send_consultation_message(
 
         return MessageResponse.model_validate(new_message)
 
-    except ValueError:
+    except ValueError as ve:
+        logger.warning(f"Invalid ID format in send_consultation_message: {ve}")
         raise HTTPException(status_code=400, detail="Неверный формат ID")
     except HTTPException:
         raise
@@ -1047,18 +1049,7 @@ async def get_public_question_messages(
         )
         messages = messages_result.scalars().all()
 
-        return [
-            {
-                "uuid": str(m.uuid),
-                "question_id": str(m.question_id),
-                "message_type": m.message_type,
-                "sender_type": m.sender_type,
-                "sender_id": str(m.sender_id),
-                "text": m.text,
-                "created_at": m.created_at.isoformat(),
-            }
-            for m in messages
-        ]
+        return [MessageResponse.model_validate(m) for m in messages]
 
     except HTTPException:
         raise
@@ -1198,15 +1189,7 @@ async def send_public_question_message(
 
         logger.info(f"New message in public question {question_id}")
 
-        return {
-            "uuid": str(new_message.uuid),
-            "question_id": str(new_message.question_id),
-            "message_type": new_message.message_type,
-            "sender_type": new_message.sender_type,
-            "sender_id": str(new_message.sender_id),
-            "text": new_message.text,
-            "created_at": new_message.created_at.isoformat(),
-        }
+        return MessageResponse.model_validate(new_message)
 
     except HTTPException:
         raise
