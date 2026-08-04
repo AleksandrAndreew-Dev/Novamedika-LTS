@@ -19,6 +19,7 @@ export default function QuestionsList({
   selectedQuestionId,
   onSelectQuestion,
   compact = false,
+  onPendingCountChange,
 }) {
   const [unreadQuestions] = useState(
     new Set(
@@ -124,6 +125,10 @@ export default function QuestionsList({
         // Force load without throttle
         lastLoadRef.current = 0;
         loadQuestions();
+        // Notify parent about pending count change
+        if (typeof onPendingCountChange === 'function') {
+          onPendingCountChange((prev) => (prev || 0) + 1);
+        }
       },
     );
 
@@ -251,11 +256,11 @@ export default function QuestionsList({
                 onClick={() =>
                   handleQuestionClick(questionId)
                 }
-                className={`w-full text-left px-4 py-3 transition-colors hover:bg-gray-50 ${
+                className={`w-full text-left px-4 py-3 transition-colors hover:bg-gray-50 relative ${
                   isSelected
                     ? 'bg-blue-50 border-l-4 border-blue-500'
                     : 'border-l-4 border-transparent'
-                }`}
+                } ${hasNewQuestions ? 'animate-pulse bg-blue-50/60' : ''}`}
               >
                 <div className="flex items-start gap-3">
                   <div className="flex-1 min-w-0">
@@ -288,6 +293,9 @@ export default function QuestionsList({
                     {getStatusBadge(question.status)}
                   </div>
                 </div>
+                {hasNewQuestions && (
+                  <span className="absolute top-1 right-1 inline-flex items-center justify-center w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                )}
               </button>
             );
           })

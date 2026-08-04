@@ -123,6 +123,57 @@ async def create_question(
         await db.commit()
         await db.refresh(new_question)
 
+        # Уведомление фармацевтов о новом вопросе
+        try:
+            from bot.services.notification_service import (
+                notify_pharmacists_about_new_question,
+            )
+
+            asyncio.create_task(notify_pharmacists_about_new_question(new_question, db))
+        except Exception as e:
+            logger.warning(
+                f"Failed to send Telegram notification for new question: {e}"
+            )
+
+        # WebSocket broadcast to pharmacist dashboard
+        try:
+            from routers.pharmacist_dashboard import ws_manager
+
+            await ws_manager.broadcast_new_question(
+                {
+                    "uuid": str(new_question.uuid),
+                    "text": new_question.text,
+                    "status": new_question.status,
+                    "created_at": new_question.created_at.isoformat(),
+                    "user_name": f"{user.first_name or ''} {user.last_name or ''}".strip()
+                    or f"User {user.telegram_id}",
+                    "message_count": 0,
+                }
+            )
+        except Exception as ws_err:
+            logger.warning(f"WebSocket broadcast failed for new question: {ws_err}")
+
+        # Redis Pub/Sub для cross-worker sync
+        try:
+            from routers.pharmacist_dashboard import publish_to_redis
+
+            await publish_to_redis(
+                {
+                    "type": "new_question",
+                    "question_data": {
+                        "uuid": str(new_question.uuid),
+                        "text": new_question.text,
+                        "status": new_question.status,
+                        "created_at": new_question.created_at.isoformat(),
+                        "user_name": f"{user.first_name or ''} {user.last_name or ''}".strip()
+                        or f"User {user.telegram_id}",
+                        "message_count": 0,
+                    },
+                }
+            )
+        except Exception as redis_err:
+            logger.warning(f"Redis publish failed for new question: {redis_err}")
+
         # Возвращаем данные с правильным преобразованием
         return QuestionResponse.model_validate(new_question)
 
@@ -461,6 +512,55 @@ async def create_consultation(
         logger.info(
             f"New consultation created by user {current_user.uuid}: {new_question.uuid}"
         )
+
+        # Уведомление фармацевтов о новом вопросе
+        try:
+            from bot.services.notification_service import (
+                notify_pharmacists_about_new_question,
+            )
+
+            asyncio.create_task(notify_pharmacists_about_new_question(new_question, db))
+        except Exception as e:
+            logger.warning(
+                f"Failed to send Telegram notification for consultation: {e}"
+            )
+
+        # WebSocket broadcast to pharmacist dashboard
+        try:
+            from routers.pharmacist_dashboard import ws_manager
+
+            await ws_manager.broadcast_new_question(
+                {
+                    "uuid": str(new_question.uuid),
+                    "text": new_question.text,
+                    "status": new_question.status,
+                    "created_at": new_question.created_at.isoformat(),
+                    "user_name": f"{current_user.first_name or 'Пользователь'} {current_user.last_name or ''}".strip(),
+                    "message_count": 0,
+                }
+            )
+        except Exception as ws_err:
+            logger.warning(f"WebSocket broadcast failed for consultation: {ws_err}")
+
+        # Redis Pub/Sub для cross-worker sync
+        try:
+            from routers.pharmacist_dashboard import publish_to_redis
+
+            await publish_to_redis(
+                {
+                    "type": "new_question",
+                    "question_data": {
+                        "uuid": str(new_question.uuid),
+                        "text": new_question.text,
+                        "status": new_question.status,
+                        "created_at": new_question.created_at.isoformat(),
+                        "user_name": f"{current_user.first_name or 'Пользователь'} {current_user.last_name or ''}".strip(),
+                        "message_count": 0,
+                    },
+                }
+            )
+        except Exception as redis_err:
+            logger.warning(f"Redis publish failed for consultation: {redis_err}")
 
         # Explicit response - avoid MissingGreenlet in async context
         return QuestionResponse(
@@ -924,6 +1024,18 @@ async def create_public_question(
             f"Public question created by anon user {user.uuid}: {new_question.uuid}"
         )
 
+        # Уведомление фармацевтов о новом вопросе
+        try:
+            from bot.services.notification_service import (
+                notify_pharmacists_about_new_question,
+            )
+
+            asyncio.create_task(notify_pharmacists_about_new_question(new_question, db))
+        except Exception as e:
+            logger.warning(
+                f"Failed to send Telegram notification for public question: {e}"
+            )
+
         # Broadcast to pharmacist dashboard via WebSocket
         try:
             from routers.pharmacist_dashboard import ws_manager
@@ -940,6 +1052,26 @@ async def create_public_question(
             )
         except Exception as ws_err:
             logger.warning(f"WebSocket broadcast failed (non-critical): {ws_err}")
+
+        # Redis Pub/Sub для cross-worker sync
+        try:
+            from routers.pharmacist_dashboard import publish_to_redis
+
+            await publish_to_redis(
+                {
+                    "type": "new_question",
+                    "question_data": {
+                        "uuid": str(new_question.uuid),
+                        "text": new_question.text,
+                        "status": new_question.status,
+                        "created_at": new_question.created_at.isoformat(),
+                        "user_name": "Гость",
+                        "message_count": 0,
+                    },
+                }
+            )
+        except Exception as redis_err:
+            logger.warning(f"Redis publish failed for public question: {redis_err}")
 
         return {
             "uuid": str(new_question.uuid),

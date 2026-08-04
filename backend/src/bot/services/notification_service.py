@@ -9,17 +9,18 @@ from bot.services.assignment_service import QuestionAssignmentService
 from bot.services.dialog_service import DialogService
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-
 logger = logging.getLogger(__name__)
 
 
 async def notify_pharmacists_about_new_question(question, db: AsyncSession):
     """Уведомление фармацевтов о новом вопросе"""
     try:
-        bot = bot_manager.get_bot()
-        if not bot:
-            logger.error("Bot not initialized for notifications")
-            return
+        if not bot_manager.bot:
+            bot, _ = await bot_manager.initialize()
+            if not bot:
+                logger.error("Bot not initialized for notifications")
+                return
+        bot = bot_manager.bot
 
         # Проверяем, нужно ли уведомлять всех
         if await QuestionAssignmentService.should_notify_all_pharmacists(
@@ -88,10 +89,12 @@ async def notify_about_clarification(
 ):
     """Уведомление об уточнении - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
     try:
-        bot = bot_manager.get_bot()
-        if not bot:
-            logger.error("Bot not initialized for notifications")
-            return
+        if not bot_manager.bot:
+            bot, _ = await bot_manager.initialize()
+            if not bot:
+                logger.error("Bot not initialized for notifications")
+                return
+        bot = bot_manager.bot
 
         # ✅ ВАЖНО: Добавляем уточнение в историю диалога
         await DialogService.add_message(

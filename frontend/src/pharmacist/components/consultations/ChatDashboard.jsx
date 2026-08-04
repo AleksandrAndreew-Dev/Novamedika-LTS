@@ -49,6 +49,7 @@ export default function ChatDashboard({
   const [activeTab, setActiveTab] = useState('questions'); // 'questions' | 'stats'
   const [panelWidth, setPanelWidth] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
   const panelRef = useRef(null);
   const autoSelectDoneRef = useRef(false);
   const activeQuestionIdRef = useRef(activeQuestionId);
@@ -98,12 +99,39 @@ export default function ChatDashboard({
 
   const handleSelectQuestion = useCallback((questionId) => {
     setActiveQuestionId(questionId);
+    setFilter('new');
   }, []);
 
   // Reset active question when filter changes (question may not be in new filter)
   useEffect(() => {
     setActiveQuestionId(null);
   }, [filter]);
+
+  // Fetch unread/pending count
+  const fetchPendingCount = useCallback(async () => {
+    try {
+      const data = await questionsService.getUnreadCount();
+      setPendingCount(data.count || 0);
+    } catch (err) {
+      logger.error('Failed to fetch pending count:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPendingCount();
+    const interval = setInterval(fetchPendingCount, 15000);
+    return () => clearInterval(interval);
+  }, [fetchPendingCount]);
+
+  useEffect(() => {
+    const unsubscribeNew = websocketService.on(
+      'new_question',
+      () => {
+        fetchPendingCount();
+      },
+    );
+    return () => unsubscribeNew();
+  }, [fetchPendingCount]);
 
   const handleBackToList = useCallback(() => {
     setActiveQuestionId(null);
@@ -208,7 +236,7 @@ export default function ChatDashboard({
               {/* Tabs */}
               <div className="flex border-b border-gray-200">
                 <button
-                  className={`flex-1 py-2.5 text-sm font-medium text-center border-b-2 transition-colors ${
+                  className={`flex-1 py-2.5 text-sm font-medium text-center border-b-2 transition-colors relative ${
                     activeTab === 'questions'
                       ? 'text-blue-600 border-blue-600'
                       : 'text-gray-500 border-transparent hover:text-gray-700'
@@ -216,6 +244,11 @@ export default function ChatDashboard({
                   onClick={() => setActiveTab('questions')}
                 >
                   📋 Вопросы
+                  {pendingCount > 0 && (
+                    <span className="absolute -top-1 -right-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full animate-pulse">
+                      {pendingCount}
+                    </span>
+                  )}
                 </button>
                 <button
                   className={`flex-1 py-2.5 text-sm font-medium text-center border-b-2 transition-colors ${
@@ -248,6 +281,12 @@ export default function ChatDashboard({
                         >
                           <span>{item.icon}</span>
                           <span>{item.label}</span>
+                          {item.key === 'new' &&
+                            pendingCount > 0 && (
+                              <span className="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full animate-pulse">
+                                {pendingCount}
+                              </span>
+                            )}
                         </button>
                       ))}
                     </div>
@@ -260,6 +299,7 @@ export default function ChatDashboard({
                         handleSelectQuestion
                       }
                       compact={true}
+                      onPendingCountChange={setPendingCount}
                     />
                   </div>
                 </>
