@@ -32,10 +32,11 @@ export default function QuestionsList({
   const [loading, setLoading] = useState(true);
   const [hasNewQuestions, setHasNewQuestions] =
     useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const newQuestionsTimerRef = useRef(null);
   const mountedRef = useRef(true);
   const lastLoadRef = useRef(0);
-  const loadThrottleMs = 500;
+  const loadThrottleMs = 2000;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -44,12 +45,10 @@ export default function QuestionsList({
     };
   }, []);
 
-  useEffect(() => {
-    console.log(
-      '[QuestionsList] Component mounted with filter:',
-      filter,
-    );
-  }, [filter]);
+  // Suppress noisy logs in production
+  const debugLog = import.meta.env?.DEV
+    ? console.log
+    : () => {};
 
   const loadQuestions = useCallback(async () => {
     // Throttle: skip if called within throttle interval
@@ -58,21 +57,27 @@ export default function QuestionsList({
       now - lastLoadRef.current < loadThrottleMs &&
       lastLoadRef.current > 0
     ) {
-      console.log(
-        '[QuestionsList] Throttled loadQuestions',
-      );
+      debugLog('[QuestionsList] Throttled loadQuestions');
       return;
     }
     lastLoadRef.current = now;
 
-    try {
+    // Show loading only on first load or filter change
+    const shouldShowLoading = lastLoadRef.current === 0;
+    if (shouldShowLoading) {
       setLoading(true);
+    }
+
+    try {
       const params =
         filter === 'all'
           ? {}
           : {
               status: filter,
             };
+      if (searchQuery.trim()) {
+        params.search = searchQuery.trim();
+      }
       const data =
         await questionsService.getQuestions(params);
 
@@ -84,7 +89,7 @@ export default function QuestionsList({
       } else if (data && Array.isArray(data.questions)) {
         setQuestions(data.questions);
       } else {
-        console.error(
+        debugLog(
           '[QuestionsList] Unexpected response format:',
           typeof data,
           data,
@@ -93,15 +98,18 @@ export default function QuestionsList({
       }
     } catch (error) {
       if (!mountedRef.current) return;
-      console.error(
+      debugLog(
         '[QuestionsList] Failed to load questions:',
         error,
       );
       setQuestions([]);
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+        lastLoadRef.current = Date.now();
+      }
     }
-  }, [filter]);
+  }, [filter, searchQuery, debugLog]);
 
   // Subscribe to WebSocket for real-time new question notifications
   useEffect(() => {
@@ -110,9 +118,8 @@ export default function QuestionsList({
     const unsubscribeNew = websocketService.on(
       'new_question',
       (data) => {
-        console.log(
-          '[QuestionsList] New question received via WebSocket:',
-          data,
+        debugLog(
+          '[QuestionsList] New question received via WebSocket',
         );
         // Show visual indicator
         setHasNewQuestions(true);
@@ -122,47 +129,45 @@ export default function QuestionsList({
         newQuestionsTimerRef.current = setTimeout(() => {
           setHasNewQuestions(false);
         }, 5000);
-        // Force load without throttle
-        lastLoadRef.current = 0;
-        loadQuestions();
         // Notify parent about pending count change
         if (typeof onPendingCountChange === 'function') {
           onPendingCountChange((prev) => (prev || 0) + 1);
         }
+        // Debounced reload — avoid flicker
+        setTimeout(() => loadQuestions(), 300);
       },
     );
 
     const unsubscribeUpdate = websocketService.on(
       'message_update',
-      (data) => {
-        console.log(
-          '[QuestionsList] Message update received via WebSocket:',
-          data,
+      () => {
+        debugLog(
+          '[QuestionsList] Message update received via WebSocket',
         );
-        // Force load without throttle
-        lastLoadRef.current = 0;
-        loadQuestions();
+        // Debounced reload
+        setTimeout(() => loadQuestions(), 300);
       },
     );
 
     const unsubscribeAssigned = websocketService.on(
       'question_assigned',
-      (data) => {
-        console.log(
-          '[QuestionsList] Question assigned received via WebSocket:',
-          data,
+      () => {
+        debugLog(
+          '[QuestionsList] Question assigned received via WebSocket',
         );
-        // Force load without throttle
-        lastLoadRef.current = 0;
-        loadQuestions();
+        // Debounced reload
+        setTimeout(() => loadQuestions(), 300);
       },
     );
 
     const unsubscribeCompleted = websocketService.on(
       'question_completed',
       () => {
-        lastLoadRef.current = 0;
-        loadQuestions();
+        debugLog(
+          '[QuestionsList] Question completed received via WebSocket',
+        );
+        // Debounced reload
+        setTimeout(() => loadQuestions(), 300);
       },
     );
 
@@ -175,16 +180,16 @@ export default function QuestionsList({
         clearTimeout(newQuestionsTimerRef.current);
       }
     };
-  }, [loadQuestions, onPendingCountChange]);
+  }, [loadQuestions, onPendingCountChange, debugLog]);
 
-  // Periodic polling fallback every 10s
+  // Periodic polling fallback every 30s (reduced from 10s to avoid flicker)
   useEffect(() => {
     loadQuestions();
     const interval = setInterval(() => {
       // Don't throttle for polling
       lastLoadRef.current = 0;
       loadQuestions();
-    }, 10000);
+    }, 30000);
     return () => clearInterval(interval);
   }, [loadQuestions]);
 
@@ -238,7 +243,9 @@ export default function QuestionsList({
       <div className="divide-y divide-gray-100">
         {questions.length === 0 ? (
           <div className="p-8 text-center text-gray-400 text-sm">
-            Нет консультаций
+            {searchQuery
+              ? 'Ничего не найдено'
+              : 'Нет консультаций'}
           </div>
         ) : (
           questions.map((question) => {
@@ -341,11 +348,37 @@ export default function QuestionsList({
         </div>
       </div>
 
+      {/* Search input */}
+      <div className="relative">
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Поиск по вопросам..."
+          className="w-full px-4 py-2 pl-10 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"
+        />
+        <svg
+          className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+          />
+        </svg>
+      </div>
+
       <div className="space-y-4">
         {questions.length === 0 ? (
           <div className="bg-white rounded-3xl shadow-sm p-8 text-center">
             <p className="text-gray-500">
-              Нет консультаций по выбранному фильтру.
+              {searchQuery
+                ? 'Ничего не найдено по вашему запросу.'
+                : 'Нет консультаций по выбранному фильтру.'}
             </p>
           </div>
         ) : (

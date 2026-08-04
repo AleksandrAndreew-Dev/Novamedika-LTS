@@ -100,13 +100,7 @@ export default function ChatDashboard({
 
   const handleSelectQuestion = useCallback((questionId) => {
     setActiveQuestionId(questionId);
-    setFilter('new');
   }, []);
-
-  // Reset active question when filter changes (question may not be in new filter)
-  useEffect(() => {
-    setActiveQuestionId(null);
-  }, [filter]);
 
   // Fetch unread/pending count
   const fetchPendingCount = useCallback(async () => {

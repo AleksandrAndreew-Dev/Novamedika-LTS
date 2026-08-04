@@ -4,606 +4,468 @@ import {
   createContext,
   useRef,
   useCallback,
-} from 'react'
-import { authService } from '../../services/authService'
-import { logger } from '../../../utils/logger'
+} from 'react';
+import { authService } from '../../services/authService';
+import { logger } from '../../../utils/logger';
 
 // Create Auth Context
-const AuthContext =
-  createContext(null)
+const AuthContext = createContext(null);
 
 // Auth Provider Component
-function AuthProvider({
-  children,
-}) {
-  const [
-    isAuthenticated,
-    setIsAuthenticated,
-  ] = useState(false)
-  const [
-    isLoading,
-    setIsLoading,
-  ] = useState(true)
-  const [
-    pharmacist,
-    setPharmacist,
-  ] = useState(null)
-  const [error, setError] =
-    useState(null)
-  const loginInProgressRef =
-    useRef(false) // Prevent concurrent login attempts
-  const lastAutoLoginRef =
-    useRef(0) // Timestamp of last successful auto-login (cooldown)
-  const lastAutoLoginAttemptRef =
-    useRef(0) // Timestamp of last auto-login attempt (throttle)
+function AuthProvider({ children }) {
+  const [isAuthenticated, setIsAuthenticated] =
+    useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [pharmacist, setPharmacist] = useState(null);
+  const [error, setError] = useState(null);
+  const loginInProgressRef = useRef(false); // Prevent concurrent login attempts
+  const lastAutoLoginRef = useRef(0); // Timestamp of last successful auto-login (cooldown)
+  const lastAutoLoginAttemptRef = useRef(0); // Timestamp of last auto-login attempt (throttle)
 
   // Single unified auto-login function as recommended in faq3.md
-  const performAutoLogin =
-    useCallback(async () => {
-      // Prevent concurrent login attempts
-      if (
-        loginInProgressRef.current
-      ) {
-        console.log(
-          '[AuthProvider] Login already in progress, skipping',
-        )
-        return
-      }
-
-      // Throttle: prevent repeated calls within 3 seconds
-      const now = Date.now()
-      if (
-        now -
-          lastAutoLoginAttemptRef.current <
-        3000
-      ) {
-        console.log(
-          '[AuthProvider] Auto-login throttled — too frequent',
-        )
-        return
-      }
-
-      loginInProgressRef.current = true
-      lastAutoLoginAttemptRef.current =
-        now
+  const performAutoLogin = useCallback(async () => {
+    // Prevent concurrent login attempts
+    if (loginInProgressRef.current) {
       console.log(
-        '[AuthProvider] Starting auto-login check...',
-      )
+        '[AuthProvider] Login already in progress, skipping',
+      );
+      return;
+    }
 
-      try {
-        setIsLoading(true)
-        setError(null)
+    // Throttle: prevent repeated calls within 3 seconds
+    const now = Date.now();
+    if (now - lastAutoLoginAttemptRef.current < 3000) {
+      console.log(
+        '[AuthProvider] Auto-login throttled — too frequent',
+      );
+      return;
+    }
 
-        // Check if we're in Telegram environment
-        if (
-          !window.Telegram
-            ?.WebApp
-        ) {
-          console.log(
-            '[AuthProvider] Not in Telegram environment. Skipping pharmacist auth.',
-          )
-          setIsAuthenticated(
-            false,
-          )
-          setPharmacist(null)
-          return
-        }
+    loginInProgressRef.current = true;
+    lastAutoLoginAttemptRef.current = now;
+    console.log(
+      '[AuthProvider] Starting auto-login check...',
+    );
 
-        // Step 1: Try existing token if available
-        const token =
-          localStorage.getItem(
-            'pharmacist_session_token',
-          )
-        if (token) {
-          try {
-            const profile =
-              await authService.getProfile()
+    try {
+      setIsLoading(true);
+      setError(null);
 
-            if (
-              profile &&
-              profile.is_active
-            ) {
-              // ✅ Valid active session
-              setPharmacist(
-                profile,
-              )
-              setIsAuthenticated(
-                true,
-              )
-              lastAutoLoginRef.current =
-                Date.now()
-              console.log(
-                '[AuthProvider] Session is valid, active pharmacist:',
-                profile.user
-                  ?.first_name,
-              )
-              return
-            } else {
-              // ❌ Pharmacist exists but is not active - NO RETRY
-              console.warn(
-                '[AuthProvider] Pharmacist is not active',
-              )
-              setError(
-                'Доступ запрещен. Ваш аккаунт фармацевта ещё не активирован администратором.',
-              )
-              localStorage.removeItem(
-                'pharmacist_session_token',
-              )
-              setIsAuthenticated(
-                false,
-              )
-              setPharmacist(
-                null,
-              )
-              return
-            }
-          } catch (err) {
-            // Handle specific error types
-            if (
-              err.message ===
-              'Session expired'
-            ) {
-              // Token expired - remove it and continue to initData login
-              console.log(
-                '[AuthProvider] Token expired, trying auto-login with initData',
-              )
-              localStorage.removeItem(
-                'pharmacist_session_token',
-              )
-            } else if (
-              err.message?.includes(
-                'not an active registered pharmacist',
-              )
-            ) {
-              // 403 - Access denied, NO RETRY
-              console.warn(
-                '[AuthProvider] Access denied: not an active registered pharmacist',
-              )
-              setError(
-                'Доступ запрещен. Вы не зарегистрированы как активный фармацевт.',
-              )
-              localStorage.removeItem(
-                'pharmacist_session_token',
-              )
-              setIsAuthenticated(
-                false,
-              )
-              setPharmacist(
-                null,
-              )
-              return
-            } else {
-              // Other errors - throw to outer catch
-              throw err
-            }
-          }
-        }
-
-        // Step 2: No token or token expired - try auto-login via initData
-        const initData =
-          window.Telegram
-            .WebApp.initData
-        if (!initData) {
-          console.log(
-            '[AuthProvider] No initData, not in Telegram Mini App',
-          )
-          setIsAuthenticated(
-            false,
-          )
-          setPharmacist(null)
-          return
-        }
-
+      // Check if we're in Telegram environment
+      if (!window.Telegram?.WebApp) {
         console.log(
-          '[AuthProvider] 🔄 Attempting auto-login with initData...',
-        )
+          '[AuthProvider] Not in Telegram environment. Skipping pharmacist auth.',
+        );
+        setIsAuthenticated(false);
+        setPharmacist(null);
+        return;
+      }
 
-        // Initialize Telegram WebApp
-        window.Telegram.WebApp.ready()
-        window.Telegram.WebApp.expand()
-
+      // Step 1: Try existing token if available
+      const token = localStorage.getItem(
+        'pharmacist_session_token',
+      );
+      if (token) {
         try {
-          // Login via backend
-          const loginResult =
-            await authService.loginWithTelegram()
+          const profile = await authService.getProfile();
 
-          console.log(
-            '[AuthProvider] ✅ Backend validated initData and returned session token',
-          )
-          if (
-            loginResult?.session_token
-          ) {
-            localStorage.setItem(
-              'pharmacist_session_token',
-              loginResult.session_token,
-            )
+          if (profile && profile.is_active) {
+            // ✅ Valid active session
+            setPharmacist(profile);
+            setIsAuthenticated(true);
+            lastAutoLoginRef.current = Date.now();
             console.log(
-              '[AuthProvider] ✅ Token saved to localStorage',
-            )
-          }
-
-          // Immediately fetch profile to verify
-          const profile =
-            await authService.getProfile()
-
-          if (
-            profile &&
-            profile.is_active
-          ) {
-            setPharmacist(
-              profile,
-            )
-            setIsAuthenticated(
-              true,
-            )
-            lastAutoLoginRef.current =
-              Date.now()
-            console.log(
-              '[AuthProvider] ✅ Auto-login successful:',
-              profile.user
-                ?.first_name,
-            )
+              '[AuthProvider] Session is valid, active pharmacist:',
+              profile.user?.first_name,
+            );
+            return;
           } else {
-            // Pharmacist not active after login
+            // ❌ Pharmacist exists but is not active - NO RETRY
             console.warn(
-              '[AuthProvider] Pharmacist exists but is not active after login',
-            )
+              '[AuthProvider] Pharmacist is not active',
+            );
             setError(
               'Доступ запрещен. Ваш аккаунт фармацевта ещё не активирован администратором.',
-            )
+            );
             localStorage.removeItem(
               'pharmacist_session_token',
-            )
-            setIsAuthenticated(
-              false,
-            )
-            setPharmacist(
-              null,
-            )
+            );
+            setIsAuthenticated(false);
+            setPharmacist(null);
+            return;
           }
-        } catch (loginErr) {
-          console.error(
-            '[AuthProvider] ❌ Auto-login failed:',
-            loginErr.message,
-          )
+        } catch (err) {
+          // Handle specific error types
+          if (err.message === 'Session expired') {
+            // Token expired - remove it and continue to initData login
+            console.log(
+              '[AuthProvider] Token expired, trying auto-login with initData',
+            );
+            localStorage.removeItem(
+              'pharmacist_session_token',
+            );
+          } else if (
+            err.message?.includes(
+              'not an active registered pharmacist',
+            )
+          ) {
+            // 403 - Access denied, NO RETRY
+            console.warn(
+              '[AuthProvider] Access denied: not an active registered pharmacist',
+            );
+            setError(
+              'Доступ запрещен. Вы не зарегистрированы как активный фармацевт.',
+            );
+            localStorage.removeItem(
+              'pharmacist_session_token',
+            );
+            setIsAuthenticated(false);
+            setPharmacist(null);
+            return;
+          } else {
+            // Other errors - throw to outer catch
+            throw err;
+          }
+        }
+      }
 
-          // Clear any partial data
+      // Step 2: No token or token expired - try auto-login via initData
+      const initData = window.Telegram.WebApp.initData;
+      if (!initData) {
+        console.log(
+          '[AuthProvider] No initData, not in Telegram Mini App',
+        );
+        setIsAuthenticated(false);
+        setPharmacist(null);
+        return;
+      }
+
+      console.log(
+        '[AuthProvider] 🔄 Attempting auto-login with initData...',
+      );
+
+      // Initialize Telegram WebApp
+      window.Telegram.WebApp.ready();
+      window.Telegram.WebApp.expand();
+
+      try {
+        // Login via backend
+        const loginResult =
+          await authService.loginWithTelegram();
+
+        console.log(
+          '[AuthProvider] ✅ Backend validated initData and returned session token',
+        );
+        if (loginResult?.session_token) {
+          localStorage.setItem(
+            'pharmacist_session_token',
+            loginResult.session_token,
+          );
+          console.log(
+            '[AuthProvider] ✅ Token saved to localStorage',
+          );
+        }
+
+        // Immediately fetch profile to verify
+        const profile = await authService.getProfile();
+
+        if (profile && profile.is_active) {
+          setPharmacist(profile);
+          setIsAuthenticated(true);
+          lastAutoLoginRef.current = Date.now();
+          console.log(
+            '[AuthProvider] ✅ Auto-login successful:',
+            profile.user?.first_name,
+          );
+        } else {
+          // Pharmacist not active after login
+          console.warn(
+            '[AuthProvider] Pharmacist exists but is not active after login',
+          );
+          setError(
+            'Доступ запрещен. Ваш аккаунт фармацевта ещё не активирован администратором.',
+          );
           localStorage.removeItem(
             'pharmacist_session_token',
-          )
-
-          // Set appropriate error message
-          let errorMessage =
-            'Ошибка авторизации. '
-
-          if (
-            loginErr.message.includes(
-              'Not in Telegram',
-            )
-          ) {
-            errorMessage =
-              'Эта страница должна быть открыта из Telegram бота. Пожалуйста, нажмите кнопку "Панель фармацевта" в боте.'
-          } else if (
-            loginErr.message.includes(
-              'initData not available',
-            )
-          ) {
-            errorMessage =
-              'Данные Telegram не загружены. Попробуйте закрыть и открыть WebApp снова.'
-          } else if (
-            loginErr.message.includes(
-              'Telegram session expired',
-            ) ||
-            loginErr.message.includes(
-              'QUERY_ID_INVALID',
-            )
-          ) {
-            errorMessage =
-              'Сессия Telegram истекла. Пожалуйста, перезапустите Мини-Приложение.'
-          } else if (
-            loginErr.message.includes(
-              'not an active registered pharmacist',
-            ) ||
-            loginErr.message.includes(
-              'Access denied',
-            )
-          ) {
-            errorMessage =
-              'Доступ запрещен. Вы не зарегистрированы как активный фармацевт.'
-          } else {
-            errorMessage +=
-              loginErr.message ||
-              'Попробуйте позже.'
-          }
-
-          setError(
-            errorMessage,
-          )
-          setIsAuthenticated(
-            false,
-          )
-          setPharmacist(null)
+          );
+          setIsAuthenticated(false);
+          setPharmacist(null);
         }
-      } catch (unexpectedError) {
+      } catch (loginErr) {
         console.error(
-          '[AuthProvider] Unexpected error:',
-          unexpectedError,
-        )
-        setError(
-          'Произошла непредвиденная ошибка. Пожалуйста, перезапустите Mini App.',
-        )
-        setIsAuthenticated(
-          false,
-        )
-        setPharmacist(null)
-      } finally {
-        // ALWAYS reset the flag
-        loginInProgressRef.current = false
-        setIsLoading(false)
+          '[AuthProvider] ❌ Auto-login failed:',
+          loginErr.message,
+        );
+
+        // Clear any partial data
+        localStorage.removeItem('pharmacist_session_token');
+
+        // Set appropriate error message
+        let errorMessage = 'Ошибка авторизации. ';
+
+        if (loginErr.message.includes('Not in Telegram')) {
+          errorMessage =
+            'Эта страница должна быть открыта из Telegram бота. Пожалуйста, нажмите кнопку "Панель фармацевта" в боте.';
+        } else if (
+          loginErr.message.includes(
+            'initData not available',
+          )
+        ) {
+          errorMessage =
+            'Данные Telegram не загружены. Попробуйте закрыть и открыть WebApp снова.';
+        } else if (
+          loginErr.message.includes(
+            'Telegram session expired',
+          ) ||
+          loginErr.message.includes('QUERY_ID_INVALID')
+        ) {
+          errorMessage =
+            'Сессия Telegram истекла. Пожалуйста, перезапустите Мини-Приложение.';
+        } else if (
+          loginErr.message.includes(
+            'not an active registered pharmacist',
+          ) ||
+          loginErr.message.includes('Access denied')
+        ) {
+          errorMessage =
+            'Доступ запрещен. Вы не зарегистрированы как активный фармацевт.';
+        } else {
+          errorMessage +=
+            loginErr.message || 'Попробуйте позже.';
+        }
+
+        setError(errorMessage);
+        setIsAuthenticated(false);
+        setPharmacist(null);
       }
-    }, [])
+    } catch (unexpectedError) {
+      console.error(
+        '[AuthProvider] Unexpected error:',
+        unexpectedError,
+      );
+      setError(
+        'Произошла непредвиденная ошибка. Пожалуйста, перезапустите Mini App.',
+      );
+      setIsAuthenticated(false);
+      setPharmacist(null);
+    } finally {
+      // ALWAYS reset the flag
+      loginInProgressRef.current = false;
+      setIsLoading(false);
+    }
+  }, []);
 
   // Run auto-login on mount
   useEffect(() => {
-    performAutoLogin()
-  }, [performAutoLogin])
+    // Skip auto-login if user just logged out
+    if (
+      sessionStorage.getItem('pharmacist_force_logout') ===
+      'true'
+    ) {
+      sessionStorage.removeItem('pharmacist_force_logout');
+      console.log(
+        '[AuthProvider] Skipping auto-login after logout',
+      );
+      return;
+    }
+
+    performAutoLogin();
+  }, [performAutoLogin]);
 
   // Proactive session refresh: check expiry every 60s, refresh 5 min before expiry
   useEffect(() => {
-    const checkSessionExpiry =
-      () => {
-        const token =
-          localStorage.getItem(
-            'pharmacist_session_token',
-          )
-        if (!token) return
+    const checkSessionExpiry = () => {
+      const token = localStorage.getItem(
+        'pharmacist_session_token',
+      );
+      if (!token) return;
 
-        // Parse JWT payload to get expiry (assuming standard JWT format)
-        try {
-          const payloadBase64 =
-            token.split(
-              '.',
-            )[1]
-          if (!payloadBase64)
-            return
-          const payload =
-            JSON.parse(
-              atob(
-                payloadBase64,
-              ),
-            )
-          const exp =
-            payload.exp
-          if (!exp) return
+      // Parse JWT payload to get expiry (assuming standard JWT format)
+      try {
+        const payloadBase64 = token.split('.')[1];
+        if (!payloadBase64) return;
+        const payload = JSON.parse(atob(payloadBase64));
+        const exp = payload.exp;
+        if (!exp) return;
 
-          const now =
-            Math.floor(
-              Date.now() /
-                1000,
-            )
-          const timeUntilExpiry =
-            exp - now
+        const now = Math.floor(Date.now() / 1000);
+        const timeUntilExpiry = exp - now;
 
-          // Refresh 5 minutes before expiry
-          if (
-            timeUntilExpiry <
-              5 * 60 &&
-            timeUntilExpiry >
-              0
-          ) {
-            console.log(
-              '[AuthProvider] Token expiring soon, refreshing session...',
-            )
-            performAutoLogin()
-          } else if (
-            timeUntilExpiry <=
-            0
-          ) {
-            console.log(
-              '[AuthProvider] Token expired, re-authenticating...',
-            )
-            performAutoLogin()
-          }
-        } catch (_) {
-          // Ignore parsing errors for non-JWT tokens
-          console.debug(
-            '[AuthProvider] Could not parse token expiry (non-JWT or malformed)',
-          )
+        // Refresh 5 minutes before expiry
+        if (
+          timeUntilExpiry < 5 * 60 &&
+          timeUntilExpiry > 0
+        ) {
+          console.log(
+            '[AuthProvider] Token expiring soon, refreshing session...',
+          );
+          performAutoLogin();
+        } else if (timeUntilExpiry <= 0) {
+          console.log(
+            '[AuthProvider] Token expired, re-authenticating...',
+          );
+          performAutoLogin();
         }
+      } catch (_) {
+        // Ignore parsing errors for non-JWT tokens
+        console.debug(
+          '[AuthProvider] Could not parse token expiry (non-JWT or malformed)',
+        );
       }
+    };
 
-    const interval =
-      setInterval(
-        checkSessionExpiry,
-        60000,
-      )
-    return () =>
-      clearInterval(interval)
-  }, [performAutoLogin])
+    const interval = setInterval(checkSessionExpiry, 60000);
+    return () => clearInterval(interval);
+  }, [performAutoLogin]);
 
   // Listen for session expired event from API interceptor
   useEffect(() => {
-    const handleSessionExpired =
-      () => {
-        // Cooldown: skip if auto-login succeeded less than 5 seconds ago
-        if (
-          Date.now() -
-            lastAutoLoginRef.current <
-          5000
-        ) {
-          console.log(
-            '[AuthProvider] Session expired event ignored — recent auto-login (cooldown)',
-          )
-          return
-        }
+    const handleSessionExpired = () => {
+      // Cooldown: skip if auto-login succeeded less than 5 seconds ago
+      if (Date.now() - lastAutoLoginRef.current < 5000) {
         console.log(
-          '[AuthProvider] Session expired event received, re-authenticating...',
-        )
-        // NOTE: Token is NOT removed here. performAutoLogin will check the token
-        // at Step 1 (line 93). If it fails with 401, it will proceed to initData login.
-        // This avoids race condition where token is deleted before performAutoLogin runs.
-        // Reset error so user sees loading spinner instead of stuck error page
-        setError(null)
-        setPharmacist(null)
-        setIsAuthenticated(
-          false,
-        )
-        performAutoLogin()
+          '[AuthProvider] Session expired event ignored — recent auto-login (cooldown)',
+        );
+        return;
       }
+      console.log(
+        '[AuthProvider] Session expired event received, re-authenticating...',
+      );
+      // NOTE: Token is NOT removed here. performAutoLogin will check the token
+      // at Step 1 (line 93). If it fails with 401, it will proceed to initData login.
+      // This avoids race condition where token is deleted before performAutoLogin runs.
+      // Reset error so user sees loading spinner instead of stuck error page
+      setError(null);
+      setPharmacist(null);
+      setIsAuthenticated(false);
+      performAutoLogin();
+    };
     window.addEventListener(
       'pharmacist:session_expired',
       handleSessionExpired,
-    )
+    );
     return () =>
       window.removeEventListener(
         'pharmacist:session_expired',
         handleSessionExpired,
-      )
-  }, [performAutoLogin])
+      );
+  }, [performAutoLogin]);
 
   // Legacy loginWithTelegram method for manual triggers (if needed)
-  const loginWithTelegram =
-    async () => {
-      // Delegate to performAutoLogin
-      return performAutoLogin()
-    }
+  const loginWithTelegram = async () => {
+    // Delegate to performAutoLogin
+    return performAutoLogin();
+  };
 
   // Login with token from URL (legacy method - if needed)
-  const loginWithToken =
-    async (token) => {
-      try {
-        setIsLoading(true)
-        setError(null)
+  const loginWithToken = async (token) => {
+    try {
+      setIsLoading(true);
+      setError(null);
 
-        console.log(
-          '[AuthProvider] 🔄 Starting login with token...',
-        )
+      console.log(
+        '[AuthProvider] 🔄 Starting login with token...',
+      );
 
-        // Store the token
-        authService.setSessionToken(
-          token,
-        )
+      // Store the token
+      authService.setSessionToken(token);
 
-        console.log(
-          '[AuthProvider] Fetching pharmacist profile...',
-        )
-        const profile =
-          await authService.getProfile()
+      console.log(
+        '[AuthProvider] Fetching pharmacist profile...',
+      );
+      const profile = await authService.getProfile();
 
-        console.log(
-          '[AuthProvider] ✅ Profile fetched successfully:',
-          profile.user
-            ?.first_name,
-        )
-        setPharmacist(profile)
-        setIsAuthenticated(
-          true,
-        )
+      console.log(
+        '[AuthProvider] ✅ Profile fetched successfully:',
+        profile.user?.first_name,
+      );
+      setPharmacist(profile);
+      setIsAuthenticated(true);
 
-        console.log(
-          '[AuthProvider] ✅ Token login successful',
-        )
-        return profile
-      } catch (err) {
-        console.error(
-          '[AuthProvider] ❌ Token login failed:',
-          err,
-        )
+      console.log(
+        '[AuthProvider] ✅ Token login successful',
+      );
+      return profile;
+    } catch (err) {
+      console.error(
+        '[AuthProvider] ❌ Token login failed:',
+        err,
+      );
 
-        // Clear any partial data
-        localStorage.removeItem(
-          'pharmacist_session_token',
-        )
+      // Clear any partial data
+      localStorage.removeItem('pharmacist_session_token');
 
-        let errorMessage =
-          'Ошибка входа. '
+      let errorMessage = 'Ошибка входа. ';
 
-        if (
-          err.response
-            ?.status === 401
-        ) {
-          errorMessage +=
-            'Неверный или истекший токен.'
-        } else {
-          errorMessage +=
-            err.message ||
-            'Попробуйте позже.'
-        }
-
-        setError(errorMessage)
-        throw err
-      } finally {
-        setIsLoading(false)
+      if (err.response?.status === 401) {
+        errorMessage += 'Неверный или истекший токен.';
+      } else {
+        errorMessage += err.message || 'Попробуйте позже.';
       }
+
+      setError(errorMessage);
+      throw err;
+    } finally {
+      setIsLoading(false);
     }
+  };
 
   // Logout function
   const logout = async () => {
     try {
-      await authService.logout()
+      await authService.logout();
 
-      setPharmacist(null)
-      setIsAuthenticated(
-        false,
-      )
-      setError(null)
+      setPharmacist(null);
+      setIsAuthenticated(false);
+      setError(null);
 
-      logger.info(
-        'Logout successful',
-      )
+      logger.info('Logout successful');
 
-      // Redirect to login page using window.location
-      window.location.href =
-        '/pharmacist/login'
+      // Set flag to prevent auto-login on next mount
+      sessionStorage.setItem(
+        'pharmacist_force_logout',
+        'true',
+      );
+
+      // Close Telegram WebApp if available
+      if (window.Telegram?.WebApp?.close) {
+        window.Telegram.WebApp.close();
+      } else {
+        // Fallback: redirect to login page
+        window.location.href = '/pharmacist/login';
+      }
     } catch (err) {
-      logger.error(
-        'Logout error:',
-        err,
-      )
+      logger.error('Logout error:', err);
     }
-  }
+  };
 
   // Update online status
-  const setOnlineStatus =
-    async (isOnline) => {
-      try {
-        await authService.setOnlineStatus(
-          isOnline,
-        )
+  const setOnlineStatus = async (isOnline) => {
+    try {
+      await authService.setOnlineStatus(isOnline);
 
-        // Update local state
-        setPharmacist(
-          (prev) => ({
-            ...prev,
-            is_online:
-              isOnline,
-          }),
-        )
-      } catch (err) {
-        logger.error(
-          'Failed to update online status:',
-          err,
-        )
-        throw err
-      }
+      // Update local state
+      setPharmacist((prev) => ({
+        ...prev,
+        is_online: isOnline,
+      }));
+    } catch (err) {
+      logger.error('Failed to update online status:', err);
+      throw err;
     }
+  };
 
   // Refresh profile data
-  const refreshProfile =
-    async () => {
-      try {
-        const profile =
-          await authService.getProfile()
-        setPharmacist(profile)
-        return profile
-      } catch (err) {
-        logger.error(
-          'Failed to refresh profile:',
-          err,
-        )
-        throw err
-      }
+  const refreshProfile = async () => {
+    try {
+      const profile = await authService.getProfile();
+      setPharmacist(profile);
+      return profile;
+    } catch (err) {
+      logger.error('Failed to refresh profile:', err);
+      throw err;
     }
+  };
 
   const value = {
     isAuthenticated,
@@ -617,19 +479,14 @@ function AuthProvider({
     setOnlineStatus,
     refreshProfile,
     // Alias for backward compatibility
-  }
+  };
 
   // Return the provider component
   return (
-    <AuthContext.Provider
-      value={value}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
-  )
+  );
 }
 
-export {
-  AuthContext,
-  AuthProvider,
-}
+export { AuthContext, AuthProvider };

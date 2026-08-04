@@ -55,11 +55,15 @@ export default function ConsultationChat({
 
         setMessages((prev) => {
           // Унифицированный подход к извлечению UUID
-          const newMsg = messagePayload?.data || messagePayload;
+          const newMsg =
+            messagePayload?.data || messagePayload;
           const msgId = newMsg?.uuid;
-          
+
           if (!msgId) {
-            logger.warn('Received message without UUID:', newMsg);
+            logger.warn(
+              'Received message without UUID:',
+              newMsg,
+            );
             return prev;
           }
 
@@ -72,11 +76,15 @@ export default function ConsultationChat({
               m.text === newMsg.text &&
               m.sender_type === newMsg.sender_type &&
               Math.abs(
-                new Date(m.created_at) - new Date(newMsg.created_at),
+                new Date(m.created_at) -
+                  new Date(newMsg.created_at),
               ) < 1000,
           );
           if (isDuplicate) {
-            logger.warn('Duplicate message detected by content:', newMsg);
+            logger.warn(
+              'Duplicate message detected by content:',
+              newMsg,
+            );
             return prev;
           }
 
@@ -170,6 +178,9 @@ export default function ConsultationChat({
       e.preventDefault();
       handleSend();
     }
+    if (e.key === 'Escape') {
+      handleBack();
+    }
   };
 
   const formatTime = (dateString) => {
@@ -181,6 +192,23 @@ export default function ConsultationChat({
         minute: '2-digit',
       },
     );
+  };
+
+  const formatRelativeTime = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 60) return 'только что';
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin} мин. назад`;
+    const diffHour = Math.floor(diffMin / 60);
+    if (diffHour < 24) return `${diffHour} ч. назад`;
+    return date.toLocaleDateString('ru-RU', {
+      day: 'numeric',
+      month: 'short',
+    });
   };
 
   const scrollToBottom = () => {
@@ -624,11 +652,12 @@ export default function ConsultationChat({
               value={newMsg}
               onChange={(e) => setNewMsg(e.target.value)}
               onKeyDown={handleKeyPress}
-              placeholder="Напишите ответ..."
+              placeholder="Напишите ответ... (Enter — отправить, Esc — назад)"
               rows={1}
               className="w-full bg-transparent border-none outline-none resize-none text-[14px] py-2 max-h-24 leading-relaxed text-gray-900 placeholder:text-gray-400"
               style={{
                 fontFamily: 'inherit',
+                minHeight: '40px',
               }}
               disabled={
                 sending || question?.status === 'completed'

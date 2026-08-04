@@ -63,6 +63,38 @@ class WebSocketService {
   }
 
   /**
+   * Trigger Telegram WebApp notification (haptic + title badge)
+   */
+  _triggerTelegramNotification(type = 'new_question') {
+    try {
+      const tgWebApp = window.Telegram?.WebApp;
+      if (!tgWebApp) return;
+
+      // Haptic feedback
+      if (tgWebApp.HapticFeedback) {
+        if (type === 'new_question') {
+          tgWebApp.HapticFeedback.notificationOccurred(
+            'success',
+          );
+        } else if (type === 'message_update') {
+          tgWebApp.HapticFeedback.impactOccurred('light');
+        } else if (type === 'question_completed') {
+          tgWebApp.HapticFeedback.notificationOccurred(
+            'warning',
+          );
+        }
+      }
+
+      // Set badge in title (if supported)
+      if (tgWebApp.setBadgeCount) {
+        // Note: this is just a hint, actual badge counting needs to be managed externally
+      }
+    } catch (_) {
+      // Ignore Telegram API errors
+    }
+  }
+
+  /**
    * Connect to WebSocket server
    */
   connect() {
@@ -97,6 +129,11 @@ class WebSocketService {
           const normalized =
             normalizeWebSocketMessage(data);
           if (!normalized?.type) return;
+
+          // Trigger Telegram notification for relevant events
+          this._triggerTelegramNotification(
+            normalized.type,
+          );
 
           const handlers = this.eventHandlers.get(
             normalized.type,
