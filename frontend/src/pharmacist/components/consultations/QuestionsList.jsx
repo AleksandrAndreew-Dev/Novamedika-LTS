@@ -175,7 +175,7 @@ export default function QuestionsList({
         clearTimeout(newQuestionsTimerRef.current);
       }
     };
-  }, [loadQuestions]);
+  }, [loadQuestions, onPendingCountChange]);
 
   // Periodic polling fallback every 10s
   useEffect(() => {

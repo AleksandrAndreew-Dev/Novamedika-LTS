@@ -10,6 +10,7 @@ import ConsultationChat from './ConsultationChat';
 import DashboardStats from '../dashboard/DashboardStats';
 import { questionsService } from '../../services/questionsService';
 import websocketService from '../../services/websocketService';
+import { logger } from '../../utils/logger';
 
 const filterOptions = [
   {
