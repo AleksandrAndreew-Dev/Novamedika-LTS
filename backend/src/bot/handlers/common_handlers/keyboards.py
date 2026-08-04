@@ -119,7 +119,7 @@ def get_user_inline_keyboard():
             [
                 InlineKeyboardButton(
                     text="\U0001f4ac Чат с фармацевтом",
-                    web_app=WebAppInfo(url=f"{webapp_url}/chat/new"),
+                    web_app=WebAppInfo(url=f"{webapp_url}/dashboard"),
                 )
             ],
             [
@@ -146,7 +146,7 @@ def get_webapp_only_keyboard():
             [
                 KeyboardButton(
                     text="\U0001f4ac Чат с фармацевтом",
-                    web_app=WebAppInfo(url=f"{webapp_url}/chat/new"),
+                    web_app=WebAppInfo(url=f"{webapp_url}/dashboard"),
                 )
             ],
             [

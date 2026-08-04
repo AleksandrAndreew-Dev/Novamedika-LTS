@@ -185,7 +185,9 @@ async def view_full_history_callback(
                     await callback.message.answer_photo(file_id, caption=" ")
                 except Exception as e:
                     logger.error(f"Error sending photo: {e}")
-                    await callback.message.answer("⚠️ Не удалось отправить одно из фото")
+                    await callback.message.answer(
+                        "⚠️ Не удалось отправить одно из фото"
+                    )
 
         await callback.answer()
 
@@ -239,6 +241,12 @@ async def questions_page_callback(
     except Exception as e:
         logger.error(f"Error in questions_page_callback: {e}", exc_info=True)
         await callback.answer("❌ Ошибка при переключении страницы", show_alert=True)
+
+
+@router.callback_query(F.data == "current_page")
+async def current_page_callback(callback: CallbackQuery):
+    """Ignore taps on the current page button in pagination."""
+    await callback.answer()
 
 
 @router.callback_query(F.data == "back_to_questions")

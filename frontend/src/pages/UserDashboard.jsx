@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../api/client';
 import userAuthService from '../services/userAuthService';
+import telegramAuthService from '../services/telegramAuthService';
 import Toast from '../components/Toast';
 
 export default function UserDashboard() {
@@ -22,10 +23,22 @@ export default function UserDashboard() {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      
+
       // Initialize auth
       userAuthService.initializeAuth();
-      
+
+      // If Telegram WebApp environment, try TMA auth before falling back to login
+      if (
+        !userAuthService.isAuthenticated() &&
+        telegramAuthService.canAuthViaWebApp()
+      ) {
+        const tgLoginSuccess =
+          await telegramAuthService.autoLogin();
+        if (tgLoginSuccess) {
+          userAuthService.initializeAuth();
+        }
+      }
+
       // Check if authenticated
       if (!userAuthService.isAuthenticated()) {
         navigate('/login');
@@ -33,22 +46,30 @@ export default function UserDashboard() {
       }
 
       // Get user profile
-      const userProfile = await userAuthService.getProfile();
+      const userProfile =
+        await userAuthService.getProfile();
       setUser(userProfile);
 
       // Get consultations
-      const consultationsResponse = await api.get('/api/consultations/', {
-        params: { page: 1, limit: 10 }
-      });
+      const consultationsResponse = await api.get(
+        '/api/consultations/',
+        {
+          params: { page: 1, limit: 10 },
+        },
+      );
       setConsultations(consultationsResponse.data);
 
       // Get stats
-      const statsResponse = await api.get('/api/consultations/stats');
+      const statsResponse = await api.get(
+        '/api/consultations/stats',
+      );
       setStats(statsResponse.data);
     } catch (err) {
       console.error('Failed to load dashboard:', err);
-      setError('Не удалось загрузить данные. Пожалуйста, войдите снова.');
-      
+      setError(
+        'Не удалось загрузить данные. Пожалуйста, войдите снова.',
+      );
+
       // If unauthorized, redirect to login
       if (err.response?.status === 401) {
         navigate('/login');
@@ -61,7 +82,10 @@ export default function UserDashboard() {
   const handleLogout = async () => {
     try {
       await userAuthService.logout();
-      setToast({ message: 'Вы успешно вышли', type: 'success' });
+      setToast({
+        message: 'Вы успешно вышли',
+        type: 'success',
+      });
       setTimeout(() => {
         navigate('/');
       }, 1000);
@@ -124,11 +148,23 @@ export default function UserDashboard() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full text-center">
           <div className="text-red-500 mb-4">
-            <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <svg
+              className="w-16 h-16 mx-auto"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
             </svg>
           </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Ошибка</h2>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">
+            Ошибка
+          </h2>
           <p className="text-gray-600 mb-6">{error}</p>
           <button
             onClick={() => navigate('/login')}
@@ -148,16 +184,23 @@ export default function UserDashboard() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-4">
-              <Link to="/" className="text-2xl font-bold text-blue-600">
+              <Link
+                to="/"
+                className="text-2xl font-bold text-blue-600"
+              >
                 NovaMedika
               </Link>
               <span className="text-gray-400">|</span>
-              <span className="text-gray-700">Личный кабинет</span>
+              <span className="text-gray-700">
+                Личный кабинет
+              </span>
             </div>
             <div className="flex items-center gap-4">
               {user && (
                 <span className="text-gray-700">
-                  {user.first_name || user.email || 'Пользователь'}
+                  {user.first_name ||
+                    user.email ||
+                    'Пользователь'}
                 </span>
               )}
               <button
@@ -176,10 +219,13 @@ export default function UserDashboard() {
         {/* Welcome Section */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Добро пожаловать{user?.first_name ? `, ${user.first_name}` : ''}!
+            Добро пожаловать
+            {user?.first_name ? `, ${user.first_name}` : ''}
+            !
           </h1>
           <p className="text-gray-600">
-            Управляйте своими консультациями и задавайте вопросы фармацевтам
+            Управляйте своими консультациями и задавайте
+            вопросы фармацевтам
           </p>
         </div>
 
@@ -190,13 +236,17 @@ export default function UserDashboard() {
               <div className="text-3xl font-bold text-blue-600 mb-2">
                 {stats.total_count}
               </div>
-              <div className="text-gray-600">Всего консультаций</div>
+              <div className="text-gray-600">
+                Всего консультаций
+              </div>
             </div>
             <div className="bg-white rounded-lg shadow p-6">
               <div className="text-3xl font-bold text-yellow-600 mb-2">
                 {stats.pending_count}
               </div>
-              <div className="text-gray-600">В ожидании</div>
+              <div className="text-gray-600">
+                В ожидании
+              </div>
             </div>
             <div className="bg-white rounded-lg shadow p-6">
               <div className="text-3xl font-bold text-green-600 mb-2">
@@ -219,8 +269,18 @@ export default function UserDashboard() {
             to="/prescriptions/upload"
             className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-medium py-3 px-6 rounded-lg shadow-lg hover:shadow-xl transition-all flex items-center gap-2"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
             </svg>
             Загрузить рецепт
           </Link>
@@ -228,8 +288,18 @@ export default function UserDashboard() {
             onClick={() => navigate('/chat/new')}
             className="bg-white hover:bg-gray-50 text-gray-700 font-medium py-3 px-6 rounded-lg border border-gray-300 shadow hover:shadow-md transition-all flex items-center gap-2"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 4v16m8-8H4"
+              />
             </svg>
             Новая консультация
           </button>
@@ -238,17 +308,31 @@ export default function UserDashboard() {
         {/* Consultations List */}
         <div className="bg-white rounded-lg shadow">
           <div className="p-6 border-b border-gray-200">
-            <h2 className="text-xl font-bold text-gray-900">Мои консультации</h2>
+            <h2 className="text-xl font-bold text-gray-900">
+              Мои консультации
+            </h2>
           </div>
-          
+
           {consultations.length === 0 ? (
             <div className="p-12 text-center">
               <div className="text-gray-400 mb-4">
-                <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                <svg
+                  className="w-16 h-16 mx-auto"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                  />
                 </svg>
               </div>
-              <p className="text-gray-600 mb-4">У вас пока нет консультаций</p>
+              <p className="text-gray-600 mb-4">
+                У вас пока нет консультаций
+              </p>
               <button
                 onClick={() => navigate('/chat/new')}
                 className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg transition-colors"
@@ -262,7 +346,9 @@ export default function UserDashboard() {
                 <div
                   key={consultation.uuid}
                   className="p-6 hover:bg-gray-50 transition-colors cursor-pointer"
-                  onClick={() => navigate(`/chat/${consultation.uuid}`)}
+                  onClick={() =>
+                    navigate(`/chat/${consultation.uuid}`)
+                  }
                 >
                   <div className="flex justify-between items-start mb-2">
                     <h3 className="font-semibold text-gray-900 line-clamp-2">
@@ -270,18 +356,22 @@ export default function UserDashboard() {
                     </h3>
                     <span
                       className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                        consultation.status
+                        consultation.status,
                       )}`}
                     >
                       {getStatusText(consultation.status)}
                     </span>
                   </div>
                   <div className="flex items-center gap-4 text-sm text-gray-500">
-                    <span>{formatDate(consultation.created_at)}</span>
+                    <span>
+                      {formatDate(consultation.created_at)}
+                    </span>
                     {consultation.category && (
                       <>
                         <span>•</span>
-                        <span className="capitalize">{consultation.category}</span>
+                        <span className="capitalize">
+                          {consultation.category}
+                        </span>
                       </>
                     )}
                   </div>

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import userAuthService from '../services/userAuthService';
@@ -13,15 +13,40 @@ export default function NewConsultation() {
   const [toast, setToast] = useState(null);
   const createdRef = useRef(false);
 
+  useEffect(() => {
+    const tryRedirectToDashboard = async () => {
+      if (userAuthService.isAuthenticated()) {
+        navigate('/dashboard', { replace: true });
+        return;
+      }
+
+      if (telegramAuthService.canAuthViaWebApp()) {
+        const success =
+          await telegramAuthService.autoLogin();
+        if (success) {
+          navigate('/dashboard', { replace: true });
+        }
+      }
+    };
+
+    tryRedirectToDashboard();
+  }, [navigate]);
+
   const getAnonUserId = () => {
     let anonId = localStorage.getItem('anon_user_id');
     if (!anonId) {
-      anonId = crypto.randomUUID();
+      anonId =
+        crypto.randomUUID &&
+        typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : 'anon-' +
+            Date.now() +
+            '-' +
+            Math.random().toString(36).slice(2);
       localStorage.setItem('anon_user_id', anonId);
     }
     return anonId;
   };
-
   const autoCreateChat = async () => {
     if (createdRef.current) return;
     createdRef.current = true;

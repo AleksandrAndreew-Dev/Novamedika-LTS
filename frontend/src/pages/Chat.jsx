@@ -131,16 +131,13 @@ export default function Chat() {
         setConsultation(data.consultation);
       if (data.messages) setMessages(data.messages);
 
-      // Если не удалось загрузить и мы в Telegram — пробуем создать новую
-      if (!data.consultation && inTelegram) {
-        const createRes =
-          await chatService.createConsultation(
-            'Новый вопрос фармацевту',
-            false,
-          );
-        navigate(`/chat/${createRes.uuid}`, {
-          replace: true,
-        });
+      // Если не удалось загрузить консультацию — возвращаем пользователя к списку своих консультаций
+      if (!data.consultation) {
+        console.warn(
+          '[Chat] Consultation not found, redirecting to consultations list',
+        );
+        navigate('/dashboard', { replace: true });
+        return;
       }
     } catch (err) {
       if (isNonActionableChatInitError(err)) {
@@ -148,11 +145,13 @@ export default function Chat() {
           'Non-actionable consultation load issue:',
           err,
         );
+        navigate('/dashboard', { replace: true });
         return;
       }
 
       console.error('Failed to load consultation:', err);
       if (err.response?.status === 404) {
+        navigate('/dashboard', { replace: true });
         return;
       }
 

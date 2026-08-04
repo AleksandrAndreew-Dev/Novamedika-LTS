@@ -69,14 +69,16 @@ function ChatWidgetOrLink() {
   // На страницах чата/дашборда не показываем ничего
   if (isExcludedPage) return null;
 
-  // В Telegram WebApp — ссылка на создание чата
+  // В Telegram WebApp — ссылка на страницу с консультациями
   if (window.Telegram?.WebApp?.initData) {
+    const startParam =
+      window.Telegram.WebApp.initDataUnsafe?.start_param;
     return (
       <a
         href={
-          window.Telegram.WebApp.initDataUnsafe?.start_param
-            ? `/?start=${window.Telegram.WebApp.initDataUnsafe.start_param}`
-            : '/chat/new'
+          startParam
+            ? `/dashboard?start=${startParam}`
+            : '/dashboard'
         }
         className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 shadow-lg flex items-center justify-center text-white hover:shadow-xl transition-shadow active:scale-90"
         aria-label="Чат с фармацевтом"
