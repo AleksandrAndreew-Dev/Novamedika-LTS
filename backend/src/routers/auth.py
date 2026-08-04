@@ -268,7 +268,7 @@ async def refresh_token_endpoint(
         result = await db.execute(
             select(RefreshToken).where(
                 RefreshToken.token == refresh_token,
-                RefreshToken.is_active == True,
+                RefreshToken.revoked == False,
                 RefreshToken.expires_at > get_utc_now_naive(),
             )
         )
@@ -287,7 +287,7 @@ async def refresh_token_endpoint(
             raise HTTPException(status_code=401, detail="Пользователь не найден")
 
         # Invalidate old refresh token
-        db_refresh_token.is_active = False
+        db_refresh_token.revoked = True
         await db.commit()
 
         # Create new tokens
@@ -343,9 +343,9 @@ async def logout_user(
         db_refresh_token = result.scalar_one_or_none()
 
         if db_refresh_token:
-            db_refresh_token.is_active = False
+            db_refresh_token.revoked = True
             await db.commit()
-            logger.info(f"User logged out, token invalidated")
+            logger.info("User logged out, token invalidated")
 
         return {"message": "Успешный выход"}
 

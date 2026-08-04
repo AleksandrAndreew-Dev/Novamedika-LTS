@@ -16,7 +16,10 @@ class UserAuthService {
    */
   async register(userData) {
     try {
-      const response = await api.post('/api/auth/register/', userData);
+      const response = await api.post(
+        '/api/auth/register/',
+        userData,
+      );
       return response.data;
     } catch (error) {
       logger.error('User registration failed:', error);
@@ -34,17 +37,26 @@ class UserAuthService {
    */
   async login(loginData) {
     try {
-      const response = await api.post('/api/auth/login/', loginData);
-      
+      const response = await api.post(
+        '/api/auth/login/',
+        loginData,
+      );
+
       // Store tokens
       if (response.data.access_token) {
-        localStorage.setItem('user_access_token', response.data.access_token);
-        localStorage.setItem('user_refresh_token', response.data.refresh_token);
-        
+        localStorage.setItem(
+          'user_access_token',
+          response.data.access_token,
+        );
+        localStorage.setItem(
+          'user_refresh_token',
+          response.data.refresh_token,
+        );
+
         // Set authorization header for future requests
         this.setAccessToken(response.data.access_token);
       }
-      
+
       return response.data;
     } catch (error) {
       logger.error('User login failed:', error);
@@ -58,12 +70,14 @@ class UserAuthService {
    */
   async logout() {
     try {
-      const refreshToken = localStorage.getItem('user_refresh_token');
-      
+      const refreshToken = localStorage.getItem(
+        'user_refresh_token',
+      );
+
       if (refreshToken) {
         // Notify backend to invalidate refresh token
         await api.post('/api/auth/logout/', null, {
-          params: { refresh_token: refreshToken }
+          params: { refresh_token: refreshToken },
         });
       }
     } catch (error) {
@@ -72,7 +86,7 @@ class UserAuthService {
       // Clear local storage regardless of API call success
       localStorage.removeItem('user_access_token');
       localStorage.removeItem('user_refresh_token');
-      
+
       // Clear authorization header
       delete api.defaults.headers.common['Authorization'];
     }
@@ -106,6 +120,13 @@ class UserAuthService {
           throw new Error('Session expired');
         }
       }
+      // User not found (404) — stale token for deleted user.
+      // Clear tokens so Telegram auto-login can re-auth on next load.
+      if (error.response?.status === 404) {
+        localStorage.removeItem('user_access_token');
+        localStorage.removeItem('user_refresh_token');
+        throw new Error('Session expired');
+      }
       throw error;
     }
   }
@@ -115,25 +136,37 @@ class UserAuthService {
    * @returns {Promise<{access_token: string, refresh_token: string}>}
    */
   async refreshAccessToken() {
-    const refreshToken = localStorage.getItem('user_refresh_token');
+    const refreshToken = localStorage.getItem(
+      'user_refresh_token',
+    );
     if (!refreshToken) {
       throw new Error('No refresh token');
     }
 
     try {
-      const response = await api.post('/api/auth/refresh/', null, {
-        params: { refresh_token: refreshToken }
-      });
-      
+      const response = await api.post(
+        '/api/auth/refresh/',
+        null,
+        {
+          params: { refresh_token: refreshToken },
+        },
+      );
+
       // Store new tokens
       if (response.data.access_token) {
-        localStorage.setItem('user_access_token', response.data.access_token);
-        localStorage.setItem('user_refresh_token', response.data.refresh_token);
-        
+        localStorage.setItem(
+          'user_access_token',
+          response.data.access_token,
+        );
+        localStorage.setItem(
+          'user_refresh_token',
+          response.data.refresh_token,
+        );
+
         // Update authorization header
         this.setAccessToken(response.data.access_token);
       }
-      
+
       return response.data;
     } catch (error) {
       logger.error('Token refresh failed:', error);
@@ -150,7 +183,8 @@ class UserAuthService {
    */
   setAccessToken(token) {
     if (token) {
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      api.defaults.headers.common['Authorization'] =
+        `Bearer ${token}`;
     } else {
       delete api.defaults.headers.common['Authorization'];
     }

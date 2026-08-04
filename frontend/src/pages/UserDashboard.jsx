@@ -70,8 +70,18 @@ export default function UserDashboard() {
         'Не удалось загрузить данные. Пожалуйста, войдите снова.',
       );
 
-      // If unauthorized, redirect to login
-      if (err.response?.status === 401) {
+      // Redirect to login on auth/session errors:
+      // 401 — token invalid/expired (after refresh fail)
+      // 404 — user not found (stale token after /qa/drop or user deletion)
+      // 'Session expired' — thrown by getProfile() on 401/404 recovery
+      // 'No access token' — no token in localStorage
+      const status = err.response?.status;
+      if (
+        status === 401 ||
+        status === 404 ||
+        err.message === 'Session expired' ||
+        err.message === 'No access token'
+      ) {
         navigate('/login');
       }
     } finally {
