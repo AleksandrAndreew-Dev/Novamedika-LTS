@@ -517,17 +517,22 @@ def build_consultations_query(
 
 @router.get("/consultations/", response_model=List[QuestionResponse])
 async def get_user_consultations(
-    current_user: User = Depends(get_current_user_jwt),
+    current_user: User = Depends(get_current_user_jwt_or_tma),
     db: AsyncSession = Depends(get_db),
     status_filter: Optional[str] = None,
     page: int = 1,
     limit: int = 20,
 ):
     """
-    Получить список консультаций пользователя (требует JWT авторизации)
+    Получить список консультаций пользователя (JWT или TMA авторизация)
 
     Поддерживает пагинацию и фильтрацию по статусу.
     """
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Требуется авторизация. Используйте /api/public/questions/ для анонимного доступа.",
+        )
     try:
         query = build_consultations_query(
             user_id=current_user.uuid,
@@ -549,62 +554,19 @@ async def get_user_consultations(
         )
 
 
-@router.get("/consultations/{consultation_id}", response_model=QuestionResponse)
-async def get_consultation_details(
-    consultation_id: str,
-    current_user: User = Depends(get_current_user_jwt),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Получить детали консультации по ID (требует JWT авторизации)
-
-    Проверяет, что консультация принадлежит текущему пользователю.
-    """
-    try:
-        result = await db.execute(
-            select(Question)
-            .options(
-                selectinload(Question.user),
-                selectinload(Question.assigned_pharmacist).selectinload(
-                    Pharmacist.user
-                ),
-                selectinload(Question.answers)
-                .selectinload(Answer.pharmacist)
-                .selectinload(Pharmacist.user),
-                selectinload(Question.dialog_messages),
-            )
-            .where(Question.uuid == uuid.UUID(consultation_id))
-            .where(
-                Question.user_id == current_user.uuid
-            )  # Security: only own consultations
-        )
-        question = result.scalar_one_or_none()
-
-        if not question:
-            raise HTTPException(status_code=404, detail="Консультация не найдена")
-
-        return QuestionResponse.model_validate(question)
-
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Неверный формат ID")
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Failed to get consultation details")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при получении консультации: {str(e)}",
-        )
-
-
 @router.get("/consultations/stats", response_model=ConsultationStats)
 async def get_consultation_stats(
-    current_user: User = Depends(get_current_user_jwt),
+    current_user: User = Depends(get_current_user_jwt_or_tma),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Получить статистику консультаций пользователя (требует JWT авторизации)
+    Получить статистику консультаций пользователя (JWT или TMA авторизация)
     """
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Требуется авторизация.",
+        )
     try:
         # Total count
         total_result = await db.execute(
@@ -651,19 +613,77 @@ async def get_consultation_stats(
         )
 
 
+@router.get("/consultations/{consultation_id}", response_model=QuestionResponse)
+async def get_consultation_details(
+    consultation_id: str,
+    current_user: User = Depends(get_current_user_jwt_or_tma),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Получить детали консультации по ID (JWT или TMA авторизация)
+
+    Проверяет, что консультация принадлежит текущему пользователю.
+    """
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Требуется авторизация. Используйте /api/public/questions/ для анонимного доступа.",
+        )
+    try:
+        result = await db.execute(
+            select(Question)
+            .options(
+                selectinload(Question.user),
+                selectinload(Question.assigned_pharmacist).selectinload(
+                    Pharmacist.user
+                ),
+                selectinload(Question.answers)
+                .selectinload(Answer.pharmacist)
+                .selectinload(Pharmacist.user),
+                selectinload(Question.dialog_messages),
+            )
+            .where(Question.uuid == uuid.UUID(consultation_id))
+            .where(
+                Question.user_id == current_user.uuid
+            )  # Security: only own consultations
+        )
+        question = result.scalar_one_or_none()
+
+        if not question:
+            raise HTTPException(status_code=404, detail="Консультация не найдена")
+
+        return QuestionResponse.model_validate(question)
+
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Неверный формат ID")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get consultation details")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при получении консультации: {str(e)}",
+        )
+
+
 @router.get(
     "/consultations/{consultation_id}/messages", response_model=List[MessageResponse]
 )
 async def get_consultation_messages(
     consultation_id: str,
-    current_user: User = Depends(get_current_user_jwt),
+    current_user: User = Depends(get_current_user_jwt_or_tma),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Получить сообщения консультации (требует JWT авторизации)
+    Получить сообщения консультации (JWT или TMA авторизация)
 
     Возвращает историю диалога для конкретной консультации.
     """
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Требуется авторизация.",
+        )
     try:
         # First verify that consultation belongs to user
         result = await db.execute(
@@ -706,17 +726,22 @@ async def get_consultation_messages(
 async def send_consultation_message(
     consultation_id: str,
     message: MessageCreate,
-    current_user: User = Depends(get_current_user_jwt),
+    current_user: User = Depends(get_current_user_jwt_or_tma),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Отправить сообщение в консультацию (требует JWT авторизации)
+    Отправить сообщение в консультацию (JWT или TMA авторизация)
 
     Пользователь может отправить сообщение фармацевту в рамках консультации.
     После сохранения уведомление отправляется:
     - Через WebSocket в pharmacist dashboard
     - Через Telegram бот (если фармацевт найден)
     """
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Требуется авторизация.",
+        )
     try:
         # Verify consultation belongs to user
         result = await db.execute(

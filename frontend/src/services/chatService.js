@@ -12,9 +12,7 @@ import telegramAuthService from './telegramAuthService';
  */
 
 const getTmaHeaders = () => {
-  if (
-    telegramAuthService.initData
-  ) {
+  if (telegramAuthService.initData) {
     return {
       Authorization: `tma ${telegramAuthService.initData}`,
     };
@@ -22,44 +20,36 @@ const getTmaHeaders = () => {
   return {};
 };
 
-const generateAnonUserId =
-  () => {
-    let anonUserId =
-      localStorage.getItem(
-        'anon_user_id',
-      );
-    if (!anonUserId) {
-      anonUserId =
-        crypto.randomUUID
-          ? crypto.randomUUID()
-          : 'anon-' +
-            Date.now() +
-            '-' +
-            Math.random()
-              .toString(36)
-              .slice(2);
-      localStorage.setItem(
-        'anon_user_id',
-        anonUserId,
-      );
-    }
-    return anonUserId;
-  };
+const getConsultationsHeaders = () => {
+  const tmaHeaders = getTmaHeaders();
+  if (Object.keys(tmaHeaders).length) {
+    return tmaHeaders;
+  }
+  return {};
+};
 
-const saveToAnonHistory = (
-  uuid,
-  text,
-) => {
+const generateAnonUserId = () => {
+  let anonUserId = localStorage.getItem('anon_user_id');
+  if (!anonUserId) {
+    anonUserId = crypto.randomUUID
+      ? crypto.randomUUID()
+      : 'anon-' +
+        Date.now() +
+        '-' +
+        Math.random().toString(36).slice(2);
+    localStorage.setItem('anon_user_id', anonUserId);
+  }
+  return anonUserId;
+};
+
+const saveToAnonHistory = (uuid, text) => {
   const history = JSON.parse(
-    localStorage.getItem(
-      'anon_questions',
-    ) || '[]',
+    localStorage.getItem('anon_questions') || '[]',
   );
   history.push({
     uuid,
     text,
-    created_at:
-      new Date().toISOString(),
+    created_at: new Date().toISOString(),
   });
   localStorage.setItem(
     'anon_questions',
@@ -75,53 +65,43 @@ export const chatService = {
     category = 'general',
   ) => {
     if (isAnonymous) {
-      const anonUserId =
-        generateAnonUserId();
-      const response =
-        await api.post(
-          '/api/public/questions/',
-          {
-            text: text.trim(),
-            category,
-            anon_user_id:
-              anonUserId,
+      const anonUserId = generateAnonUserId();
+      const response = await api.post(
+        '/api/public/questions/',
+        {
+          text: text.trim(),
+          category,
+          anon_user_id: anonUserId,
+        },
+        {
+          headers: {
+            'X-API-KEY':
+              window.APP_CONFIG?.API_KEY ||
+              import.meta.env?.VITE_API_KEY ||
+              '',
           },
-          {
-            headers: {
-              'X-API-KEY':
-                window
-                  .APP_CONFIG
-                  ?.API_KEY ||
-                import.meta
-                  .env
-                  ?.VITE_API_KEY ||
-                '',
-            },
-          },
-        );
+        },
+      );
       saveToAnonHistory(
         response.data.uuid,
         response.data.text,
       );
       return response.data;
     }
-    const inTelegram =
-      !!telegramAuthService.initData;
+    const inTelegram = !!telegramAuthService.initData;
     const config = inTelegram
       ? {
-          headers:
-            getTmaHeaders(),
+          headers: getTmaHeaders(),
         }
       : {};
-    const response =
-      await api.post(
-        '/api/consultations/',
-        {
-          text: text.trim(),
-          category,
-        },
-        config,
-      );
+    const response = await api.post(
+      '/api/consultations/',
+      {
+        text: text.trim(),
+        category,
+      },
+      config,
+    );
     return response.data;
   },
 
@@ -134,97 +114,76 @@ export const chatService = {
     // Сначала пробуем с текущим режимом
     try {
       if (isAnonymous) {
-        const [
-          consultationRes,
-          messagesRes,
-        ] = await Promise.all([
-          api.get(
-            `/api/public/questions/${id}`,
-          ),
-          api.get(
-            `/api/public/questions/${id}/messages`,
-          ),
-        ]);
+        const [consultationRes, messagesRes] =
+          await Promise.all([
+            api.get(`/api/public/questions/${id}`),
+            api.get(`/api/public/questions/${id}/messages`),
+          ]);
         return {
-          consultation:
-            consultationRes.data,
-          messages:
-            messagesRes.data,
+          consultation: consultationRes.data,
+          messages: messagesRes.data,
         };
       }
       // JWT добавляется interceptor-ом; явные headers нужны только для TMA
-      const config = inTelegram
-        ? {
-            headers:
-              getTmaHeaders(),
-          }
-        : {};
-      const [
-        consultationRes,
-        messagesRes,
-      ] = await Promise.all([
-        api.get(
-          `/api/consultations/${id}`,
-          config,
-        ),
-        api.get(
-          `/api/consultations/${id}/messages`,
-          config,
-        ),
-      ]);
+      const headers = getConsultationsHeaders();
+      const [consultationRes, messagesRes] =
+        await Promise.all([
+          api.get(
+            `/api/consultations/${id}`,
+            headers
+              ? {
+                  headers,
+                }
+              : undefined,
+          ),
+          api.get(
+            `/api/consultations/${id}/messages`,
+            headers
+              ? {
+                  headers,
+                }
+              : undefined,
+          ),
+        ]);
       return {
-        consultation:
-          consultationRes.data,
-        messages:
-          messagesRes.data,
+        consultation: consultationRes.data,
+        messages: messagesRes.data,
       };
     } catch (err) {
       // Fallback: если 404 на public endpoint, попробовать JWT endpoint
       if (isAnonymous && err.response?.status === 404) {
         const config = inTelegram
           ? {
-              headers:
-                getTmaHeaders(),
+              headers: getTmaHeaders(),
             }
           : {};
-        const [
-          consultationRes,
-          messagesRes,
-        ] = await Promise.all([
-          api.get(
-            `/api/consultations/${id}`,
-            config,
-          ),
-          api.get(
-            `/api/consultations/${id}/messages`,
-            config,
-          ),
-        ]);
+        const [consultationRes, messagesRes] =
+          await Promise.all([
+            api.get(`/api/consultations/${id}`, config),
+            api.get(
+              `/api/consultations/${id}/messages`,
+              config,
+            ),
+          ]);
         return {
-          consultation:
-            consultationRes.data,
-          messages:
-            messagesRes.data,
+          consultation: consultationRes.data,
+          messages: messagesRes.data,
         };
       }
       // Fallback: если 401/403 на JWT endpoint, попробовать public endpoint
-      if (!isAnonymous && (err.response?.status === 401 || err.response?.status === 403)) {
-        const [
-          consultationRes,
-          messagesRes,
-        ] = await Promise.all([
-          api.get(
-            `/api/public/questions/${id}`,
-          ),
-          api.get(
-            `/api/public/questions/${id}/messages`,
-          ),
-        ]);
+      if (
+        !isAnonymous &&
+        (err.response?.status === 401 ||
+          err.response?.status === 403)
+      ) {
+        const [consultationRes, messagesRes] =
+          await Promise.all([
+            api.get(`/api/public/questions/${id}`),
+            api.get(`/api/public/questions/${id}/messages`),
+          ]);
         return {
-          consultation:
-            consultationRes.data,
-          messages:
-            messagesRes.data,
+          consultation: consultationRes.data,
+          messages: messagesRes.data,
         };
       }
       throw err;
@@ -241,54 +200,52 @@ export const chatService = {
     // Сначала пробуем с текущим режимом
     try {
       if (isAnonymous) {
-        const response =
-          await api.post(
-            `/api/public/questions/${id}/messages`,
-            {
-              text: text.trim(),
-            },
-          );
+        const response = await api.post(
+          `/api/public/questions/${id}/messages`,
+          {
+            text: text.trim(),
+          },
+        );
         return response.data;
       }
-      const config = inTelegram
-        ? {
-            headers:
-              getTmaHeaders(),
-          }
-        : {};
-      const response =
-        await api.post(
-          `/api/consultations/${id}/messages`,
-          { text: text.trim() },
-          config,
-        );
+      const headers = getConsultationsHeaders();
+      const response = await api.post(
+        `/api/consultations/${id}/messages`,
+        { text: text.trim() },
+        headers
+          ? {
+              headers,
+            }
+          : undefined,
+      );
       return response.data;
     } catch (err) {
       // Fallback: если 404 на public endpoint, попробовать JWT endpoint
       if (isAnonymous && err.response?.status === 404) {
         const config = inTelegram
           ? {
-              headers:
-                getTmaHeaders(),
+              headers: getTmaHeaders(),
             }
           : {};
-        const response =
-          await api.post(
-            `/api/consultations/${id}/messages`,
-            { text: text.trim() },
-            config,
-          );
+        const response = await api.post(
+          `/api/consultations/${id}/messages`,
+          { text: text.trim() },
+          config,
+        );
         return response.data;
       }
       // Fallback: если 401/403 на JWT endpoint, попробовать public endpoint
-      if (!isAnonymous && (err.response?.status === 401 || err.response?.status === 403)) {
-        const response =
-          await api.post(
-            `/api/public/questions/${id}/messages`,
-            {
-              text: text.trim(),
-            },
-          );
+      if (
+        !isAnonymous &&
+        (err.response?.status === 401 ||
+          err.response?.status === 403)
+      ) {
+        const response = await api.post(
+          `/api/public/questions/${id}/messages`,
+          {
+            text: text.trim(),
+          },
+        );
         return response.data;
       }
       throw err;
@@ -304,21 +261,19 @@ export const chatService = {
     // Сначала пробуем с текущим режимом
     try {
       if (isAnonymous) {
-        const res =
-          await api.get(
-            `/api/public/questions/${id}/messages`,
-          );
+        const res = await api.get(
+          `/api/public/questions/${id}/messages`,
+        );
         return res.data;
       }
-      const config = inTelegram
-        ? {
-            headers:
-              getTmaHeaders(),
-          }
-        : {};
+      const headers = getConsultationsHeaders();
       const res = await api.get(
         `/api/consultations/${id}/messages`,
-        config,
+        headers
+          ? {
+              headers,
+            }
+          : undefined,
       );
       return res.data;
     } catch (err) {
@@ -326,8 +281,7 @@ export const chatService = {
       if (isAnonymous && err.response?.status === 404) {
         const config = inTelegram
           ? {
-              headers:
-                getTmaHeaders(),
+              headers: getTmaHeaders(),
             }
           : {};
         const res = await api.get(
@@ -337,11 +291,14 @@ export const chatService = {
         return res.data;
       }
       // Fallback: если 401/403 на JWT endpoint, попробовать public endpoint
-      if (!isAnonymous && (err.response?.status === 401 || err.response?.status === 403)) {
-        const res =
-          await api.get(
-            `/api/public/questions/${id}/messages`,
-          );
+      if (
+        !isAnonymous &&
+        (err.response?.status === 401 ||
+          err.response?.status === 403)
+      ) {
+        const res = await api.get(
+          `/api/public/questions/${id}/messages`,
+        );
         return res.data;
       }
       throw err;
@@ -349,8 +306,7 @@ export const chatService = {
   },
 
   /** Check if user is anonymous */
-  isAnonymous: () =>
-    !userAuthService.isAuthenticated(),
+  isAnonymous: () => !userAuthService.isAuthenticated(),
 };
 
 export default chatService;

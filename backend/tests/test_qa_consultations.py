@@ -6,7 +6,8 @@ from pathlib import Path
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from routers.qa import build_consultations_query
+from auth.auth import get_current_user_jwt_or_tma
+from routers.qa import build_consultations_query, router
 
 
 def test_build_consultations_query_with_valid_eager_loading():
@@ -25,3 +26,19 @@ def test_build_consultations_query_with_valid_eager_loading():
     assert "ORDER BY" in compiled
     assert "LIMIT" in compiled
     assert "OFFSET" in compiled
+
+
+def test_consultation_routes_use_tma_aware_auth_dependency():
+    routes = {
+        route.path: route.dependant.dependencies
+        for route in router.routes
+        if getattr(route, "path", "").startswith("/consultations")
+    }
+
+    for path in [
+        "/consultations/",
+        "/consultations/{consultation_id}",
+        "/consultations/{consultation_id}/messages",
+    ]:
+        dependencies = routes[path]
+        assert any(dep.call is get_current_user_jwt_or_tma for dep in dependencies)
