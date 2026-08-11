@@ -46,9 +46,10 @@ export default function QuestionsList({
   }, []);
 
   // Suppress noisy logs in production
-  const debugLog = import.meta.env?.DEV
-    ? console.log
-    : () => {};
+  const debugLog = React.useMemo(
+    () => (import.meta.env?.DEV ? console.log : () => {}),
+    [],
+  );
 
   const loadQuestions = useCallback(async () => {
     // Throttle: skip if called within throttle interval
@@ -117,7 +118,7 @@ export default function QuestionsList({
 
     const unsubscribeNew = websocketService.on(
       'new_question',
-      (data) => {
+      (_data) => {
         debugLog(
           '[QuestionsList] New question received via WebSocket',
         );

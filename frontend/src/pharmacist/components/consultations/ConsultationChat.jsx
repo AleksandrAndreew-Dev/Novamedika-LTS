@@ -194,23 +194,6 @@ export default function ConsultationChat({
     );
   };
 
-  const formatRelativeTime = (dateString) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffSec = Math.floor(diffMs / 1000);
-    if (diffSec < 60) return 'только что';
-    const diffMin = Math.floor(diffSec / 60);
-    if (diffMin < 60) return `${diffMin} мин. назад`;
-    const diffHour = Math.floor(diffMin / 60);
-    if (diffHour < 24) return `${diffHour} ч. назад`;
-    return date.toLocaleDateString('ru-RU', {
-      day: 'numeric',
-      month: 'short',
-    });
-  };
-
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({
       behavior: 'smooth',
