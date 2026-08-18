@@ -72,7 +72,15 @@ def _get_or_create_engine():
     global _engine
     if _engine is None:
         echo = os.getenv("SQL_ECHO", "false").lower() == "true"
-        _engine = create_async_engine(DATABASE_URL, echo=echo)
+        _engine = create_async_engine(
+            DATABASE_URL,
+            echo=echo,
+            pool_size=15,
+            max_overflow=10,
+            pool_pre_ping=True,
+            pool_recycle=1800,
+            pool_timeout=30,
+        )
     return _engine
 
 
