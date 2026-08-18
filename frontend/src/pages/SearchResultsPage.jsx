@@ -214,6 +214,9 @@ export default function SearchResultsPage() {
             onPageChange={handlePageChange}
             loading={loading}
             searchData={searchData}
+            onNewSearch={handleNewSearch}
+            onBackToForms={handleBack}
+            isTelegram={isTelegram}
           />
         )}
       </div>

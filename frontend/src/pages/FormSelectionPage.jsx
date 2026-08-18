@@ -1,4 +1,9 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+} from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import FormSelection from '../components/FormSelection';
 import Footer from '../components/Footer';
@@ -9,15 +14,21 @@ import { useTelegramWebApp } from '../telegram/TelegramContext';
 export default function FormSelectionPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  
+
   const navigate = useNavigate();
   const location = useLocation();
   const abortRef = useRef(null);
   const { tg, isTelegram } = useTelegramWebApp();
 
   // Get search data from location state
-  const searchData = location.state?.searchData || { name: '', city: '' };
-  const searchContext = location.state?.searchContext || { availableCombinations: [], totalFound: 0 };
+  const searchData = location.state?.searchData || {
+    name: '',
+    city: '',
+  };
+  const searchContext = location.state?.searchContext || {
+    availableCombinations: [],
+    totalFound: 0,
+  };
 
   // Handle Telegram back button
   const onTgBack = useCallback(() => {
@@ -34,7 +45,12 @@ export default function FormSelectionPage() {
     };
   }, [isTelegram, tg, onTgBack]);
 
-  const handleFormSelect = async (name, form, manufacturer, country) => {
+  const handleFormSelect = async (
+    name,
+    form,
+    manufacturer,
+    country,
+  ) => {
     if (abortRef.current) abortRef.current.abort();
     abortRef.current = new AbortController();
     const { signal } = abortRef.current;
@@ -121,12 +137,13 @@ export default function FormSelectionPage() {
             </svg>
             Назад к поиску
           </button>
-          
+
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             Выбор формы препарата
           </h1>
           <p className="text-gray-600">
-            {searchData.name && `Результаты для: ${searchData.name}`}
+            {searchData.name &&
+              `Результаты для: ${searchData.name}`}
             {searchData.city && ` в ${searchData.city}`}
           </p>
         </div>
@@ -160,14 +177,19 @@ export default function FormSelectionPage() {
 
         {!loading && (
           <FormSelection
-            availableCombinations={searchContext.availableCombinations}
+            searchData={searchData}
+            availableCombinations={
+              searchContext.availableCombinations
+            }
             totalFound={searchContext.totalFound}
             onFormSelect={handleFormSelect}
+            onBack={handleBack}
             loading={loading}
+            isTelegram={isTelegram}
           />
         )}
       </div>
-      
+
       <Footer />
     </div>
   );
