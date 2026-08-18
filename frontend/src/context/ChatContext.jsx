@@ -49,6 +49,8 @@ export function ChatProvider({ children }) {
   // в другой вкладке (storage) или протух — одноразной проверки при mount
   // недостаточно (иначе старый isAnonymous=false посылает polling на
   // защищённый /api/consultations/{id}/messages и вызывает 401).
+  // Also clear _pendingAuth flag when anonymous status changes to prevent
+  // stale token retries in the API interceptor.
   useEffect(() => {
     const syncAnonymousStatus = () => {
       setIsAnonymous(chatService.isAnonymous());

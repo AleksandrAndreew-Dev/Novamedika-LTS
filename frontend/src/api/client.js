@@ -166,21 +166,32 @@ api.interceptors.response.use(
     }
 
     // If request was marked as _pendingAuth (no token at send time), retry once after delay
+    // But skip retry if in anonymous mode - let it fall through to public endpoint fallback
     if (
       error.config?._pendingAuth &&
       error.response?.status === 401
     ) {
-      const token = localStorage.getItem(
-        'pharmacist_session_token',
+      // In anonymous mode, don't retry with pharmacist token - fall back to public endpoint
+      const userAccessToken = localStorage.getItem(
+        'user_access_token',
       );
-      if (token) {
-        logger.info(
-          '[API] Retrying request — token now available',
+      if (!userAccessToken) {
+        logger.debug(
+          '[API] Skipping pharmacist token retry in anonymous mode, will fall back to public endpoint',
         );
-        delete error.config._pendingAuth;
-        error.config.headers['Authorization'] =
-          `session ${token}`;
-        return api(error.config);
+      } else {
+        const token = localStorage.getItem(
+          'pharmacist_session_token',
+        );
+        if (token) {
+          logger.info(
+            '[API] Retrying request — token now available',
+          );
+          delete error.config._pendingAuth;
+          error.config.headers['Authorization'] =
+            `session ${token}`;
+          return api(error.config);
+        }
       }
     }
 
