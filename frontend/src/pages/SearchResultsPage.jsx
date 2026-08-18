@@ -1,4 +1,9 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+} from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import SearchResults from '../components/SearchResults';
 import Footer from '../components/Footer';
@@ -16,16 +21,31 @@ export default function SearchResultsPage() {
     total: 0,
     totalPages: 1,
   });
-  
+
   const navigate = useNavigate();
   const location = useLocation();
   const abortRef = useRef(null);
   const { tg, isTelegram } = useTelegramWebApp();
 
-  // Get search data from location state
-  const searchData = location.state?.searchData || { name: '', city: '', form: '' };
-  const initialResults = location.state?.results || [];
-  const initialPagination = location.state?.pagination || { page: 1, size: 50, total: 0, totalPages: 1 };
+  // Get search data from location state - wrapped in useMemo to avoid
+  // creating new object on every render
+  const searchData = useMemo(
+    () =>
+      location.state?.searchData || {
+        name: '',
+        city: '',
+        form: '',
+      },
+    [location.state?.searchData],
+  );
+  const initialResults = useMemo(
+    () => location.state?.results || [],
+    [location.state?.results],
+  );
+  const initialPagination = useMemo(
+    () => ({ page: 1, size: 50, total: 0, totalPages: 1 }),
+    [],
+  );
 
   // Initialize state from location state
   useEffect(() => {
@@ -67,8 +87,10 @@ export default function SearchResultsPage() {
       };
 
       if (searchData.form) params.form = searchData.form;
-      if (searchData.manufacturer) params.manufacturer = searchData.manufacturer;
-      if (searchData.country) params.country = searchData.country;
+      if (searchData.manufacturer)
+        params.manufacturer = searchData.manufacturer;
+      if (searchData.country)
+        params.country = searchData.country;
       if (searchData.city) params.city = searchData.city;
 
       const response = await api.get('/search-fts/', {
@@ -135,7 +157,7 @@ export default function SearchResultsPage() {
               </svg>
               Назад к выбору формы
             </button>
-            
+
             <button
               onClick={handleNewSearch}
               className="text-blue-600 hover:text-blue-800 font-medium"
@@ -143,14 +165,17 @@ export default function SearchResultsPage() {
               Новый поиск
             </button>
           </div>
-          
+
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             Результаты поиска
           </h1>
           <p className="text-gray-600">
-            {searchData.name && `Препарат: ${searchData.name}`}
-            {searchData.form && ` • Форма: ${searchData.form}`}
-            {searchData.city && ` • Город: ${searchData.city}`}
+            {searchData.name &&
+              `Препарат: ${searchData.name}`}
+            {searchData.form &&
+              ` • Форма: ${searchData.form}`}
+            {searchData.city &&
+              ` • Город: ${searchData.city}`}
           </p>
         </div>
 
@@ -191,7 +216,7 @@ export default function SearchResultsPage() {
           />
         )}
       </div>
-      
+
       <Footer />
     </div>
   );

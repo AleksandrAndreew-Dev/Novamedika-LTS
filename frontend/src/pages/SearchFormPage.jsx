@@ -1,5 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import {
+  useNavigate,
+  useSearchParams,
+} from 'react-router-dom';
 import SearchBar from '../components/SearchBar';
 import Footer from '../components/Footer';
 import { api } from '../api/client';
@@ -19,7 +22,7 @@ export default function SearchFormPage() {
   const [cities, setCities] = useState(DEFAULT_CITIES);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  
+
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const abortRef = useRef(null);
@@ -186,7 +189,7 @@ export default function SearchFormPage() {
           initialName={initialName}
         />
       </div>
-      
+
       <Footer />
     </div>
   );
