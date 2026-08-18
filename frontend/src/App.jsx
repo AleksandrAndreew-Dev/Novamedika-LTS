@@ -40,6 +40,18 @@ const Chat = lazy(() => import('./pages/Chat'));
 const NewConsultation = lazy(
   () => import('./pages/NewConsultation'),
 );
+const SearchFormPage = lazy(
+  () => import('./pages/SearchFormPage'),
+);
+const FormSelectionPage = lazy(
+  () => import('./pages/FormSelectionPage'),
+);
+const SearchResultsPage = lazy(
+  () => import('./pages/SearchResultsPage'),
+);
+const ProductDetailPage = lazy(
+  () => import('./pages/ProductDetailPage'),
+);
 
 // Loading fallback shown during lazy component load
 function PageLoader() {
@@ -64,9 +76,11 @@ function ChatWidgetOrLink() {
   const isExcludedPage =
     isChatPage ||
     location.pathname.startsWith('/pharmacist') ||
-    location.pathname.startsWith('/dashboard');
+    location.pathname.startsWith('/dashboard') ||
+    location.pathname.startsWith('/search') ||
+    location.pathname.startsWith('/product');
 
-  // На страницах чата/дашборда не показываем ничего
+  // На страницах чата/дашборда/поиска не показываем ничего
   if (isExcludedPage) return null;
 
   // В Telegram WebApp — ссылка на страницу с консультациями
@@ -743,6 +757,25 @@ function App() {
                   path="/prescriptions/upload"
                   element={<UploadPrescription />}
                 />
+                {/* New search routes with URL-based navigation */}
+                <Route
+                  path="/search"
+                  element={<SearchFormPage />}
+                />
+                <Route
+                  path="/search/form-selection"
+                  element={<FormSelectionPage />}
+                />
+                <Route
+                  path="/search/results"
+                  element={<SearchResultsPage />}
+                />
+                {/* Dynamic product URL route */}
+                <Route
+                  path="/product/:id"
+                  element={<ProductDetailPage />}
+                />
+                {/* Legacy route - redirects to new search */}
                 <Route path="/*" element={<Search />} />
               </Routes>
 

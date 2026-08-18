@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 const SearchBar = React.memo(function SearchBar({
   cities,
@@ -6,10 +6,18 @@ const SearchBar = React.memo(function SearchBar({
   loading,
   currentCity,
   isTelegram,
+  initialName,
 }) {
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initialName || "");
   const [city, setCity] = useState(currentCity || "");
   const [nameError, setNameError] = useState("");
+
+  // Update name when initialName changes (for URL params)
+  useEffect(() => {
+    if (initialName) {
+      setName(initialName);
+    }
+  }, [initialName]);
 
   const handleSubmit = (e) => {
     e.preventDefault();

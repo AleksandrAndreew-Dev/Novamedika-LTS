@@ -1,4 +1,5 @@
-import React from "react";
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const ResultItemWeb = React.memo(function ResultItemWeb({
   item,
@@ -6,17 +7,36 @@ const ResultItemWeb = React.memo(function ResultItemWeb({
   formatDate,
   onBook,
 }) {
+  const navigate = useNavigate();
+
   const mapQuery = encodeURIComponent(
-    `${item.pharmacy_name} №${item.pharmacy_number}, ${item.pharmacy_city}${item.pharmacy_district ? `, ${item.pharmacy_district}` : ""}, ${item.pharmacy_address}`,
+    `${item.pharmacy_name} №${item.pharmacy_number}, ${item.pharmacy_city}${item.pharmacy_district ? `, ${item.pharmacy_district}` : ''}, ${item.pharmacy_address}`,
   );
   const mapUrl = `https://www.google.com/maps/search/?api=1&query=${mapQuery}`;
 
+  // Product UUID — each product row in a pharmacy is uniquely identified by its UUID
+  const productId =
+    item.product_uuid || item.uuid || item.id;
+
+  const handleCardClick = () => {
+    navigate(`/product/${productId}`, {
+      state: { product: item },
+    });
+  };
+
   return (
     <div
-      className="bg-white border border-gray-300 rounded-xl p-4 md:p-6 hover:shadow-md transition-shadow duration-200 focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:ring-offset-2"
+      className="bg-white border border-gray-300 rounded-xl p-4 md:p-6 hover:shadow-md transition-shadow duration-200 focus:outline-none focus:ring-2 focus:ring-telegram-primary focus:ring-offset-2 cursor-pointer"
       tabIndex={0}
       role="article"
-      aria-label={`${item.name}, ${item.form} от ${item.manufacturer || "неизвестного производителя"} в аптеке ${item.pharmacy_name}`}
+      aria-label={`${item.name}, ${item.form} от ${item.manufacturer || 'неизвестного производителя'} в аптеке ${item.pharmacy_name}`}
+      onClick={handleCardClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleCardClick();
+        }
+      }}
     >
       <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-4 mb-4">
         <div className="flex-1">
@@ -24,7 +44,8 @@ const ResultItemWeb = React.memo(function ResultItemWeb({
             {item.name}
           </h3>
           <p className="text-gray-800 text-sm md:text-base mt-1">
-            {item.form} • {item.manufacturer || "Производитель не указан"}
+            {item.form} •{' '}
+            {item.manufacturer || 'Производитель не указан'}
           </p>
         </div>
         <div className="text-left lg:text-right">
@@ -54,14 +75,18 @@ const ResultItemWeb = React.memo(function ResultItemWeb({
               />
             </svg>
             <div>
-              <strong className="text-gray-900">{item.pharmacy_name}</strong> №
-              {item.pharmacy_number}
+              <strong className="text-gray-900">
+                {item.pharmacy_name}
+              </strong>{' '}
+              №{item.pharmacy_number}
             </div>
           </div>
           <div className="text-gray-800 ml-7">
             {item.pharmacy_city}
             {item.pharmacy_district && (
-              <span className="text-gray-600">, {item.pharmacy_district}</span>
+              <span className="text-gray-600">
+                , {item.pharmacy_district}
+              </span>
             )}
             , {item.pharmacy_address}
           </div>
@@ -71,6 +96,9 @@ const ResultItemWeb = React.memo(function ResultItemWeb({
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+              }}
             >
               <svg
                 className="w-4 h-4 mr-1"
@@ -111,7 +139,9 @@ const ResultItemWeb = React.memo(function ResultItemWeb({
                 d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
               />
             </svg>
-            <span className="text-gray-900 font-medium">Телефон:</span>{" "}
+            <span className="text-gray-900 font-medium">
+              Телефон:
+            </span>{' '}
             {item.pharmacy_phone}
           </div>
 
@@ -130,8 +160,10 @@ const ResultItemWeb = React.memo(function ResultItemWeb({
               />
             </svg>
             <div>
-              <span className="text-gray-900 font-medium">Время работы:</span>{" "}
-              {item.working_hours || "Уточняйте в аптеке"}
+              <span className="text-gray-900 font-medium">
+                Время работы:
+              </span>{' '}
+              {item.working_hours || 'Уточняйте в аптеке'}
             </div>
           </div>
           <div className="text-gray-700 text-xs md:text-sm ml-7 bg-gray-100 inline-block py-1 px-2 rounded">
@@ -142,11 +174,16 @@ const ResultItemWeb = React.memo(function ResultItemWeb({
 
       <div className="mt-4 flex justify-end">
         <button
-          onClick={() => onBook(item)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onBook(item);
+          }}
           disabled={item.quantity <= 0}
           className="bg-telegram-primary text-gray-900 font-medium py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {item.quantity <= 0 ? "Нет в наличии" : "Забронировать"}
+          {item.quantity <= 0
+            ? 'Нет в наличии'
+            : 'Забронировать'}
         </button>
       </div>
     </div>

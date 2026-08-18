@@ -245,16 +245,14 @@ async def search_full_text(
 
     # Если form/manufacturer/country указаны (шаг 3 — конкретная комбинация),
     # ищем напрямую по фильтрам, без level-based поиска
-        # Если form/manufacturer/country указаны (шаг 3 — конкретная комбинация),
+    # Если form/manufacturer/country указаны (шаг 3 — конкретная комбинация),
     # ищем напрямую по фильтрам, без level-based поиска
     is_specific_combination = bool(form and manufacturer and country)
 
     if is_specific_combination:
         # Прямой поиск по точной комбинации (form, manufacturer, country)
         items_query = (
-            select(Product)
-            .options(joinedload(Product.pharmacy))
-            .join(Pharmacy)
+            select(Product).options(joinedload(Product.pharmacy)).join(Pharmacy)
         )
 
         # Фильтры по городу, форме, производителю, стране, цене
@@ -263,7 +261,9 @@ async def search_full_text(
         if form and form != "Все формы":
             items_query = items_query.where(Product.form == form)
         if manufacturer and manufacturer != "Все производители":
-            items_query = items_query.where(Product.manufacturer.ilike(f"%{manufacturer}%"))
+            items_query = items_query.where(
+                Product.manufacturer.ilike(f"%{manufacturer}%")
+            )
         if country and country != "Все страны":
             items_query = items_query.where(Product.country.ilike(f"%{country}%"))
         if min_price is not None:
@@ -276,7 +276,9 @@ async def search_full_text(
 
         # НОВАЯ ФИЛЬТРАЦИЯ ПО ИМЕНИ (все слова, полнотекстовый поиск)
         stopwords = {"уп", "упак", "н", "и", "в", "на", "по", "для", "от"}
-        search_words = [w for w in search_query.split() if len(w) >= 2 and w not in stopwords]
+        search_words = [
+            w for w in search_query.split() if len(w) >= 2 and w not in stopwords
+        ]
 
         if search_words:
             # Строим полнотекстовый запрос из ВСЕХ значимых слов (AND)
@@ -284,18 +286,24 @@ async def search_full_text(
             specific_ts_query = func.to_tsquery("russian_simple", fts_query_str)
             # Применяем фильтр
             items_query = items_query.where(
-                func.to_tsvector("russian_simple", Product.name).op("@@")(specific_ts_query)
+                func.to_tsvector("russian_simple", Product.name).op("@@")(
+                    specific_ts_query
+                )
             )
             # Сортировка по релевантности, затем по цене и наличию
             items_query = items_query.order_by(
-                func.ts_rank(func.to_tsvector("russian_simple", Product.name), specific_ts_query).desc(),
+                func.ts_rank(
+                    func.to_tsvector("russian_simple", Product.name), specific_ts_query
+                ).desc(),
                 Product.price.asc(),
-                Product.quantity.desc()
+                Product.quantity.desc(),
             )
         else:
             # Fallback: точное вхождение (если все слова были стоп-словами)
             items_query = items_query.where(Product.name.ilike(f"%{search_query}%"))
-            items_query = items_query.order_by(Product.price.asc(), Product.quantity.desc())
+            items_query = items_query.order_by(
+                Product.price.asc(), Product.quantity.desc()
+            )
 
         # Пагинация
         count_query = select(func.count()).select_from(items_query.subquery())
@@ -312,25 +320,29 @@ async def search_full_text(
 
         items = []
         for p in products:
-            items.append({
-                "uuid": str(p.uuid),
-                "name": p.name,
-                "form": p.form,
-                "manufacturer": p.manufacturer,
-                "country": p.country,
-                "price": float(p.price) if p.price else 0.0,
-                "quantity": float(p.quantity) if p.quantity else 0.0,
-                "pharmacy_name": p.pharmacy.name if p.pharmacy else "Unknown",
-                "pharmacy_city": p.pharmacy.city if p.pharmacy else "Unknown",
-                "pharmacy_district": p.pharmacy.district if p.pharmacy else None,
-                "pharmacy_address": p.pharmacy.address if p.pharmacy else "Unknown",
-                "pharmacy_phone": p.pharmacy.phone if p.pharmacy else "Unknown",
-                "pharmacy_number": p.pharmacy.pharmacy_number if p.pharmacy else "N/A",
-                "pharmacy_id": p.pharmacy.uuid if p.pharmacy else None,
-                "updated_at": p.updated_at.isoformat() if p.updated_at else None,
-                "working_hours": getattr(p.pharmacy, "working_hours", None)
-                               or getattr(p.pharmacy, "opening_hours", "9:00-21:00"),
-            })
+            items.append(
+                {
+                    "uuid": str(p.uuid),
+                    "name": p.name,
+                    "form": p.form,
+                    "manufacturer": p.manufacturer,
+                    "country": p.country,
+                    "price": float(p.price) if p.price else 0.0,
+                    "quantity": float(p.quantity) if p.quantity else 0.0,
+                    "pharmacy_name": p.pharmacy.name if p.pharmacy else "Unknown",
+                    "pharmacy_city": p.pharmacy.city if p.pharmacy else "Unknown",
+                    "pharmacy_district": p.pharmacy.district if p.pharmacy else None,
+                    "pharmacy_address": p.pharmacy.address if p.pharmacy else "Unknown",
+                    "pharmacy_phone": p.pharmacy.phone if p.pharmacy else "Unknown",
+                    "pharmacy_number": (
+                        p.pharmacy.pharmacy_number if p.pharmacy else "N/A"
+                    ),
+                    "pharmacy_id": p.pharmacy.uuid if p.pharmacy else None,
+                    "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+                    "working_hours": getattr(p.pharmacy, "working_hours", None)
+                    or getattr(p.pharmacy, "opening_hours", "9:00-21:00"),
+                }
+            )
 
         return {
             "items": items,
@@ -391,8 +403,7 @@ async def search_full_text(
             )
             .having(func.sum(Product.quantity) > 0)
             .order_by(
-                text(
-                    """
+                text("""
                 exact_score DESC,
                 starts_score DESC,
                 word_score DESC,
@@ -400,8 +411,7 @@ async def search_full_text(
                 trigram_score DESC,
                 levenshtein_score DESC,
                 count DESC
-            """
-                ),
+            """),
                 Product.name.asc(),
             )
         )
@@ -512,4 +522,59 @@ async def search_full_text(
         "available_combinations": available_combinations,
         "total_found": total_found,
         "search_level": chosen_level_name,
+    }
+
+
+@router.get("/products/{product_id}")
+@limiter.limit("60/minute")
+async def get_product(
+    request: Request,
+    product_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a single product by UUID with pharmacy info for the detail page."""
+    try:
+        product_uuid = uuid.UUID(product_id)
+    except (ValueError, AttributeError):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid product ID — expected a valid UUID",
+        )
+
+    result = await db.execute(
+        select(Product)
+        .options(joinedload(Product.pharmacy))
+        .where(Product.uuid == product_uuid)
+    )
+    product = result.unique().scalar_one_or_none()
+
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    p = product
+    ph = product.pharmacy
+
+    return {
+        "uuid": str(p.uuid),
+        "product_uuid": str(p.uuid),
+        "name": p.name,
+        "form": p.form,
+        "manufacturer": p.manufacturer,
+        "country": p.country,
+        "price": float(p.price) if p.price else 0.0,
+        "quantity": float(p.quantity) if p.quantity else 0.0,
+        "pharmacy_name": ph.name if ph else "Unknown",
+        "pharmacy_city": ph.city if ph else "Unknown",
+        "pharmacy_district": ph.district if ph else None,
+        "pharmacy_address": ph.address if ph else "Unknown",
+        "pharmacy_phone": ph.phone if ph else "Unknown",
+        "pharmacy_number": ph.pharmacy_number if ph else "N/A",
+        "pharmacy_id": str(ph.uuid) if ph else None,
+        "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+        "working_hours": (
+            getattr(ph, "working_hours", None)
+            or getattr(ph, "opening_hours", "9:00-21:00")
+            if ph
+            else "9:00-21:00"
+        ),
     }
