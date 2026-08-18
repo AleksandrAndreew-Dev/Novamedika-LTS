@@ -72,16 +72,11 @@ function PageLoader() {
  */
 function ChatWidgetOrLink() {
   const location = useLocation();
-  const isChatPage = location.pathname.startsWith('/chat');
-  const isExcludedPage =
-    isChatPage ||
-    location.pathname.startsWith('/pharmacist') ||
-    location.pathname.startsWith('/dashboard') ||
-    location.pathname.startsWith('/search') ||
-    location.pathname.startsWith('/product');
+  // Скрываем виджет только на панели фармацевта (у неё свой чат)
+  const isPharmacistPage =
+    location.pathname.startsWith('/pharmacist');
 
-  // На страницах чата/дашборда/поиска не показываем ничего
-  if (isExcludedPage) return null;
+  if (isPharmacistPage) return null;
 
   // В Telegram WebApp — ссылка на страницу с консультациями
   if (window.Telegram?.WebApp?.initData) {
