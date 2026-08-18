@@ -1,95 +1,64 @@
 // src/api/client.js
-import axios from 'axios'
-import { NORMALIZED_API_BASE } from './config'
-import { logger } from '../utils/logger'
+import axios from 'axios';
+import { NORMALIZED_API_BASE } from './config';
+import { logger } from '../utils/logger';
 
-export const api =
-  axios.create({
-    baseURL:
-      NORMALIZED_API_BASE,
-    timeout: 15000,
-    headers: {
-      'Content-Type':
-        'application/json',
-    },
-  })
+export const api = axios.create({
+  baseURL: NORMALIZED_API_BASE,
+  timeout: 15000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
 // Request interceptor — добавляем API key и Authorization token если есть
 api.interceptors.request.use(
   (config) => {
     // Добавляем API key если есть (только если не установлен явно)
     const apiKey =
-      window.APP_CONFIG
-        ?.API_KEY ||
-      import.meta.env
-        ?.VITE_API_KEY
-    if (
-      apiKey &&
-      !config.headers[
-        'X-API-KEY'
-      ]
-    ) {
-      config.headers[
-        'X-API-KEY'
-      ] = apiKey
+      window.APP_CONFIG?.API_KEY ||
+      import.meta.env?.VITE_API_KEY;
+    if (apiKey && !config.headers['X-API-KEY']) {
+      config.headers['X-API-KEY'] = apiKey;
     }
 
     // Не перезаписываем Authorization если он уже явно установлен (например tma <initData>)
-    if (
-      !config.headers[
-        'Authorization'
-      ]
-    ) {
-      const url =
-        config.url || ''
-      const isPharmacistEndpoint =
-        url.startsWith(
-          '/api/pharmacist/',
-        )
+    if (!config.headers['Authorization']) {
+      const url = config.url || '';
+      const isPharmacistEndpoint = url.startsWith(
+        '/api/pharmacist/',
+      );
 
-      if (
-        isPharmacistEndpoint
-      ) {
+      if (isPharmacistEndpoint) {
         // Фармацевтические эндпоинты — только pharmacist_session_token
-        const pharmacistToken =
-          localStorage.getItem(
-            'pharmacist_session_token',
-          )
+        const pharmacistToken = localStorage.getItem(
+          'pharmacist_session_token',
+        );
         if (pharmacistToken) {
-          config.headers[
-            'Authorization'
-          ] =
-            `session ${pharmacistToken}`
+          config.headers['Authorization'] =
+            `session ${pharmacistToken}`;
         } else {
           // No token yet — mark request to allow retry after auth resolves
-          config._pendingAuth = true
+          config._pendingAuth = true;
           logger.warn(
             `[API] No pharmacist session token for ${config.url}, will retry after auth`,
-          )
+          );
         }
       } else {
         // Обычные эндпоинты — user_access_token, fallback на pharmacist_token
-        const userToken =
-          localStorage.getItem(
-            'user_access_token',
-          )
+        const userToken = localStorage.getItem(
+          'user_access_token',
+        );
         if (userToken) {
-          config.headers[
-            'Authorization'
-          ] =
-            `Bearer ${userToken}`
+          config.headers['Authorization'] =
+            `Bearer ${userToken}`;
         } else {
-          const pharmacistToken =
-            localStorage.getItem(
-              'pharmacist_session_token',
-            )
-          if (
-            pharmacistToken
-          ) {
-            config.headers[
-              'Authorization'
-            ] =
-              `session ${pharmacistToken}`
+          const pharmacistToken = localStorage.getItem(
+            'pharmacist_session_token',
+          );
+          if (pharmacistToken) {
+            config.headers['Authorization'] =
+              `session ${pharmacistToken}`;
           }
         }
       }
@@ -99,46 +68,30 @@ api.interceptors.request.use(
     logger.debug(
       `API Request: ${config.method?.toUpperCase()} ${config.url}`,
       {
-        baseURL:
-          config.baseURL,
-        headers: Object.keys(
-          config.headers ||
-            {},
-        ).reduce(
+        baseURL: config.baseURL,
+        headers: Object.keys(config.headers || {}).reduce(
           (acc, key) => {
             // Don't log sensitive headers
-            if (
-              key.toLowerCase() ===
-              'authorization'
-            ) {
-              acc[key] =
-                '[REDACTED]'
+            if (key.toLowerCase() === 'authorization') {
+              acc[key] = '[REDACTED]';
             } else {
-              acc[key] =
-                config.headers[
-                  key
-                ]
+              acc[key] = config.headers[key];
             }
-            return acc
+            return acc;
           },
           {},
         ),
         data: config.data,
       },
-    )
+    );
 
-    return config
+    return config;
   },
   (error) => {
-    logger.error(
-      'API Request Error:',
-      error,
-    )
-    return Promise.reject(
-      error,
-    )
+    logger.error('API Request Error:', error);
+    return Promise.reject(error);
   },
-)
+);
 
 // Response interceptor — форматируем ошибки
 const ERROR_MESSAGES = {
@@ -151,35 +104,24 @@ const ERROR_MESSAGES = {
   500: 'Ошибка сервера. Попробуйте позже.',
   502: 'Сервер временно недоступен.',
   503: 'Сервер временно недоступен. Попробуйте позже.',
-}
+};
 
-function getErrorMessage(
-  error,
-) {
+function getErrorMessage(error) {
   if (error.response) {
-    const status =
-      error.response.status
-    const data =
-      error.response.data
+    const status = error.response.status;
+    const data = error.response.data;
     // Берём сообщение от сервера если есть
-    const serverMsg =
-      data?.detail ||
-      data?.message
+    const serverMsg = data?.detail || data?.message;
     return (
       serverMsg ||
-      ERROR_MESSAGES[
-        status
-      ] ||
+      ERROR_MESSAGES[status] ||
       `Ошибка ${status}`
-    )
+    );
   }
   if (error.request) {
-    return 'Нет соединения с сервером. Проверьте интернет.'
+    return 'Нет соединения с сервером. Проверьте интернет.';
   }
-  return (
-    error.message ||
-    'Неизвестная ошибка'
-  )
+  return error.message || 'Неизвестная ошибка';
 }
 
 api.interceptors.response.use(
@@ -188,133 +130,106 @@ api.interceptors.response.use(
     logger.debug(
       `API Response: ${response.config.method?.toUpperCase()} ${response.config.url} - ${response.status}`,
       {
-        status:
-          response.status,
+        status: response.status,
         data: response.data,
       },
-    )
-    return response
+    );
+    return response;
   },
   (error) => {
-    const message =
-      getErrorMessage(error)
-    logger.error(
-      `API Error [${error.response?.status || 'network'}]: ${message}`,
-      {
-        url: error.config
-          ?.url,
-        method:
-          error.config
-            ?.method,
-        baseURL:
-          error.config
-            ?.baseURL,
-        status:
-          error.response
-            ?.status,
-        responseData:
-          error.response
-            ?.data,
-        errorMessage:
-          error.message,
-      },
-    )
+    const message = getErrorMessage(error);
+    const errorUrl = error.config?.url || '';
+    const errorStatus = error.response?.status;
+    // 401 на /api/consultations/ — ожидаемая auth-переход: chatService
+    // автоматически повторяет запрос через публичный
+    // /api/public/questions/ fallback. Не засоряем /api/log/client-error.
+    const isHandledAuthTransition =
+      errorStatus === 401 &&
+      errorUrl.includes('/api/consultations/');
+
+    if (isHandledAuthTransition) {
+      logger.warn(
+        `API 401 on ${errorUrl} — handled by chatService anonymous fallback`,
+      );
+    } else {
+      logger.error(
+        `API Error [${errorStatus || 'network'}]: ${message}`,
+        {
+          url: errorUrl,
+          method: error.config?.method,
+          baseURL: error.config?.baseURL,
+          status: errorStatus,
+          responseData: error.response?.data,
+          errorMessage: error.message,
+        },
+      );
+    }
 
     // If request was marked as _pendingAuth (no token at send time), retry once after delay
     if (
-      error.config
-        ?._pendingAuth &&
-      error.response
-        ?.status === 401
+      error.config?._pendingAuth &&
+      error.response?.status === 401
     ) {
-      const token =
-        localStorage.getItem(
-          'pharmacist_session_token',
-        )
+      const token = localStorage.getItem(
+        'pharmacist_session_token',
+      );
       if (token) {
         logger.info(
           '[API] Retrying request — token now available',
-        )
-        delete error.config
-          ._pendingAuth
-        error.config.headers[
-          'Authorization'
-        ] = `session ${token}`
-        return api(
-          error.config,
-        )
+        );
+        delete error.config._pendingAuth;
+        error.config.headers['Authorization'] =
+          `session ${token}`;
+        return api(error.config);
       }
     }
 
     // Auto re-auth on 401 for pharmacist endpoints (throttled)
     if (
-      error.response
-        ?.status === 401 &&
-      error.config?.url?.startsWith(
-        '/api/pharmacist/',
-      )
+      error.response?.status === 401 &&
+      error.config?.url?.startsWith('/api/pharmacist/')
     ) {
       // Prevent re-auth loop: throttle to once per 5 seconds
-      const now = Date.now()
+      const now = Date.now();
       const lastDispatch =
-        window.__pharmacistSessionExpiredAt ||
-        0
-      if (
-        now - lastDispatch <
-        5000
-      ) {
+        window.__pharmacistSessionExpiredAt || 0;
+      if (now - lastDispatch < 5000) {
         logger.debug(
           '[API] 401 throttled — skipping re-auth dispatch (cooldown)',
-        )
+        );
       } else {
         logger.info(
           '[API] 401 on pharmacist endpoint — dispatching re-auth event (token removal handled by AuthProvider)',
-        )
-        window.__pharmacistSessionExpiredAt =
-          now
+        );
+        window.__pharmacistSessionExpiredAt = now;
         // NOTE: Do NOT remove token here. Only AuthProvider.performAutoLogin
         // should remove the token, to avoid race conditions where the interceptor
         // deletes the token before AuthProvider can check it.
         // Dispatch event so AuthProvider re-initiates TMA login
         window.dispatchEvent(
-          new CustomEvent(
-            'pharmacist:session_expired',
-          ),
-        )
+          new CustomEvent('pharmacist:session_expired'),
+        );
       }
     }
 
     // Добавляем human-readable сообщение к объекту ошибки
-    error.userMessage =
-      message
-    error.isApiError =
-      !!error.response
+    error.userMessage = message;
+    error.isApiError = !!error.response;
 
-    return Promise.reject(
-      error,
-    )
+    return Promise.reject(error);
   },
-)
+);
 
 // Методы для работы с бронированиями
 export const bookingApi = {
-  createOrder: async (
-    orderData,
-  ) => {
-    const response =
-      await api.post(
-        '/orders',
-        orderData,
-      )
-    return response.data
+  createOrder: async (orderData) => {
+    const response = await api.post('/orders', orderData);
+    return response.data;
   },
-}
+};
 
 // Экспортируем хелпер для получения сообщений ошибок
-export {
-  getErrorMessage,
-  ERROR_MESSAGES,
-}
+export { getErrorMessage, ERROR_MESSAGES };
 
 // Экспортируем по умолчанию основной API клиент
-export default api
+export default api;

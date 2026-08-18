@@ -45,9 +45,27 @@ export function ChatProvider({ children }) {
   }, [wsBaseUrl]);
   const reconnectDelay = 3000;
 
-  // Sync anonymous status on auth change
+  // Синхронизация статуса анонимности. Токен auth мог быть удалён/рефрешнут
+  // в другой вкладке (storage) или протух — одноразной проверки при mount
+  // недостаточно (иначе старый isAnonymous=false посылает polling на
+  // защищённый /api/consultations/{id}/messages и вызывает 401).
   useEffect(() => {
-    setIsAnonymous(chatService.isAnonymous());
+    const syncAnonymousStatus = () => {
+      setIsAnonymous(chatService.isAnonymous());
+    };
+    syncAnonymousStatus();
+    window.addEventListener('storage', syncAnonymousStatus);
+    window.addEventListener('focus', syncAnonymousStatus);
+    return () => {
+      window.removeEventListener(
+        'storage',
+        syncAnonymousStatus,
+      );
+      window.removeEventListener(
+        'focus',
+        syncAnonymousStatus,
+      );
+    };
   }, []);
 
   // Save current chat ID to localStorage
@@ -115,31 +133,43 @@ export function ChatProvider({ children }) {
             if (data.type === 'message_update') {
               const msg = data.data;
               if (!msg || !msg.uuid) {
-                console.warn('[ChatContext] Received message without UUID:', msg);
+                console.warn(
+                  '[ChatContext] Received message without UUID:',
+                  msg,
+                );
                 return;
               }
 
               setMessages((prev) => {
-                const prevIds = new Set(prev.map((m) => m.uuid));
+                const prevIds = new Set(
+                  prev.map((m) => m.uuid),
+                );
                 if (prevIds.has(msg.uuid)) {
-                  console.log('[ChatContext] Duplicate message by UUID:', msg.uuid);
+                  console.log(
+                    '[ChatContext] Duplicate message by UUID:',
+                    msg.uuid,
+                  );
                   return prev;
                 }
-                
+
                 // Дополнительная проверка на дубликаты
                 const isDuplicate = prev.some(
                   (m) =>
                     m.text === msg.text &&
                     m.sender_type === msg.sender_type &&
                     Math.abs(
-                      new Date(m.created_at) - new Date(msg.created_at),
+                      new Date(m.created_at) -
+                        new Date(msg.created_at),
                     ) < 1000,
                 );
                 if (isDuplicate) {
-                  console.warn('[ChatContext] Duplicate message by content:', msg);
+                  console.warn(
+                    '[ChatContext] Duplicate message by content:',
+                    msg,
+                  );
                   return prev;
                 }
-                
+
                 const updated = [...prev, msg];
                 updated.sort(
                   (a, b) =>
