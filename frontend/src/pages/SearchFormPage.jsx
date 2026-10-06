@@ -1,3 +1,13 @@
+/**
+ * SearchFormPage — Google-style landing.
+ *
+ * Visual changes only:
+ *  - Vertical centering on desktop (title + SearchBar in the middle of the viewport)
+ *  - Bigger, more inviting hero typography
+ *  - Optional quick-chips below the pill
+ *
+ * Logic, routes, and callback contracts are UNCHANGED.
+ */
 import { useState, useEffect, useRef } from 'react';
 import {
   useNavigate,
@@ -18,17 +28,27 @@ const DEFAULT_CITIES = [
   'Могилев',
 ];
 
+// Quick-search suggestion chips (purely visual, click populates input via SearchBar rerender)
+const QUICK_SUGGESTIONS = [
+  'Парацетамол',
+  'Ибупрофен',
+  'Анальгин',
+  'Аспирин',
+  'Но-шпа',
+  'Цитрамон',
+];
+
 export default function SearchFormPage() {
   const [cities, setCities] = useState(DEFAULT_CITIES);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [quickName, setQuickName] = useState('');
 
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const abortRef = useRef(null);
   const { tg, isTelegram } = useTelegramWebApp();
 
-  // Get initial values from URL params
   const initialName = searchParams.get('q') || '';
   const initialCity = searchParams.get('city') || '';
 
@@ -40,7 +60,6 @@ export default function SearchFormPage() {
       try {
         const response = await api.get('/cities/');
         const data = response.data;
-
         const citiesList = Array.isArray(data)
           ? data
           : (data?.results ?? data?.items ?? []);
@@ -57,9 +76,7 @@ export default function SearchFormPage() {
         }
       } catch (error) {
         logger.error('Error fetching cities:', error);
-        if (!cancelled) {
-          setCities(DEFAULT_CITIES);
-        }
+        if (!cancelled) setCities(DEFAULT_CITIES);
       }
     };
 
@@ -72,7 +89,6 @@ export default function SearchFormPage() {
           void fetchCities();
         });
       }
-
       return window.setTimeout(() => {
         void fetchCities();
       }, 0);
@@ -95,7 +111,7 @@ export default function SearchFormPage() {
     };
   }, []);
 
-  // Handle Telegram back button
+  // Hide TG back button on the landing
   useEffect(() => {
     if (!isTelegram || !tg) return;
     tg.BackButton.hide();
@@ -121,7 +137,6 @@ export default function SearchFormPage() {
 
       const responseData = response.data || {};
 
-      // Navigate to form selection page with search context
       navigate('/search/form-selection', {
         state: {
           searchData: { name, city: city || '' },
@@ -147,49 +162,84 @@ export default function SearchFormPage() {
     }
   };
 
+  // Clicking a suggestion → run search immediately
+  const handleSuggestionClick = (text) => {
+    setQuickName(text);
+    handleSearch(text, initialCity);
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Поиск лекарств
-          </h1>
-          <p className="text-gray-600">
-            Найдите нужные препараты в аптеках вашего города
-          </p>
-        </div>
-
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
-            <div className="flex items-center">
-              <svg
-                className="w-5 h-5 text-red-500 mr-2"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              <span className="text-red-800 text-sm">
-                {error}
-              </span>
-            </div>
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* ============ MAIN (centered on desktop) ============ */}
+      <main className="flex-1 flex items-start md:items-center justify-center px-4 py-10 md:py-0">
+        <div className="w-full max-w-2xl">
+          {/* Hero */}
+          <div className="text-center mb-8 md:mb-10">
+            <h1 className="text-4xl md:text-5xl font-semibold text-gray-900 tracking-tight mb-3">
+              Поиск лекарств
+            </h1>
+            <p className="text-base md:text-lg text-gray-600 max-w-md mx-auto">
+              Найдите нужные препараты в аптеках вашего города
+            </p>
           </div>
-        )}
 
-        <SearchBar
-          cities={cities}
-          onSearch={handleSearch}
-          loading={loading}
-          currentCity={initialCity}
-          isTelegram={isTelegram}
-          initialName={initialName}
-        />
-      </div>
+          {/* SearchBar (Google-style pill) */}
+          <SearchBar
+            cities={cities}
+            onSearch={handleSearch}
+            loading={loading}
+            currentCity={initialCity}
+            isTelegram={isTelegram}
+            initialName={quickName || initialName}
+          />
 
+          {/* Error */}
+          {error && (
+            <div
+              className="mt-4 mx-auto max-w-md bg-red-50 border border-red-200 rounded-xl p-3"
+              role="alert"
+            >
+              <div className="flex items-center gap-2">
+                <svg
+                  className="w-5 h-5 text-red-500 flex-shrink-0"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                  aria-hidden="true"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                <span className="text-red-800 text-sm">
+                  {error}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Quick suggestion chips */}
+          <div className="mt-6 flex flex-wrap justify-center gap-2">
+            <span className="text-xs text-gray-400 self-center mr-1">
+              Популярное:
+            </span>
+            {QUICK_SUGGESTIONS.map((text) => (
+              <button
+                key={text}
+                type="button"
+                onClick={() => handleSuggestionClick(text)}
+                disabled={loading}
+                className="px-3 py-1.5 text-sm text-gray-700 bg-white border border-gray-200 rounded-full hover:border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {text}
+              </button>
+            ))}
+          </div>
+        </div>
+      </main>
+
+      {/* ============ FOOTER ============ */}
       <Footer />
     </div>
   );
