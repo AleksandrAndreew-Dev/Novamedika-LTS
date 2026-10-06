@@ -142,7 +142,7 @@
   margin-top: 1px;
 }
 
-.chat-widget__expand-btn {
+.chat-widget__close-btn {
   background: rgba(255, 255, 255, 0.15);
   border: none;
   color: white;
@@ -154,9 +154,10 @@
   justify-content: center;
   cursor: pointer;
   transition: background 0.2s;
+  flex-shrink: 0;
 }
 
-.chat-widget__expand-btn:hover {
+.chat-widget__close-btn:hover {
   background: rgba(255, 255, 255, 0.25);
 }
 
@@ -318,12 +319,43 @@
   margin-top: 4px;
 }
 
+/* System messages («Консультация завершена» и т.п.) */
+.chat-widget__system-msg {
+  display: flex;
+  justify-content: center;
+  margin: 6px 0;
+}
+
+.chat-widget__system-text {
+  font-size: 11px;
+  line-height: 1.35;
+  color: #6b7280;
+  background: #f3f4f6;
+  border-radius: 10px;
+  padding: 5px 10px;
+  text-align: center;
+  max-width: 90%;
+}
+
 /* Input area */
 .chat-widget__input-area {
   padding: 10px 12px;
   background: white;
   border-top: 1px solid #e5e7eb;
   flex-shrink: 0;
+}
+
+/* Подсказка после завершения консультации */
+.chat-widget__completed-hint {
+  font-size: 11px;
+  line-height: 1.35;
+  color: #6b7280;
+  background: #f3f4f6;
+  border: 1px dashed #d1d5db;
+  border-radius: 8px;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  text-align: center;
 }
 
 .chat-widget__input-form {

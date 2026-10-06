@@ -105,6 +105,48 @@ export const chatService = {
     return response.data;
   },
 
+  /** Load consultation details only (status, text, etc.) — лёгкий запрос для статуса */
+  getConsultation: async (
+    id,
+    isAnonymous = false,
+    inTelegram = false,
+  ) => {
+    try {
+      if (isAnonymous) {
+        const res = await api.get(`/api/public/questions/${id}`);
+        return res.data;
+      }
+      // JWT добавляется interceptor-ом; явные headers нужны только для TMA
+      const headers = getConsultationsHeaders();
+      const res = await api.get(
+        `/api/consultations/${id}`,
+        headers ? { headers } : undefined,
+      );
+      return res.data;
+    } catch (err) {
+      // Fallback: если 404 на public endpoint, попробовать JWT endpoint
+      if (isAnonymous && err.response?.status === 404) {
+        const config = inTelegram
+          ? {
+              headers: getTmaHeaders(),
+            }
+          : {};
+        const res = await api.get(`/api/consultations/${id}`, config);
+        return res.data;
+      }
+      // Fallback: если 401/403 на JWT endpoint, попробовать public endpoint
+      if (
+        !isAnonymous &&
+        (err.response?.status === 401 ||
+          err.response?.status === 403)
+      ) {
+        const res = await api.get(`/api/public/questions/${id}`);
+        return res.data;
+      }
+      throw err;
+    }
+  },
+
   /** Load consultation data + messages */
   loadConsultation: async (
     id,

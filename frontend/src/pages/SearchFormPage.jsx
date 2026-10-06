@@ -179,8 +179,7 @@ export default function SearchFormPage() {
               Поиск лекарств
             </h1>
             <p className="text-base md:text-lg text-gray-600 max-w-md mx-auto">
-              Найдите нужные препараты в аптеках Новамедика
-              и Эклиния
+              в аптеках Новамедика и Эклиния
             </p>
           </div>
 

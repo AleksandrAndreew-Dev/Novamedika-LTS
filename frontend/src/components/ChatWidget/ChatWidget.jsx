@@ -4,7 +4,6 @@ import {
   useEffect,
   useCallback,
 } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useChat } from '../../context/ChatContext';
 import ChatTrigger from './ChatTrigger';
 import { canSubmitMessage } from './chatSubmission';
@@ -13,6 +12,8 @@ import './ChatWidget.css';
 export default function ChatWidget() {
   const {
     currentConsultationId,
+    consultationStatus,
+    refreshConsultationStatus,
     messages,
     isWidgetOpen,
     openWidget,
@@ -23,7 +24,6 @@ export default function ChatWidget() {
     createConsultation,
     sendMessage,
   } = useChat();
-  const navigate = useNavigate();
   const messagesEndRef = useRef(null);
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -56,6 +56,14 @@ export default function ChatWidget() {
     loadMessages,
     messages.length,
   ]);
+
+  // Обновляем статус консультации при открытии виджета —
+  // страховка, если WS-событие о завершении было пропущено
+  useEffect(() => {
+    if (isWidgetOpen) {
+      void refreshConsultationStatus();
+    }
+  }, [isWidgetOpen, refreshConsultationStatus]);
 
   const handleToggle = useCallback(() => {
     if (isWidgetOpen) {
@@ -167,31 +175,19 @@ export default function ChatWidget() {
                   Фармацевт
                 </div>
                 <div className="chat-widget__header-status">
-                  {currentConsultationId
-                    ? 'В работе'
-                    : 'Задайте вопрос'}
+                  {consultationStatus === 'completed'
+                    ? 'Диалог завершён'
+                    : currentConsultationId
+                      ? 'В работе'
+                      : 'Задайте вопрос'}
                 </div>
               </div>
             </div>
             <button
-              onClick={() => {
-                try {
-                  if (currentConsultationId) {
-                    navigate(
-                      `/chat/${currentConsultationId}`,
-                    );
-                  } else {
-                    navigate('/chat/new');
-                  }
-                } catch (err) {
-                  console.error(
-                    '[ChatWidget] Navigation error:',
-                    err,
-                  );
-                }
-              }}
-              className="chat-widget__expand-btn"
-              title="Открыть в полном окне"
+              onClick={closeWidget}
+              className="chat-widget__close-btn"
+              title="Закрыть чат"
+              aria-label="Закрыть чат"
             >
               <svg
                 width="16"
@@ -203,7 +199,8 @@ export default function ChatWidget() {
                 strokeLinecap="round"
                 strokeLinejoin="round"
               >
-                <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
           </div>
@@ -281,6 +278,26 @@ export default function ChatWidget() {
                   {messages.map((message, idx) => {
                     const isUser =
                       message.sender_type === 'user';
+                    // Системные сообщения (напр. «Консультация завершена»)
+                    if (
+                      message.is_system ||
+                      message.sender_type === 'system'
+                    ) {
+                      return (
+                        <div
+                          key={
+                            message.uuid ||
+                            message.id ||
+                            idx
+                          }
+                          className="chat-widget__system-msg"
+                        >
+                          <div className="chat-widget__system-text">
+                            {message.text}
+                          </div>
+                        </div>
+                      );
+                    }
                     const prevMsg =
                       idx > 0 ? messages[idx - 1] : null;
                     const showAvatar =
@@ -320,6 +337,12 @@ export default function ChatWidget() {
 
                 {/* Input */}
                 <div className="chat-widget__input-area">
+                  {consultationStatus === 'completed' && (
+                    <p className="chat-widget__completed-hint">
+                      Консультация завершена — ваше
+                      сообщение начнёт новую консультацию
+                    </p>
+                  )}
                   <form
                     onSubmit={handleSendMessage}
                     className="chat-widget__input-form"

@@ -27,6 +27,11 @@ export function ChatProvider({ children }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  // Статус текущей консультации (pending / answered / completed / ...)
+  // null — пока не загружен. Нужен для корректного поведения после завершения:
+  // виджет/страница не должны переоткрывать закрытый диалог, а создают новый.
+  const [consultationStatus, setConsultationStatus] =
+    useState(null);
   const [isAnonymous, setIsAnonymous] = useState(() =>
     chatService.isAnonymous(),
   );
@@ -81,6 +86,34 @@ export function ChatProvider({ children }) {
       localStorage.removeItem('current_chat_id');
     }
   }, [currentConsultationId]);
+
+  // Загрузка статуса консультации (первичная + ручной refresh при открытии виджета)
+  const refreshConsultationStatus = useCallback(async () => {
+    if (!currentConsultationId) {
+      setConsultationStatus(null);
+      return null;
+    }
+    try {
+      const data = await chatService.getConsultation(
+        currentConsultationId,
+        isAnonymous,
+      );
+      if (data?.status) {
+        setConsultationStatus(data.status);
+        return data.status;
+      }
+    } catch {
+      // Статус обновится через WS или при следующем открытии виджета
+    }
+    return null;
+  }, [currentConsultationId, isAnonymous]);
+
+  // Сбрасываем статус при смене консультации и загружаем актуальный
+  useEffect(() => {
+    setConsultationStatus(null);
+    if (!currentConsultationId) return;
+    void refreshConsultationStatus();
+  }, [currentConsultationId, refreshConsultationStatus]);
 
   // Reset unread when widget opens
   useEffect(() => {
@@ -188,6 +221,7 @@ export function ChatProvider({ children }) {
             }
 
             if (data.type === 'question_completed') {
+              setConsultationStatus('completed');
               const systemMsg = {
                 id: Date.now(),
                 text: 'Консультация завершена. Спасибо! Если у вас есть вопрос - напишите сообщение.',
@@ -342,6 +376,7 @@ export function ChatProvider({ children }) {
         chatService.isAnonymous(),
       );
       setCurrentConsultationId(data.uuid);
+      setConsultationStatus(data.status || 'pending');
       setMessages([]);
       return data;
     } catch (e) {
@@ -352,18 +387,56 @@ export function ChatProvider({ children }) {
     }
   }, []);
 
+  /**
+   * Отправка сообщения.
+   * Если консультация завершена (или бэкенд вернул 409 consultation_completed) —
+   * автоматически создаётся НОВАЯ консультация с текстом сообщения.
+   * Возвращает { createdNewConsultation, consultationId }.
+   */
   const sendMessage = useCallback(
     async (text) => {
-      if (!currentConsultationId || !text.trim()) return;
-      const data = await chatService.sendMessage(
-        currentConsultationId,
-        text,
-        isAnonymous,
-        false,
-      );
-      setMessages((prev) => [...prev, data]);
+      const trimmed = (text || '').trim();
+      if (!trimmed) return null;
+
+      // Диалог уже завершён — не переоткрываем его, а начинаем новый
+      if (!currentConsultationId || consultationStatus === 'completed') {
+        const data = await createConsultation(trimmed);
+        return {
+          createdNewConsultation: true,
+          consultationId: data.uuid,
+        };
+      }
+
+      try {
+        const data = await chatService.sendMessage(
+          currentConsultationId,
+          trimmed,
+          isAnonymous,
+          false,
+        );
+        setMessages((prev) => [...prev, data]);
+        return {
+          createdNewConsultation: false,
+          consultationId: currentConsultationId,
+        };
+      } catch (err) {
+        // Статус на клиенте устарел: консультация завершена на сервере
+        if (err?.response?.status === 409) {
+          const data = await createConsultation(trimmed);
+          return {
+            createdNewConsultation: true,
+            consultationId: data.uuid,
+          };
+        }
+        throw err;
+      }
     },
-    [currentConsultationId, isAnonymous],
+    [
+      currentConsultationId,
+      consultationStatus,
+      isAnonymous,
+      createConsultation,
+    ],
   );
 
   const openWidget = useCallback(() => {
@@ -387,6 +460,9 @@ export function ChatProvider({ children }) {
     unreadCount,
     isAnonymous,
     setIsAnonymous,
+    consultationStatus,
+    setConsultationStatus,
+    refreshConsultationStatus,
     loadMessages,
     createConsultation,
     sendMessage,

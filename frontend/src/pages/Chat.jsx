@@ -50,10 +50,14 @@ export default function Chat() {
     setCurrentConsultationId,
     isAnonymous,
     setIsAnonymous,
+    consultationStatus,
     sendMessage: contextSendMessage,
   } = useChat();
 
   const [consultation, setConsultation] = useState(null);
+  // Актуальный статус: WS-событие о завершении (контекст) имеет приоритет
+  // над статусом, загруженным при открытии страницы
+  const currentStatus = consultationStatus ?? consultation?.status;
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
@@ -164,40 +168,30 @@ export default function Chat() {
     }
   };
 
-  // Отправка сообщения через ChatContext
+  // Отправка сообщения через ChatContext.
+  // Если консультация завершена — контекст сам создаёт новую,
+  // в этом случае переходим на её URL.
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
 
     try {
       setSending(true);
-      await contextSendMessage(newMessage.trim());
+      const result = await contextSendMessage(newMessage.trim());
       setNewMessage('');
+      if (
+        result?.createdNewConsultation &&
+        result.consultationId &&
+        result.consultationId !== id
+      ) {
+        navigate(`/chat/${result.consultationId}`, {
+          replace: true,
+        });
+      }
     } catch (err) {
       setToast({
         message:
           err.userMessage || 'Ошибка отправки сообщения',
-        type: 'error',
-      });
-    } finally {
-      setSending(false);
-    }
-  };
-
-  // Создание новой консультации из завершённой
-  const handleCreateNewConsultation = async () => {
-    try {
-      setSending(true);
-      const data = await chatService.createConsultation(
-        'Новый вопрос фармацевту',
-        isAnonymous,
-      );
-      setCurrentConsultationId(data.uuid);
-      setMessages([]);
-      navigate(`/chat/${data.uuid}`, { replace: true });
-    } catch (_err) {
-      setToast({
-        message: 'Не удалось создать новую консультацию',
         type: 'error',
       });
     } finally {
@@ -341,8 +335,8 @@ export default function Chat() {
         </button>
         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-indigo-500 flex items-center justify-center text-white font-semibold text-lg flex-shrink-0 relative">
           Ф
-          {(consultation?.status === 'pending' ||
-            consultation?.status === 'in_progress') && (
+          {(currentStatus === 'pending' ||
+            currentStatus === 'in_progress') && (
             <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></span>
           )}
         </div>
@@ -355,20 +349,20 @@ export default function Chat() {
           <div className="text-xs flex items-center gap-1.5">
             <span
               className={`w-1.5 h-1.5 rounded-full inline-block ${
-                consultation?.status === 'pending' ||
-                consultation?.status === 'in_progress'
+                currentStatus === 'pending' ||
+                currentStatus === 'in_progress'
                   ? 'bg-green-500'
                   : 'bg-gray-400'
               }`}
             ></span>
             <span
               className={
-                consultation?.status === 'completed'
+                currentStatus === 'completed'
                   ? 'text-gray-500'
                   : 'text-green-600'
               }
             >
-              {getStatusText(consultation?.status)}
+              {getStatusText(currentStatus)}
             </span>
           </div>
         </div>
@@ -596,37 +590,11 @@ export default function Chat() {
             )}
           </button>
         </form>
-        {consultation?.status === 'completed' && (
+        {currentStatus === 'completed' && (
           <div className="text-center mt-2">
-            <button
-              type="button"
-              onClick={handleCreateNewConsultation}
-              disabled={sending}
-              className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-2 rounded-full transition-colors"
-            >
-              {sending ? (
-                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 4v16m8-8H4"
-                  />
-                </svg>
-              )}
-              {sending
-                ? 'Создание...'
-                : 'Создать новую консультацию'}
-            </button>
-            <p className="text-xs text-gray-400 text-center mt-1.5">
-              Предыдущая консультация завершена
+            <p className="text-xs text-gray-400 text-center">
+              Консультация завершена — новое сообщение
+              автоматически начнёт новую консультацию
             </p>
           </div>
         )}

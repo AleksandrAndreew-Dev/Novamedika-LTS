@@ -867,6 +867,14 @@ async def send_consultation_message(
         if not question:
             raise HTTPException(status_code=404, detail="Консультация не найдена")
 
+        # Диалог завершён — переоткрывать его нельзя (единое правило с ботом
+        # и pharmacist dashboard). Веб создаёт новую консультацию по 409.
+        if question.status == "completed":
+            raise HTTPException(
+                status_code=409,
+                detail="consultation_completed",
+            )
+
         # Create new dialog message
         new_message = DialogMessage(
             uuid=uuid.uuid4(),
@@ -1227,6 +1235,28 @@ async def send_public_question_message(
         if not question:
             raise HTTPException(status_code=404, detail="Вопрос не найден")
 
+        # Диалог завершён — переоткрывать нельзя: фронт по 409 создаёт новую
+        if question.status == "completed":
+            raise HTTPException(
+                status_code=409,
+                detail="consultation_completed",
+            )
+
+        # telegram_id владельца вопроса получаем ДО commit: обращение к
+        # незагруженному relationship после commit вызывает MissingGreenlet
+        user_telegram_id = None
+        try:
+            owner_result = await db.execute(
+                select(User).where(User.uuid == question.user_id)
+            )
+            owner = owner_result.scalar_one_or_none()
+            if owner:
+                user_telegram_id = owner.telegram_id
+        except Exception as owner_err:
+            logger.warning(
+                f"Failed to fetch question owner telegram_id: {owner_err}"
+            )
+
         # Создаём новое сообщение
         new_message = DialogMessage(
             uuid=uuid.uuid4(),
@@ -1303,7 +1333,7 @@ async def send_public_question_message(
 
         # Send message back to user's Telegram chat if available (background task to avoid greenlet_spawn)
         try:
-            if question.user and question.user.telegram_id:
+            if user_telegram_id:
                 from bot.core import bot_manager
                 import asyncio
 
@@ -1313,11 +1343,11 @@ async def send_public_question_message(
                         try:
                             bot = bot_manager.bot
                             await bot.send_message(
-                                chat_id=question.user.telegram_id,
+                                chat_id=user_telegram_id,
                                 text=message.text,
                             )
                             logger.info(
-                                f"Message forwarded to user's Telegram chat {question.user.telegram_id}"
+                                f"Message forwarded to user's Telegram chat {user_telegram_id}"
                             )
                         except Exception as tg_err:
                             logger.warning(
