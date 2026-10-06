@@ -51,6 +51,16 @@ export default function ChatDashboard({
   const [panelWidth, setPanelWidth] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  // Счётчики для явных бейджей на каждом фильтре + пульс таба при WS-событии
+  const [tabCounts, setTabCounts] = useState({
+    new: 0,
+    in_progress: 0,
+    answered: 0,
+  });
+  const [flashTab, setFlashTab] = useState(null); // 'new' | 'in_progress' | null
+  const [toast, setToast] = useState(null); // { id, kind, text, targetFilter }
+  const flashTimerRef = useRef(null);
+  const toastTimerRef = useRef(null);
   const panelRef = useRef(null);
   const autoSelectDoneRef = useRef(false);
   const activeQuestionIdRef = useRef(activeQuestionId);
@@ -102,7 +112,7 @@ export default function ChatDashboard({
     setActiveQuestionId(questionId);
   }, []);
 
-  // Fetch unread/pending count
+  // Fetch unread/pending count + счётчики всех табов
   const fetchPendingCount = useCallback(async () => {
     try {
       const data = await questionsService.getUnreadCount();
@@ -112,21 +122,157 @@ export default function ChatDashboard({
     }
   }, []);
 
+  const fetchTabCounts = useCallback(async () => {
+    try {
+      const stats =
+        await questionsService.getDashboardStats();
+      setTabCounts((prev) => ({
+        new:
+          stats?.newQuestions ??
+          stats?.pending_count ??
+          prev.new,
+        in_progress:
+          stats?.inProgress ??
+          stats?.in_progress_count ??
+          prev.in_progress,
+        // answered отдельно не отдаётся stats — доберём ниже
+        answered: prev.answered,
+      }));
+      // answered: один лёгкий запрос, чтобы таб «Отвеченные» тоже имел цифру
+      try {
+        const answered =
+          await questionsService.getQuestions({
+            status: 'answered',
+            limit: 1,
+          });
+        const total =
+          answered?.total ??
+          answered?.pages ??
+          (Array.isArray(answered?.questions)
+            ? answered.questions.length
+            : Array.isArray(answered)
+              ? answered.length
+              : 0);
+        setTabCounts((prev) => ({
+          ...prev,
+          answered: total,
+        }));
+      } catch (_) {
+        // Не роняем остальные счётчики
+      }
+    } catch (err) {
+      logger.error('Failed to fetch tab counts:', err);
+    }
+  }, []);
+
+  // Бейдж во вкладке браузера: (N) Новые
+  useEffect(() => {
+    const total =
+      (tabCounts.new || 0) + (tabCounts.in_progress || 0);
+    document.title =
+      total > 0
+        ? `(${total}) Консультации — фармацевт`
+        : 'Консультации — фармацевт';
+  }, [tabCounts]);
+
+  const triggerHaptic = useCallback((kind) => {
+    try {
+      const haptic =
+        window.Telegram?.WebApp?.HapticFeedback;
+      if (!haptic) return;
+      if (kind === 'new') {
+        haptic.notificationOccurred?.('success');
+      } else {
+        haptic.impactOccurred?.('medium');
+      }
+    } catch (_) {
+      // ignore
+    }
+  }, []);
+
+  const flashFilterTab = useCallback((key, toastText) => {
+    setFlashTab(key);
+    if (flashTimerRef.current) {
+      clearTimeout(flashTimerRef.current);
+    }
+    flashTimerRef.current = setTimeout(() => {
+      setFlashTab(null);
+    }, 6000);
+    // Тост с кнопкой перехода (без автопереключения фильтра)
+    if (toastText) {
+      const id = Date.now();
+      setToast({
+        id,
+        kind: key,
+        text: toastText,
+        targetFilter: key,
+      });
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+      toastTimerRef.current = setTimeout(() => {
+        setToast((prev) =>
+          prev?.id === id ? null : prev,
+        );
+      }, 8000);
+    }
+  }, []);
+
   useEffect(() => {
     fetchPendingCount();
-    const interval = setInterval(fetchPendingCount, 15000);
+    fetchTabCounts();
+    const interval = setInterval(() => {
+      fetchPendingCount();
+      fetchTabCounts();
+    }, 15000);
     return () => clearInterval(interval);
-  }, [fetchPendingCount]);
+  }, [fetchPendingCount, fetchTabCounts]);
 
   useEffect(() => {
     const unsubscribeNew = websocketService.on(
       'new_question',
       () => {
         fetchPendingCount();
+        fetchTabCounts();
+        triggerHaptic('new');
+        flashFilterTab('new', 'Новый вопрос — показать');
       },
     );
-    return () => unsubscribeNew();
-  }, [fetchPendingCount]);
+    const unsubscribeUpdate = websocketService.on(
+      'message_update',
+      () => {
+        // Продолжение диалога = «В работе»
+        fetchTabCounts();
+        triggerHaptic('reply');
+        flashFilterTab(
+          'in_progress',
+          'Новый ответ в «В работе» — показать',
+        );
+      },
+    );
+    return () => {
+      unsubscribeNew();
+      unsubscribeUpdate();
+    };
+  }, [
+    fetchPendingCount,
+    fetchTabCounts,
+    triggerHaptic,
+    flashFilterTab,
+  ]);
+
+  useEffect(
+    () => () => {
+      if (flashTimerRef.current) {
+        clearTimeout(flashTimerRef.current);
+      }
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+      document.title = 'Консультации — фармацевт';
+    },
+    [],
+  );
 
   const handleBackToList = useCallback(() => {
     setActiveQuestionId(null);
@@ -211,7 +357,7 @@ export default function ChatDashboard({
   // Desktop layout: side-by-side
   if (!isMobile) {
     return (
-      <div className="flex h-[calc(100vh-4rem)] bg-gray-50 rounded-3xl overflow-hidden shadow-sm border border-gray-200">
+      <div className="flex h-[calc(100vh-4rem)] bg-gray-50 rounded-3xl overflow-hidden shadow-sm border border-gray-200 relative">
         {/* Left panel */}
         <div
           ref={panelRef}
@@ -262,28 +408,59 @@ export default function ChatDashboard({
                 <>
                   <div className="p-3 border-b border-gray-200">
                     <div className="flex gap-1 overflow-x-auto">
-                      {filterOptions.map((item) => (
-                        <button
-                          key={item.key}
-                          onClick={() =>
-                            setFilter(item.key)
-                          }
-                          className={`flex items-center gap-1 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                            filter === item.key
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                          }`}
-                        >
-                          <span>{item.icon}</span>
-                          <span>{item.label}</span>
-                          {item.key === 'new' &&
-                            pendingCount > 0 && (
-                              <span className="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full animate-pulse">
-                                {pendingCount}
+                      {filterOptions.map((item) => {
+                        const count =
+                          item.key === 'new'
+                            ? tabCounts.new || pendingCount
+                            : item.key === 'in_progress'
+                              ? tabCounts.in_progress
+                              : item.key === 'answered'
+                                ? tabCounts.answered
+                                : 0;
+                        const isFlash = flashTab === item.key;
+                        const showCount =
+                          item.key !== 'all' && count > 0;
+                        return (
+                          <button
+                            key={item.key}
+                            onClick={() => {
+                              setFilter(item.key);
+                              // Клик по мигающему табу гасит пульс
+                              if (flashTab === item.key) {
+                                setFlashTab(null);
+                              }
+                            }}
+                            className={`flex items-center gap-1 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                              filter === item.key
+                                ? 'bg-blue-600 text-white'
+                                : isFlash
+                                  ? 'bg-red-100 text-red-700 ring-2 ring-red-400 animate-pulse'
+                                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            }`}
+                          >
+                            <span>{item.icon}</span>
+                            <span>{item.label}</span>
+                            {showCount && (
+                              <span
+                                className={`inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold leading-none rounded-full ${
+                                  filter === item.key
+                                    ? 'bg-white text-blue-700'
+                                    : isFlash
+                                      ? 'bg-red-600 text-white animate-pulse'
+                                      : item.key === 'new'
+                                        ? 'bg-red-500 text-white animate-pulse'
+                                        : 'bg-blue-600 text-white'
+                                }`}
+                              >
+                                {count > 99 ? '99+' : count}
                               </span>
                             )}
-                        </button>
-                      ))}
+                            {isFlash && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                   <div className="flex-1 overflow-y-auto">
@@ -341,6 +518,38 @@ export default function ChatDashboard({
             </div>
           )}
         </div>
+
+        {/* Тост: новый вопрос / новый ответ — без автопереключения */}
+        {toast && (
+          <div className="absolute bottom-4 left-4 z-30 max-w-sm">
+            <div
+              className={`flex items-center gap-2 px-4 py-3 rounded-2xl shadow-lg text-sm font-medium ${
+                toast.kind === 'new'
+                  ? 'bg-red-600 text-white animate-pulse'
+                  : 'bg-blue-600 text-white'
+              }`}
+            >
+              <span className="flex-1">{toast.text}</span>
+              <button
+                onClick={() => {
+                  setFilter(toast.targetFilter);
+                  setFlashTab(null);
+                  setToast(null);
+                }}
+                className="px-3 py-1.5 rounded-full bg-white/20 hover:bg-white/30 font-semibold whitespace-nowrap"
+              >
+                Показать
+              </button>
+              <button
+                onClick={() => setToast(null)}
+                className="px-2 py-1 rounded-full hover:bg-white/20"
+                aria-label="Закрыть"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -383,27 +592,60 @@ export default function ChatDashboard({
   }
 
   return (
-    <div className="h-[calc(100vh-4rem)] bg-white flex flex-col">
+    <div className="h-[calc(100vh-4rem)] bg-white flex flex-col relative">
       {/* Header with filters */}
       <div className="p-4 border-b border-gray-200">
         <h2 className="text-lg font-bold text-gray-900">
           Консультации
         </h2>
         <div className="flex gap-1 mt-3 overflow-x-auto">
-          {filterOptions.map((item) => (
-            <button
-              key={item.key}
-              onClick={() => setFilter(item.key)}
-              className={`flex items-center gap-1 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                filter === item.key
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              <span>{item.icon}</span>
-              <span>{item.label}</span>
-            </button>
-          ))}
+          {filterOptions.map((item) => {
+            const count =
+              item.key === 'new'
+                ? tabCounts.new || pendingCount
+                : item.key === 'in_progress'
+                  ? tabCounts.in_progress
+                  : item.key === 'answered'
+                    ? tabCounts.answered
+                    : 0;
+            const isFlash = flashTab === item.key;
+            return (
+              <button
+                key={item.key}
+                onClick={() => {
+                  setFilter(item.key);
+                  if (flashTab === item.key) {
+                    setFlashTab(null);
+                  }
+                }}
+                className={`flex items-center gap-1 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                  filter === item.key
+                    ? 'bg-blue-600 text-white'
+                    : isFlash
+                      ? 'bg-red-100 text-red-700 ring-2 ring-red-400 animate-pulse'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <span>{item.icon}</span>
+                <span>{item.label}</span>
+                {item.key !== 'all' && count > 0 && (
+                  <span
+                    className={`inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold leading-none rounded-full ${
+                      filter === item.key
+                        ? 'bg-white text-blue-700'
+                        : isFlash
+                          ? 'bg-red-600 text-white animate-pulse'
+                          : item.key === 'new'
+                            ? 'bg-red-500 text-white animate-pulse'
+                            : 'bg-blue-600 text-white'
+                    }`}
+                  >
+                    {count > 99 ? '99+' : count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -414,8 +656,41 @@ export default function ChatDashboard({
           selectedQuestionId={activeQuestionId}
           onSelectQuestion={handleSelectQuestion}
           compact={true}
+          onPendingCountChange={setPendingCount}
         />
       </div>
+
+      {/* Тост: новый вопрос / новый ответ — без автопереключения */}
+      {toast && (
+        <div className="absolute bottom-4 left-4 right-4 z-20">
+          <div
+            className={`flex items-center gap-2 px-4 py-3 rounded-2xl shadow-lg text-sm font-medium ${
+              toast.kind === 'new'
+                ? 'bg-red-600 text-white animate-pulse'
+                : 'bg-blue-600 text-white'
+            }`}
+          >
+            <span className="flex-1">{toast.text}</span>
+            <button
+              onClick={() => {
+                setFilter(toast.targetFilter);
+                setFlashTab(null);
+                setToast(null);
+              }}
+              className="px-3 py-1.5 rounded-full bg-white/20 hover:bg-white/30 font-semibold whitespace-nowrap"
+            >
+              Показать
+            </button>
+            <button
+              onClick={() => setToast(null)}
+              className="px-2 py-1 rounded-full hover:bg-white/20"
+              aria-label="Закрыть"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

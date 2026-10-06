@@ -33,6 +33,10 @@ export default function QuestionsList({
   const [loading, setLoading] = useState(true);
   const [hasNewQuestions, setHasNewQuestions] =
     useState(false);
+  // Подсветка конкретных карточек: Map<questionId, { ts, kind: 'new' | 'reply' }>
+  const [highlightIds, setHighlightIds] = useState(
+    () => new Map(),
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const newQuestionsTimerRef = useRef(null);
   const mountedRef = useRef(true);
@@ -113,13 +117,59 @@ export default function QuestionsList({
     }
   }, [filter, searchQuery, debugLog]);
 
+  const extractQuestionId = (payload) => {
+    if (!payload || typeof payload !== 'object')
+      return null;
+    const inner = payload?.data || payload;
+    return (
+      payload?.question_id ||
+      payload?.questionId ||
+      inner?.question_id ||
+      inner?.questionId ||
+      inner?.uuid ||
+      payload?.uuid ||
+      null
+    );
+  };
+
+  const markHighlight = useCallback((questionId, kind) => {
+    if (!questionId) return;
+    const ts = Date.now();
+    setHighlightIds((prev) => {
+      const next = new Map(prev);
+      next.set(String(questionId), { ts, kind });
+      return next;
+    });
+    // Гасим подсветку карточки через 30с
+    setTimeout(() => {
+      setHighlightIds((prev) => {
+        const cur = prev.get(String(questionId));
+        if (!cur || cur.ts !== ts) return prev;
+        const next = new Map(prev);
+        next.delete(String(questionId));
+        return next;
+      });
+    }, 30000);
+  }, []);
+
+  const formatHlTime = (ts) => {
+    try {
+      return new Date(ts).toLocaleTimeString('ru-RU', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch (_) {
+      return '';
+    }
+  };
+
   // Subscribe to WebSocket for real-time new question notifications
   useEffect(() => {
     websocketService.connect();
 
     const unsubscribeNew = websocketService.on(
       'new_question',
-      (_data) => {
+      (payload) => {
         debugLog(
           '[QuestionsList] New question received via WebSocket',
         );
@@ -131,23 +181,35 @@ export default function QuestionsList({
         newQuestionsTimerRef.current = setTimeout(() => {
           setHasNewQuestions(false);
         }, 5000);
+        // Подсветить конкретную карточку (новый вопрос)
+        markHighlight(extractQuestionId(payload), 'new');
         // Notify parent about pending count change
         if (typeof onPendingCountChange === 'function') {
           onPendingCountChange((prev) => (prev || 0) + 1);
         }
-        // Debounced reload — avoid flicker
-        setTimeout(() => loadQuestions(), 300);
+        // Перезагружаем только если смотрим «Новые»/«Все» —
+        // чужой фильтр не дёргаем, только бейдж таба
+        if (filter === 'new' || filter === 'all') {
+          setTimeout(() => loadQuestions(), 300);
+        }
       },
     );
 
     const unsubscribeUpdate = websocketService.on(
       'message_update',
-      () => {
+      (payload) => {
         debugLog(
           '[QuestionsList] Message update received via WebSocket',
         );
-        // Debounced reload
-        setTimeout(() => loadQuestions(), 300);
+        // Подсветить конкретную карточку (продолжение в «В работе»)
+        markHighlight(
+          extractQuestionId(payload),
+          'reply',
+        );
+        // Перезагружаем только текущий фильтр «В работе»/«Все»
+        if (filter === 'in_progress' || filter === 'all') {
+          setTimeout(() => loadQuestions(), 300);
+        }
       },
     );
 
@@ -182,7 +244,13 @@ export default function QuestionsList({
         clearTimeout(newQuestionsTimerRef.current);
       }
     };
-  }, [loadQuestions, onPendingCountChange, debugLog]);
+  }, [
+    loadQuestions,
+    onPendingCountChange,
+    debugLog,
+    filter,
+    markHighlight,
+  ]);
 
   // Periodic polling fallback every 30s (reduced from 10s to avoid flicker)
   useEffect(() => {
@@ -266,6 +334,9 @@ export default function QuestionsList({
             const isUnread =
               question.status === 'pending' ||
               unreadQuestions.has(questionId);
+            const hl = highlightIds.get(String(questionId));
+            const isHlNew = hl?.kind === 'new';
+            const isHlReply = hl?.kind === 'reply';
 
             return (
               <button
@@ -277,9 +348,26 @@ export default function QuestionsList({
                 className={`w-full text-left px-4 py-3 transition-colors hover:bg-gray-50 relative ${
                   isSelected
                     ? 'bg-blue-50 border-l-4 border-blue-500'
-                    : 'border-l-4 border-transparent'
-                } ${hasNewQuestions ? 'animate-pulse bg-blue-50/60' : ''}`}
+                    : isHlNew
+                      ? 'bg-red-50 border-l-4 border-red-500 animate-pulse'
+                      : isHlReply
+                        ? 'bg-blue-50 border-l-4 border-blue-400'
+                        : 'border-l-4 border-transparent'
+                } ${hasNewQuestions && !hl ? 'animate-pulse bg-blue-50/60' : ''}`}
               >
+                {hl && (
+                  <span
+                    className={`inline-flex items-center gap-1 mb-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                      isHlNew
+                        ? 'bg-red-600 text-white animate-pulse'
+                        : 'bg-blue-600 text-white'
+                    }`}
+                  >
+                    {isHlNew
+                      ? `🆕 Новый • ${formatHlTime(hl.ts)}`
+                      : `💬 Новый ответ • ${formatHlTime(hl.ts)}`}
+                  </span>
+                )}
                 <div className="flex items-start gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
