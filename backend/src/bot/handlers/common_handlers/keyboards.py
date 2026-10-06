@@ -30,6 +30,19 @@ def get_pharmacist_webapp_url() -> str:
     return base_url
 
 
+def get_search_webapp_url() -> str:
+    """Генерирует явный URL WebApp для поиска лекарств.
+
+    Отдельный path нужен, чтобы кнопка «Поиск лекарств» не открывала
+    корень, который при активной pharmacist-сессии может трактоваться
+    как панель фармацевта.
+    """
+    base_url = os.getenv(
+        "FRONTEND_URL", "https://spravka.novamedika.com"
+    ).rstrip("/")
+    return f"{base_url}/search"
+
+
 def get_pharmacist_inline_keyboard_with_token(
     telegram_id: int, pharmacist_uuid: str | None = None
 ):
@@ -41,8 +54,7 @@ def get_pharmacist_inline_keyboard_with_token(
     """
     # Получаем чистый URL без токена
     pharmacist_dashboard_url = get_pharmacist_webapp_url()
-
-    webapp_url = os.getenv("FRONTEND_URL", "https://spravka.novamedika.com")
+    search_webapp_url = get_search_webapp_url()
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -78,7 +90,7 @@ def get_pharmacist_inline_keyboard_with_token(
             [
                 InlineKeyboardButton(
                     text="\U0001f50d Поиск лекарств",
-                    web_app=WebAppInfo(url=webapp_url),
+                    web_app=WebAppInfo(url=search_webapp_url),
                 )
             ],
         ]

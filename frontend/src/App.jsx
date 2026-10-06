@@ -157,23 +157,18 @@ function App() {
   );
   const hasAuthToken = urlParams.has('token');
 
-  // Проверяем наличие session token в localStorage (фармацевт уже залогинен)
-  const hasPharmacistSession = !!localStorage.getItem(
-    'pharmacist_session_token',
-  );
-
-  // Кешируем isPharmacistMode
+  // Режим панели включается только явными признаками.
+  // Сохранённая pharmacist-сессия не должна перенаправлять корень и /search
+  // в дашборд: кнопка «Поиск лекарств» теперь ведёт на явный /search.
   const isPharmacistMode = useMemo(
     () =>
       isPharmacistSubdomain ||
       isPharmacistPath ||
-      (hasAuthToken && isInTelegramCached) ||
-      hasPharmacistSession,
+      (hasAuthToken && isInTelegramCached),
     [
       isPharmacistSubdomain,
       isPharmacistPath,
       hasAuthToken,
-      hasPharmacistSession,
       isInTelegramCached,
     ],
   );
