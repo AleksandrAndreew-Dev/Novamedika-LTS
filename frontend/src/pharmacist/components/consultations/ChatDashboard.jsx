@@ -112,13 +112,30 @@ export default function ChatDashboard({
     setActiveQuestionId(questionId);
   }, []);
 
-  // Fetch unread/pending count + счётчики всех табов
+  // Лёгкий счётчик (poll 5с) + тяжёлый stats (30с)
   const fetchPendingCount = useCallback(async () => {
     try {
       const data = await questionsService.getUnreadCount();
-      setPendingCount(data.count || 0);
+      const n = data.count || 0;
+      setPendingCount(n);
+      // Не даём счётчику прыгать назад: max(poll, текущее)
+      setTabCounts((prev) => ({
+        ...prev,
+        new: Math.max(prev.new || 0, n),
+      }));
     } catch (err) {
       logger.error('Failed to fetch pending count:', err);
+    }
+  }, []);
+
+  // Мгновенный инкремент от WS (не ждём poll)
+  const bumpTabCount = useCallback((key) => {
+    setTabCounts((prev) => ({
+      ...prev,
+      [key]: (prev[key] || 0) + 1,
+    }));
+    if (key === 'new') {
+      setPendingCount((prev) => (prev || 0) + 1);
     }
   }, []);
 
@@ -221,19 +238,43 @@ export default function ChatDashboard({
   useEffect(() => {
     fetchPendingCount();
     fetchTabCounts();
-    const interval = setInterval(() => {
-      fetchPendingCount();
-      fetchTabCounts();
-    }, 15000);
-    return () => clearInterval(interval);
+    // Лёгкий счётчик — каждые 5с; тяжёлый stats — каждые 30с
+    const fast = setInterval(fetchPendingCount, 5000);
+    const slow = setInterval(fetchTabCounts, 30000);
+    return () => {
+      clearInterval(fast);
+      clearInterval(slow);
+    };
   }, [fetchPendingCount, fetchTabCounts]);
 
+  // Точка соединения WS
+  const [wsOnline, setWsOnline] = useState(false);
   useEffect(() => {
+    const t = setInterval(() => {
+      try {
+        setWsOnline(
+          websocketService.isConnected?.() ??
+            websocketService.isConnected ??
+            false,
+        );
+      } catch (_) {
+        setWsOnline(false);
+      }
+    }, 3000);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    websocketService.connect();
+    // После (пере)подключения сразу подтягиваем счётчики — закрыть пропуски
+    const t = setTimeout(() => {
+      fetchPendingCount();
+      fetchTabCounts();
+    }, 1500);
     const unsubscribeNew = websocketService.on(
       'new_question',
       () => {
-        fetchPendingCount();
-        fetchTabCounts();
+        bumpTabCount('new');
         triggerHaptic('new');
         flashFilterTab('new', 'Новый вопрос — показать');
       },
@@ -242,7 +283,7 @@ export default function ChatDashboard({
       'message_update',
       () => {
         // Продолжение диалога = «В работе»
-        fetchTabCounts();
+        bumpTabCount('in_progress');
         triggerHaptic('reply');
         flashFilterTab(
           'in_progress',
@@ -251,12 +292,14 @@ export default function ChatDashboard({
       },
     );
     return () => {
+      clearTimeout(t);
       unsubscribeNew();
       unsubscribeUpdate();
     };
   }, [
     fetchPendingCount,
     fetchTabCounts,
+    bumpTabCount,
     triggerHaptic,
     flashFilterTab,
   ]);
@@ -386,8 +429,8 @@ export default function ChatDashboard({
                 >
                   📋 Вопросы
                   {pendingCount > 0 && (
-                    <span className="absolute -top-1 -right-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full animate-pulse">
-                      {pendingCount}
+                    <span className="absolute -top-1 -right-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-white bg-sky-600 rounded-full">
+                      {pendingCount > 99 ? '99+' : pendingCount}
                     </span>
                   )}
                 </button>
@@ -420,43 +463,47 @@ export default function ChatDashboard({
                         const isFlash = flashTab === item.key;
                         const showCount =
                           item.key !== 'all' && count > 0;
+                        const badgeColor =
+                          item.key === 'new'
+                            ? 'bg-sky-600 text-white'
+                            : item.key === 'in_progress'
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-slate-500 text-white';
                         return (
                           <button
                             key={item.key}
                             onClick={() => {
                               setFilter(item.key);
-                              // Клик по мигающему табу гасит пульс
+                              // Клик по подсвеченному табу гасит отметку
                               if (flashTab === item.key) {
                                 setFlashTab(null);
                               }
                             }}
-                            className={`flex items-center gap-1 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                            className={`flex items-center gap-1 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium transition-colors ring-1 ${
                               filter === item.key
-                                ? 'bg-blue-600 text-white'
+                                ? 'bg-blue-600 text-white ring-blue-600'
                                 : isFlash
-                                  ? 'bg-red-100 text-red-700 ring-2 ring-red-400 animate-pulse'
-                                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                  ? item.key === 'new'
+                                    ? 'bg-sky-50 text-sky-800 ring-sky-300'
+                                    : 'bg-emerald-50 text-emerald-800 ring-emerald-300'
+                                  : 'bg-gray-100 text-gray-600 ring-transparent hover:bg-gray-200'
                             }`}
                           >
                             <span>{item.icon}</span>
                             <span>{item.label}</span>
                             {showCount && (
                               <span
-                                className={`inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold leading-none rounded-full ${
+                                className={`inline-flex items-center gap-1 justify-center px-1.5 py-0.5 text-[10px] font-bold leading-none rounded-full ${
                                   filter === item.key
                                     ? 'bg-white text-blue-700'
-                                    : isFlash
-                                      ? 'bg-red-600 text-white animate-pulse'
-                                      : item.key === 'new'
-                                        ? 'bg-red-500 text-white animate-pulse'
-                                        : 'bg-blue-600 text-white'
+                                    : badgeColor
                                 }`}
                               >
+                                {isFlash && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                                )}
                                 {count > 99 ? '99+' : count}
                               </span>
-                            )}
-                            {isFlash && (
-                              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
                             )}
                           </button>
                         );
@@ -522,13 +569,14 @@ export default function ChatDashboard({
         {/* Тост: новый вопрос / новый ответ — без автопереключения */}
         {toast && (
           <div className="absolute bottom-4 left-4 z-30 max-w-sm">
-            <div
-              className={`flex items-center gap-2 px-4 py-3 rounded-2xl shadow-lg text-sm font-medium ${
-                toast.kind === 'new'
-                  ? 'bg-red-600 text-white animate-pulse'
-                  : 'bg-blue-600 text-white'
-              }`}
-            >
+            <div className="flex items-center gap-2 px-4 py-3 rounded-2xl shadow-lg text-sm font-medium bg-slate-800 text-white">
+              <span
+                className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                  toast.kind === 'new'
+                    ? 'bg-sky-400'
+                    : 'bg-emerald-400'
+                }`}
+              />
               <span className="flex-1">{toast.text}</span>
               <button
                 onClick={() => {
@@ -595,9 +643,17 @@ export default function ChatDashboard({
     <div className="h-[calc(100vh-4rem)] bg-white flex flex-col relative">
       {/* Header with filters */}
       <div className="p-4 border-b border-gray-200">
-        <h2 className="text-lg font-bold text-gray-900">
-          Консультации
-        </h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-bold text-gray-900">
+            Консультации
+          </h2>
+          <span
+            title={wsOnline ? 'Обновления онлайн' : 'Переподключение…'}
+            className={`w-2 h-2 rounded-full ${
+              wsOnline ? 'bg-emerald-500' : 'bg-gray-300'
+            }`}
+          />
+        </div>
         <div className="flex gap-1 mt-3 overflow-x-auto">
           {filterOptions.map((item) => {
             const count =
@@ -609,6 +665,12 @@ export default function ChatDashboard({
                     ? tabCounts.answered
                     : 0;
             const isFlash = flashTab === item.key;
+            const badgeColor =
+              item.key === 'new'
+                ? 'bg-sky-600 text-white'
+                : item.key === 'in_progress'
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-slate-500 text-white';
             return (
               <button
                 key={item.key}
@@ -618,28 +680,29 @@ export default function ChatDashboard({
                     setFlashTab(null);
                   }
                 }}
-                className={`flex items-center gap-1 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                className={`flex items-center gap-1 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium transition-colors ring-1 ${
                   filter === item.key
-                    ? 'bg-blue-600 text-white'
+                    ? 'bg-blue-600 text-white ring-blue-600'
                     : isFlash
-                      ? 'bg-red-100 text-red-700 ring-2 ring-red-400 animate-pulse'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      ? item.key === 'new'
+                        ? 'bg-sky-50 text-sky-800 ring-sky-300'
+                        : 'bg-emerald-50 text-emerald-800 ring-emerald-300'
+                      : 'bg-gray-100 text-gray-600 ring-transparent hover:bg-gray-200'
                 }`}
               >
                 <span>{item.icon}</span>
                 <span>{item.label}</span>
                 {item.key !== 'all' && count > 0 && (
                   <span
-                    className={`inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold leading-none rounded-full ${
+                    className={`inline-flex items-center gap-1 justify-center px-1.5 py-0.5 text-[10px] font-bold leading-none rounded-full ${
                       filter === item.key
                         ? 'bg-white text-blue-700'
-                        : isFlash
-                          ? 'bg-red-600 text-white animate-pulse'
-                          : item.key === 'new'
-                            ? 'bg-red-500 text-white animate-pulse'
-                            : 'bg-blue-600 text-white'
+                        : badgeColor
                     }`}
                   >
+                    {isFlash && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                    )}
                     {count > 99 ? '99+' : count}
                   </span>
                 )}
@@ -663,13 +726,14 @@ export default function ChatDashboard({
       {/* Тост: новый вопрос / новый ответ — без автопереключения */}
       {toast && (
         <div className="absolute bottom-4 left-4 right-4 z-20">
-          <div
-            className={`flex items-center gap-2 px-4 py-3 rounded-2xl shadow-lg text-sm font-medium ${
-              toast.kind === 'new'
-                ? 'bg-red-600 text-white animate-pulse'
-                : 'bg-blue-600 text-white'
-            }`}
-          >
+          <div className="flex items-center gap-2 px-4 py-3 rounded-2xl shadow-lg text-sm font-medium bg-slate-800 text-white">
+            <span
+              className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                toast.kind === 'new'
+                  ? 'bg-sky-400'
+                  : 'bg-emerald-400'
+              }`}
+            />
             <span className="flex-1">{toast.text}</span>
             <button
               onClick={() => {

@@ -56,23 +56,26 @@ export default function QuestionsList({
     [],
   );
 
-  const loadQuestions = useCallback(async () => {
-    // Throttle: skip if called within throttle interval
-    const now = Date.now();
-    if (
-      now - lastLoadRef.current < loadThrottleMs &&
-      lastLoadRef.current > 0
-    ) {
-      debugLog('[QuestionsList] Throttled loadQuestions');
-      return;
-    }
-    lastLoadRef.current = now;
+  const loadQuestions = useCallback(
+    async (opts = {}) => {
+      const force = opts.force === true;
+      // Throttle — только для обычных вызовов; WS-события идут с force
+      const now = Date.now();
+      if (
+        !force &&
+        now - lastLoadRef.current < loadThrottleMs &&
+        lastLoadRef.current > 0
+      ) {
+        debugLog('[QuestionsList] Throttled loadQuestions');
+        return;
+      }
+      lastLoadRef.current = now;
 
-    // Show loading only on first load or filter change
-    const shouldShowLoading = lastLoadRef.current === 0;
-    if (shouldShowLoading) {
-      setLoading(true);
-    }
+      // Show loading only on first load or filter change
+      const shouldShowLoading = lastLoadRef.current === 0;
+      if (shouldShowLoading) {
+        setLoading(true);
+      }
 
     try {
       const params =
@@ -115,7 +118,9 @@ export default function QuestionsList({
         lastLoadRef.current = Date.now();
       }
     }
-  }, [filter, searchQuery, debugLog]);
+    },
+    [filter, searchQuery, debugLog],
+  );
 
   const extractQuestionId = (payload) => {
     if (!payload || typeof payload !== 'object')
@@ -140,7 +145,7 @@ export default function QuestionsList({
       next.set(String(questionId), { ts, kind });
       return next;
     });
-    // Гасим подсветку карточки через 30с
+    // Спокойная подсветка 60с, без мигания
     setTimeout(() => {
       setHighlightIds((prev) => {
         const cur = prev.get(String(questionId));
@@ -149,7 +154,7 @@ export default function QuestionsList({
         next.delete(String(questionId));
         return next;
       });
-    }, 30000);
+    }, 60000);
   }, []);
 
   const formatHlTime = (ts) => {
@@ -173,7 +178,7 @@ export default function QuestionsList({
         debugLog(
           '[QuestionsList] New question received via WebSocket',
         );
-        // Show visual indicator
+        // Тихий общий флаг (без пульса всего списка)
         setHasNewQuestions(true);
         if (newQuestionsTimerRef.current) {
           clearTimeout(newQuestionsTimerRef.current);
@@ -182,15 +187,21 @@ export default function QuestionsList({
           setHasNewQuestions(false);
         }, 5000);
         // Подсветить конкретную карточку (новый вопрос)
-        markHighlight(extractQuestionId(payload), 'new');
+        const qid = extractQuestionId(payload);
+        if (!qid && import.meta.env?.DEV) {
+          debugLog(
+            '[QuestionsList] new_question without id:',
+            payload,
+          );
+        }
+        markHighlight(qid, 'new');
         // Notify parent about pending count change
         if (typeof onPendingCountChange === 'function') {
           onPendingCountChange((prev) => (prev || 0) + 1);
         }
-        // Перезагружаем только если смотрим «Новые»/«Все» —
-        // чужой фильтр не дёргаем, только бейдж таба
+        // WS-событие всегда force — throttle не должен съедать показ
         if (filter === 'new' || filter === 'all') {
-          setTimeout(() => loadQuestions(), 300);
+          loadQuestions({ force: true });
         }
       },
     );
@@ -202,13 +213,16 @@ export default function QuestionsList({
           '[QuestionsList] Message update received via WebSocket',
         );
         // Подсветить конкретную карточку (продолжение в «В работе»)
-        markHighlight(
-          extractQuestionId(payload),
-          'reply',
-        );
-        // Перезагружаем только текущий фильтр «В работе»/«Все»
+        const qid = extractQuestionId(payload);
+        if (!qid && import.meta.env?.DEV) {
+          debugLog(
+            '[QuestionsList] message_update without id:',
+            payload,
+          );
+        }
+        markHighlight(qid, 'reply');
         if (filter === 'in_progress' || filter === 'all') {
-          setTimeout(() => loadQuestions(), 300);
+          loadQuestions({ force: true });
         }
       },
     );
@@ -219,8 +233,7 @@ export default function QuestionsList({
         debugLog(
           '[QuestionsList] Question assigned received via WebSocket',
         );
-        // Debounced reload
-        setTimeout(() => loadQuestions(), 300);
+        loadQuestions({ force: true });
       },
     );
 
@@ -230,8 +243,7 @@ export default function QuestionsList({
         debugLog(
           '[QuestionsList] Question completed received via WebSocket',
         );
-        // Debounced reload
-        setTimeout(() => loadQuestions(), 300);
+        loadQuestions({ force: true });
       },
     );
 
@@ -345,27 +357,27 @@ export default function QuestionsList({
                 onClick={() =>
                   handleQuestionClick(questionId)
                 }
-                className={`w-full text-left px-4 py-3 transition-colors hover:bg-gray-50 relative ${
+                className={`w-full text-left px-4 py-3 transition-colors hover:bg-gray-50 relative ring-1 ring-inset ${
                   isSelected
-                    ? 'bg-blue-50 border-l-4 border-blue-500'
+                    ? 'bg-blue-50 ring-blue-200 border-l-4 border-blue-500'
                     : isHlNew
-                      ? 'bg-red-50 border-l-4 border-red-500 animate-pulse'
+                      ? 'bg-sky-50 ring-sky-200 border-l-4 border-sky-400'
                       : isHlReply
-                        ? 'bg-blue-50 border-l-4 border-blue-400'
-                        : 'border-l-4 border-transparent'
-                } ${hasNewQuestions && !hl ? 'animate-pulse bg-blue-50/60' : ''}`}
+                        ? 'bg-emerald-50 ring-emerald-200 border-l-4 border-emerald-400'
+                        : 'border-l-4 border-transparent ring-transparent'
+                }`}
               >
                 {hl && (
                   <span
                     className={`inline-flex items-center gap-1 mb-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
                       isHlNew
-                        ? 'bg-red-600 text-white animate-pulse'
-                        : 'bg-blue-600 text-white'
+                        ? 'bg-sky-600 text-white'
+                        : 'bg-emerald-600 text-white'
                     }`}
                   >
                     {isHlNew
-                      ? `🆕 Новый • ${formatHlTime(hl.ts)}`
-                      : `💬 Новый ответ • ${formatHlTime(hl.ts)}`}
+                      ? `Новый • ${formatHlTime(hl.ts)}`
+                      : `Новый ответ • ${formatHlTime(hl.ts)}`}
                   </span>
                 )}
                 <div className="flex items-start gap-3">
@@ -400,7 +412,7 @@ export default function QuestionsList({
                   </div>
                 </div>
                 {hasNewQuestions && (
-                  <span className="absolute top-1 right-1 inline-flex items-center justify-center w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                  <span className="absolute top-2 right-2 inline-flex items-center justify-center w-2 h-2 rounded-full bg-sky-500" />
                 )}
               </button>
             );
@@ -435,8 +447,8 @@ export default function QuestionsList({
               Список вопросов
             </h2>
             {hasNewQuestions && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-medium animate-pulse">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-100 text-sky-800 text-xs font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-sky-500"></span>
                 Новые
               </span>
             )}
