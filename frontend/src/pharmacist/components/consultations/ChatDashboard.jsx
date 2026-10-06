@@ -51,6 +51,7 @@ export default function ChatDashboard({
   const [panelWidth, setPanelWidth] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  const [listRefreshKey, setListRefreshKey] = useState(0);
   // Счётчики для явных бейджей на каждом фильтре + пульс таба при WS-событии
   const [tabCounts, setTabCounts] = useState({
     new: 0,
@@ -113,18 +114,18 @@ export default function ChatDashboard({
   }, []);
 
   // Лёгкий счётчик (poll 5с) + тяжёлый stats (30с)
-  const fetchPendingCount = useCallback(async () => {
+  const fetchPendingCount = useCallback(async (opts = {}) => {
+    const silent = opts.silent === true;
     try {
       const data = await questionsService.getUnreadCount();
       const n = data.count || 0;
       setPendingCount(n);
-      // Не даём счётчику прыгать назад: max(poll, текущее)
-      setTabCounts((prev) => ({
-        ...prev,
-        new: Math.max(prev.new || 0, n),
-      }));
+      // Сверка с сервером — перекрывает локальные WS-инкременты,
+      // чтобы бейдж не залипал на завышенном числе
+      setTabCounts((prev) => ({ ...prev, new: n }));
     } catch (err) {
-      logger.error('Failed to fetch pending count:', err);
+      // predictability: при ошибке счётчики НЕ трогаем (иначе мигают 0)
+      if (!silent) logger.error('Failed to fetch pending count:', err);
     }
   }, []);
 
@@ -139,7 +140,8 @@ export default function ChatDashboard({
     }
   }, []);
 
-  const fetchTabCounts = useCallback(async () => {
+  const fetchTabCounts = useCallback(async (opts = {}) => {
+    const silent = opts.silent === true;
     try {
       const stats =
         await questionsService.getDashboardStats();
@@ -178,7 +180,8 @@ export default function ChatDashboard({
         // Не роняем остальные счётчики
       }
     } catch (err) {
-      logger.error('Failed to fetch tab counts:', err);
+      // predictability: при ошибке счётчики НЕ трогаем (иначе мигают 0)
+      if (!silent) logger.error('Failed to fetch tab counts:', err);
     }
   }, []);
 
@@ -235,15 +238,29 @@ export default function ChatDashboard({
     }
   }, []);
 
+  // Единый интервал 15с: poll счётчиков + рефетч при возврате в WebApp.
+  // Раньше «лёгкий» poll шёл каждые 5с, а «тяжёлый» каждые 30с — бейджи
+  // обновлялись вразнобой (то число, то старое). Плюс «перезаход лечил»,
+  // потому что свежие данные приходили только при монтировании —
+  // теперь рефетч идёт сам по visibilitychange.
   useEffect(() => {
-    fetchPendingCount();
-    fetchTabCounts();
-    // Лёгкий счётчик — каждые 5с; тяжёлый stats — каждые 30с
-    const fast = setInterval(fetchPendingCount, 5000);
-    const slow = setInterval(fetchTabCounts, 30000);
+    fetchPendingCount({ silent: true });
+    fetchTabCounts({ silent: true });
+    const interval = setInterval(() => {
+      fetchPendingCount({ silent: true });
+      fetchTabCounts({ silent: true });
+    }, 15000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        fetchPendingCount({ silent: true });
+        fetchTabCounts({ silent: true });
+        setListRefreshKey((k) => k + 1);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
-      clearInterval(fast);
-      clearInterval(slow);
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, [fetchPendingCount, fetchTabCounts]);
 
@@ -519,6 +536,7 @@ export default function ChatDashboard({
                       }
                       compact={true}
                       onPendingCountChange={setPendingCount}
+                      refreshKey={listRefreshKey}
                     />
                   </div>
                 </>
@@ -720,6 +738,7 @@ export default function ChatDashboard({
           onSelectQuestion={handleSelectQuestion}
           compact={true}
           onPendingCountChange={setPendingCount}
+          refreshKey={listRefreshKey}
         />
       </div>
 

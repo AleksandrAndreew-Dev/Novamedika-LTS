@@ -386,6 +386,30 @@ async def telegram_webapp_login(
         )
 
 
+@router.post("/logout")
+@router.post("/logout/")
+async def pharmacist_logout(
+    request: Request,
+    pharmacist: Pharmacist = Depends(get_current_pharmacist_session),
+):
+    """Инвалидировать сессию фармацевта (чинит 404 POST /api/pharmacist/logout/).
+
+    Фронтенд (authService.logout) вызывает POST /api/pharmacist/logout/
+    при выходе — раньше такого роута не было, клиент получал 404 и слал
+    client-error в логи. Токен извлекаем из Authorization-заголовка
+    вручную, т.к. Depends уже провалидировал сессию, но сам токен не отдал.
+    """
+    auth = request.headers.get("authorization", "")
+    parts = auth.split()
+    if len(parts) == 2:
+        try:
+            await delete_session(parts[1])
+            logger.info("Pharmacist session invalidated via logout")
+        except Exception:
+            logger.exception("Failed to invalidate session on logout")
+    return {"ok": True}
+
+
 @router.get("/me", response_model=PharmacistResponse)
 async def get_current_pharmacist_profile(
     pharmacist: Pharmacist = Depends(get_current_pharmacist_session),

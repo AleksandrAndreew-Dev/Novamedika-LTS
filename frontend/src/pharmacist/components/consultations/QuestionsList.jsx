@@ -21,6 +21,7 @@ export default function QuestionsList({
   onSelectQuestion,
   compact = false,
   onPendingCountChange,
+  refreshKey = 0,
 }) {
   const [unreadQuestions] = useState(
     new Set(
@@ -31,6 +32,8 @@ export default function QuestionsList({
   );
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState(null);
   const [hasNewQuestions, setHasNewQuestions] =
     useState(false);
   // Подсветка конкретных карточек: Map<questionId, { ts, kind: 'new' | 'reply' }>
@@ -41,7 +44,14 @@ export default function QuestionsList({
   const newQuestionsTimerRef = useRef(null);
   const mountedRef = useRef(true);
   const lastLoadRef = useRef(0);
+  const requestIdRef = useRef(0);
+  const questionsRef = useRef([]);
+  const filterRef = useRef(filter);
   const loadThrottleMs = 2000;
+
+  useEffect(() => {
+    filterRef.current = filter;
+  }, [filter]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -71,53 +81,71 @@ export default function QuestionsList({
       }
       lastLoadRef.current = now;
 
-      // Show loading only on first load or filter change
-      const shouldShowLoading = lastLoadRef.current === 0;
-      if (shouldShowLoading) {
+      // Предсказуемое поведение: при смене фильтра показываем индикатор,
+      // но НЕ очищаем старый список (нет «пустого» мигания).
+      // Скелетон — только при первой загрузке, далее — тихий рефетч.
+      const isFirstLoad = questionsRef.current.length === 0;
+      if (isFirstLoad) {
         setLoading(true);
-      }
-
-    try {
-      const params =
-        filter === 'all'
-          ? {}
-          : {
-              status: filter,
-            };
-      if (searchQuery.trim()) {
-        params.search = searchQuery.trim();
-      }
-      const data =
-        await questionsService.getQuestions(params);
-
-      if (!mountedRef.current) return;
-
-      // Backend returns { questions: [...], total, page, limit, pages }
-      if (Array.isArray(data)) {
-        setQuestions(data);
-      } else if (data && Array.isArray(data.questions)) {
-        setQuestions(data.questions);
       } else {
+        setRefreshing(true);
+      }
+      setLoadError(null);
+      const requestId = ++requestIdRef.current;
+
+      try {
+        const params =
+          filter === 'all'
+            ? {}
+            : {
+                status: filter,
+              };
+        if (searchQuery.trim()) {
+          params.search = searchQuery.trim();
+        }
+        // Пробрасываем внешний refreshKey (кнопка «Обновить» / смена таба сверху)
+        if (opts.refreshKey !== undefined) {
+          params._rk = opts.refreshKey;
+        }
+        const data =
+          await questionsService.getQuestions(params);
+
+        if (!mountedRef.current) return;
+        // Отбрасываем устаревшие ответы (гонка filter A -> filter B)
+        if (requestId !== requestIdRef.current) return;
+
+        // Backend returns { questions: [...], total, page, limit, pages }
+        if (Array.isArray(data)) {
+          setQuestions(data);
+          questionsRef.current = data;
+        } else if (data && Array.isArray(data.questions)) {
+          setQuestions(data.questions);
+          questionsRef.current = data.questions;
+        } else {
+          debugLog(
+            '[QuestionsList] Unexpected response format:',
+            typeof data,
+            data,
+          );
+          setQuestions([]);
+          questionsRef.current = [];
+        }
+      } catch (error) {
+        if (!mountedRef.current) return;
+        if (requestId !== requestIdRef.current) return;
         debugLog(
-          '[QuestionsList] Unexpected response format:',
-          typeof data,
-          data,
+          '[QuestionsList] Failed to load questions:',
+          error,
         );
-        setQuestions([]);
+        // При ошибке список НЕ затираем — показываем баннер с ретраем
+        setLoadError(error);
+      } finally {
+        if (mountedRef.current && requestId === requestIdRef.current) {
+          setLoading(false);
+          setRefreshing(false);
+          lastLoadRef.current = Date.now();
+        }
       }
-    } catch (error) {
-      if (!mountedRef.current) return;
-      debugLog(
-        '[QuestionsList] Failed to load questions:',
-        error,
-      );
-      setQuestions([]);
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-        lastLoadRef.current = Date.now();
-      }
-    }
     },
     [filter, searchQuery, debugLog],
   );
@@ -168,7 +196,9 @@ export default function QuestionsList({
     }
   };
 
-  // Subscribe to WebSocket for real-time new question notifications
+  // Subscribe to WebSocket once (стабильно, без переподписок при смене фильтра).
+  // Актуальный фильтр читаем через filterRef — иначе при каждом клике по табу
+  // эффект пересоздавал 4 подписки и мог пропускать/дублировать события.
   useEffect(() => {
     websocketService.connect();
 
@@ -200,7 +230,8 @@ export default function QuestionsList({
           onPendingCountChange((prev) => (prev || 0) + 1);
         }
         // WS-событие всегда force — throttle не должен съедать показ
-        if (filter === 'new' || filter === 'all') {
+        const f = filterRef.current;
+        if (f === 'new' || f === 'all') {
           loadQuestions({ force: true });
         }
       },
@@ -221,7 +252,8 @@ export default function QuestionsList({
           );
         }
         markHighlight(qid, 'reply');
-        if (filter === 'in_progress' || filter === 'all') {
+        const f = filterRef.current;
+        if (f === 'in_progress' || f === 'all') {
           loadQuestions({ force: true });
         }
       },
@@ -256,21 +288,31 @@ export default function QuestionsList({
         clearTimeout(newQuestionsTimerRef.current);
       }
     };
-  }, [
-    loadQuestions,
-    onPendingCountChange,
-    debugLog,
-    filter,
-    markHighlight,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Periodic polling fallback every 30s (reduced from 10s to avoid flicker)
+  // Первичная загрузка + смена фильтра/поиска/refreshKey.
+  // Смена фильтра идёт с force (throttle её НЕ блокирует — иначе таб
+  // периодически показывал пустой/старый список).
+  // Поиск дебаунсим 400мс, чтобы не дёргать API на каждую букву.
   useEffect(() => {
-    loadQuestions();
+    lastLoadRef.current = 0;
+    if (searchQuery.trim()) {
+      const t = setTimeout(() => {
+        loadQuestions({ force: true, refreshKey });
+      }, 400);
+      return () => clearTimeout(t);
+    }
+    loadQuestions({ force: true, refreshKey });
+  }, [loadQuestions, filter, searchQuery, refreshKey]);
+
+  // Фоновый поллинг каждые 30с (без мигания — тихий рефетч).
+  // Первичную загрузку делает эффект выше; здесь только интервал,
+  // иначе при монтировании уходят 2 параллельных запроса и побеждает
+  // устаревший ответ (пустой список).
+  useEffect(() => {
     const interval = setInterval(() => {
-      // Don't throttle for polling
-      lastLoadRef.current = 0;
-      loadQuestions();
+      loadQuestions({ force: true });
     }, 30000);
     return () => clearInterval(interval);
   }, [loadQuestions]);
@@ -317,7 +359,9 @@ export default function QuestionsList({
 
   // Compact mode: simpler card layout for sidebar
   if (compact) {
-    if (loading) {
+    // Скелетон — только пока список ни разу не загружен.
+    // Иначе при смене таба был «пустой миг» вместо старых данных.
+    if (loading && questions.length === 0) {
       return (
         <div className="space-y-2 p-4">
           {[...Array(5)].map((_, i) => (
@@ -332,11 +376,44 @@ export default function QuestionsList({
 
     return (
       <div className="divide-y divide-gray-100">
+        {loadError && questions.length > 0 && (
+          <div className="m-3 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center gap-2">
+            <span className="flex-1">
+              Не удалось обновить список. Показаны сохранённые данные.
+            </span>
+            <button
+              type="button"
+              onClick={() => loadQuestions({ force: true })}
+              className="px-2.5 py-1 rounded-full bg-amber-600 text-white font-semibold hover:bg-amber-700"
+            >
+              Повторить
+            </button>
+          </div>
+        )}
+        {refreshing && (
+          <div className="px-4 py-1.5 text-[11px] text-gray-400 flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+            Обновление…
+          </div>
+        )}
         {questions.length === 0 ? (
           <div className="p-8 text-center text-gray-400 text-sm">
-            {searchQuery
-              ? 'Ничего не найдено'
-              : 'Нет консультаций'}
+            {loadError ? (
+              <>
+                <p className="mb-2">Не удалось загрузить список.</p>
+                <button
+                  type="button"
+                  onClick={() => loadQuestions({ force: true })}
+                  className="px-3 py-1.5 rounded-full bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700"
+                >
+                  Повторить
+                </button>
+              </>
+            ) : searchQuery ? (
+              'Ничего не найдено'
+            ) : (
+              'Нет консультаций'
+            )}
           </div>
         ) : (
           questions.map((question) => {
