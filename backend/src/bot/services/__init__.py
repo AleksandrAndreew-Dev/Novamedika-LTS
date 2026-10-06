@@ -1,6 +1,7 @@
 # bot/services/__init__.py
 from .notification_service import (
     notify_pharmacists_about_new_question,
+    notify_pharmacists_about_new_question_in_background,
     notify_about_clarification,
     get_online_pharmacists
 )
@@ -10,6 +11,7 @@ from .dialog_service import DialogService
 
 __all__ = [
     'notify_pharmacists_about_new_question',
+    'notify_pharmacists_about_new_question_in_background',
     'notify_about_clarification',
     'get_online_pharmacists',
     'QuestionAssignmentService',

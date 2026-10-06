@@ -124,13 +124,19 @@ async def create_question(
         await db.commit()
         await db.refresh(new_question)
 
-        # Уведомление фармацевтов о новом вопросе
+        # Уведомление фармацевтов о новом вопросе.
+        # ВАЖНО: собственная сессия в задаче (не request-сессия db) —
+        # иначе asyncpg InterfaceError: another operation is in progress.
         try:
             from bot.services.notification_service import (
-                notify_pharmacists_about_new_question,
+                notify_pharmacists_about_new_question_in_background,
             )
 
-            asyncio.create_task(notify_pharmacists_about_new_question(new_question, db))
+            asyncio.create_task(
+                notify_pharmacists_about_new_question_in_background(
+                    new_question.uuid
+                )
+            )
         except Exception as e:
             logger.warning(
                 f"Failed to send Telegram notification for new question: {e}"
@@ -524,13 +530,19 @@ async def create_consultation(
             f"New consultation created by user {current_user.uuid}: {new_question.uuid}"
         )
 
-        # Уведомление фармацевтов о новом вопросе
+        # Уведомление фармацевтов о новом вопросе.
+        # ВАЖНО: собственная сессия в задаче (не request-сессия db) —
+        # иначе asyncpg InterfaceError: another operation is in progress.
         try:
             from bot.services.notification_service import (
-                notify_pharmacists_about_new_question,
+                notify_pharmacists_about_new_question_in_background,
             )
 
-            asyncio.create_task(notify_pharmacists_about_new_question(new_question, db))
+            asyncio.create_task(
+                notify_pharmacists_about_new_question_in_background(
+                    new_question.uuid
+                )
+            )
         except Exception as e:
             logger.warning(
                 f"Failed to send Telegram notification for consultation: {e}"
@@ -1043,13 +1055,19 @@ async def create_public_question(
             f"Public question created by anon user {user.uuid}: {new_question.uuid}"
         )
 
-        # Уведомление фармацевтов о новом вопросе
+        # Уведомление фармацевтов о новом вопросе.
+        # ВАЖНО: собственная сессия в задаче (не request-сессия db) —
+        # иначе asyncpg InterfaceError: another operation is in progress.
         try:
             from bot.services.notification_service import (
-                notify_pharmacists_about_new_question,
+                notify_pharmacists_about_new_question_in_background,
             )
 
-            asyncio.create_task(notify_pharmacists_about_new_question(new_question, db))
+            asyncio.create_task(
+                notify_pharmacists_about_new_question_in_background(
+                    new_question.uuid
+                )
+            )
         except Exception as e:
             logger.warning(
                 f"Failed to send Telegram notification for public question: {e}"

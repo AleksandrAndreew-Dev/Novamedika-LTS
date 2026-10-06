@@ -421,6 +421,22 @@ async def get_questions(
     )
 
 
+# ВАЖНО: маршрут MUST быть ЗАРЕГИСТРИРОВАН ДО /questions/{question_id},
+# иначе FastAPI матчит "unread-count" как question_id → 400 Invalid question ID
+# (см. логи 20261006: спам 400 каждые 15-30 сек).
+@router.get("/questions/unread-count")
+async def get_unread_count(
+    db: AsyncSession = Depends(get_db),
+    pharmacist: Pharmacist = Depends(get_current_pharmacist),
+):
+    """Get count of unread/new questions"""
+
+    result = await db.execute(select(func.count()).where(Question.status == "pending"))
+    count = result.scalar() or 0
+
+    return {"count": count}
+
+
 @router.get("/questions/{question_id}")
 async def get_question_by_id(
     question_id: str,
@@ -719,19 +735,6 @@ async def assign_question(
     await publish_to_redis(assign_data)
 
     return {"message": "Question assigned successfully"}
-
-
-@router.get("/questions/unread-count")
-async def get_unread_count(
-    db: AsyncSession = Depends(get_db),
-    pharmacist: Pharmacist = Depends(get_current_pharmacist),
-):
-    """Get count of unread/new questions"""
-
-    result = await db.execute(select(func.count()).where(Question.status == "pending"))
-    count = result.scalar() or 0
-
-    return {"count": count}
 
 
 @router.get("/consultations/stats", response_model=ConsultationStats)

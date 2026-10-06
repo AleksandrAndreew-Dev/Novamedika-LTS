@@ -22,12 +22,33 @@ from bot.handlers.common_handlers.keyboards import (
     get_pharmacist_inline_keyboard,
     get_pharmacist_inline_keyboard_with_token,
     get_user_inline_keyboard,
+    with_updated_footer,
 )
 from utils.time_utils import get_utc_now_naive
+from aiogram.exceptions import TelegramBadRequest
 
 logger = logging.getLogger(__name__)
 
 router = Router()
+
+
+async def safe_edit_menu_message(callback: CallbackQuery, text: str, **kwargs):
+    """Единое правило обновления меню: edit на месте + защита от
+    'message is not modified'. Возвращает True если отредактировано."""
+    if not callback.message:
+        await callback.bot.send_message(
+            chat_id=callback.from_user.id, text=text, **kwargs
+        )
+        return False
+    try:
+        await callback.message.edit_text(text, **kwargs)
+        return True
+    except TelegramBadRequest as e:
+        if "message is not modified" in str(e):
+            # Контент тот же — просто подтверждаем, что всё актуально
+            await callback.answer("✅ Уже актуально")
+            return False
+        raise
 
 
 @router.callback_query(F.data == "consent_privacy_policy")

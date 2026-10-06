@@ -157,16 +157,73 @@ def get_webapp_only_keyboard():
         keyboard=[
             [
                 KeyboardButton(
-                    text="\U0001f4ac Чат с фармацевтом",
+                    text="💬 Чат с фармацевтом",
                     web_app=WebAppInfo(url=f"{webapp_url}/dashboard"),
                 )
             ],
             [
                 KeyboardButton(
-                    text="\U0001f50d Поиск лекарств",
+                    text="🔍 Поиск лекарств",
                     web_app=WebAppInfo(url=webapp_url),
                 )
             ],
         ],
         resize_keyboard=True,
     )
+
+
+# ---------- Постоянные нижние клавиатуры ----------
+# Правило UX: меню должно быть видно ВСЕГДА (is_persistent=True),
+# чтобы пользователь не гадал «как вызвать меню».
+# Тексты кнопок 1:1 совпадают с ключами USER_BUTTONS / PHARMACIST_BUTTONS
+# в button_fallbacks.py — нажатие обрабатывается как текст-сообщение.
+
+
+def get_persistent_user_keyboard() -> ReplyKeyboardMarkup:
+    """Постоянная нижняя клавиатура обычного пользователя."""
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(text="❓ Задать вопрос"),
+                KeyboardButton(text="📋 Мои вопросы"),
+            ],
+            [
+                KeyboardButton(text="📜 История"),
+                KeyboardButton(text="❓ Помощь"),
+            ],
+        ],
+        resize_keyboard=True,
+        is_persistent=True,
+    )
+
+
+def get_persistent_pharmacist_keyboard() -> ReplyKeyboardMarkup:
+    """Постоянная нижняя клавиатура фармацевта."""
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(text="🟢 Онлайн"),
+                KeyboardButton(text="⚫ Офлайн"),
+            ],
+            [
+                KeyboardButton(text="📋 Вопросы"),
+                KeyboardButton(text="📊 Статистика"),
+            ],
+            [
+                KeyboardButton(text="📜 История"),
+                KeyboardButton(text="❓ Помощь"),
+            ],
+        ],
+        resize_keyboard=True,
+        is_persistent=True,
+    )
+
+
+def with_updated_footer(text: str) -> str:
+    """Добавляет метку времени обновления — пользователь видит,
+    что информация обновилась именно сейчас (а не старая)."""
+    from datetime import datetime, timezone, timedelta
+
+    # Минск (UTC+3) — основная аудитория бота
+    now = datetime.now(timezone.utc) + timedelta(hours=3)
+    return f"{text}\n\n🕒 <i>Обновлено: {now.strftime('%H:%M %d.%m')}</i>"

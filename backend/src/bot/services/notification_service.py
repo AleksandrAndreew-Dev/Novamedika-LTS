@@ -12,6 +12,30 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 logger = logging.getLogger(__name__)
 
 
+async def notify_pharmacists_about_new_question_in_background(question_uuid):
+    """Фоновая задача: уведомление фармацевтов с СОБСТВЕННОЙ сессией БД.
+
+    Нельзя передавать request-сессию в asyncio.create_task: запрос
+    завершается → сессия возвращается в пул → задача продолжает работать
+    на том же соединении → asyncpg InterfaceError: another operation is
+    in progress (см. логи 20261006, POST /api/consultations/).
+    """
+    from db.database import get_async_sessionmaker
+
+    session_maker = get_async_sessionmaker()
+    async with session_maker() as db:
+        result = await db.execute(
+            select(Question).where(Question.uuid == question_uuid)
+        )
+        question = result.scalar_one_or_none()
+        if question is None:
+            logger.warning(
+                f"Question {question_uuid} not found for notification"
+            )
+            return
+        await notify_pharmacists_about_new_question(question, db)
+
+
 async def notify_pharmacists_about_new_question(question, db: AsyncSession):
     """Уведомление фармацевтов о новом вопросе"""
     try:

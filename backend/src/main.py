@@ -67,14 +67,15 @@ ACTIVE_REQUESTS = Gauge("http_active_requests", "Number of active HTTP requests"
 
 async def set_bot_commands(bot: Bot):
     commands = [
-        BotCommand(command="/start", description="Главное меню"),
-        BotCommand(command="/ask", description="Задать вопрос"),
-        BotCommand(command="/my_questions", description="Мои вопросы"),
-        BotCommand(command="/help", description="Помощь"),
-        BotCommand(command="/online", description="Войти в онлайн (фармацевт)"),
-        BotCommand(command="/offline", description="Выйти из онлайн (фармацевт)"),
+        BotCommand(command="start", description="Главное меню"),
+        BotCommand(command="menu", description="Показать меню с кнопками"),
+        BotCommand(command="ask", description="Задать вопрос"),
+        BotCommand(command="my_questions", description="Мои вопросы"),
+        BotCommand(command="help", description="Помощь"),
+        BotCommand(command="online", description="Войти в онлайн (фармацевт)"),
+        BotCommand(command="offline", description="Выйти из онлайн (фармацевт)"),
         BotCommand(
-            command="/questions", description="Вопросы пользователей (фармацевт)"
+            command="questions", description="Вопросы пользователей (фармацевт)"
         ),
     ]
     await bot.set_my_commands(commands)

@@ -91,6 +91,9 @@ services:
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       # Admin API Keys для критичных операций
       - ADMIN_API_KEYS=${ADMIN_API_KEYS}
+      # Директория клиентских логов — должна совпадать с agent/diagnostics.sh
+      # (LOG_FILE=/opt/novamedika-prod/logs/client-errors.jsonl)
+      - CLIENT_LOG_DIR=/opt/novamedika-prod/logs
     healthcheck:
       test:
         [
@@ -120,6 +123,7 @@ services:
       - 'traefik.http.routers.backend-cities.middlewares=security-headers'
     volumes:
       - ./uploaded_csv:/app/uploaded_csv:rw
+      - /opt/novamedika-prod/logs:/opt/novamedika-prod/logs:rw
     networks:
       - traefik-public
     depends_on:

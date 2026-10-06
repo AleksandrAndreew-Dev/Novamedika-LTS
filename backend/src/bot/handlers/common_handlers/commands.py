@@ -23,6 +23,8 @@ from bot.handlers.common_handlers.keyboards import (
     get_pharmacist_inline_keyboard_with_token,
     get_user_inline_keyboard,
     get_webapp_only_keyboard,
+    get_persistent_user_keyboard,
+    get_persistent_pharmacist_keyboard,
 )
 from bot.handlers.direct_questions import try_create_question
 from utils.time_utils import get_utc_now_naive
@@ -175,15 +177,18 @@ async def cmd_start(
         status_text = "🟢 Онлайн" if pharmacist.is_online else "🔴 Офлайн"
         pharmacy_name = pharmacist.pharmacy_info.get("name", "Не указана")
 
-        # Сначала убираем устаревшую reply-клавиатуру (регистрация/старое меню),
-        # затем подвешиваем inline-кнопки к тому же сообщению
+        # Постоянная нижняя клавиатура — меню видно всегда, вызывать не надо.
+        # Затем inline-кнопки подвешиваем к сообщению-приветствию.
+        await message.answer(
+            "⌨️ Кнопки меню закреплены внизу экрана ⬇️",
+            reply_markup=get_persistent_pharmacist_keyboard(),
+        )
         welcome = await message.answer(
             f"👨‍⚕️ <b>Добро пожаловать, {pharmacist.pharmacy_info.get('first_name', 'Фармацевт')}!</b>\n\n"
             f"🏥 {pharmacy_name}\n"
             f"📊 Статус: {status_text}\n\n"
             "Выберите действие:",
             parse_mode="HTML",
-            reply_markup=ReplyKeyboardRemove(),
         )
         try:
             await welcome.edit_reply_markup(reply_markup=keyboard)
@@ -191,7 +196,12 @@ async def cmd_start(
             logger.warning(f"Failed to attach inline keyboard to /start: {e}")
             await message.answer("⌨️ Меню:", reply_markup=keyboard)
     else:
-        # Обычный пользователь с данным согласием
+        # Обычный пользователь с данным согласием.
+        # Постоянная нижняя клавиатура — меню видно всегда.
+        await message.answer(
+            "⌨️ Кнопки меню закреплены внизу экрана ⬇️",
+            reply_markup=get_persistent_user_keyboard(),
+        )
         await message.answer(
             "👋 <b>Добро пожаловать в NovoMedika!</b>\n\n"
             "💊 Я помогу вам найти лекарства и ответить на вопросы.\n\n"
@@ -199,6 +209,55 @@ async def cmd_start(
             "• Написать вопрос фармацевту прямо в чат\n"
             "• Использовать кнопки ниже для быстрого доступа\n\n"
             "Для справки используйте /help",
+            parse_mode="HTML",
+            reply_markup=get_user_inline_keyboard(),
+        )
+
+
+@router.message(Command("menu"))
+async def cmd_menu(
+    message: Message,
+    state: FSMContext,
+    db: AsyncSession | None = None,
+    user: User | None = None,
+    is_pharmacist: bool | None = None,
+    pharmacist: Pharmacist | None = None,
+):
+    """Показать меню с кнопками заново (если пользователь его потерял).
+
+    Правило UX: любое меню вызывается одной командой /menu —
+    пользователь не должен гадать, как вернуть кнопки.
+    """
+    if not db or not user or is_pharmacist is None:
+        logger.error("Missing required dependencies in cmd_menu")
+        await message.answer("❌ Ошибка сервера")
+        return
+
+    await state.clear()
+
+    if is_pharmacist and pharmacist:
+        keyboard = get_pharmacist_inline_keyboard_with_token(
+            telegram_id=int(user.telegram_id), pharmacist_uuid=str(pharmacist.uuid)
+        )
+        status_text = "🟢 Онлайн" if pharmacist.is_online else "🔴 Офлайн"
+        await message.answer(
+            "⌨️ Кнопки меню закреплены внизу экрана ⬇️",
+            reply_markup=get_persistent_pharmacist_keyboard(),
+        )
+        await message.answer(
+            f"👨‍⚕️ <b>Панель фармацевта</b>\n\n📊 Статус: {status_text}\n\n"
+            "Выберите действие:",
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
+    else:
+        await message.answer(
+            "⌨️ Кнопки меню закреплены внизу экрана ⬇️",
+            reply_markup=get_persistent_user_keyboard(),
+        )
+        await message.answer(
+            "👋 <b>Главное меню</b>\n\n"
+            "Напишите ваш вопрос фармацевту в чат или выберите действие:",
             parse_mode="HTML",
             reply_markup=get_user_inline_keyboard(),
         )
