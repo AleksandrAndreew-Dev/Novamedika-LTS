@@ -79,7 +79,7 @@ async def send_answer_to_user(question, answer_text: str, pharmacist, db: AsyncS
 
         # ✅ Получаем полную историю диалога
         history_text, file_ids = await DialogService.format_dialog_history_for_display(
-            question.uuid, db
+            question.uuid, db, include_header=False
         )
 
         # Формируем информацию о фармацевте

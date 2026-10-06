@@ -25,6 +25,7 @@ from auth.auth import (
 )
 from auth.security import get_api_key
 from services.user_service import get_or_create_user
+from utils.time_utils import get_utc_now_naive
 import logging
 from sqlalchemy.orm import selectinload  # ДОБАВИТЬ
 
@@ -265,6 +266,12 @@ async def answer_question(
         if not question:
             raise HTTPException(status_code=404, detail="Question not found")
 
+        # Диалог завершён — отвечать нельзя (единое правило с ботом и dashboard)
+        if question.status == "completed":
+            raise HTTPException(
+                status_code=400, detail="Cannot answer to completed question"
+            )
+
         # Создаем ответ
         new_answer = Answer(
             uuid=uuid.uuid4(),
@@ -273,9 +280,10 @@ async def answer_question(
             text=answer.text,
         )
 
-        # Обновляем статус вопроса
+        # Обновляем статус вопроса (единые поля status/answered_by/answered_at)
         question.status = "answered"
         question.answered_by = pharmacist.uuid
+        question.answered_at = get_utc_now_naive()
 
         db.add(new_answer)
         await db.commit()
@@ -283,6 +291,9 @@ async def answer_question(
 
         return AnswerResponse.model_validate(new_answer)
 
+    except HTTPException:
+        # Не оборачиваем HTTP-ошибки (404/400) в 500
+        raise
     except Exception as e:
         await db.rollback()
         raise HTTPException(

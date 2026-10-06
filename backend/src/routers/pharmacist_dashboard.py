@@ -512,8 +512,11 @@ async def answer_question(
 
     db.add(new_message)
 
-    # Update question status
+    # Update question status (единые поля status/answered_by/answered_at,
+    # как в боте и в REST /api/qa/questions/{id}/answer)
     question.status = "answered"
+    question.answered_by = pharmacist.uuid
+    question.answered_at = get_utc_now_naive()
 
     await db.commit()
     await db.refresh(new_message)

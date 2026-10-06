@@ -10,6 +10,7 @@ import websocketService from '../../services/websocketService';
 const filterLabels = {
   all: 'Все',
   new: 'Новые',
+  answered: 'Отвеченные',
   in_progress: 'В работе',
   completed: 'Завершенные',
 };
@@ -195,21 +196,30 @@ export default function QuestionsList({
   }, [loadQuestions]);
 
   const getStatusBadge = (status) => {
+    // Единый map статусов (как в ConsultationChat)
     const badges = {
+      pending: {
+        text: 'Ожидает ответа',
+        color: 'bg-yellow-100 text-yellow-800',
+      },
       new: {
-        text: 'Новый',
-        color: 'bg-blue-100 text-blue-800',
+        text: 'Ожидает ответа',
+        color: 'bg-yellow-100 text-yellow-800',
       },
       in_progress: {
         text: 'В работе',
-        color: 'bg-yellow-100 text-yellow-800',
+        color: 'bg-blue-100 text-blue-800',
+      },
+      answered: {
+        text: 'Есть ответ',
+        color: 'bg-green-100 text-green-800',
       },
       completed: {
         text: 'Завершен',
-        color: 'bg-green-100 text-green-800',
+        color: 'bg-gray-100 text-gray-800',
       },
     };
-    const badge = badges[status] || badges.new;
+    const badge = badges[status] || badges.pending;
     return (
       <span
         className={`px-2 py-1 rounded-full text-xs font-medium ${badge.color}`}
@@ -387,6 +397,13 @@ export default function QuestionsList({
             const questionId = question.uuid || question.id;
             const isSelected =
               questionId === selectedQuestionId;
+            // Заголовок показываем только если он реально отличается
+            // от текста вопроса (иначе текст дублировался в карточке)
+            const hasSeparateTitle =
+              Boolean(question.title) &&
+              question.title !== question.text;
+            const bodyText =
+              question.question || question.text || 'Без названия';
 
             return (
               <button
@@ -403,13 +420,19 @@ export default function QuestionsList({
               >
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900 truncate">
-                      {question.title ||
-                        question.text ||
-                        'Без названия'}
-                    </h3>
-                    <p className="mt-2 text-gray-600 text-sm line-clamp-2">
-                      {question.question || question.text}
+                    {hasSeparateTitle && (
+                      <h3 className="text-lg font-semibold text-gray-900 truncate">
+                        {question.title}
+                      </h3>
+                    )}
+                    <p
+                      className={`line-clamp-2 ${
+                        hasSeparateTitle
+                          ? 'mt-2 text-gray-600 text-sm'
+                          : 'text-lg font-semibold text-gray-900'
+                      }`}
+                    >
+                      {bodyText}
                     </p>
                     <div className="mt-4 flex flex-wrap gap-2 text-sm text-gray-500">
                       <span>

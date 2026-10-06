@@ -3,7 +3,12 @@
 import logging
 
 from aiogram import F, Router
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    ReplyKeyboardRemove,
+)
 from aiogram.fsm.context import FSMContext
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -332,7 +337,7 @@ async def answer_question_callback(
     is_pharmacist: bool,
     pharmacist: Pharmacist,
 ):
-    """Обработка нажатия на кнопку ответа на вопрос С ПРОВЕРКОЙ ЗАВЕРШЕНИЯ"""
+    """Нажатие «Ответить»: назначение, защита от дублей, переключение"""
     question_uuid = callback.data.replace("answer_", "")
 
     if not is_pharmacist or not pharmacist:
@@ -362,16 +367,32 @@ async def answer_question_callback(
             )
             return
 
+        # --- Защита от повторных нажатий и явное переключение диалогов ---
+        current_state = await state.get_state()
+        state_data = await state.get_data()
+        active_uuid = state_data.get("question_uuid")
+        dialog_is_open = (
+            current_state in (
+                QAStates.waiting_for_answer.state,
+                QAStates.in_dialog_with_user.state,
+            )
+            and active_uuid is not None
+        )
+
+        if dialog_is_open and active_uuid == question_uuid:
+            # Тот же вопрос — FSM уже настроен, новое сообщение не нужно
+            await callback.answer("✅ Диалог уже открыт — просто напишите сообщение")
+            return
+
+        switched_from_uuid = active_uuid if dialog_is_open else None
+
+        # --- Назначение ДО установки FSM-состояния ---
         if question.status == "pending" or question.taken_by != pharmacist.uuid:
             assignment_success = (
                 await QuestionAssignmentService.assign_question_to_pharmacist(
                     question_uuid, str(pharmacist.uuid), db
                 )
             )
-            await state.update_data(
-                question_uuid=question_uuid, dialog_partner_id=str(pharmacist.uuid)
-            )
-            await state.set_state(QAStates.in_dialog_with_user)
 
             if not assignment_success:
                 await callback.answer(
@@ -384,21 +405,54 @@ async def answer_question_callback(
             question.status = "in_progress"
             await db.commit()
 
-        await state.update_data(question_uuid=question_uuid)
+        await state.update_data(
+            question_uuid=question_uuid, dialog_partner_id=str(pharmacist.uuid)
+        )
         await state.set_state(QAStates.waiting_for_answer)
 
         question_preview = (
             question.text[:300] + "..." if len(question.text) > 300 else question.text
         )
 
-        await callback.message.answer(
+        # Явное уведомление о переключении с вопроса A на вопрос B
+        if switched_from_uuid and switched_from_uuid != question_uuid:
+            prev_result = await db.execute(
+                select(Question).where(Question.uuid == switched_from_uuid)
+            )
+            prev_question = prev_result.scalar_one_or_none()
+            if prev_question:
+                prev_preview = (
+                    prev_question.text[:100] + "..."
+                    if len(prev_question.text) > 100
+                    else prev_question.text
+                )
+                await callback.message.answer(
+                    f"🔀 <b>Переключение диалога</b>\n\n"
+                    f"Закрыт: {prev_preview}\n\n"
+                    f"Открыт: {question_preview}",
+                    parse_mode="HTML",
+                )
+
+        # Приглашение: сначала убираем устаревшую reply-клавиатуру
+        # (регистрационные кнопки), затем подвешиваем inline-кнопки
+        invitation = await callback.message.answer(
             f"💬 <b>Вы в диалоге с пользователем</b>\n\n"
             f"❓ Вопрос: {question_preview}\n\n"
             f"Напишите ваш ответ или уточняющий вопрос:\n"
             f"(или нажмите кнопки ниже для других действий)",
             parse_mode="HTML",
-            reply_markup=make_pharmacist_dialog_keyboard(question_uuid),
+            reply_markup=ReplyKeyboardRemove(),
         )
+        try:
+            await invitation.edit_reply_markup(
+                reply_markup=make_pharmacist_dialog_keyboard(question_uuid)
+            )
+        except Exception as kb_err:
+            logger.warning(f"Failed to attach dialog keyboard: {kb_err}")
+            await callback.message.answer(
+                "⚙️ Кнопки диалога:",
+                reply_markup=make_pharmacist_dialog_keyboard(question_uuid),
+            )
         await callback.answer()
 
     except Exception as e:
@@ -462,6 +516,7 @@ async def answer_clarification_callback(
             f"✍️ <b>Напишите ваш ответ на уточнение ниже:</b>\n"
             f"(или /cancel для отмены)",
             parse_mode="HTML",
+            reply_markup=ReplyKeyboardRemove(),
         )
         await callback.answer()
 

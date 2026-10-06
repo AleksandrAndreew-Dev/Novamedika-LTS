@@ -175,14 +175,21 @@ async def cmd_start(
         status_text = "🟢 Онлайн" if pharmacist.is_online else "🔴 Офлайн"
         pharmacy_name = pharmacist.pharmacy_info.get("name", "Не указана")
 
-        await message.answer(
+        # Сначала убираем устаревшую reply-клавиатуру (регистрация/старое меню),
+        # затем подвешиваем inline-кнопки к тому же сообщению
+        welcome = await message.answer(
             f"👨‍⚕️ <b>Добро пожаловать, {pharmacist.pharmacy_info.get('first_name', 'Фармацевт')}!</b>\n\n"
             f"🏥 {pharmacy_name}\n"
             f"📊 Статус: {status_text}\n\n"
             "Выберите действие:",
             parse_mode="HTML",
-            reply_markup=keyboard,
+            reply_markup=ReplyKeyboardRemove(),
         )
+        try:
+            await welcome.edit_reply_markup(reply_markup=keyboard)
+        except Exception as e:
+            logger.warning(f"Failed to attach inline keyboard to /start: {e}")
+            await message.answer("⌨️ Меню:", reply_markup=keyboard)
     else:
         # Обычный пользователь с данным согласием
         await message.answer(

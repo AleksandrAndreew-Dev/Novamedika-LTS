@@ -27,18 +27,25 @@ def is_not_command(text: str | None) -> bool:
     return not text.startswith("/")
 
 
-@router.message(QAStates.in_dialog_with_user, F.text)
-async def handle_pharmacist_text_in_dialog(
+async def _process_pharmacist_answer(
     message: Message,
     state: FSMContext,
     db: AsyncSession,
     is_pharmacist: bool,
     pharmacist: Pharmacist,
-):
-    """Обработка текстовых сообщений фармацевта в диалоге"""
+) -> None:
+    """Единая обработка текстового ответа фармацевта.
+
+    Общий код для обоих FSM-состояний (waiting_for_answer и
+    in_dialog_with_user): раньше обработчики расходились, из-за чего
+    при переключении вопросов стороны получали разные по формату
+    сообщения и дубли истории.
+    """
     # Игнорируем команды в состоянии диалога
     if not is_not_command(message.text):
         return
+
+    logger.info(f"Processing answer from pharmacist {message.from_user.id}")
 
     if not is_pharmacist or not pharmacist:
         await message.answer("❌ Эта функция доступна только фармацевтам")
@@ -203,11 +210,23 @@ async def handle_pharmacist_text_in_dialog(
 
     except Exception as e:
         logger.error(
-            f"Error in handle_pharmacist_text_in_dialog for pharmacist {message.from_user.id}: {e}",
+            f"Error in _process_pharmacist_answer for pharmacist {message.from_user.id}: {e}",
             exc_info=True,
         )
         await message.answer("❌ Ошибка при отправке сообщения")
         await state.clear()
+
+
+@router.message(QAStates.in_dialog_with_user, F.text)
+async def handle_pharmacist_text_in_dialog(
+    message: Message,
+    state: FSMContext,
+    db: AsyncSession,
+    is_pharmacist: bool,
+    pharmacist: Pharmacist,
+):
+    """Обработка текстовых сообщений фармацевта в активном диалоге"""
+    await _process_pharmacist_answer(message, state, db, is_pharmacist, pharmacist)
 
 
 @router.message(QAStates.waiting_for_answer, F.text)
@@ -218,183 +237,7 @@ async def process_answer_text(
     is_pharmacist: bool,
     pharmacist: Pharmacist,
 ):
-    """Обработка сообщения от фармацевта (ответ или уточнение)"""
-    # Игнорируем команды в состоянии ожидания ответа
-    if not is_not_command(message.text):
-        return
+    """Первый ответ фармацевта — обрабатывается единым обработчиком диалога"""
+    await _process_pharmacist_answer(message, state, db, is_pharmacist, pharmacist)
 
-    logger.info(f"Processing message from pharmacist {message.from_user.id}")
 
-    if not is_pharmacist or not pharmacist:
-        await message.answer("❌ Эта функция доступна только фармацевтам")
-        await state.clear()
-        return
-
-    try:
-        state_data = await state.get_data()
-        question_uuid = state_data.get("question_uuid")
-
-        if not question_uuid:
-            await message.answer("❌ Не удалось найти вопрос для ответа")
-            await state.clear()
-            return
-
-        result = await db.execute(
-            select(Question).where(Question.uuid == question_uuid)
-        )
-        question = result.scalar_one_or_none()
-
-        if not question:
-            await message.answer("❌ Вопрос не найден")
-            await state.clear()
-            return
-
-        if question.status == "completed":
-            await message.answer("✅ Этот диалог уже завершен", show_alert=True)
-            await state.clear()
-            return
-
-        if not pharmacist.is_online:
-            pharmacist.is_online = True
-            pharmacist.last_seen = get_utc_now_naive()
-            await db.commit()
-
-        # Обновляем статус вопроса (Answer не создаём - DialogMessage достаточно)
-        if question.status != "completed":
-            question.status = "answered"
-        question.answered_at = get_utc_now_naive()
-        question.answered_by = pharmacist.uuid
-
-        new_message = await DialogService.add_message(
-            db=db,
-            question_id=question.uuid,
-            sender_type="pharmacist",
-            sender_id=pharmacist.uuid,
-            message_type="answer",
-            text=message.text,
-        )
-        await db.commit()
-
-        # WebSocket broadcast to pharmacist dashboard
-        try:
-            from routers.pharmacist_dashboard import (
-                ws_manager,
-                publish_to_redis,
-                create_message_data,
-            )
-
-            message_data = create_message_data(new_message)
-            ws_msg_data = {
-                "question_id": str(question.uuid),
-                "message_data": message_data,
-            }
-            await ws_manager.broadcast_message_update(**ws_msg_data)
-            await publish_to_redis({"type": "message_update", **ws_msg_data})
-            logger.info(
-                f"WebSocket broadcast sent for Telegram answer to {question.uuid}"
-            )
-        except Exception as ws_err:
-            logger.error(f"WebSocket broadcast failed for Telegram answer: {ws_err}", exc_info=True)
-
-        user_result = await db.execute(
-            select(User).where(User.uuid == question.user_id)
-        )
-        user = user_result.scalar_one_or_none()
-
-        if user and user.telegram_id:
-            try:
-                pharmacy_info = pharmacist.pharmacy_info or {}
-                chain = pharmacy_info.get("chain", "Не указана")
-                number = pharmacy_info.get("number", "Не указан")
-                role = pharmacy_info.get("role", "Фармацевт")
-
-                first_name = pharmacy_info.get("first_name", "")
-                last_name = pharmacy_info.get("last_name", "")
-                patronymic = pharmacy_info.get("patronymic", "")
-
-                pharmacist_name_parts = []
-                if last_name:
-                    pharmacist_name_parts.append(last_name)
-                if first_name:
-                    pharmacist_name_parts.append(first_name)
-                if patronymic:
-                    pharmacist_name_parts.append(patronymic)
-
-                pharmacist_name = (
-                    " ".join(pharmacist_name_parts)
-                    if pharmacist_name_parts
-                    else "Фармацевт"
-                )
-                pharmacist_info_text = f"{pharmacist_name}"
-
-                if chain and number:
-                    pharmacist_info_text += f", {chain}, аптека №{number}"
-                if role and role != "Фармацевт":
-                    pharmacist_info_text += f" ({role})"
-
-                user_dialog_keyboard = InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [
-                            InlineKeyboardButton(
-                                text="✍️ Ответить фармацевту",
-                                callback_data=f"continue_user_dialog_{question.uuid}",
-                            ),
-                            InlineKeyboardButton(
-                                text="📸 Отправить фото",
-                                callback_data=f"send_prescription_photo_{question.uuid}",
-                            ),
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                text="✅ Завершить консультацию",
-                                callback_data=f"end_dialog_{question.uuid}",
-                            )
-                        ],
-                    ]
-                )
-
-                await DialogService.send_unified_dialog_history(
-                    bot=message.bot,
-                    chat_id=user.telegram_id,
-                    question_uuid=question.uuid,
-                    db=db,
-                    title="ОТВЕТ ФАРМАЦЕВТА",
-                    pre_text="💬 <b>ОТВЕТ ФАРМАЦЕВТА</b>\n\n",
-                    post_text=f"\n\n👨‍⚕️ <b>Фармацевт:</b> {pharmacist_info_text}",
-                    is_pharmacist=False,
-                    show_buttons=True,
-                    custom_buttons=user_dialog_keyboard.inline_keyboard,
-                )
-
-                logger.info(f"Full history sent to user {user.telegram_id}")
-
-            except Exception as e:
-                logger.error(
-                    f"Failed to send history to user {user.telegram_id}: {e}",
-                    exc_info=True,
-                )
-
-        await DialogService.send_unified_dialog_history(
-            bot=message.bot,
-            chat_id=message.chat.id,
-            question_uuid=question.uuid,
-            db=db,
-            title="ВЫ ОТПРАВИЛИ ОТВЕТ",
-            pre_text="💬 <b>ВЫ ОТПРАВИЛИ ОТВЕТ</b>\n\n",
-            post_text="\n\n<b>Доступные действия:</b>",
-            is_pharmacist=True,
-            show_buttons=True,
-            custom_buttons=make_pharmacist_dialog_keyboard(
-                question.uuid
-            ).inline_keyboard,
-        )
-
-        await state.set_state(QAStates.in_dialog_with_user)
-
-    except Exception as e:
-        logger.error(
-            f"Error in process_answer_text for pharmacist {message.from_user.id}: {e}",
-            exc_info=True,
-        )
-        await message.answer("❌ Ошибка при отправке сообщения")
-        await state.clear()

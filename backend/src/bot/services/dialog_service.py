@@ -136,7 +136,10 @@ class DialogService:
 
     @staticmethod
     async def format_dialog_history_for_display(
-        question_id: UUID, db: AsyncSession, limit: int = 20
+        question_id: UUID,
+        db: AsyncSession,
+        limit: int = 20,
+        include_header: bool = True,
     ) -> Tuple[str, List[str]]:
         """Форматировать историю диалога для отображения - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
         try:
@@ -208,8 +211,12 @@ class DialogService:
                 )
                 formatted_messages.append(formatted_msg)
 
-            # Собираем полную историю (новые сообщения внизу)
-            history_text = "📋 <b>ПОЛНАЯ ИСТОРИЯ ДИАЛОГА</b>\n\n"
+            # Собираем полную историю (новые сообщения внизу).
+            # Заголовок добавляем только при include_header=True —
+            # иначе он дублируется с заголовком вызывающего кода.
+            history_text = (
+                "📋 <b>ПОЛНАЯ ИСТОРИЯ ДИАЛОГА</b>\n\n" if include_header else ""
+            )
 
             # Добавляем все отформатированные сообщения
             for formatted_msg in formatted_messages:
@@ -225,9 +232,9 @@ class DialogService:
 
         except Exception as e:
             logger.error(f"Error formatting dialog history: {e}", exc_info=True)
+            header = "📋 <b>ИСТОРИЯ ДИАЛОГА</b>\n\n" if include_header else ""
             return (
-                "📋 <b>ИСТОРИЯ ДИАЛОГА</b>\n\n"
-                "❌ Не удалось загрузить историю диалога.\n\n"
+                f"{header}❌ Не удалось загрузить историю диалога.\n\n"
                 "━" * 30,
                 [],
             )
@@ -247,19 +254,21 @@ class DialogService:
     ) -> str:
         """Универсальная функция отправки полной истории диалога - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
         try:
-            # Получаем полную историю диалога
+            # Получаем полную историю диалога БЕЗ встроенного заголовка —
+            # единственный заголовок задаётся ниже (pre_text или title),
+            # иначе заголовки дублировались
             history_text, file_ids = (
                 await DialogService.format_dialog_history_for_display(
-                    question_uuid, db, limit=20
+                    question_uuid, db, limit=20, include_header=False
                 )
             )
 
-            # Формируем сообщение
+            # Формируем сообщение (ровно один заголовок)
             message_parts = []
-            if pre_text:
-                message_parts.append(pre_text)
+            message_parts.append(pre_text or f"📋 <b>{title}</b>")
 
-            message_parts.append(f"📋 <b>{title}</b>\n\n{history_text}")
+            if history_text:
+                message_parts.append(history_text)
 
             if post_text:
                 message_parts.append(post_text)

@@ -273,17 +273,22 @@ export default function ConsultationChat({
 
   const getStatusBadge = () => {
     if (!question) return null;
+    // Единый map статусов (как в QuestionsList)
     const badges = {
       pending: {
-        text: 'В ожидании',
+        text: 'Ожидает ответа',
+        class: 'bg-yellow-100 text-yellow-700',
+      },
+      new: {
+        text: 'Ожидает ответа',
         class: 'bg-yellow-100 text-yellow-700',
       },
       answered: {
-        text: 'Отвечено',
+        text: 'Есть ответ',
         class: 'bg-green-100 text-green-700',
       },
       completed: {
-        text: 'Завершено',
+        text: 'Завершен',
         class: 'bg-gray-100 text-gray-500',
       },
       in_progress: {
@@ -450,13 +455,7 @@ export default function ConsultationChat({
             {getUserName()}
           </div>
           <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-[11px] text-gray-400">
-              {question?.status === 'pending'
-                ? 'ожидает ответа'
-                : question?.status === 'answered'
-                  ? 'есть ответ'
-                  : question?.status}
-            </span>
+            {/* Сырой статус убран — дублировал бейдж статуса */}
             {getStatusBadge()}
           </div>
         </div>
