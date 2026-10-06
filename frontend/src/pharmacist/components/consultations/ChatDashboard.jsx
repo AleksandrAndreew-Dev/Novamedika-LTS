@@ -129,16 +129,22 @@ export default function ChatDashboard({
     }
   }, []);
 
-  // Мгновенный инкремент от WS (не ждём poll)
-  const bumpTabCount = useCallback((key) => {
-    setTabCounts((prev) => ({
-      ...prev,
-      [key]: (prev[key] || 0) + 1,
-    }));
-    if (key === 'new') {
-      setPendingCount((prev) => (prev || 0) + 1);
+  // Мгновенный инкремент от WS убран: он расходился с poll 15с
+  // (WS накинул +1, poll перезатёр старым) — отсюда мигание цифр.
+  // Единственный источник правды — сервер; после WS-события делаем
+  // дебаунснутый рефетч счётчиков + списка.
+  const countsRefreshTimerRef = useRef(null);
+  const scheduleCountsRefresh = useCallback(() => {
+    if (countsRefreshTimerRef.current) {
+      clearTimeout(countsRefreshTimerRef.current);
     }
-  }, []);
+    countsRefreshTimerRef.current = setTimeout(() => {
+      fetchPendingCount({ silent: true });
+      fetchTabCounts({ silent: true });
+      // Список обновляет своя WS-подписка в QuestionsList — здесь ключ
+      // не трогаем, иначе двойной fetch и мигание списка.
+    }, 800);
+  }, [fetchPendingCount, fetchTabCounts]);
 
   const fetchTabCounts = useCallback(async (opts = {}) => {
     const silent = opts.silent === true;
@@ -291,7 +297,7 @@ export default function ChatDashboard({
     const unsubscribeNew = websocketService.on(
       'new_question',
       () => {
-        bumpTabCount('new');
+        scheduleCountsRefresh();
         triggerHaptic('new');
         flashFilterTab('new', 'Новый вопрос — показать');
       },
@@ -300,7 +306,7 @@ export default function ChatDashboard({
       'message_update',
       () => {
         // Продолжение диалога = «В работе»
-        bumpTabCount('in_progress');
+        scheduleCountsRefresh();
         triggerHaptic('reply');
         flashFilterTab(
           'in_progress',
@@ -310,13 +316,16 @@ export default function ChatDashboard({
     );
     return () => {
       clearTimeout(t);
+      if (countsRefreshTimerRef.current) {
+        clearTimeout(countsRefreshTimerRef.current);
+      }
       unsubscribeNew();
       unsubscribeUpdate();
     };
   }, [
     fetchPendingCount,
     fetchTabCounts,
-    bumpTabCount,
+    scheduleCountsRefresh,
     triggerHaptic,
     flashFilterTab,
   ]);
@@ -463,8 +472,12 @@ export default function ChatDashboard({
                 </button>
               </div>
 
-              {/* Questions tab */}
-              {activeTab === 'questions' && (
+              {/* Questions tab — скрываем через CSS, а не размонтируем:
+                  иначе каждый переход на «Статистику» убивал список/таймеры
+                  и при возврате шёл полный рефетч с миганием */}
+              <div
+                className={activeTab === 'questions' ? 'contents' : 'hidden'}
+              >
                 <>
                   <div className="p-3 border-b border-gray-200">
                     <div className="flex gap-1 overflow-x-auto">
@@ -540,14 +553,14 @@ export default function ChatDashboard({
                     />
                   </div>
                 </>
-              )}
+              </div>
 
-              {/* Stats tab */}
-              {activeTab === 'stats' && (
-                <div className="flex-1 overflow-y-auto p-4">
-                  <DashboardStats compact />
-                </div>
-              )}
+              {/* Stats tab — тоже не размонтируем, чтобы не дёргать API при каждом клике */}
+              <div
+                className={activeTab === 'stats' ? 'flex-1 overflow-y-auto p-4' : 'hidden'}
+              >
+                {activeTab === 'stats' && <DashboardStats compact />}
+              </div>
             </>
           )}
         </div>

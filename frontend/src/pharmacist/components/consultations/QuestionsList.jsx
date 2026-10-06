@@ -47,6 +47,7 @@ export default function QuestionsList({
   const requestIdRef = useRef(0);
   const questionsRef = useRef([]);
   const filterRef = useRef(filter);
+  const loadQuestionsRef = useRef(null);
   const loadThrottleMs = 2000;
 
   useEffect(() => {
@@ -149,6 +150,10 @@ export default function QuestionsList({
     },
     [filter, searchQuery, debugLog],
   );
+
+  useEffect(() => {
+    loadQuestionsRef.current = loadQuestions;
+  }, [loadQuestions]);
 
   const extractQuestionId = (payload) => {
     if (!payload || typeof payload !== 'object')
@@ -307,15 +312,16 @@ export default function QuestionsList({
   }, [loadQuestions, filter, searchQuery, refreshKey]);
 
   // Фоновый поллинг каждые 30с (без мигания — тихий рефетч).
-  // Первичную загрузку делает эффект выше; здесь только интервал,
-  // иначе при монтировании уходят 2 параллельных запроса и побеждает
-  // устаревший ответ (пустой список).
+  // Первичную загрузку делает эффект выше; здесь только интервал.
+  // Интервал НЕ зависит от loadQuestions (иначе при каждой смене фильтра
+  // таймер пересоздавался и сдвигался — отсюда «непредсказуемые» обновления).
   useEffect(() => {
     const interval = setInterval(() => {
-      loadQuestions({ force: true });
+      lastLoadRef.current = 0;
+      loadQuestionsRef.current({ force: true });
     }, 30000);
     return () => clearInterval(interval);
-  }, [loadQuestions]);
+  }, []);
 
   const getStatusBadge = (status) => {
     // Единый map статусов (как в ConsultationChat)

@@ -95,13 +95,17 @@ class WebSocketService {
   }
 
   /**
-   * Connect to WebSocket server
+   * Connect to WebSocket server (idempotent — no duplicate sockets)
    */
   connect() {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      logger.info('WebSocket already connected');
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
+    // Close stale socket before creating a new one (avoid leaked sockets
+    // that keep firing onmessage after this.ws is overwritten)
+    try {
+      if (this.ws) this.ws.onclose = null, this.ws.onerror = null, this.ws.onmessage = null, this.ws.onopen = null;
+    } catch (_) { /* ignore */ }
 
     try {
       // Build URL with latest token each connect attempt
