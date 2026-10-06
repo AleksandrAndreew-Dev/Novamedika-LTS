@@ -16,6 +16,8 @@ elephant.md
 .clineignore
 .ai-rules.md
 
+deepseek/
+
 # Windows reserved filenames
 nul
 con
