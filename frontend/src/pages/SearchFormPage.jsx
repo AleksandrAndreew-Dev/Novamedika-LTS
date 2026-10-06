@@ -17,6 +17,7 @@ import SearchBar from '../components/SearchBar';
 import Footer from '../components/Footer';
 import { api } from '../api/client';
 import { logger } from '../utils/logger';
+import { saveSearchContext } from '../utils/searchContext';
 import { useTelegramWebApp } from '../telegram/TelegramContext';
 
 const DEFAULT_CITIES = [
@@ -136,15 +137,20 @@ export default function SearchFormPage() {
       });
 
       const responseData = response.data || {};
+      const nextSearchData = { name, city: city || '' };
+      const nextSearchContext = {
+        availableCombinations:
+          responseData.available_combinations || [],
+        totalFound: responseData.total_found || 0,
+      };
+
+      // Persist context so back-navigation / refresh keep combinations
+      saveSearchContext(nextSearchData, nextSearchContext);
 
       navigate('/search/form-selection', {
         state: {
-          searchData: { name, city: city || '' },
-          searchContext: {
-            availableCombinations:
-              responseData.available_combinations || [],
-            totalFound: responseData.total_found || 0,
-          },
+          searchData: nextSearchData,
+          searchContext: nextSearchContext,
         },
       });
     } catch (error) {

@@ -1,5 +1,6 @@
 import React, {
   useState,
+  useMemo,
   useCallback,
   useRef,
   useEffect,
@@ -9,6 +10,10 @@ import FormSelection from '../components/FormSelection';
 import Footer from '../components/Footer';
 import { api } from '../api/client';
 import { logger } from '../utils/logger';
+import {
+  loadSearchContext,
+  saveSearchContext,
+} from '../utils/searchContext';
 import { useTelegramWebApp } from '../telegram/TelegramContext';
 
 export default function FormSelectionPage() {
@@ -20,15 +25,34 @@ export default function FormSelectionPage() {
   const abortRef = useRef(null);
   const { tg, isTelegram } = useTelegramWebApp();
 
-  // Get search data from location state
-  const searchData = location.state?.searchData || {
-    name: '',
-    city: '',
-  };
-  const searchContext = location.state?.searchContext || {
-    availableCombinations: [],
-    totalFound: 0,
-  };
+  // Router state first, sessionStorage fallback
+  // (heals browser refresh and back-navigation from results)
+  const storedContext = useMemo(() => loadSearchContext(), []);
+
+  const hasSearchContext = Boolean(
+    location.state?.searchData || storedContext?.searchData,
+  );
+
+  const searchData =
+    location.state?.searchData ||
+    storedContext?.searchData || {
+      name: '',
+      city: '',
+    };
+  const searchContext =
+    location.state?.searchContext ||
+    storedContext?.searchContext || {
+      availableCombinations: [],
+      totalFound: 0,
+    };
+
+  // Without any context there is nothing to render: redirect to
+  // the search form instead of a fake "nothing found" page
+  useEffect(() => {
+    if (!hasSearchContext) {
+      navigate('/search', { replace: true });
+    }
+  }, [hasSearchContext, navigate]);
 
   // Handle Telegram back button
   const onTgBack = useCallback(() => {
@@ -44,6 +68,9 @@ export default function FormSelectionPage() {
       tg.BackButton.offClick(onTgBack);
     };
   }, [isTelegram, tg, onTgBack]);
+
+  // Context is missing entirely -> redirect effect above handles it
+  if (!hasSearchContext) return null;
 
   const handleFormSelect = async (
     name,
@@ -82,10 +109,14 @@ export default function FormSelectionPage() {
         country,
       };
 
+      // Keep storage in sync so refresh/back keeps the chosen form
+      saveSearchContext(updatedSearchData, searchContext);
+
       // Navigate to results page with search data and results
       navigate('/search/results', {
         state: {
           searchData: updatedSearchData,
+          searchContext,
           results: response.data.items || [],
           pagination: {
             page: response.data.page || 1,

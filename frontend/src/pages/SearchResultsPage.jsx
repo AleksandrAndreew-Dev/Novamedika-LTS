@@ -10,6 +10,7 @@ import SearchResults from '../components/SearchResults';
 import Footer from '../components/Footer';
 import { api } from '../api/client';
 import { logger } from '../utils/logger';
+import { loadSearchContext } from '../utils/searchContext';
 import { useTelegramWebApp } from '../telegram/TelegramContext';
 
 export default function SearchResultsPage() {
@@ -30,14 +31,24 @@ export default function SearchResultsPage() {
 
   // Get search data from location state - wrapped in useMemo to avoid
   // creating new object on every render
+  // sessionStorage fallback for refresh / direct open
+  const storedContext = useMemo(() => loadSearchContext(), []);
   const searchData = useMemo(
     () =>
-      location.state?.searchData || {
+      location.state?.searchData ||
+      storedContext?.searchData || {
         name: '',
         city: '',
         form: '',
       },
-    [location.state?.searchData],
+    [location.state?.searchData, storedContext],
+  );
+  const searchContext = useMemo(
+    () =>
+      location.state?.searchContext ||
+      storedContext?.searchContext ||
+      null,
+    [location.state?.searchContext, storedContext],
   );
   const initialResults = useMemo(
     () => location.state?.results || [],
@@ -59,10 +70,10 @@ export default function SearchResultsPage() {
     navigate('/search/form-selection', {
       state: {
         searchData,
-        searchContext: location.state?.searchContext,
+        searchContext,
       },
     });
-  }, [navigate, searchData, location.state]);
+  }, [navigate, searchData, searchContext]);
 
   useEffect(() => {
     if (!isTelegram || !tg) return;
@@ -125,7 +136,7 @@ export default function SearchResultsPage() {
     navigate('/search/form-selection', {
       state: {
         searchData,
-        searchContext: location.state?.searchContext,
+        searchContext,
       },
     });
   };
