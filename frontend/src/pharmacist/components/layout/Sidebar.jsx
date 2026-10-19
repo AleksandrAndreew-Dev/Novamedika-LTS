@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function Sidebar({ activeTab, setActiveTab }) {
   // Always call hooks at the top level - React Hooks Rules
-  const navigate = useNavigate();
   const { pharmacist, logout, setOnlineStatus } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isTogglingOnline, setIsTogglingOnline] = useState(false);

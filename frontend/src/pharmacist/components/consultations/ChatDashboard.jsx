@@ -329,8 +329,10 @@ export default function ChatDashboard({
 
   const handleQuestionCompleted = useCallback(() => {
     setActiveQuestionId(null);
-    void selectNextPendingQuestion();
-  }, [selectNextPendingQuestion]);
+    setListRefreshKey((k) => k + 1);
+    // Выбор следующей — только явным кликом пользователя (автовыбор удалён:
+    // он забирал первый pending в работу и провоцировал гонку 403).
+  }, []);
 
   useEffect(() => {
     websocketService.connect();
@@ -353,14 +355,14 @@ export default function ChatDashboard({
           setActiveQuestionId(null);
         }
 
-        void selectNextPendingQuestion();
+        setListRefreshKey((k) => k + 1);
       },
     );
 
     return () => {
       unsubscribeCompleted();
     };
-  }, [selectNextPendingQuestion]);
+  }, []);
 
   // Resize handlers
   const startResize = (e) => {
