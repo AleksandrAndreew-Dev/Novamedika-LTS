@@ -78,6 +78,14 @@ function ChatWidgetOrLink() {
 
   if (isPharmacistPage) return null;
 
+  // Роль фармацевта: на витрине поиска кнопка пользовательского чата не нужна —
+  // иначе фармацевт открывает user-кабинет (/dashboard) с чужой историей вместо
+  // своей панели (/pharmacist). Проверяем session-токен панели.
+  const isPharmacistRole = Boolean(
+    localStorage.getItem('pharmacist_session_token'),
+  );
+  if (isPharmacistRole) return null;
+
   // В Telegram WebApp — ссылка на страницу с консультациями
   if (window.Telegram?.WebApp?.initData) {
     const startParam =
