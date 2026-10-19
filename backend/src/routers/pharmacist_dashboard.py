@@ -10,7 +10,7 @@ from fastapi import (
     Body,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, update
 from sqlalchemy.orm import selectinload
 from typing import List, Optional, Set, Dict
 import uuid
@@ -46,6 +46,23 @@ def create_message_data(message: DialogMessage) -> dict:
         "file_id": message.file_id,
         "created_at": message.created_at.isoformat(),
     }
+
+
+async def try_claim_pending_question(db, question_uuid, pharmacist_uuid) -> bool:
+    """Атомарно забрать pending-вопрос. True — забрали мы, False — уже занят."""
+    now = get_utc_now_naive()
+    result = await db.execute(
+        update(Question)
+        .where(Question.uuid == question_uuid, Question.status == "pending")
+        .values(
+            taken_by=pharmacist_uuid,
+            assigned_to=pharmacist_uuid,
+            status="in_progress",
+            taken_at=now,
+        )
+    )
+    await db.commit()
+    return (result.rowcount or 0) > 0
 
 
 router = APIRouter(
@@ -469,18 +486,19 @@ async def get_question_by_id(
     )
     if not is_assigned:
         if question.status == "pending":
-            question.taken_by = pharmacist.uuid
-            question.assigned_to = pharmacist.uuid
-            question.status = "in_progress"
-            question.taken_at = get_utc_now_naive()
-            await db.commit()
+            claimed = await try_claim_pending_question(db, question_uuid, pharmacist.uuid)
+            if not claimed:
+                await db.refresh(question)
+                raise HTTPException(status_code=403, detail="Not assigned to this question")
+            await db.refresh(question)
             logger.info(
                 f"Pharmacist {pharmacist.uuid} auto-assigned question {question_id} via get_question_by_id"
             )
         else:
             raise HTTPException(status_code=403, detail="Not assigned to this question")
 
-    # Format messages
+    # Format messages — унифицировано с get_dialog/DialogMessageResponse:
+    # uuid (не id), question_id, sender_id — иначе фронт ломает дедуп/сортировку.
     messages = []
     for msg in question.dialog_messages:
         sender_type = "user" if msg.sender_type == "user" else "pharmacist"
@@ -488,9 +506,12 @@ async def get_question_by_id(
 
         messages.append(
             {
+                "uuid": str(msg.uuid),
                 "id": str(msg.uuid),
+                "question_id": str(msg.question_id),
                 "text": msg.text,
                 "sender_type": sender_type,
+                "sender_id": str(msg.sender_id),
                 "sender_name": sender_name,
                 "created_at": msg.created_at,
                 "message_type": msg.message_type,
@@ -543,10 +564,11 @@ async def answer_question(
     )
     if not is_assigned:
         if question.status == "pending":
-            question.taken_by = pharmacist.uuid
-            question.assigned_to = pharmacist.uuid
-            question.status = "in_progress"
-            question.taken_at = get_utc_now_naive()
+            claimed = await try_claim_pending_question(db, question_uuid, pharmacist.uuid)
+            if not claimed:
+                await db.refresh(question)
+                raise HTTPException(status_code=403, detail="Not assigned to this question")
+            await db.refresh(question)
             logger.info(
                 f"Pharmacist {pharmacist.uuid} auto-assigned question {question_id} via answer"
             )
@@ -814,7 +836,7 @@ async def get_consultation_stats(
     )
     in_progress_count = in_progress_result.scalar() or 0
 
-    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = get_utc_now_naive().replace(hour=0, minute=0, second=0, microsecond=0)
     completed_result = await db.execute(
         select(func.count()).where(
             and_(Question.status == "completed", Question.created_at >= today_start)
@@ -822,7 +844,7 @@ async def get_consultation_stats(
     )
     completed_today = completed_result.scalar() or 0
 
-    week_ago = datetime.utcnow() - timedelta(days=7)
+    week_ago = get_utc_now_naive() - timedelta(days=7)
     avg_time_result = await db.execute(
         select(func.avg(Question.answered_at - Question.created_at)).where(
             and_(
@@ -850,7 +872,7 @@ async def update_online_status(
 ):
     """Update pharmacist online status"""
     pharmacist.is_online = online
-    pharmacist.last_seen = datetime.utcnow()
+    pharmacist.last_seen = get_utc_now_naive()
     await db.commit()
     return {"status": "ok", "is_online": online}
 
@@ -903,14 +925,14 @@ async def get_dialog(
     )
     if not is_assigned:
         if question.status == "pending":
-            question.taken_by = pharmacist.uuid
-            question.assigned_to = pharmacist.uuid
-            question.status = "in_progress"
-            question.taken_at = datetime.utcnow()
-
-            await db.commit()
+            claimed = await try_claim_pending_question(db, question_uuid, pharmacist.uuid)
+            if not claimed:
+                # Гонка: пока открывали — вопрос забрал другой фармацевт
+                await db.refresh(question)
+                raise HTTPException(status_code=403, detail="Not assigned to this question")
+            await db.refresh(question)
             logger.info(
-                f"Pharmacist {pharmacist.uuid} auto-assigned question {question_id}"
+                f"Pharmacist {pharmacist.uuid} auto-assigned question {question_id} via get_dialog"
             )
         else:
             raise HTTPException(status_code=403, detail="Not assigned to this question")
@@ -950,8 +972,13 @@ async def send_message(
     """Send message in consultation dialog (from Web App)"""
     from main import app
 
+    try:
+        question_uuid = uuid.UUID(question_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid question ID")
+
     question_result = await db.execute(
-        select(Question).where(Question.uuid == question_id)
+        select(Question).where(Question.uuid == question_uuid)
     )
     question = question_result.scalar_one_or_none()
 
@@ -965,10 +992,11 @@ async def send_message(
     )
     if not is_assigned:
         if question.status == "pending":
-            question.taken_by = pharmacist.uuid
-            question.assigned_to = pharmacist.uuid
-            question.status = "in_progress"
-            question.taken_at = datetime.utcnow()
+            claimed = await try_claim_pending_question(db, question_uuid, pharmacist.uuid)
+            if not claimed:
+                await db.refresh(question)
+                raise HTTPException(status_code=403, detail="Not assigned to this question")
+            await db.refresh(question)
 
             logger.info(
                 f"Pharmacist {pharmacist.uuid} auto-assigned question {question_id} via send_message"
@@ -978,12 +1006,12 @@ async def send_message(
 
     msg = DialogMessage(
         uuid=uuid.uuid4(),
-        question_id=question_id,
+        question_id=question.uuid,
         sender_type="pharmacist",
         sender_id=pharmacist.uuid,
         message_type="answer",
         text=data.text,
-        created_at=datetime.utcnow(),
+        created_at=get_utc_now_naive(),
     )
     db.add(msg)
 

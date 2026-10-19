@@ -135,16 +135,25 @@ export default function ConsultationChat({
             questionId,
           );
         setQuestion(questionData);
+        // Нормализация: getQuestionById отдаёт {id,...}, getDialog — {uuid,...}.
+        // Приводим всё к {uuid, question_id, sender_id,...} — иначе дедуп по
+        // m.uuid и фильтр своих WS-эхо ломаются.
+        const normalizeMsg = (m) => ({
+          ...m,
+          uuid: m.uuid || m.id,
+          question_id: m.question_id || questionData?.uuid || questionId,
+          sender_id: m.sender_id || null,
+        });
         try {
           const dialogData =
             await questionsService.getDialog(questionId);
-          setMessages(dialogData || []);
+          setMessages((dialogData || []).map(normalizeMsg));
         } catch (dialogError) {
           // Диалог недоступен (403 чужой / 404) — показываем вопрос
           // и историю из getQuestionById, чат в ошибку не роняем
           const status = dialogError?.response?.status;
           const fallback = Array.isArray(questionData?.messages)
-            ? questionData.messages
+            ? questionData.messages.map(normalizeMsg)
             : [];
           setMessages(fallback);
           if (status === 403) {

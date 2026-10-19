@@ -77,28 +77,10 @@ export default function ChatDashboard({
     activeQuestionIdRef.current = activeQuestionId;
   }, [activeQuestionId]);
 
-  const selectNextPendingQuestion =
-    useCallback(async () => {
-      try {
-        const data = await questionsService.getQuestions({
-          status: 'pending',
-        });
-        const questions = data?.questions || data || [];
-        if (questions.length > 0) {
-          const firstId =
-            questions[0].uuid || questions[0].id;
-          if (firstId) {
-            setActiveQuestionId(firstId);
-          } else {
-            setActiveQuestionId(null);
-          }
-        } else {
-          setActiveQuestionId(null);
-        }
-      } catch (_e) {
-        // Silently fail — user can select manually
-      }
-    }, []);
+  // Автовыбор отключён: раньше дашборд при монтировании сам забирал первый
+  // pending в работу (гонка между фармацевтами + увод из фильтра «Новые»).
+  // Выбор вопроса — только явным кликом пользователя.
+  const selectNextPendingQuestion = useCallback(async () => {}, []);
 
   // Auto-select first new question on mount
   useEffect(() => {

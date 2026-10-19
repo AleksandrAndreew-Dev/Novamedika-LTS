@@ -899,8 +899,8 @@ async def send_consultation_message(
 
         db.add(new_message)
 
-        # Update question status if it was answered/completed
-        if question.status in ["answered", "completed"]:
+        # Update question status if it was answered (completed stays closed — 409 above)
+        if question.status == "answered":
             question.status = "pending"  # Reopen for new question
 
         await db.commit()
