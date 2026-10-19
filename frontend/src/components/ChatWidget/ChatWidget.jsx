@@ -349,8 +349,8 @@ export default function ChatWidget() {
                 <div className="chat-widget__input-area">
                   {consultationStatus === 'completed' && (
                     <p className="chat-widget__completed-hint">
-                      Консультация завершена — ваше
-                      сообщение начнёт новую консультацию
+                      Ваше сообщение начнёт новую
+                      консультацию
                     </p>
                   )}
                   <form
