@@ -7,6 +7,9 @@ export default function Sidebar({ activeTab, setActiveTab }) {
   const navigate = useNavigate();
   const { pharmacist, logout, setOnlineStatus } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isTogglingOnline, setIsTogglingOnline] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [onlineError, setOnlineError] = useState(null);
 
   const navigation = [
     {
@@ -25,26 +28,40 @@ export default function Sidebar({ activeTab, setActiveTab }) {
         </svg>
       ),
     },
-    {
-      name: 'Профиль',
-      icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-        </svg>
-      ),
-    },
   ];
 
   const handleLogout = async () => {
-    await logout();
-    navigate('/login');
+    if (isLoggingOut) return; // Prevent double-clicks
+
+    setIsLoggingOut(true);
+
+    try {
+      await logout();
+      // Navigate happens in logout function
+    } catch (error) {
+      console.error('Logout error:', error);
+      setIsLoggingOut(false);
+      // Even if logout fails, try to clear local state
+      setOnlineError('Ошибка при выходе. Попробуйте ещё раз.');
+      setTimeout(() => setOnlineError(null), 3000);
+    }
   };
 
   const toggleOnlineStatus = async () => {
+    if (isTogglingOnline) return; // Prevent double-clicks
+
+    setIsTogglingOnline(true);
+    setOnlineError(null);
+
     try {
       await setOnlineStatus(!pharmacist?.is_online);
     } catch (error) {
       console.error('Failed to toggle online status:', error);
+      setOnlineError('Не удалось изменить статус. Попробуйте позже.');
+      // Auto-clear error after 3 seconds
+      setTimeout(() => setOnlineError(null), 3000);
+    } finally {
+      setIsTogglingOnline(false);
     }
   };
 
@@ -67,13 +84,14 @@ export default function Sidebar({ activeTab, setActiveTab }) {
         {/* Online status toggle for mobile */}
         <button
           onClick={toggleOnlineStatus}
+          disabled={isTogglingOnline}
           className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
             pharmacist?.is_online
               ? 'bg-green-100 text-green-800'
               : 'bg-gray-100 text-gray-600'
-          }`}
+          } ${isTogglingOnline ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
-          {pharmacist?.is_online ? 'Онлайн' : 'Офлайн'}
+          {isTogglingOnline ? '...' : (pharmacist?.is_online ? 'Онлайн' : 'Офлайн')}
         </button>
       </div>
 
@@ -126,20 +144,6 @@ export default function Sidebar({ activeTab, setActiveTab }) {
               </span>
               {navigation[1].name}
             </button>
-
-            <button
-              onClick={() => setActiveTab('questions')}
-              className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
-                activeTab === 'questions'
-                  ? 'bg-amber-50 text-amber-600'
-                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-              }`}
-            >
-              <span className={`mr-3 ${activeTab === 'questions' ? 'text-amber-600' : 'text-gray-400'}`}>
-                {navigation[2].icon}
-              </span>
-              {navigation[2].name}
-            </button>
           </nav>
 
           {/* User info and actions */}
@@ -165,24 +169,45 @@ export default function Sidebar({ activeTab, setActiveTab }) {
             {/* Online status toggle */}
             <button
               onClick={toggleOnlineStatus}
+              disabled={isTogglingOnline}
               className={`w-full mb-3 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 pharmacist?.is_online
                   ? 'bg-green-100 text-green-800 hover:bg-green-200'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+              } ${isTogglingOnline ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              {pharmacist?.is_online ? '🟢 Онлайн' : '⚫ Офлайн'}
+              {isTogglingOnline ? '...' : (pharmacist?.is_online ? '🟢 Онлайн' : '⚫ Офлайн')}
             </button>
+
+            {/* Online status error message */}
+            {onlineError && (
+              <div className="mb-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+                {onlineError}
+              </div>
+            )}
 
             {/* Logout button */}
             <button
               onClick={handleLogout}
-              className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+              disabled={isLoggingOut}
+              className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-              Выйти
+              {isLoggingOut ? (
+                <>
+                  <svg className="animate-spin w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Выход...
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  Выйти
+                </>
+              )}
             </button>
           </div>
         </div>

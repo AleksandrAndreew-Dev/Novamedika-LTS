@@ -29,6 +29,7 @@ export default function ConsultationChat({
   const messagesEndRef = useRef(null);
   const currentPharmacistIdRef = useRef(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const [isCompleting, setIsCompleting] = useState(false);
 
   // Subscribe to WebSocket for real-time message updates
   useEffect(() => {
@@ -260,8 +261,10 @@ export default function ConsultationChat({
 
   const handleComplete = useCallback(async () => {
     if (!questionId) return;
+    if (isCompleting) return; // Prevent double-clicks
     if (!window.confirm('Завершить консультацию?')) return;
 
+    setIsCompleting(true);
     try {
       await questionsService.completeQuestion(questionId);
       setQuestion((prev) =>
@@ -271,8 +274,10 @@ export default function ConsultationChat({
     } catch (e) {
       logger.error('Failed to complete:', e);
       setError('Не удалось завершить консультацию');
+    } finally {
+      setIsCompleting(false);
     }
-  }, [questionId]);
+  }, [questionId, isCompleting]);
 
   const handleContinueToNext = useCallback(() => {
     if (onClose) onClose();
@@ -504,24 +509,37 @@ export default function ConsultationChat({
         </div>
         <button
           onClick={handleComplete}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors flex-shrink-0"
+          disabled={isCompleting || question?.status === 'completed'}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
           aria-label="Завершить диалог"
           title="Завершить диалог"
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="8.5" y1="12" x2="15.5" y2="12"></line>
-          </svg>
-          <span className="hidden sm:inline">Завершить диалог</span>
+          {isCompleting ? (
+            <>
+              <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span className="hidden sm:inline">Завершение...</span>
+            </>
+          ) : (
+            <>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="8.5" y1="12" x2="15.5" y2="12"></line>
+              </svg>
+              <span className="hidden sm:inline">Завершить диалог</span>
+            </>
+          )}
         </button>
       </div>
 

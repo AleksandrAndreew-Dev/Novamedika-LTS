@@ -461,6 +461,25 @@ async def get_question_by_id(
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
+    # Check assignment: only assigned pharmacist can view question details
+    is_assigned = (
+        question.assigned_to == pharmacist.uuid
+        or question.taken_by == pharmacist.uuid
+        or question.answered_by == pharmacist.uuid
+    )
+    if not is_assigned:
+        if question.status == "pending":
+            question.taken_by = pharmacist.uuid
+            question.assigned_to = pharmacist.uuid
+            question.status = "in_progress"
+            question.taken_at = get_utc_now_naive()
+            await db.commit()
+            logger.info(
+                f"Pharmacist {pharmacist.uuid} auto-assigned question {question_id} via get_question_by_id"
+            )
+        else:
+            raise HTTPException(status_code=403, detail="Not assigned to this question")
+
     # Format messages
     messages = []
     for msg in question.dialog_messages:
@@ -515,6 +534,24 @@ async def answer_question(
         raise HTTPException(
             status_code=400, detail="Cannot answer to completed question"
         )
+
+    # Check assignment: only assigned pharmacist can answer
+    is_assigned = (
+        question.assigned_to == pharmacist.uuid
+        or question.taken_by == pharmacist.uuid
+        or question.answered_by == pharmacist.uuid
+    )
+    if not is_assigned:
+        if question.status == "pending":
+            question.taken_by = pharmacist.uuid
+            question.assigned_to = pharmacist.uuid
+            question.status = "in_progress"
+            question.taken_at = get_utc_now_naive()
+            logger.info(
+                f"Pharmacist {pharmacist.uuid} auto-assigned question {question_id} via answer"
+            )
+        else:
+            raise HTTPException(status_code=403, detail="Not assigned to this question")
 
     # Create message in dialog history
     new_message = DialogMessage(
@@ -661,6 +698,11 @@ async def complete_question(
         return {"message": "Question already completed"}
 
     question.status = "completed"
+    # Ensure answered_by is set so pharmacist can access the completed dialog
+    if not question.answered_by:
+        question.answered_by = pharmacist.uuid
+    if not question.answered_at:
+        question.answered_at = get_utc_now_naive()
 
     await db.commit()
 
@@ -917,7 +959,9 @@ async def send_message(
         raise HTTPException(status_code=404, detail="Question not found")
 
     is_assigned = (
-        question.assigned_to == pharmacist.uuid or question.taken_by == pharmacist.uuid
+        question.assigned_to == pharmacist.uuid
+        or question.taken_by == pharmacist.uuid
+        or question.answered_by == pharmacist.uuid
     )
     if not is_assigned:
         if question.status == "pending":
