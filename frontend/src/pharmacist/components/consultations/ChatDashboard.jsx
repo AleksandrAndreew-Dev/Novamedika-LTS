@@ -129,23 +129,9 @@ export default function ChatDashboard({
     }
   }, []);
 
-  // Мгновенный инкремент от WS убран: он расходился с poll 15с
-  // (WS накинул +1, poll перезатёр старым) — отсюда мигание цифр.
-  // Единственный источник правды — сервер; после WS-события делаем
-  // дебаунснутый рефетч счётчиков + списка.
-  const countsRefreshTimerRef = useRef(null);
-  const scheduleCountsRefresh = useCallback(() => {
-    if (countsRefreshTimerRef.current) {
-      clearTimeout(countsRefreshTimerRef.current);
-    }
-    countsRefreshTimerRef.current = setTimeout(() => {
-      fetchPendingCount({ silent: true });
-      fetchTabCounts({ silent: true });
-      // Список обновляет своя WS-подписка в QuestionsList — здесь ключ
-      // не трогаем, иначе двойной fetch и мигание списка.
-    }, 800);
-  }, [fetchPendingCount, fetchTabCounts]);
-
+  // fetchTabCounts объявляем ДО scheduleCountsRefresh — иначе TDZ ReferenceError
+  // "Cannot access 'z' before initialization": scheduleCountsRefresh ссылается
+  // на fetchTabCounts в зависимостях useCallback, а const ещё не инициализирован.
   const fetchTabCounts = useCallback(async (opts = {}) => {
     const silent = opts.silent === true;
     try {
@@ -190,6 +176,23 @@ export default function ChatDashboard({
       if (!silent) logger.error('Failed to fetch tab counts:', err);
     }
   }, []);
+
+  // Мгновенный инкремент от WS убран: он расходился с poll 15с
+  // (WS накинул +1, poll перезатёр старым) — отсюда мигание цифр.
+  // Единственный источник правды — сервер; после WS-события делаем
+  // дебаунснутый рефетч счётчиков + списка.
+  const countsRefreshTimerRef = useRef(null);
+  const scheduleCountsRefresh = useCallback(() => {
+    if (countsRefreshTimerRef.current) {
+      clearTimeout(countsRefreshTimerRef.current);
+    }
+    countsRefreshTimerRef.current = setTimeout(() => {
+      fetchPendingCount({ silent: true });
+      fetchTabCounts({ silent: true });
+      // Список обновляет своя WS-подписка в QuestionsList — здесь ключ
+      // не трогаем, иначе двойной fetch и мигание списка.
+    }, 800);
+  }, [fetchPendingCount, fetchTabCounts]);
 
   // Бейдж во вкладке браузера: (N) Новые
   useEffect(() => {
