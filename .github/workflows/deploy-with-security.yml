@@ -424,6 +424,10 @@ jobs:
             docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} pull
             docker-compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d --force-recreate
 
+            echo "=== Step 3.5: Cleaning up old Docker images ==="
+            docker image prune -f
+            docker builder prune -f
+            echo "Done: Old Docker images cleaned up"
             if [ "$FAST_DEPLOY" != "true" ]; then
               echo "=== Step 4: Deploying monitoring stack ==="
               docker-compose -f docker-compose.monitoring.yml up -d --force-recreate
