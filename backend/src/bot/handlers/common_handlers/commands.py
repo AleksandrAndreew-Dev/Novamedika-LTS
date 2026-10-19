@@ -267,7 +267,7 @@ async def cmd_menu(
 async def hide_keyboard(message: Message):
     """Скрыть reply-клавиатуру"""
     await message.answer(
-        "⌨️ Клавиатура скрыта. Используйте /search чтобы вернуть.",
+        "⌨️ Клавиатура скрыта. Нажмите /menu чтобы вернуть её внизу экрана.",
         reply_markup=ReplyKeyboardRemove(),
     )
 

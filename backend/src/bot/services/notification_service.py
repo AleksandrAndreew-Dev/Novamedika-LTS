@@ -5,6 +5,9 @@ from sqlalchemy.orm import selectinload
 from bot.core import bot_manager
 from db.qa_models import Pharmacist, User, Question
 from bot.keyboards.qa_keyboard import make_question_keyboard
+from bot.handlers.common_handlers.keyboards import (
+    get_persistent_pharmacist_keyboard,
+)
 from bot.services.assignment_service import QuestionAssignmentService
 from bot.services.dialog_service import DialogService
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -90,7 +93,7 @@ async def notify_pharmacists_about_new_question(question, db: AsyncSession):
                             f"❓ Вопрос: {question_preview}\n\n"
                             f"💡 Статус: Вы в офлайн"
                         )
-                        reply_markup = None
+                        reply_markup = get_persistent_pharmacist_keyboard()
 
                     await bot.send_message(
                         chat_id=pharmacist.user.telegram_id,

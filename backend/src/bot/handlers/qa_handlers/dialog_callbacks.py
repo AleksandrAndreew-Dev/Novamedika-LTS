@@ -7,7 +7,6 @@ from aiogram.types import (
     CallbackQuery,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
-    ReplyKeyboardRemove,
 )
 from aiogram.fsm.context import FSMContext
 
@@ -19,6 +18,9 @@ from utils.time_utils import get_utc_now_naive
 from db.qa_models import User, Pharmacist, Question, Answer
 from bot.handlers.qa_states import QAStates
 from bot.keyboards.qa_keyboard import make_pharmacist_dialog_keyboard
+from bot.handlers.common_handlers.keyboards import (
+    get_persistent_pharmacist_keyboard,
+)
 from bot.services.dialog_service import DialogService
 from bot.services.assignment_service import QuestionAssignmentService
 
@@ -441,7 +443,7 @@ async def answer_question_callback(
             f"Напишите ваш ответ или уточняющий вопрос:\n"
             f"(или нажмите кнопки ниже для других действий)",
             parse_mode="HTML",
-            reply_markup=ReplyKeyboardRemove(),
+            reply_markup=get_persistent_pharmacist_keyboard(),
         )
         try:
             await invitation.edit_reply_markup(
@@ -516,7 +518,7 @@ async def answer_clarification_callback(
             f"✍️ <b>Напишите ваш ответ на уточнение ниже:</b>\n"
             f"(или /cancel для отмены)",
             parse_mode="HTML",
-            reply_markup=ReplyKeyboardRemove(),
+            reply_markup=get_persistent_pharmacist_keyboard(),
         )
         await callback.answer()
 

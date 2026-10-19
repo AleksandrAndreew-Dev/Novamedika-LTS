@@ -3,7 +3,6 @@ from aiogram.types import (
     Message,
     ReplyKeyboardMarkup,
     KeyboardButton,
-    ReplyKeyboardRemove,
 )
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -14,6 +13,10 @@ import logging
 import os
 import uuid
 
+from bot.handlers.common_handlers.keyboards import (
+    get_persistent_user_keyboard,
+    get_persistent_pharmacist_keyboard,
+)
 from db.qa_models import Pharmacist, User
 from services.user_service import get_or_create_user
 from utils.time_utils import get_utc_now_naive
@@ -140,7 +143,10 @@ async def cmd_register(
 async def cancel_registration(message: Message, state: FSMContext):
     """Отмена регистрации"""
     await state.clear()
-    await message.answer("❌ Регистрация отменена.", reply_markup=ReplyKeyboardRemove())
+    await message.answer(
+        "❌ Регистрация отменена.",
+        reply_markup=get_persistent_user_keyboard(),
+    )
 
 
 def is_not_command(text: str | None) -> bool:
@@ -371,5 +377,5 @@ async def process_patronymic(message: Message, state: FSMContext, db: AsyncSessi
         "Теперь вы можете отвечать на вопросы пользователей.\n"
         "Используйте /start для входа в панель фармацевта.",
         parse_mode="HTML",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=get_persistent_pharmacist_keyboard(),
     )
