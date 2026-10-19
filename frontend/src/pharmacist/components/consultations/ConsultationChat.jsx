@@ -27,6 +27,7 @@ export default function ConsultationChat({
     setCompletionOptionsVisible,
   ] = useState(false);
   const messagesEndRef = useRef(null);
+  const currentPharmacistIdRef = useRef(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
 
   // Subscribe to WebSocket for real-time message updates
@@ -54,6 +55,14 @@ export default function ConsultationChat({
         }
 
         setMessages((prev) => {
+          // Игнорируем свои сообщения от фармацевта — они уже добавлены локально в handleSend
+          if (
+            messagePayload?.sender_type === 'pharmacist' &&
+            messagePayload?.sender_id &&
+            messagePayload.sender_id === currentPharmacistIdRef.current
+          ) {
+            return prev;
+          }
           // Унифицированный подход к извлечению UUID
           const newMsg =
             messagePayload?.data || messagePayload;
@@ -158,6 +167,9 @@ export default function ConsultationChat({
         newMsg,
       );
       setMessages((prev) => [...prev, sentMsg]);
+      if (sentMsg?.sender_id) {
+        currentPharmacistIdRef.current = sentMsg.sender_id;
+      }
       setNewMsg('');
 
       if (window.Telegram?.WebApp?.HapticFeedback) {
