@@ -238,7 +238,7 @@ export function ChatProvider({ children }) {
                 const systemMsg = {
                   id: systemId,
                   uuid: systemId,
-                  text: 'Консультация завершена. Спасибо! Если у вас есть вопрос - напишите сообщение.',
+                  text: 'Консультация завершена. Спасибо!',
                   sender_type: 'system',
                   created_at: new Date().toISOString(),
                   is_system: true,
