@@ -222,14 +222,29 @@ export function ChatProvider({ children }) {
 
             if (data.type === 'question_completed') {
               setConsultationStatus('completed');
-              const systemMsg = {
-                id: Date.now(),
-                text: 'Консультация завершена. Спасибо! Если у вас есть вопрос - напишите сообщение.',
-                sender_type: 'system',
-                created_at: new Date().toISOString(),
-                is_system: true,
-              };
-              setMessages((prev) => [...prev, systemMsg]);
+              // Stable id + dedup: backend may deliver the same event twice
+              // (direct WS + Redis echo / N workers), each must not add a message.
+              const qid =
+                data.question_id || data.data?.question_id || currentConsultationId;
+              const systemId = `system-completed-${qid || 'unknown'}`;
+              setMessages((prev) => {
+                if (
+                  prev.some(
+                    (m) => m.id === systemId || m.uuid === systemId || m.is_system,
+                  )
+                ) {
+                  return prev;
+                }
+                const systemMsg = {
+                  id: systemId,
+                  uuid: systemId,
+                  text: 'Консультация завершена. Спасибо! Если у вас есть вопрос - напишите сообщение.',
+                  sender_type: 'system',
+                  created_at: new Date().toISOString(),
+                  is_system: true,
+                };
+                return [...prev, systemMsg];
+              });
             }
           } catch {
             // Not JSON — might be "pong" or other text

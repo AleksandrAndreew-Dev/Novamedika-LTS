@@ -656,6 +656,10 @@ async def complete_question(
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
+    # Idempotency: already completed -> no re-broadcast (prevents duplicates)
+    if question.status == "completed":
+        return {"message": "Question already completed"}
+
     question.status = "completed"
 
     await db.commit()
@@ -674,20 +678,24 @@ async def complete_question(
             f"Completion broadcast to pharmacists failed (non-critical): {e}"
         )
 
-    # Send completion event to user's WebSocket
-    try:
-        await ws_manager.broadcast_to_consultation(
-            str(question.uuid),
-            complete_data,
-        )
-        logger.info(f"Completion event sent to user WebSocket for {question_id}")
-    except Exception as e:
-        logger.warning(f"Completion broadcast to user failed (non-critical): {e}")
-
-    await publish_to_redis(complete_data)
-
-    # Publish user_completion event for cross-worker sync to user websockets
-    await publish_to_redis({"type": "user_completion", **complete_data})
+    # User delivery ONLY via Redis -> redis_ws_listener -> broadcast_to_consultation.
+    # No direct broadcast here: direct + redis echo on the same worker = duplicate
+    # question_completed events (and N duplicates with N workers).
+    # Fallback to direct broadcast only if Redis publish fails (no listener will echo).
+    user_event = {"type": "user_completion", **complete_data}
+    redis_ok = await publish_to_redis(complete_data)
+    redis_user_ok = await publish_to_redis(user_event)
+    if not redis_user_ok:
+        try:
+            await ws_manager.broadcast_to_consultation(
+                str(question.uuid),
+                complete_data,
+            )
+            logger.info(
+                f"Completion event sent to user WebSocket directly (redis fallback) for {question_id}"
+            )
+        except Exception as e:
+            logger.warning(f"Completion broadcast to user failed (non-critical): {e}")
 
     logger.info(f"Pharmacist {pharmacist.uuid} completed question {question_id}")
 

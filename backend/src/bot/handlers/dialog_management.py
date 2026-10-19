@@ -22,7 +22,7 @@ from bot.keyboards.qa_keyboard import (
     make_completed_dialog_keyboard,
     get_post_consultation_keyboard,
 )
-from routers.pharmacist_dashboard import ws_manager, publish_to_redis
+from routers.pharmacist_dashboard import publish_to_redis
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -91,20 +91,9 @@ async def complete_dialog_service(
 
         await db.commit()
 
-        # Notify web chat via WebSocket and Redis cross-worker
-        try:
-            await ws_manager.broadcast_to_consultation(
-                str(question.uuid),
-                {
-                    "type": "question_completed",
-                    "question_id": str(question.uuid),
-                    "completed_by": str(initiator.uuid),
-                    "status": "completed",
-                },
-            )
-        except Exception:
-            pass
-
+        # User delivery ONLY via Redis -> redis_ws_listener -> broadcast_to_consultation.
+        # No direct broadcast here: direct + redis echo on the same worker = duplicate
+        # question_completed events (and N duplicates with N workers).
         try:
             await publish_to_redis(
                 {
