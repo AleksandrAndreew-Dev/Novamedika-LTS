@@ -160,6 +160,10 @@ export default function ConsultationChat({
             setError(
               'Диалог недоступен: консультация назначена другому фармацевту',
             );
+          } else if (status === 409) {
+            setError(
+              'Консультацию только что забрал другой фармацевт — выберите следующую из списка',
+            );
           } else if (status === 404) {
             setError('Диалог не найден');
           } else {

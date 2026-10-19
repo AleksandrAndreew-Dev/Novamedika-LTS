@@ -70,25 +70,11 @@ export default function ChatDashboard({
   const flashTimerRef = useRef(null);
   const toastTimerRef = useRef(null);
   const panelRef = useRef(null);
-  const autoSelectDoneRef = useRef(false);
   const activeQuestionIdRef = useRef(activeQuestionId);
 
   useEffect(() => {
     activeQuestionIdRef.current = activeQuestionId;
   }, [activeQuestionId]);
-
-  // Автовыбор отключён: раньше дашборд при монтировании сам забирал первый
-  // pending в работу (гонка между фармацевтами + увод из фильтра «Новые»).
-  // Выбор вопроса — только явным кликом пользователя.
-  const selectNextPendingQuestion = useCallback(async () => {}, []);
-
-  // Auto-select first new question on mount
-  useEffect(() => {
-    if (autoSelectDoneRef.current) return;
-    autoSelectDoneRef.current = true;
-
-    void selectNextPendingQuestion();
-  }, [selectNextPendingQuestion]);
 
   useEffect(() => {
     const handleResize = () =>

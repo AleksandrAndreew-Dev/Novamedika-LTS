@@ -795,10 +795,21 @@ async def assign_question(
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    question.taken_by = pharmacist.uuid
-    question.status = "in_progress"
+    # Уже назначено нам — идемпотентный OK (повторный клик/ретрай)
+    if (
+        question.assigned_to == pharmacist.uuid
+        or question.taken_by == pharmacist.uuid
+    ):
+        return {"message": "Question assigned successfully"}
 
-    await db.commit()
+    # Занят другим или закрыт — уводить нельзя
+    if question.status != "pending":
+        raise HTTPException(status_code=409, detail="Question already taken")
+
+    claimed = await try_claim_pending_question(db, question_uuid, pharmacist.uuid)
+    if not claimed:
+        raise HTTPException(status_code=409, detail="Question already taken")
+    await db.refresh(question)
 
     logger.info(f"Pharmacist {pharmacist.uuid} assigned question {question_id}")
 

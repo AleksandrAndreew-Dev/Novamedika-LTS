@@ -1286,8 +1286,8 @@ async def send_public_question_message(
         )
 
         db.add(new_message)
-        # Обновляем статус вопроса
-        if question.status in ["answered", "completed"]:
+        # completed stays closed — 409 выше; reopen только из answered
+        if question.status == "answered":
             question.status = "pending"
 
         await db.commit()
@@ -1303,6 +1303,8 @@ async def send_public_question_message(
                     "uuid": str(new_message.uuid),
                     "question_id": question_id,
                     "sender_type": "user",
+                    "sender_id": str(new_message.sender_id),
+                    "message_type": new_message.message_type,
                     "text": new_message.text,
                     "created_at": new_message.created_at.isoformat(),
                 },
