@@ -112,11 +112,21 @@ export default function ChatWidget() {
     if (!canSend) return;
 
     const trimmed = newMessage.trim();
-    const lastMsg = messages[messages.length - 1];
-    if (
-      lastMsg?.sender_type === 'user' &&
-      lastMsg.text === trimmed
-    ) {
+    // Защита от дублей: идентичный текст от пользователя в последние 3 сек
+    // (двойной Enter / ретрай). Раньше проверялся только последний элемент
+    // без ограничения по времени — ложно блокировал повтор позже и
+    // пропускал дубль, если между копиями было системное сообщение.
+    const recentDuplicate = messages
+      .slice(-5)
+      .some(
+        (m) =>
+          m.sender_type === 'user' &&
+          m.text === trimmed &&
+          Math.abs(
+            Date.now() - new Date(m.created_at).getTime(),
+          ) < 3000,
+      );
+    if (recentDuplicate) {
       console.warn(
         '[ChatWidget] Duplicate message detected, skipping',
       );

@@ -414,7 +414,15 @@ export function ChatProvider({ children }) {
           isAnonymous,
           false,
         );
-        setMessages((prev) => [...prev, data]);
+        // Гонка: WS-эхо (message_update) может прийти раньше HTTP-ответа
+        // и уже добавить это сообщение. Без проверки по UUID оптимистичное
+        // добавление создало бы дубликат.
+        setMessages((prev) => {
+          if (data?.uuid && prev.some((m) => m.uuid === data.uuid)) {
+            return prev;
+          }
+          return [...prev, data];
+        });
         return {
           createdNewConsultation: false,
           consultationId: currentConsultationId,

@@ -166,7 +166,17 @@ export default function ConsultationChat({
         questionId,
         newMsg,
       );
-      setMessages((prev) => [...prev, sentMsg]);
+      // Гонка: WS-эхо своего сообщения может прийти раньше HTTP-ответа —
+      // проверяем UUID, чтобы не добавить дубликат.
+      setMessages((prev) => {
+        if (
+          sentMsg?.uuid &&
+          prev.some((m) => m.uuid === sentMsg.uuid)
+        ) {
+          return prev;
+        }
+        return [...prev, sentMsg];
+      });
       if (sentMsg?.sender_id) {
         currentPharmacistIdRef.current = sentMsg.sender_id;
       }
