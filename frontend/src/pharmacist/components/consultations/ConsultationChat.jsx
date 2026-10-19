@@ -500,7 +500,7 @@ export default function ConsultationChat({
             <circle cx="12" cy="12" r="10"></circle>
             <line x1="8.5" y1="12" x2="15.5" y2="12"></line>
           </svg>
-          Завершить диалог
+          <span className="hidden sm:inline">Завершить диалог</span>
         </button>
       </div>
 

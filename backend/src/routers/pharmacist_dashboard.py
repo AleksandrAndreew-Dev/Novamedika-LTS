@@ -912,6 +912,15 @@ async def send_message(
         created_at=datetime.utcnow(),
     )
     db.add(msg)
+
+    # Обновляем статус вопроса: после ответа фармацевта переводим в "answered"
+    # (если диалог не завершён), как в боте и в эндпоинте /answer —
+    # иначе вопрос остаётся "in_progress" и не попадает во вкладку «Отвеченные».
+    if question.status != "completed":
+        question.status = "answered"
+        question.answered_by = pharmacist.uuid
+        question.answered_at = get_utc_now_naive()
+
     await db.flush()
 
     # Broadcast via WebSocket
