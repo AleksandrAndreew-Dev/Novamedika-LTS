@@ -670,20 +670,30 @@ async def complete_question(
         "completed_by": str(pharmacist.uuid),
         "status": "completed",
     }
-    try:
-        await ws_manager.broadcast(complete_data)
-        logger.info(f"Completion broadcast sent to pharmacists for {question_id}")
-    except Exception as e:
-        logger.warning(
-            f"Completion broadcast to pharmacists failed (non-critical): {e}"
-        )
+    # Pharmacist delivery ONLY via Redis -> redis_ws_listener -> broadcast.
+    # No direct broadcast here: direct + redis echo on the same worker = duplicate
+    # question_completed events (and N duplicates with N workers).
+    # Fallback to direct broadcast only if Redis publish fails.
+    redis_ok = await publish_to_redis(complete_data)
+    if not redis_ok:
+        try:
+            await ws_manager.broadcast(complete_data)
+            logger.info(
+                f"Completion broadcast sent to pharmacists directly (redis fallback) for {question_id}"
+            )
+        except Exception as e:
+            logger.warning(
+                f"Completion broadcast to pharmacists failed (non-critical): {e}"
+            )
 
     # User delivery ONLY via Redis -> redis_ws_listener -> broadcast_to_consultation.
     # No direct broadcast here: direct + redis echo on the same worker = duplicate
     # question_completed events (and N duplicates with N workers).
     # Fallback to direct broadcast only if Redis publish fails (no listener will echo).
-    user_event = {"type": "user_completion", **complete_data}
-    redis_ok = await publish_to_redis(complete_data)
+    # NOTE: {**complete_data, ...} — type must be overridden AFTER unpack,
+    # otherwise complete_data["type"]="question_completed" silently overwrites it
+    # and Redis gets two identical question_completed events instead of user_completion.
+    user_event = {**complete_data, "type": "user_completion"}
     redis_user_ok = await publish_to_redis(user_event)
     if not redis_user_ok:
         try:

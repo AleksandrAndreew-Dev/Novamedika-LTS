@@ -91,15 +91,29 @@ async def complete_dialog_service(
 
         await db.commit()
 
-        # User delivery ONLY via Redis -> redis_ws_listener -> broadcast_to_consultation.
+        # Delivery ONLY via Redis -> redis_ws_listener:
+        #  - "question_completed" -> broadcast() to pharmacists (panel)
+        #  - "user_completion" -> broadcast_to_consultation() to user widget
         # No direct broadcast here: direct + redis echo on the same worker = duplicate
-        # question_completed events (and N duplicates with N workers).
+        # events (and N duplicates with N workers).
+        completed_by = str(initiator.uuid) if initiator else ""
+        try:
+            await publish_to_redis(
+                {
+                    "type": "question_completed",
+                    "question_id": str(question.uuid),
+                    "completed_by": completed_by,
+                    "status": "completed",
+                }
+            )
+        except Exception:
+            pass
         try:
             await publish_to_redis(
                 {
                     "type": "user_completion",
                     "question_id": str(question.uuid),
-                    "completed_by": str(initiator.uuid),
+                    "completed_by": completed_by,
                     "status": "completed",
                 }
             )
