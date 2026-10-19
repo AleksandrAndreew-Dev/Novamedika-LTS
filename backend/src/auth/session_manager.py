@@ -69,7 +69,8 @@ async def create_session_token(
     telegram_id: int, pharmacist_uuid: str, user_id: str
 ) -> str:
     """Create a session token and store in Redis.
-    Atomically replaces any previous session for the same telegram_id."""
+    Multiple concurrent sessions per telegram_id are allowed —
+    a new login must not invalidate sessions on other devices."""
     token = str(uuid.uuid4())
     session_data = {
         "telegram_id": telegram_id,
@@ -81,16 +82,11 @@ async def create_session_token(
 
     redis_client = await get_redis_client()
 
-    # 1. Atomically invalidate previous session for this telegram_id
+    # NOTE: Не инвалидируем старые сессии — вход с нескольких устройств
+    # должен работать одновременно.
     map_key = f"{SESSION_MAP_PREFIX}{telegram_id}"
-    old_token = await redis_client.get(map_key)
-    if old_token:
-        await redis_client.delete(f"{SESSION_PREFIX}{old_token}")
-        logger.info(
-            f"Invalidated stale session {old_token[:10]}... for telegram_id={telegram_id}"
-        )
 
-    # 2. Store new session atomically with the map key
+    # Store new session atomically with the map key
     pipe = redis_client.pipeline()
     pipe.setex(f"{SESSION_PREFIX}{token}", SESSION_TTL, json.dumps(session_data))
     pipe.setex(map_key, SESSION_TTL, token)

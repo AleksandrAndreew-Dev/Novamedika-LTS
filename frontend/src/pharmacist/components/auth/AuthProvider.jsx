@@ -74,8 +74,6 @@ function AuthProvider({ children }) {
             setPharmacist(profile);
             setIsAuthenticated(true);
             lastAutoLoginRef.current = Date.now();
-            // Автоматически переводим фармацевта в онлайн при успешном входе
-            authService.setOnlineStatus(true).catch(() => {});
             console.log(
               '[AuthProvider] Session is valid, active pharmacist:',
               profile.user?.first_name,
@@ -175,8 +173,6 @@ function AuthProvider({ children }) {
           setPharmacist(profile);
           setIsAuthenticated(true);
           lastAutoLoginRef.current = Date.now();
-          // Автоматически переводим фармацевта в онлайн при успешном входе
-          authService.setOnlineStatus(true).catch(() => {});
           console.log(
             '[AuthProvider] ✅ Auto-login successful:',
             profile.user?.first_name,
