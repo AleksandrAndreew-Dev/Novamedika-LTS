@@ -17,7 +17,7 @@ export default function MainLayout({ children }) {
           На десктопе — классический flex со сайдбаром и прокруткой контента. */}
       <div className="flex flex-col lg:flex-row lg:h-screen lg:overflow-hidden">
         {/* Sidebar */}
-        <Sidebar />
+        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
         {/* Main content */}
         <main className="flex-1 lg:overflow-y-auto pt-14 lg:pt-0">

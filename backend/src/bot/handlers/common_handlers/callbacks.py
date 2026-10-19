@@ -324,6 +324,89 @@ async def back_to_pharmacist_main_callback(
     await callback.answer()
 
 
+async def get_pharmacist_stats_text(
+    db: AsyncSession, user: User
+) -> tuple[str, str | None, str | None]:
+    """Считает статистику работы фармацевта.
+
+    Returns:
+        (stats_text, pharmacist_uuid, error) — error не None, если
+        фармацевт не найден в БД.
+    """
+    result = await db.execute(
+        select(Pharmacist).where(Pharmacist.user_id == user.uuid)
+    )
+    pharmacist = result.scalar_one_or_none()
+
+    if not pharmacist:
+        return "", None, "❌ Вы не найдены как фармацевт"
+
+    counts = {}
+    for key, status in (
+        ("total", None),
+        ("pending", "pending"),
+        ("in_progress", "in_progress"),
+        ("answered", "answered"),
+        ("completed", "completed"),
+    ):
+        q = select(func.count(Question.uuid)).where(
+            Question.taken_by == pharmacist.uuid
+        )
+        if status:
+            q = q.where(Question.status == status)
+        counts[key] = (await db.execute(q)).scalar() or 0
+
+    total = counts["total"]
+    stats_text = "📊 <b>Статистика вашей работы</b>\n\n"
+    if total == 0:
+        stats_text += "У вас пока нет вопросов.\n\nВозьмите первый вопрос в работу!"
+    else:
+        stats_text += f"📋 <b>Всего:</b> {total}\n"
+        stats_text += f"⏳ <b>Ожидают ответа:</b> {counts['pending']}\n"
+        stats_text += f"🔄 <b>В обработке:</b> {counts['in_progress']}\n"
+        stats_text += f"💬 <b>Отвечены:</b> {counts['answered']}\n"
+        stats_text += f"✅ <b>Завершены:</b> {counts['completed']}\n\n"
+        answer_rate = ((counts["answered"] + counts["completed"]) / total) * 100
+        stats_text += f"📈 <b>Процент ответов:</b> {answer_rate:.1f}%\n"
+
+    return stats_text, str(pharmacist.uuid), None
+
+
+async def get_pharmacist_completed_history_text(
+    db: AsyncSession, user: User
+) -> tuple[str, str | None]:
+    """История завершённых фармацевтом консультаций (по taken_by).
+
+    Returns:
+        (history_text, error) — error не None при проблеме.
+    """
+    result = await db.execute(
+        select(Pharmacist).where(Pharmacist.user_id == user.uuid)
+    )
+    pharmacist = result.scalar_one_or_none()
+
+    if not pharmacist:
+        return "", "❌ Вы не найдены как фармацевт"
+
+    result = await db.execute(
+        select(Question)
+        .where(
+            Question.taken_by == pharmacist.uuid,
+            Question.status == "completed",
+        )
+        .order_by(Question.created_at.desc())
+        .limit(10)
+    )
+    questions = result.scalars().all()
+    if not questions:
+        return "📭 У вас пока нет завершённых консультаций", None
+    text = "📜 <b>Ваши завершённые консультации:</b>\n\n"
+    for i, q in enumerate(questions, 1):
+        preview = q.text[:80] + "..." if len(q.text) > 80 else q.text
+        text += f"{i}. {preview}\n"
+    return text, None
+
+
 @router.callback_query(F.data == "questions_stats")
 async def questions_stats_callback(
     callback: CallbackQuery,
@@ -339,59 +422,18 @@ async def questions_stats_callback(
 
     try:
         if is_pharmacist:
-            result = await db.execute(
-                select(Pharmacist).where(Pharmacist.user_id == user.uuid)
+            stats_text, pharmacist_uuid, error = await get_pharmacist_stats_text(
+                db, user
             )
-            pharmacist = result.scalar_one_or_none()
 
-            if not pharmacist:
-                await callback.answer("❌ Вы не найдены как фармацевт", show_alert=True)
+            if error:
+                await callback.answer(error, show_alert=True)
                 return
-
-            total_result = await db.execute(
-                select(func.count(Question.uuid)).where(
-                    Question.taken_by == pharmacist.uuid
-                )
-            )
-            total = total_result.scalar() or 0
-
-            pending_result = await db.execute(
-                select(func.count(Question.uuid)).where(
-                    Question.taken_by == pharmacist.uuid,
-                    Question.status == "pending",
-                )
-            )
-            pending = pending_result.scalar() or 0
-
-            in_progress_result = await db.execute(
-                select(func.count(Question.uuid)).where(
-                    Question.taken_by == pharmacist.uuid,
-                    Question.status == "in_progress",
-                )
-            )
-            in_progress = in_progress_result.scalar() or 0
-
-            answered_result = await db.execute(
-                select(func.count(Question.uuid)).where(
-                    Question.taken_by == pharmacist.uuid,
-                    Question.status == "answered",
-                )
-            )
-            answered = answered_result.scalar() or 0
-
-            completed_result = await db.execute(
-                select(func.count(Question.uuid)).where(
-                    Question.taken_by == pharmacist.uuid,
-                    Question.status == "completed",
-                )
-            )
-            completed = completed_result.scalar() or 0
 
             keyboard = get_pharmacist_inline_keyboard_with_token(
                 telegram_id=int(user.telegram_id),
-                pharmacist_uuid=str(pharmacist.uuid),
+                pharmacist_uuid=pharmacist_uuid,
             )
-            header = "📊 <b>Статистика вашей работы</b>\n\n"
         else:
             total_result = await db.execute(
                 select(func.count(Question.uuid)).where(Question.user_id == user.uuid)
@@ -433,19 +475,19 @@ async def questions_stats_callback(
             keyboard = get_user_inline_keyboard()
             header = "📊 <b>Статистика ваших вопросов</b>\n\n"
 
-        stats_text = header
-        if total == 0:
-            stats_text += "У вас пока нет вопросов.\n\nЗадайте первый вопрос в чат!"
-        else:
-            stats_text += f"📋 <b>Всего:</b> {total}\n"
-            stats_text += f"⏳ <b>Ожидают ответа:</b> {pending}\n"
-            stats_text += f"🔄 <b>В обработке:</b> {in_progress}\n"
-            stats_text += f"💬 <b>Отвечены:</b> {answered}\n"
-            stats_text += f"✅ <b>Завершены:</b> {completed}\n\n"
+            stats_text = header
+            if total == 0:
+                stats_text += "У вас пока нет вопросов.\n\nЗадайте первый вопрос в чат!"
+            else:
+                stats_text += f"📋 <b>Всего:</b> {total}\n"
+                stats_text += f"⏳ <b>Ожидают ответа:</b> {pending}\n"
+                stats_text += f"🔄 <b>В обработке:</b> {in_progress}\n"
+                stats_text += f"💬 <b>Отвечены:</b> {answered}\n"
+                stats_text += f"✅ <b>Завершены:</b> {completed}\n\n"
 
-            if total > 0:
-                answer_rate = ((answered + completed) / total) * 100
-                stats_text += f"📈 <b>Процент ответов:</b> {answer_rate:.1f}%\n"
+                if total > 0:
+                    answer_rate = ((answered + completed) / total) * 100
+                    stats_text += f"📈 <b>Процент ответов:</b> {answer_rate:.1f}%\n"
 
         if callback.message:
             await callback.message.edit_text(

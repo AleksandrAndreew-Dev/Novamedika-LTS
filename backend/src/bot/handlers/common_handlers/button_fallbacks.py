@@ -15,6 +15,10 @@ from sqlalchemy import select
 
 from db.qa_models import User, Question
 from bot.handlers.qa_states import UserQAStates
+from bot.handlers.common_handlers.callbacks import (
+    get_pharmacist_stats_text,
+    get_pharmacist_completed_history_text,
+)
 from bot.handlers.common_handlers.keyboards import (
     get_pharmacist_inline_keyboard,
     get_pharmacist_inline_keyboard_with_token,
@@ -95,24 +99,28 @@ async def pharmacist_button_fallback(
         await cmd_my_questions(message, db, user, is_pharmacist)
 
     elif action == "questions_stats":
-        await message.answer("📊 Эта функция доступна только пользователям")
+        stats_text, pharmacist_uuid, error = await get_pharmacist_stats_text(
+            db, user
+        )
+        if error:
+            await message.answer(error)
+            return
+        keyboard = get_pharmacist_inline_keyboard_with_token(
+            telegram_id=int(user.telegram_id),
+            pharmacist_uuid=pharmacist_uuid,
+        )
+        await message.answer(
+            stats_text, parse_mode="HTML", reply_markup=keyboard
+        )
 
     elif action == "my_questions_from_completed":
-        result = await db.execute(
-            select(Question)
-            .where(Question.user_id == user.uuid, Question.status == "completed")
-            .order_by(Question.created_at.desc())
-            .limit(10)
+        history_text, error = await get_pharmacist_completed_history_text(
+            db, user
         )
-        questions = result.scalars().all()
-        if not questions:
-            await message.answer("📭 У вас пока нет завершённых вопросов")
+        if error:
+            await message.answer(error)
             return
-        text = "📜 <b>История вопросов:</b>\n\n"
-        for i, q in enumerate(questions, 1):
-            preview = q.text[:80] + "..." if len(q.text) > 80 else q.text
-            text += f"{i}. {preview}\n"
-        await message.answer(text, parse_mode="HTML")
+        await message.answer(history_text, parse_mode="HTML")
 
     elif action == "pharmacist_help":
         # Используем клавиатуру с JWT токеном
