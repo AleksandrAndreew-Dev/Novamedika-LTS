@@ -452,10 +452,10 @@ export default function Chat() {
               return (
                 <div
                   key={message.uuid || message.id || idx}
-                  className="flex justify-center mb-2 animate-fadeIn"
+                  className="flex justify-center my-2 animate-fadeIn"
                 >
-                  <div className="text-xs text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full">
-                    {message.text}
+                  <div className="text-[13px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-4 py-2 rounded-xl text-center shadow-sm">
+                    ✅ {message.text}
                   </div>
                 </div>
               );
@@ -592,8 +592,8 @@ export default function Chat() {
         </form>
         {currentStatus === 'completed' && (
           <div className="text-center mt-2">
-            <p className="text-xs text-gray-400 text-center">
-              Консультация завершена — новое сообщение
+            <p className="text-[13px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 text-center">
+              ✅ Консультация завершена — новое сообщение
               автоматически начнёт новую консультацию
             </p>
           </div>
