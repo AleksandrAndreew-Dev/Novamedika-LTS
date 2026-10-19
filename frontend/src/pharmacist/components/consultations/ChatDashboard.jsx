@@ -29,6 +29,11 @@ const filterOptions = [
     icon: '💬',
   },
   {
+    key: 'completed',
+    label: 'Завершенные',
+    icon: '✅',
+  },
+  {
     key: 'all',
     label: 'Все',
     icon: '📋',
@@ -58,6 +63,7 @@ export default function ChatDashboard({
     new: 0,
     in_progress: 0,
     answered: 0,
+    completed: 0,
   });
   const [flashTab, setFlashTab] = useState(null); // 'new' | 'in_progress' | null
   const [toast, setToast] = useState(null); // { id, kind, text, targetFilter }
@@ -149,28 +155,30 @@ export default function ChatDashboard({
           prev.in_progress,
         // answered отдельно не отдаётся stats — доберём ниже
         answered: prev.answered,
+        completed: prev.completed,
       }));
-      // answered: один лёгкий запрос, чтобы таб «Отвеченные» тоже имел цифру
-      try {
-        const answered =
-          await questionsService.getQuestions({
-            status: 'answered',
+      // answered/completed: лёгкие запросы для цифр на табах
+      for (const key of ['answered', 'completed']) {
+        try {
+          const res = await questionsService.getQuestions({
+            status: key,
             limit: 1,
           });
-        const total =
-          answered?.total ??
-          answered?.pages ??
-          (Array.isArray(answered?.questions)
-            ? answered.questions.length
-            : Array.isArray(answered)
-              ? answered.length
-              : 0);
-        setTabCounts((prev) => ({
-          ...prev,
-          answered: total,
-        }));
-      } catch (_) {
-        // Не роняем остальные счётчики
+          const total =
+            res?.total ??
+            res?.pages ??
+            (Array.isArray(res?.questions)
+              ? res.questions.length
+              : Array.isArray(res)
+                ? res.length
+                : 0);
+          setTabCounts((prev) => ({
+            ...prev,
+            [key]: total,
+          }));
+        } catch (_) {
+          // Не роняем остальные счётчики
+        }
       }
     } catch (err) {
       // predictability: при ошибке счётчики НЕ трогаем (иначе мигают 0)

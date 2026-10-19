@@ -134,9 +134,30 @@ export default function ConsultationChat({
             questionId,
           );
         setQuestion(questionData);
-        const dialogData =
-          await questionsService.getDialog(questionId);
-        setMessages(dialogData || []);
+        try {
+          const dialogData =
+            await questionsService.getDialog(questionId);
+          setMessages(dialogData || []);
+        } catch (dialogError) {
+          // Диалог недоступен (403 чужой / 404) — показываем вопрос
+          // и историю из getQuestionById, чат в ошибку не роняем
+          const status = dialogError?.response?.status;
+          const fallback = Array.isArray(questionData?.messages)
+            ? questionData.messages
+            : [];
+          setMessages(fallback);
+          if (status === 403) {
+            setError(
+              'Диалог недоступен: консультация назначена другому фармацевту',
+            );
+          } else if (status === 404) {
+            setError('Диалог не найден');
+          } else {
+            setError(
+              'Не удалось загрузить историю сообщений, показаны данные вопроса',
+            );
+          }
+        }
       } catch (error) {
         logger.error(
           'Failed to load consultation data:',

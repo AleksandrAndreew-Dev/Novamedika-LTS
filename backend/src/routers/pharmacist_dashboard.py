@@ -839,16 +839,25 @@ async def get_dialog(
     db: AsyncSession = Depends(get_db),
 ):
     """Get dialog messages for a specific question"""
+    try:
+        question_uuid = uuid.UUID(question_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid question ID")
+
     question_result = await db.execute(
-        select(Question).where(Question.uuid == question_id)
+        select(Question).where(Question.uuid == question_uuid)
     )
     question = question_result.scalar_one_or_none()
 
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
+    # Svoi zavershennye otkryvaem po assigned_to / taken_by / answered_by.
+    # Chuzhie dialogi ne otkryvaem (403 sohranyaetsya).
     is_assigned = (
-        question.assigned_to == pharmacist.uuid or question.taken_by == pharmacist.uuid
+        (question.assigned_to is not None and question.assigned_to == pharmacist.uuid)
+        or (question.taken_by is not None and question.taken_by == pharmacist.uuid)
+        or (question.answered_by is not None and question.answered_by == pharmacist.uuid)
     )
     if not is_assigned:
         if question.status == "pending":
@@ -866,7 +875,10 @@ async def get_dialog(
 
     messages_result = await db.execute(
         select(DialogMessage)
-        .where(DialogMessage.question_id == question_id)
+        .where(
+            DialogMessage.question_id == question_uuid,
+            DialogMessage.is_deleted == False,  # noqa: E712
+        )
         .order_by(DialogMessage.created_at)
     )
     messages = messages_result.scalars().all()
