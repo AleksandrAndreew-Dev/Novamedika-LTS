@@ -40,6 +40,8 @@ const MemoizedConsultationChat = memo(ConsultationChat);
 
 export default function ChatDashboard({
   isPanelVisible = true,
+  activeTab,
+  setActiveTab,
 }) {
   const [filter, setFilter] = useState('new');
   const [activeQuestionId, setActiveQuestionId] =
@@ -47,7 +49,6 @@ export default function ChatDashboard({
   const [isMobile, setIsMobile] = useState(
     window.innerWidth < 768,
   );
-  const [activeTab, setActiveTab] = useState('questions'); // 'questions' | 'stats'
   const [panelWidth, setPanelWidth] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);

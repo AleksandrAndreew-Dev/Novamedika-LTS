@@ -5,6 +5,8 @@ import { useAuth } from '../../hooks/useAuth';
 export default function MainLayout({ children }) {
   const { user } = useAuth();
   const [isPanelVisible, setIsPanelVisible] = useState(true);
+  const [activeTab, setActiveTab] = useState('questions'); // 'questions' | 'stats'
+  const [activeQuestionId, setActiveQuestionId] = useState(null);
 
   const togglePanel = () => setIsPanelVisible(!isPanelVisible);
 
@@ -66,7 +68,17 @@ export default function MainLayout({ children }) {
 
           {/* Content with props passed to children */}
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
-            {React.cloneElement(children, { isPanelVisible, togglePanel })}
+            {React.cloneElement(
+              children,
+              {
+                isPanelVisible,
+                togglePanel,
+                activeTab,
+                setActiveTab,
+                activeQuestionId,
+                setActiveQuestionId,
+              }
+            )}
           </div>
         </main>
       </div>
