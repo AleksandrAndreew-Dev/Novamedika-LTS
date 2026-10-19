@@ -213,6 +213,12 @@ def get_persistent_pharmacist_keyboard() -> ReplyKeyboardMarkup:
                 KeyboardButton(text="📜 История"),
                 KeyboardButton(text="❓ Помощь"),
             ],
+            [
+                KeyboardButton(
+                    text="💼 Панель фармацевта",
+                    web_app=WebAppInfo(url=get_pharmacist_webapp_url()),
+                ),
+            ],
         ],
         resize_keyboard=True,
         is_persistent=True,

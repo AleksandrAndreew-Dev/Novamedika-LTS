@@ -483,8 +483,9 @@ export default function ConsultationChat({
         </div>
         <button
           onClick={handleComplete}
-          className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full transition-colors"
-          aria-label="Завершить"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors flex-shrink-0"
+          aria-label="Завершить диалог"
+          title="Завершить диалог"
         >
           <svg
             width="16"
@@ -492,13 +493,14 @@ export default function ConsultationChat({
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2"
+            strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
           >
             <circle cx="12" cy="12" r="10"></circle>
-            <line x1="8" y1="12" x2="16" y2="12"></line>
+            <line x1="8.5" y1="12" x2="15.5" y2="12"></line>
           </svg>
+          Завершить диалог
         </button>
       </div>
 
