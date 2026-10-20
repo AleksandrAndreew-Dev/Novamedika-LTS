@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 import logging
 from utils.time_utils import get_utc_now_naive
+from utils.telegram_edit import safe_edit_message
 
 from db.qa_models import Question, User, Pharmacist
 from bot.handlers.qa_states import QAStates, UserQAStates

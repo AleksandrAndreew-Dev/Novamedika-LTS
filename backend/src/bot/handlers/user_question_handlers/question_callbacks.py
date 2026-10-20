@@ -22,6 +22,8 @@ from bot.handlers.user_question_handlers.commands import (
 from src.utils.get_utils import get_all_pharmacist_questions
 from src.utils.pharm_format_questions import format_pharmacist_questions_list
 
+from utils.telegram_edit import safe_edit_message
+
 logger = logging.getLogger(__name__)
 
 router = Router()
