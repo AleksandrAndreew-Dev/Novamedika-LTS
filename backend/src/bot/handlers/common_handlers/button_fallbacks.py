@@ -35,8 +35,6 @@ router = Router()
 # ---------- Фармацевт ----------
 
 PHARMACIST_BUTTONS = {
-    "🟢 Онлайн": "go_online",
-    "⚫ Офлайн": "go_offline",
     "📋 Вопросы": "view_questions",
     "📊 Статистика": "questions_stats",
     "📜 История": "my_questions_from_completed",
@@ -59,41 +57,7 @@ async def pharmacist_button_fallback(
 
     action = PHARMACIST_BUTTONS[message.text]
 
-    if action == "go_online":
-        pharmacist.is_online = True
-        pharmacist.last_seen = get_utc_now_naive()
-        await db.commit()
-
-        # Используем клавиатуру с JWT токеном
-        keyboard = get_pharmacist_inline_keyboard_with_token(
-            telegram_id=int(user.telegram_id), pharmacist_uuid=str(pharmacist.uuid)
-        )
-
-        await message.answer(
-            "🟢 <b>Вы теперь онлайн!</b>\n\n"
-            "Вы будете получать уведомления о новых вопросах.",
-            parse_mode="HTML",
-            reply_markup=keyboard,
-        )
-
-    elif action == "go_offline":
-        pharmacist.is_online = False
-        pharmacist.last_seen = get_utc_now_naive()
-        await db.commit()
-
-        # Используем клавиатуру с JWT токеном
-        keyboard = get_pharmacist_inline_keyboard_with_token(
-            telegram_id=int(user.telegram_id), pharmacist_uuid=str(pharmacist.uuid)
-        )
-
-        await message.answer(
-            "🔴 <b>Вы теперь офлайн.</b>\n\n"
-            "Вы не будете получать уведомления о новых вопросах.",
-            parse_mode="HTML",
-            reply_markup=keyboard,
-        )
-
-    elif action == "view_questions":
+    if action == "view_questions":
         await cmd_my_questions(message, db, user, is_pharmacist)
 
     elif action == "questions_stats":
@@ -122,9 +86,8 @@ async def pharmacist_button_fallback(
 
         await message.answer(
             "👨‍⚕️ <b>Как отвечать на вопросы?</b>\n\n"
-            "1. Нажмите «🟢 Перейти в онлайн»\n"
-            "2. Как придёт уведомление — нажмите «💬 Ответить»\n"
-            "3. Напишите ответ пользователю",
+            "1. Как придёт уведомление — нажмите «💬 Ответить»\n"
+            "2. Напишите ответ пользователю",
             parse_mode="HTML",
             reply_markup=keyboard,
         )

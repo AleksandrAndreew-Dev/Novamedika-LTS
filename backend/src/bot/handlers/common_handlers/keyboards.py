@@ -60,12 +60,6 @@ def get_pharmacist_inline_keyboard_with_token(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="\U0001f7e2 Онлайн", callback_data="go_online"
-                ),
-                InlineKeyboardButton(text="\u26ab Офлайн", callback_data="go_offline"),
-            ],
-            [
-                InlineKeyboardButton(
                     text="\U0001f4cb Вопросы", callback_data="view_questions"
                 ),
                 InlineKeyboardButton(
@@ -201,10 +195,6 @@ def get_persistent_pharmacist_keyboard() -> ReplyKeyboardMarkup:
     """Постоянная нижняя клавиатура фармацевта."""
     return ReplyKeyboardMarkup(
         keyboard=[
-            [
-                KeyboardButton(text="🟢 Онлайн"),
-                KeyboardButton(text="⚫ Офлайн"),
-            ],
             [
                 KeyboardButton(text="📋 Вопросы"),
                 KeyboardButton(text="📊 Статистика"),
