@@ -47,14 +47,6 @@ export default function MainLayout({ children }) {
               <h1 className="text-lg sm:text-xl font-bold text-gray-900 min-w-0">
                 Привет, {user?.user?.first_name || user?.name || 'Фармацевт'} 👋
               </h1>
-              <span
-                className={`flex items-center gap-1 text-sm ${
-                  user?.is_online ? 'text-green-600' : 'text-gray-400'
-                }`}
-              >
-                {user?.is_online ? '🟢 Онлайн' : '⚫ Офлайн'}
-              </span>
-              <span className="hidden sm:inline text-sm text-gray-400">|</span>
               <span className="hidden sm:inline text-sm text-gray-600">
                 {user?.pharmacy_info?.name || 'Аптека'}
               </span>

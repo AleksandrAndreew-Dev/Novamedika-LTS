@@ -171,7 +171,6 @@ export default function DashboardStats({ compact = false }) {
                 <p className="text-sm text-gray-600">Статус</p>
                 <p className="font-medium">
                   {user?.is_active ? 'Активен' : 'Не активен'}
-                  {user?.is_online && ' • Онлайн'}
                 </p>
               </div>
               <div>
