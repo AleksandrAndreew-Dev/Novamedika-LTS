@@ -37,9 +37,6 @@ export default function Sidebar({ activeTab, setActiveTab }) {
     } catch (error) {
       console.error('Logout error:', error);
       setIsLoggingOut(false);
-      // Even if logout fails, try to clear local state
-      setOnlineError('Ошибка при выходе. Попробуйте ещё раз.');
-      setTimeout(() => setOnlineError(null), 3000);
     }
   };
 
