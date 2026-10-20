@@ -63,13 +63,12 @@ async def pharmacist_button_fallback(
         pharmacist.is_online = True
         pharmacist.last_seen = get_utc_now_naive()
         await db.commit()
-        
+
         # Используем клавиатуру с JWT токеном
         keyboard = get_pharmacist_inline_keyboard_with_token(
-            telegram_id=int(user.telegram_id),
-            pharmacist_uuid=str(pharmacist.uuid)
+            telegram_id=int(user.telegram_id), pharmacist_uuid=str(pharmacist.uuid)
         )
-        
+
         await message.answer(
             "🟢 <b>Вы теперь онлайн!</b>\n\n"
             "Вы будете получать уведомления о новых вопросах.",
@@ -81,13 +80,12 @@ async def pharmacist_button_fallback(
         pharmacist.is_online = False
         pharmacist.last_seen = get_utc_now_naive()
         await db.commit()
-        
+
         # Используем клавиатуру с JWT токеном
         keyboard = get_pharmacist_inline_keyboard_with_token(
-            telegram_id=int(user.telegram_id),
-            pharmacist_uuid=str(pharmacist.uuid)
+            telegram_id=int(user.telegram_id), pharmacist_uuid=str(pharmacist.uuid)
         )
-        
+
         await message.answer(
             "🔴 <b>Вы теперь офлайн.</b>\n\n"
             "Вы не будете получать уведомления о новых вопросах.",
@@ -99,9 +97,7 @@ async def pharmacist_button_fallback(
         await cmd_my_questions(message, db, user, is_pharmacist)
 
     elif action == "questions_stats":
-        stats_text, pharmacist_uuid, error = await get_pharmacist_stats_text(
-            db, user
-        )
+        stats_text, pharmacist_uuid, error = await get_pharmacist_stats_text(db, user)
         if error:
             await message.answer(error)
             return
@@ -109,14 +105,10 @@ async def pharmacist_button_fallback(
             telegram_id=int(user.telegram_id),
             pharmacist_uuid=pharmacist_uuid,
         )
-        await message.answer(
-            stats_text, parse_mode="HTML", reply_markup=keyboard
-        )
+        await message.answer(stats_text, parse_mode="HTML", reply_markup=keyboard)
 
     elif action == "my_questions_from_completed":
-        history_text, error = await get_pharmacist_completed_history_text(
-            db, user
-        )
+        history_text, error = await get_pharmacist_completed_history_text(db, user)
         if error:
             await message.answer(error)
             return
@@ -125,10 +117,9 @@ async def pharmacist_button_fallback(
     elif action == "pharmacist_help":
         # Используем клавиатуру с JWT токеном
         keyboard = get_pharmacist_inline_keyboard_with_token(
-            telegram_id=int(user.telegram_id),
-            pharmacist_uuid=str(pharmacist.uuid)
+            telegram_id=int(user.telegram_id), pharmacist_uuid=str(pharmacist.uuid)
         )
-        
+
         await message.answer(
             "👨‍⚕️ <b>Как отвечать на вопросы?</b>\n\n"
             "1. Нажмите «🟢 Перейти в онлайн»\n"

@@ -233,7 +233,7 @@ async def questions_page_callback(
             ),
         )
 
-        await callback.message.edit_text(
+        await safe_edit_message(callback.message, 
             message_text, parse_mode="HTML", reply_markup=reply_markup
         )
         await callback.answer(f"Страница {page + 1}")
@@ -280,7 +280,7 @@ async def back_to_questions_callback(
             ),
         )
 
-        await callback.message.edit_text(
+        await safe_edit_message(callback.message, 
             message_text, parse_mode="HTML", reply_markup=reply_markup
         )
         await callback.answer()
@@ -383,7 +383,7 @@ async def filter_questions_callback(
             ]
         )
 
-        await callback.message.edit_text(
+        await safe_edit_message(callback.message, 
             message_text, parse_mode="HTML", reply_markup=keyboard
         )
         await callback.answer(f"Показаны {filter_text} вопросы")

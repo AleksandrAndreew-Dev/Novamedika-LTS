@@ -25,6 +25,7 @@ from bot.handlers.common_handlers.keyboards import (
     with_updated_footer,
 )
 from utils.time_utils import get_utc_now_naive
+from utils.telegram_edit import safe_edit_callback, safe_edit_message
 from aiogram.exceptions import TelegramBadRequest
 
 logger = logging.getLogger(__name__)
@@ -35,20 +36,7 @@ router = Router()
 async def safe_edit_menu_message(callback: CallbackQuery, text: str, **kwargs):
     """Единое правило обновления меню: edit на месте + защита от
     'message is not modified'. Возвращает True если отредактировано."""
-    if not callback.message:
-        await callback.bot.send_message(
-            chat_id=callback.from_user.id, text=text, **kwargs
-        )
-        return False
-    try:
-        await callback.message.edit_text(text, **kwargs)
-        return True
-    except TelegramBadRequest as e:
-        if "message is not modified" in str(e):
-            # Контент тот же — просто подтверждаем, что всё актуально
-            await callback.answer("✅ Уже актуально")
-            return False
-        raise
+    return await safe_edit_callback(callback, text, **kwargs)
 
 
 @router.callback_query(F.data == "consent_privacy_policy")
@@ -73,7 +61,7 @@ async def consent_privacy_policy_callback(
 
         # Показываем главное меню после согласия
         if callback.message:
-            await callback.message.edit_text(
+            await safe_edit_message(callback.message, 
                 "✅ <b>Согласие получено!</b>\n\n"
                 "Теперь вы можете использовать все функции бота.\n\n"
                 "💊 Напишите ваш вопрос фармацевту или используйте кнопки ниже:",
@@ -102,7 +90,7 @@ async def decline_privacy_policy_callback(callback: CallbackQuery):
     await callback.answer()
 
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_message(callback.message, 
             "❌ <b>Согласие не получено</b>\n\n"
             "К сожалению, без согласия на обработку персональных данных "
             "мы не можем предоставить вам услуги сервиса.\n\n"
@@ -151,7 +139,7 @@ async def consent_transboundary_transfer_callback(
 
         # Показываем главное меню после согласия
         if callback.message:
-            await callback.message.edit_text(
+            await safe_edit_message(callback.message, 
                 "✅ <b>Согласие получено!</b>\n\n"
                 "Теперь вы можете использовать все функции бота.\n\n"
                 "💊 Напишите ваш вопрос фармацевту или используйте кнопки ниже:",
@@ -182,7 +170,7 @@ async def decline_transboundary_transfer_callback(callback: CallbackQuery):
     await callback.answer()
 
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_message(callback.message, 
             "❌ <b>Согласие на трансграничную передачу не получено</b>\n\n"
             "Без согласия на трансграничную передачу данных использование Telegram-бота невозможно.\n\n"
             "🔄 <b>Альтернативные каналы связи:</b>\n\n"
@@ -243,7 +231,7 @@ async def back_to_main_callback(
             telegram_id=int(user.telegram_id), pharmacist_uuid=str(pharmacist.uuid)
         )
         if callback.message:
-            await callback.message.edit_text(
+            await safe_edit_message(callback.message, 
                 "👨‍⚕️ <b>Панель фармацевта</b>\n\n" "Выберите действие:",
                 parse_mode="HTML",
                 reply_markup=keyboard,
@@ -257,7 +245,7 @@ async def back_to_main_callback(
             )
     else:
         if callback.message:
-            await callback.message.edit_text(
+            await safe_edit_message(callback.message, 
                 "👋 <b>Главное меню</b>\n\n"
                 " Напишите ваш вопрос фармацевтическомуу специалисту в чат  или Выберите действие:",
                 parse_mode="HTML",
@@ -301,7 +289,7 @@ async def back_to_pharmacist_main_callback(
     )
 
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_message(callback.message, 
             f"👨‍⚕️ <b>Панель фармацевта</b>\n\n"
             f"🏥 {pharmacy_name}\n"
             f"📊 Статус: {status_text}\n\n"
@@ -489,12 +477,19 @@ async def questions_stats_callback(
                     answer_rate = ((answered + completed) / total) * 100
                     stats_text += f"📈 <b>Процент ответов:</b> {answer_rate:.1f}%\n"
 
+        stats_text = with_updated_footer(stats_text)
+
         if callback.message:
-            await callback.message.edit_text(
+            edited = await safe_edit_message(
+                callback.message,
                 stats_text,
                 parse_mode="HTML",
                 reply_markup=keyboard,
             )
+            if not edited:
+                await callback.answer(
+                    "✅ Статистика уже актуальна", show_alert=False
+                )
         else:
             await callback.bot.send_message(
                 chat_id=callback.from_user.id,
@@ -522,7 +517,7 @@ async def i_am_pharmacist_callback(callback: CallbackQuery, state: FSMContext):
     """Начать регистрацию фармацевта"""
     await state.clear()
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_message(callback.message, 
             "👨‍⚕️ <b>Регистрация фармацевта</b>\n\n"
             "Для регистрации обратитесь к администратору.\n\n"
             "Или нажмите кнопку «Регистрация» ниже.",
@@ -592,7 +587,7 @@ async def go_online_callback(
     )
 
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_message(callback.message, 
             "🟢 <b>Вы теперь онлайн!</b>\n\n"
             "Вы будете получать уведомления о новых вопросах.",
             parse_mode="HTML",
@@ -643,7 +638,7 @@ async def go_offline_callback(
     )
 
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_message(callback.message, 
             "🔴 <b>Вы теперь офлайн.</b>\n\n"
             "Вы не будете получать уведомления о новых вопросах.",
             parse_mode="HTML",
@@ -703,7 +698,7 @@ async def continue_user_dialog_callback(
         await state.set_state(UserQAStates.in_dialog)
 
         if callback.message:
-            await callback.message.edit_text(
+            await safe_edit_message(callback.message, 
                 "💬 <b>Продолжение диалога</b>\n\n"
                 f"❓ <b>Ваш вопрос:</b>\n{question.text}\n\n"
                 "Напишите ваше сообщение фармацевту:",
@@ -749,7 +744,7 @@ async def ask_question_callback(callback: CallbackQuery, state: FSMContext):
     """Задать вопрос"""
     await state.set_state(UserQAStates.waiting_for_question)
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_message(callback.message, 
             "📝 <b>Напишите ваш вопрос:</b>\n\n"
             "Опишите вашу проблему подробно.\n\n"
             "Для отмены: /cancel",
@@ -791,7 +786,7 @@ async def user_help_callback(callback: CallbackQuery):
     """Помощь для пользователей через кнопку"""
     await callback.answer()
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_message(callback.message, 
             "👋 <b>Помощь для пользователей</b>\n\n"
             "💊 <b>Основной процесс:</b>\n"
             "1. Просто напишите вопрос в чат\n"
@@ -832,7 +827,6 @@ async def pharmacist_help_callback(
     user: User | None = None,
 ):
     """Помощь для фармацевтов через кнопку"""
-    await callback.answer()
     if not pharmacist or not user:
         await callback.answer("❌ Ошибка сервера. Попробуйте позже.", show_alert=True)
         return
@@ -842,7 +836,7 @@ async def pharmacist_help_callback(
         pharmacist_uuid=str(pharmacist.uuid),
     )
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_message(callback.message, 
             "👨‍⚕️ <b>Помощь для фармацевтов</b>\n\n"
             "💊 <b>Основной процесс:</b>\n"
             "1. Перейдите в онлайн (/online)\n"
@@ -978,7 +972,7 @@ async def registration_info_callback(callback: CallbackQuery):
     """Информация о регистрации"""
     await callback.answer()
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_message(callback.message, 
             "📝 <b>Регистрация фармацевта</b>\n\n"
             "Для регистрации необходимо:\n"
             "1. Быть сотрудником аптеки\n"
@@ -1052,7 +1046,7 @@ async def show_privacy_policy_callback(callback: CallbackQuery):
     )
 
     if callback.message:
-        await callback.message.edit_text(
+        await safe_edit_message(callback.message, 
             privacy_text, parse_mode="HTML", reply_markup=keyboard
         )
     else:

@@ -147,7 +147,7 @@ async def cmd_my_questions(
             reply_markup = make_questions_pagination_keyboard(questions, page)
 
         if is_callback and update.message:
-            await update.message.edit_text(
+            await safe_edit_message(update.message, 
                 message_text,
                 parse_mode="HTML",
                 reply_markup=reply_markup,

@@ -320,7 +320,7 @@ async def release_question_callback(
         await db.commit()
 
         await callback.answer("✅ Вопрос освобожден!")
-        await callback.message.edit_text(
+        await safe_edit_message(callback.message, 
             f"✅ Вопрос освобожден.\n\n"
             f"❓ Вопрос: {question.text[:100]}...\n\n"
             f"Теперь его смогут взять другие фармацевты."

@@ -337,7 +337,7 @@ async def complete_consultation_callback(
             await state.clear()
 
             # Обновляем сообщение
-            await callback.message.edit_text(
+            await safe_edit_message(callback.message, 
                 f"✅ Консультация успешно завершена!\n\n"
                 f"❓ Вопрос: {question.text[:100]}...\n\n"
                 f"Теперь вы можете задать новый вопрос или посмотреть другие консультации.",
